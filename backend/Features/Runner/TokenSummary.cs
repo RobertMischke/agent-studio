@@ -32,6 +32,8 @@ public sealed record TokenSummary(
     bool AllModelsPriced,
     int UnknownModelCount,
     IReadOnlyList<TokenSummaryByModel> ByModel,
+    string? FirstActivity,
+    string? LastActivity,
     string Disclaimer);
 
 public sealed record TokenSummaryByModel(
@@ -278,12 +280,18 @@ public class TokenSummaryService
         decimal grandTotal = 0;
         bool allPriced = true;
         bool anyPricedAtAll = false;
+        DateTime? firstAt = null;
+        DateTime? lastAt = null;
 
         foreach (var (name, summary) in projectSummaries)
         {
             projectCount++;
             totalEntries += summary.OrchestratorEntries;
             totalCalls += summary.OrchestratorLlmCalls;
+            if (summary.FirstActivity is { } fa && DateTime.TryParse(fa, out var faTs))
+                if (firstAt == null || faTs < firstAt) firstAt = faTs;
+            if (summary.LastActivity is { } la && DateTime.TryParse(la, out var laTs))
+                if (lastAt == null || laTs > lastAt) lastAt = laTs;
             totalInput += summary.TotalInputTokens;
             totalOutput += summary.TotalOutputTokens;
             totalCacheRead += summary.TotalCacheReadTokens;
@@ -351,6 +359,8 @@ public class TokenSummaryService
                 .OrderByDescending(p => p.InputTokens + p.OutputTokens)
                 .ToList(),
             FetchedAt: DateTime.UtcNow.ToString("o"),
+            FirstActivity: firstAt?.ToString("o"),
+            LastActivity: lastAt?.ToString("o"),
             Disclaimer: DefaultDisclaimer);
 
         // Persist for next-app-start display. Best-effort.
@@ -392,6 +402,8 @@ public class TokenSummaryService
         var perModel = new Dictionary<string, ModelBucket>(StringComparer.OrdinalIgnoreCase);
         long totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreate = 0;
         int callCount = 0;
+        DateTime? firstAt = null;
+        DateTime? lastAt = null;
 
         foreach (var entry in entries)
         {
@@ -402,6 +414,10 @@ public class TokenSummaryService
             totalOutput += u.OutputTokens;
             totalCacheRead += u.CacheReadTokens;
             totalCacheCreate += u.CacheCreationTokens;
+
+            var ts = entry.Ts.ToUniversalTime();
+            if (firstAt == null || ts < firstAt) firstAt = ts;
+            if (lastAt == null || ts > lastAt) lastAt = ts;
 
             var canonicalModel = ModelMetadataRegistry.NormalizeId(u.Model);
             var key = string.IsNullOrWhiteSpace(canonicalModel) ? "(unknown)" : canonicalModel;
@@ -457,6 +473,8 @@ public class TokenSummaryService
             AllModelsPriced: allPriced,
             UnknownModelCount: byModel.Count(model => !model.ModelInCatalog),
             ByModel: byModel,
+            FirstActivity: firstAt?.ToString("o"),
+            LastActivity: lastAt?.ToString("o"),
             Disclaimer: TokenSummaryService.DefaultDisclaimer);
     }
 
