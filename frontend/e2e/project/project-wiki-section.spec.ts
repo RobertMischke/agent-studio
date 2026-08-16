@@ -76,10 +76,13 @@ test.describe('Project detail - Knowledge section', () => {
     const paths = await api<WatchPath[]>('/api/watch-paths');
     expect(paths.length).toBeGreaterThan(0);
 
+    // The seeded ADR-0056 demo projects now carry populated Wiki trees, so the
+    // "more than one page" probe below no longer rules them out. They are
+    // excluded explicitly: this spec asserts against real repository pages.
     const prioritized = [
       ...paths.filter(p => /agent.?software|agent.?studio|agent.?task/i.test(p.name)),
       ...paths
-    ];
+    ].filter(p => !/^demo (app|platform)$/i.test(p.name));
     const candidates = Array.from(new Map(prioritized.map(p => [p.name, p])).values());
 
     for (const candidate of candidates) {

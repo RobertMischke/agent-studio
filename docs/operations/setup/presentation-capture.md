@@ -12,8 +12,11 @@ The source of truth for the ordered outputs is the
 Before any capture, confirm all of the following:
 
 - The visible project picker contains only `Demo App` and `Demo Platform`.
-- The cards use `DEMO-*` or `PLAT-*` keys. Stop immediately if any real project
-  or task name appears.
+- The cards use `DEMO-*` or `PLAT-*` keys and the Dossiers use `DEMO-W*` keys.
+  Stop immediately if any real project or task name appears.
+- The Wiki of both demo projects shows only seeded pages, and every page
+  declares itself as pinned demo data: markdown in its footer, a Dossier in its
+  header and closing note.
 - Browser notifications, email, chat overlays, password managers, and desktop
   notifications are closed or suppressed.
 - The output folder contains no earlier production capture.
@@ -28,6 +31,18 @@ The seed refuses the production workspace root. After reset, open the demo
 backend configured for `C:\Projects\agent-taskboard-workspace-demo`, select
 `Demo App`, and verify the visible keys again. Do not point ScreenToGif or OBS
 at the stable or production browser window.
+
+## The two pinned inputs
+
+The seed reads two committed files and invents nothing at run time.
+
+| File | Holds | Refreshed by |
+| --- | --- | --- |
+| `scripts/presentation-capture/pinned-seed.json` | Projects, task keys, lanes, and the escalated decision task. Sanitized from a real board. | The sanitizing export below. |
+| `scripts/presentation-capture/pinned-demo-content.json` | Both Wiki trees, the six-Dossier gallery, and the card-to-Dossier references. Invented fixtures. | Hand-edited under review. The export never writes it. |
+
+Keeping them apart is the data boundary: a snapshot refresh can never overwrite
+invented content, and sanitized real data never becomes Wiki or Dossier prose.
 
 ## Updating the pinned snapshot from real data
 

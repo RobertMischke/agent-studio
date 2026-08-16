@@ -592,6 +592,42 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <p>Approve S1 through S6 as the public read-only launch package, with S2 as the non-negotiable gate. S1 and S2 can proceed in parallel from the integrated AGT-2530 baseline. S3 and S4 build on the denial contract. S5 freezes the verifiable release unit. S6 is the only infrastructure-changing slice and requires a separate launch approval. Keep S7 outside the launch commitment.</p>
 </div>
 
+<!-- agent-studio:implementation-section:start -->
+<h2 id="implementation"><span class="no">§8a</span>Implementation state</h2>
+<p><b>S1 is delivered. The single pinned seed now generates the content this dossier specifies.</b> The AGT-2530 snapshot was not forked. It was extended with one versioned sidecar, <code>scripts/presentation-capture/pinned-demo-content.json</code>, which the sanitizing export never writes. That separation is deliberate: the task snapshot is sanitized real data, while the Wiki trees and the Dossier gallery are invented fixtures, and a later snapshot refresh must not be able to overwrite invented content or leak source identity into it.</p>
+
+<table>
+  <thead><tr><th>Specification</th><th>Generated now</th><th>Proven by</th></tr></thead>
+  <tbody>
+    <tr><td><b>Two Wiki trees</b> (§3)</td><td>Seven Demo App pages and six Demo Platform pages, each with a companion classification sidecar, a curated Overview, and an explicit folder and file order. Every page carries the pinned-demo footer.</td><td>Live <code>/wiki/tree</code>, <code>/wiki/home</code>, and a Pulse run with zero dead links and zero warnings in both projects.</td></tr>
+    <tr><td><b>Six Dossiers</b> (§4)</td><td><code>DEMO-W1</code> to <code>DEMO-W6</code> under <code>docs/dossiers/</code>, rendered in the canonical article house style from the committed template.</td><td>The catalogue returns six valid descriptors covering <code>active</code>, <code>decision-pending</code>, <code>decided</code> twice, <code>documented</code>, and <code>archived</code>, projecting all five lifecycle states.</td></tr>
+    <tr><td><b>Canonical references</b></td><td><code>references.workbenches</code> on ten cards is the canonical edge; <code>sourceTaskKeys</code> and <code>relatedTaskKeys</code> stay populated as the compatibility bridge.</td><td>The reference endpoint resolves both directions, including the four live delivery points of <code>DEMO-W4</code> and their lanes.</td></tr>
+    <tr><td><b>Fixture-only decisions</b></td><td>Four settled receipts and two open inline decision points. <code>DEMO-W6</code> carries the archive receipt with actor, fixed time, and reason.</td><td>Every receipt survives the catalogue's settled-state validation; <code>DEMO-W2</code> reports two open decision points.</td></tr>
+    <tr><td><b>Byte-identical generation</b> (§7)</td><td>Two fresh roots and a re-seed produce identical trees. Every visible value derives from the pinned time base; nothing is invented at first boot.</td><td>A recursive content hash over two independently generated roots, asserted in the backend acceptance test.</td></tr>
+    <tr><td><b>Data boundary</b> (§3)</td><td>Invented organizations, actors, metrics, and paths only. Demo Platform hosts use the reserved <code>.invalid</code> suffix so no name resolves.</td><td>A generated-content scan rejects producing-repository keys, project names, absolute host paths, and every remote URL scheme. No page fetches a remote image or contains an executable snippet.</td></tr>
+  </tbody>
+</table>
+
+<h3>What S1 deliberately did not do</h3>
+<ul>
+  <li><b>No AGT-2558 artifact scene was added.</b> §2 admits that scene only after acceptance, and acceptance is not proven from this checkout. The pinned artifact gallery already present on <code>DEMO-5</code> in the AGT-2530 baseline is unchanged; nothing new was consumed from that card.</li>
+  <li><b>No execution, hosting, or security behavior changed.</b> S1 is content only. The launch invariant remains unproven until S2 lands.</li>
+  <li><b>The pinned marketing stills were not regenerated.</b> Shot 06, project knowledge, was captured against the previous single-page demo Wiki and now shows content the seed no longer produces. Regenerating it means regenerating the whole pinned set, which is a separate reviewed change; the storyboard row and the still are stale until then.</li>
+</ul>
+
+<div class="box warn">
+  <h4>Finding for S2: a seeded lane is not a stable lane</h4>
+  <p>Local verification against <code>worktree-test-stack.sh up --demo</code> showed the seeded board drifting after boot. Cards seeded into <code>3-progress</code> were rewritten on disk to <code>4-auto-review</code>, and two <code>5-human-review</code> cards escalated to <code>5e-escalated</code>, on a store whose projects are configured <code>RunnerMode: manual</code> with <code>AutoCommit: false</code>. The generated seed is correct; the running server moved it. This is direct evidence for the §2 distinction that the dev guard is not an execution boundary: without the S2 startup lock a public visitor would watch the pinned board rearrange itself, and the §3 lane table would stop being true minutes after a reset. S2 should treat lane stability as part of the denial contract, not only claim and start admission.</p>
+</div>
+
+<h3>Delivered slices</h3>
+<ul>
+<!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2666" data-delivered-at="2026-08-16" data-slice="seed-content-and-gallery"><b>Seed content and gallery.</b> Extended the single pinned seed with a versioned invented-content sidecar carrying both Wiki trees, the six-state Dossier gallery with canonical card references and fixture-only decision receipts, added a backend acceptance test that proves byte-identical regeneration, all-lane and all-lifecycle discovery through the production catalogue, and the §3 data boundary, and verified the result live against the isolated demo stack.</li>
+<!-- agent-studio:implementation-log:end -->
+</ul>
+<!-- agent-studio:implementation-section:end -->
+
 <h2 id="approval" data-concept-section="open-decisions"><span class="no">§9</span>Decision request</h2>
 <p>This dossier is decision-ready. Approval is requested for the following package:</p>
 
