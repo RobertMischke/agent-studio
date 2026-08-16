@@ -189,6 +189,52 @@ public class ProjectWikiEnhancementsTests : IDisposable
         Assert.Equal(1, overview.Metadata.FindingsCount);
     }
 
+    // ---- ReadWikiAsset (Dossier sibling assets/, AGT-2665) ----
+
+    /// <summary>
+    /// The Dossier viewer's asset-URL rewrite (frontend, AGT-2665) resolves a
+    /// screenshot relative to the Dossier's own folder into a docs-root-
+    /// relative path and calls this endpoint with it. This pins the backend
+    /// half of that contract: a nested `<slug>/assets/*.png` sibling of a
+    /// multi-page Dossier (AGT-2617 `pages/` format) must resolve, alongside
+    /// its own `pages/` sibling reachable through the doc endpoint.
+    /// </summary>
+    [Fact]
+    public void ReadWikiAsset_ResolvesNestedDossierAssetsSibling()
+    {
+        var projectRoot = Path.Combine(_tempDir, "dossier-assets-proj");
+        var dossierDir = Path.Combine(projectRoot, "docs", "operations", "timeline-redesign");
+        var assetsDir = Path.Combine(dossierDir, "assets");
+        Directory.CreateDirectory(assetsDir);
+        File.WriteAllText(Path.Combine(dossierDir, "index.html"),
+            "<img src=\"assets/task-timeline-agt-2577-current-light--real.png\" alt=\"Timeline\">");
+        var pngBytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A };
+        File.WriteAllBytes(
+            Path.Combine(assetsDir, "task-timeline-agt-2577-current-light--real.png"), pngBytes);
+
+        var docs = BuildDocsService(("Dossiers", projectRoot));
+
+        var asset = docs.ReadWikiAsset(
+            "Dossiers", "operations/timeline-redesign/assets/task-timeline-agt-2577-current-light--real.png");
+
+        Assert.NotNull(asset);
+        Assert.Equal("image/png", asset!.Value.ContentType);
+        Assert.Equal(pngBytes, File.ReadAllBytes(asset.Value.Path));
+    }
+
+    [Fact]
+    public void ReadWikiAsset_RejectsTraversalOutsideDocsRoot()
+    {
+        var projectRoot = Path.Combine(_tempDir, "dossier-assets-traversal");
+        Directory.CreateDirectory(Path.Combine(projectRoot, "docs"));
+        File.WriteAllText(Path.Combine(projectRoot, "secret.png"), "not docs content");
+        var docs = BuildDocsService(("Dossiers", projectRoot));
+
+        var asset = docs.ReadWikiAsset("Dossiers", "../secret.png");
+
+        Assert.Null(asset);
+    }
+
     [Fact]
     public void GetWikiTree_NoDocsFolder_ReturnsEmptyButValid()
     {

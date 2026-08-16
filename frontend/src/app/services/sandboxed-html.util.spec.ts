@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ISOLATED_HTML_ACTIVE_ANCHOR_MESSAGE,
   ISOLATED_HTML_ANCHORS_READY_MESSAGE,
+  ISOLATED_HTML_CSP,
   ISOLATED_HTML_LINK_MESSAGE,
   ISOLATED_HTML_SCROLL_ANCHOR_MESSAGE,
   ISOLATED_HTML_TRACK_ANCHORS_MESSAGE,
@@ -10,6 +11,11 @@ import {
   buildIsolatedHtmlSrcdoc,
   resolveIsolatedHtmlNavigation,
 } from './sandboxed-html.util';
+
+function cspOf(srcdoc: string): string {
+  return new DOMParser().parseFromString(srcdoc, 'text/html')
+    .querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content') ?? '';
+}
 
 describe('sandboxed HTML navigation', () => {
   it('delegates non-anchor links to the host while keeping anchors in the frame', () => {
@@ -71,6 +77,42 @@ describe('sandboxed HTML navigation', () => {
       'outside-docs/index.html',
       './target.html',
     )).toBeNull();
+  });
+
+  it('keeps images restricted to data: URIs when no resolver is supplied (AGT-2665 default)', () => {
+    const srcdoc = buildIsolatedHtmlSrcdoc(
+      '<img src="assets/task-timeline-agt-2577-current-light--real.png" alt="Screenshot">',
+    );
+    const parsed = new DOMParser().parseFromString(srcdoc, 'text/html');
+    expect(parsed.querySelector('img')?.getAttribute('src'))
+      .toBe('assets/task-timeline-agt-2577-current-light--real.png');
+    expect(cspOf(srcdoc)).toBe(ISOLATED_HTML_CSP);
+  });
+
+  it('rewrites a Dossier-relative image src to the Wiki asset endpoint and widens img-src to that origin (AGT-2665)', () => {
+    const srcdoc = buildIsolatedHtmlSrcdoc(
+      '<img src="assets/task-timeline-agt-2577-current-light--real.png" alt="Timeline, light theme">' +
+      '<img src="https://tracker.invalid/pixel.png" alt="External">' +
+      '<img src="data:image/svg+xml;base64,AAAA" alt="Inline">',
+      {
+        resolveImageSrc: src => src.startsWith('assets/')
+          ? `/api/projects/Demo/wiki/assets/operations/timeline-redesign/${src}`
+          : src,
+      },
+    );
+    const parsed = new DOMParser().parseFromString(srcdoc, 'text/html');
+    const [screenshot, external, inline] = Array.from(parsed.querySelectorAll('img'));
+    expect(screenshot.getAttribute('src')).toBe(
+      `${window.location.origin}/api/projects/Demo/wiki/assets/operations/timeline-redesign/` +
+      'assets/task-timeline-agt-2577-current-light--real.png',
+    );
+    // Absolute/data: sources the resolver hands back unchanged stay untouched.
+    expect(external.getAttribute('src')).toBe('https://tracker.invalid/pixel.png');
+    expect(inline.getAttribute('src')).toBe('data:image/svg+xml;base64,AAAA');
+    expect(cspOf(srcdoc)).toContain(`img-src data: ${window.location.origin};`);
+    // Every other directive is unchanged, in particular connect-src still
+    // denies the artifact any script-driven network access.
+    expect(cspOf(srcdoc)).toContain("connect-src 'none'");
   });
 
   it('classifies absolute HTTP(S) links as external and rejects active schemes', () => {

@@ -249,6 +249,71 @@ describe('WorkbenchViewerComponent', () => {
     http.verify();
   });
 
+  it('resolves a sibling assets/ screenshot to the Wiki asset endpoint so it renders instead of 404ing (AGT-2665)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [WorkbenchViewerComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: TaskService, useValue: { getReferenceStatuses: () => of([]), refresh: vi.fn() } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(WorkbenchViewerComponent);
+    fixture.componentRef.setInput('projectName', 'Demo');
+    fixture.componentRef.setInput('workbenchId', 'timeline-redesign');
+    fixture.detectChanges();
+
+    const document: WorkbenchDocument = {
+      workbench: {
+        id: 'timeline-redesign',
+        key: 'AGT-W35',
+        title: 'Task Timeline redesign',
+        summary: 'Decision-ready redesign for the Task Timeline.',
+        status: 'decision-pending',
+        phase: 'decision-ready',
+        updatedAtUtc: '2026-08-11T17:10:00Z',
+        entryPath: 'docs/operations/timeline-redesign/index.html',
+        valid: true,
+        error: null,
+        sourceTaskKeys: ['AGT-2631'],
+        relatedTaskKeys: [],
+        pattern: 'ui',
+      },
+      html: '<html><body>' +
+        '<img src="assets/task-timeline-agt-2577-current-light--real.png" alt="Timeline, light theme">' +
+        '</body></html>',
+      branch: 'develop',
+      revision: null,
+      workingTreeModified: false,
+      fingerprint: null,
+    };
+
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/projects/Demo/workbenches/timeline-redesign').flush(document);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    http.expectOne('/api/projects/Demo/workbenches/AGT-W35/references').flush({
+      projectName: 'Demo',
+      workbenchKey: 'AGT-W35',
+      workbenchId: 'timeline-redesign',
+      legacyTaskKeys: [],
+      items: [],
+    });
+    fixture.detectChanges();
+    http.verify();
+
+    const srcdoc = fixture.componentInstance.srcdoc();
+    const parsed = new DOMParser().parseFromString(srcdoc, 'text/html');
+    expect(parsed.querySelector('img')?.getAttribute('src')).toBe(
+      `${window.location.origin}/api/projects/Demo/wiki/assets/` +
+      'operations/timeline-redesign/assets/task-timeline-agt-2577-current-light--real.png',
+    );
+    const csp = parsed.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content') ?? '';
+    expect(csp).toContain(`img-src data: ${window.location.origin};`);
+  });
+
   it('offers the documented transition after every referenced card is terminal', async () => {
     await TestBed.configureTestingModule({
       imports: [WorkbenchViewerComponent],

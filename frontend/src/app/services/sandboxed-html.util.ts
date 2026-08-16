@@ -4,6 +4,23 @@ export const ISOLATED_HTML_CSP =
   "object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; " +
   "form-action 'none'; base-uri 'none'";
 
+/**
+ * Same policy as {@link ISOLATED_HTML_CSP}, except `img-src` also allows the
+ * host application origin. Used only when the caller supplies
+ * `resolveImageSrc`, so a screenshot rewritten to the Wiki asset endpoint
+ * (same-origin `GET`, no credentials-bearing capability granted elsewhere in
+ * this policy) can actually load. `connect-src` stays `'none'`: the artifact
+ * still cannot script a fetch/XHR to exfiltrate anything.
+ */
+function isolatedHtmlCspWithAssetOrigin(origin: string): string {
+  return (
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
+    `img-src data: ${origin}; font-src data:; connect-src 'none'; media-src data:; ` +
+    "object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; " +
+    "form-action 'none'; base-uri 'none'"
+  );
+}
+
 export const ISOLATED_HTML_LINK_MESSAGE = 'agent-studio:isolated-html-link';
 export const ISOLATED_HTML_ANCHORS_READY_MESSAGE = 'agent-studio:isolated-html-anchors-ready';
 export const ISOLATED_HTML_ACTIVE_ANCHOR_MESSAGE = 'agent-studio:isolated-html-active-anchor';
@@ -25,7 +42,17 @@ export type IsolatedHtmlNavigation =
  */
 export function buildIsolatedHtmlSrcdoc(
   html: string,
-  options: { workbenchDecisions?: boolean; documentPattern?: 'ui' | 'concept' } = {},
+  options: {
+    workbenchDecisions?: boolean;
+    documentPattern?: 'ui' | 'concept';
+    /**
+     * Resolves a repository-relative `<img src>` (e.g. `assets/foo.png`) to
+     * the Wiki asset endpoint URL. Absolute/`data:` sources are expected to
+     * come back unchanged (see `resolveWikiImageSrc`). Omit to keep images
+     * restricted to `data:` URIs only, as before.
+     */
+    resolveImageSrc?: (src: string) => string;
+  } = {},
 ): string {
   if (!html) return '';
   const parser = new DOMParser();
@@ -39,9 +66,25 @@ export function buildIsolatedHtmlSrcdoc(
     if (isArtifactSecurityControl(control)) control.remove();
   }
 
+  // `base=about:blank` (below) makes a relative image path unresolvable, so a
+  // resolved reference must already be absolute. `resolveImageSrc` returns a
+  // root-relative API path; the actual app origin is only known here.
+  const origin = typeof window !== 'undefined' ? window.location.origin : null;
+  if (options.resolveImageSrc && origin) {
+    const resolve = options.resolveImageSrc;
+    for (const img of Array.from(artifact.querySelectorAll('img[src]'))) {
+      const raw = img.getAttribute('src');
+      if (!raw) continue;
+      const resolved = resolve(raw);
+      img.setAttribute('src', resolved.startsWith('/') ? origin + resolved : resolved);
+    }
+  }
+
   const policy = wrapper.createElement('meta');
   policy.httpEquiv = 'Content-Security-Policy';
-  policy.content = ISOLATED_HTML_CSP;
+  policy.content = options.resolveImageSrc && origin
+    ? isolatedHtmlCspWithAssetOrigin(origin)
+    : ISOLATED_HTML_CSP;
   const base = wrapper.createElement('base');
   base.href = 'about:blank';
   wrapper.head.append(policy, base);

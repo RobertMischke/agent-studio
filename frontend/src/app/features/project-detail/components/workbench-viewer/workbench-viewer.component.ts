@@ -30,6 +30,7 @@ import {
   buildIsolatedHtmlSrcdoc,
   resolveIsolatedHtmlNavigation,
 } from '../../../../services/sandboxed-html.util';
+import { resolveWikiImageSrc } from '../../../../services/wiki-image-resolver';
 import {
   discoverWorkbenchDecisionMarkup,
   normalizeWorkbenchDecisionResponses,
@@ -77,9 +78,14 @@ export class WorkbenchViewerComponent {
 
   readonly srcdoc = computed(() => {
     const document = this.document();
+    const project = this.projectName();
+    const docsRelDir = wikiDocsRelPath(document?.workbench.entryPath);
     return buildIsolatedHtmlSrcdoc(document?.html ?? '', {
       workbenchDecisions: true,
       documentPattern: document?.workbench.pattern === 'ui' ? 'ui' : 'concept',
+      resolveImageSrc: docsRelDir
+        ? (src) => resolveWikiImageSrc(src, docsRelDir, (rel) => this.docs.wikiAssetUrl(project, rel))
+        : undefined,
     });
   });
   readonly decisionMarkup = computed(() =>
@@ -250,6 +256,19 @@ export class WorkbenchViewerComponent {
       },
     });
   }
+}
+
+/**
+ * `workbench.entryPath` is repo-root-relative (`docs/operations/x/index.html`,
+ * matching `resolveIsolatedHtmlNavigation`'s contract); the Wiki asset
+ * endpoint and `resolveWikiImageSrc` instead key off the docs-root-relative
+ * form (`operations/x/index.html`). Returns null for a missing/malformed path
+ * so the caller can fall back to the unresolved (`data:`-only) image policy.
+ */
+function wikiDocsRelPath(entryPath: string | undefined | null): string | null {
+  if (!entryPath || !entryPath.startsWith('docs/')) return null;
+  const rel = entryPath.slice('docs/'.length);
+  return rel.length > 0 ? rel : null;
 }
 
 function workbenchLoadError(response: unknown): string {

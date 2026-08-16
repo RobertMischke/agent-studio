@@ -49,7 +49,7 @@ import {
   derivePageType,
   pageTypeIcon,
 } from '../../../../models/page-context.model';
-import { resolveWikiImageSrc } from './wiki-image-resolver';
+import { resolveWikiImageSrc } from '../../../../services/wiki-image-resolver';
 import { WikiDashboardComponent } from './wiki-dashboard/wiki-dashboard.component';
 import { WikiAgentReadsComponent } from './wiki-agent-reads/wiki-agent-reads.component';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
