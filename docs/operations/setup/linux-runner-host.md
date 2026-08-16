@@ -123,19 +123,21 @@ The tunnel procedure and health gate are documented in
 ### Own the Task Server route
 
 Do not run the tunnel as an unattended bare `ssh -N` process. For the current
-Windows-to-Linux reverse route, register the repository-owned functional keeper
-from the Studio checkout:
+Windows-to-Linux reverse route, use the product-managed Windows control-plane
+installer:
 
 ```powershell
-.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
-    -SshTarget agent-runner `
-    -RemotePort 15031 `
-    -TaskServerPort 5031 `
-    -IntervalMinutes 5
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  ".\docs\operations\setup\windows-control-plane-host\install-tunnel-supervision.ps1" `
+  -SshTarget agent-runner -RemotePort 15031 -TaskServerPort 5031
 ```
 
-The keeper probes `/healthz` from the Linux host, removes only the matching dead
-forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
+The setup flow explains and requests one administrator approval, installs both
+the keeper and watchdog outside the source checkout, and registers their
+Scheduled Tasks. See
+[windows-control-plane-host.md](./windows-control-plane-host.md). The keeper
+probes `/healthz` from the Linux host, removes only the matching dead forward,
+and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
 host can initiate the SSH connection, prefer the host-owned `autossh` plus
 systemd form in the linked tunnel runbook because it starts before an
 interactive Windows logon.
@@ -1109,7 +1111,7 @@ proof.
   This is the board-visible transport alarm even when the host itself is still
   running, because a broken route cannot carry a fresh failure report through
   itself. For the Windows-to-Linux reverse-tunnel topology, inspect
-  `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\events.log`, then run the
+  `%LOCALAPPDATA%\Agent Studio\Tunnel\state\keeper-events.log`, then run the
   functional host-side curl from
   [Remote runner: persistent connection](./remote-runner-persistent-connection.md).
   Repair the route instead of restarting the review daemon.

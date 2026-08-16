@@ -14,14 +14,18 @@ param(
 
     [string] $TaskName = 'AgentRunner-TunnelKeeper',
 
-    [string] $KeeperPath = (Join-Path $PSScriptRoot 'tunnel-keeper.ps1')
+    [string] $KeeperPath = (Join-Path $PSScriptRoot 'tunnel-keeper.ps1'),
+
+    [string] $StateDirectory = (Join-Path $env:LOCALAPPDATA 'Agent Studio\Tunnel\state'),
+
+    [string] $RunAsUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 )
 
 $ErrorActionPreference = 'Stop'
 $keeper = (Resolve-Path -LiteralPath $KeeperPath).Path
 $powerShell = (Get-Command 'powershell.exe' -ErrorAction Stop).Source
-$userId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $quotedKeeper = '"{0}"' -f ($keeper -replace '"', '""')
+$quotedStateDirectory = '"{0}"' -f ($StateDirectory -replace '"', '""')
 $arguments = @(
     '-NoProfile',
     '-NonInteractive',
@@ -29,7 +33,8 @@ $arguments = @(
     '-File', $quotedKeeper,
     '-SshTarget', $SshTarget,
     '-RemotePort', $RemotePort,
-    '-TaskServerPort', $TaskServerPort
+    '-TaskServerPort', $TaskServerPort,
+    '-StateDirectory', $quotedStateDirectory
 ) -join ' '
 
 $action = New-ScheduledTaskAction -Execute $powerShell -Argument $arguments
@@ -40,7 +45,7 @@ $periodicTrigger = New-ScheduledTaskTrigger `
     -RepetitionDuration (New-TimeSpan -Days 3650)
 $startupTrigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal `
-    -UserId $userId `
+    -UserId $RunAsUser `
     -LogonType S4U `
     -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `

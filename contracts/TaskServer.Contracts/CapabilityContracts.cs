@@ -155,7 +155,21 @@ public sealed record RunnerCapabilitySnapshotDto(
     int? EffectiveMaxParallelism = null,
     DateTime? RuntimeCapacityAppliedAt = null,
     long? RuntimeCapacityAppliedVersion = null,
-    HostProjectPolicyDto? ProjectPolicy = null);
+    HostProjectPolicyDto? ProjectPolicy = null,
+    TunnelSupervisionStatusDto? TunnelSupervision = null);
+
+public sealed record TunnelScheduledTaskStatusDto(
+    bool Registered,
+    string State,
+    DateTime? ObservedAt);
+
+public sealed record TunnelSupervisionStatusDto(
+    string SshTarget,
+    int RemotePort,
+    TunnelScheduledTaskStatusDto Keeper,
+    TunnelScheduledTaskStatusDto Watchdog,
+    DateTime? LastHealAt,
+    string? LastHealResult);
 
 public sealed record OperatorHostDrainRequest(string Reason);
 

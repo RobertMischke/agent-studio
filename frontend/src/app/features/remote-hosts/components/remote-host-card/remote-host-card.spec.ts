@@ -92,6 +92,27 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelector('[data-testid="remote-host-cpu-context"]')?.textContent).toContain('does not consume a RUN slot');
   });
 
+  it('shows product-managed keeper, watchdog, and last-heal status beside the route', () => {
+    const el: HTMLElement = mount({
+      ...HOST,
+      tunnelSupervision: {
+        sshTarget: 'agent-runner',
+        remotePort: 15031,
+        keeper: { registered: true, state: 'running', observedAt: '2026-07-10T11:55:00Z' },
+        watchdog: { registered: true, state: 'running', observedAt: '2026-07-10T11:59:50Z' },
+        lastHealAt: '2026-07-10T11:58:00Z',
+        lastHealResult: 'succeeded',
+      },
+    }).nativeElement;
+
+    expect(el.querySelector('[data-testid="remote-host-tunnel-keeper"]')?.textContent)
+      .toContain('Registered · Running');
+    expect(el.querySelector('[data-testid="remote-host-tunnel-watchdog"]')?.textContent)
+      .toContain('Registered · Running');
+    expect(el.querySelector('[data-testid="remote-host-tunnel-last-heal"]')?.textContent)
+      .toContain('succeeded');
+  });
+
   it('shows a neutral live-loading state instead of cached stopped data', () => {
     const el: HTMLElement = mount({
       ...HOST,

@@ -24,12 +24,14 @@ const VALID: RunnerSetupConfig = {
   clientId: 'runner-client-01',
   gitRemote: 'https://github.com/example/agent-studio.git',
   gitPushRemote: 'git@github.com:example/agent-studio.git',
+  elevationConsent: false,
 };
 
 describe('runner setup model', () => {
   it('requires every operator-owned connection value', () => {
     expect(runnerSetupIssues({
       sshTarget: '', taskServerUrl: '', connectionMode: '', clientId: '', gitRemote: '', gitPushRemote: '',
+      elevationConsent: false,
     })).toEqual([
       'SSH target is required.',
       'Task Server URL is required.',
@@ -45,7 +47,23 @@ describe('runner setup model', () => {
     expect(runnerSetupIssues(loopback)).toContain(
       'A remote host cannot reach this loopback URL. Choose Tunnel or enter a central or LAN URL.',
     );
-    expect(runnerSetupIssues({ ...loopback, connectionMode: 'tunnel' })).toEqual([]);
+    expect(runnerSetupIssues({ ...loopback, connectionMode: 'tunnel', elevationConsent: true })).toEqual([]);
+  });
+
+  it('adds the self-elevating product installer before tunnel reachability', () => {
+    const request = buildRunnerSetupRequest(HOST, {
+      ...VALID,
+      taskServerUrl: 'http://127.0.0.1:15031',
+      connectionMode: 'tunnel',
+      elevationConsent: true,
+    });
+
+    expect(request.prompt).toContain('install-tunnel-supervision.ps1');
+    expect(request.prompt).toContain('Windows User Account Control consent prompt');
+    expect(request.prompt).toContain('AgentRunner-TunnelKeeper');
+    expect(request.prompt).toContain('AgentRunner-TunnelWatchdog');
+    expect(request.prompt.indexOf('Windows control-plane tunnel supervision'))
+      .toBeLessThan(request.prompt.indexOf('Reachability gate'));
   });
 
   it('builds the exact idempotent remote setup and protected provider-auth contract', () => {
@@ -65,7 +83,7 @@ describe('runner setup model', () => {
       gitRemote: 'https://github.com/example/agent-studio.git',
       gitPushRemote: 'git@github.com:example/agent-studio.git',
     });
-    expect(request.prompt).toContain('Reachability gate (must run first)');
+    expect(request.prompt).toContain('Reachability gate');
     expect(request.prompt).toContain('CodingAgentRunner');
     expect(request.prompt).toContain('[0.5.0,)');
     expect(request.prompt).toContain('systemd');

@@ -63,25 +63,21 @@ Host agent-runner
     ExitOnForwardFailure yes
 ```
 
-Use the repository-owned functional keeper instead of a bare `ssh -N` loop:
+Use the Agent Studio Windows control-plane installer instead of registering
+checkout scripts or running a bare `ssh -N` loop:
 
 ```powershell
-Set-Location C:\Projects\agent-studio
-.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
-    -SshTarget agent-runner `
-    -RemotePort 15031 `
-    -TaskServerPort 5031 `
-    -IntervalMinutes 5
-
-.\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
-    -DevspacePath C:\Projects\agent-taskboard-devspace `
-    -SshTarget agent-runner `
-    -RemotePort 15031 `
-    -KeeperTaskName AgentRunner-TunnelKeeper `
-    -ProbeIntervalSeconds 60 `
-    -FailureThreshold 2 `
-    -OperatorAlarmPath C:\Projects\agent-taskboard-devspace\.operator-alarm.log
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  ".\docs\operations\setup\windows-control-plane-host\install-tunnel-supervision.ps1" `
+  -SshTarget agent-runner -RemotePort 15031 -TaskServerPort 5031
 ```
+
+The guided Execution Hosts flow runs the same installer. It explains the
+one-time elevation before opening Windows User Account Control, copies the
+assets to the stable Agent Studio application-data directory, and registers
+both tasks. See
+[windows-control-plane-host.md](./windows-control-plane-host.md) for the
+authoritative Windows setup and status-verification flow.
 
 Both registrations are idempotent and use `IgnoreNew`. The keeper starts at
 boot, starts immediately when registered, and retains its five-minute fallback
@@ -89,8 +85,7 @@ trigger. The independent `AgentRunner-TunnelWatchdog` starts at boot and owns a
 60-second probe loop. Both tasks use an S4U principal, so they do not depend on
 an interactive logon session. The selected identity must own a local protected
 SSH key and a non-interactive `agent-runner` alias. Run the registration from
-an elevated PowerShell session because an at-startup task can require that
-authority.
+administrator authority once because an at-startup task can require it.
 
 The keeper task has no execution time limit and remains the owner of its
 `ssh.exe` child until SSH exits. It deliberately has no Task Scheduler retry:
@@ -101,7 +96,7 @@ Windows forward once so the long-lived SSH process moves under this ownership
 and logging contract.
 
 The keeper in
-[`deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1`](../../../deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1)
+[`tunnel-keeper.ps1`](./windows-control-plane-host/tunnel-keeper.ps1)
 does not equate a local `ssh.exe` process with a working route. It asks the
 Linux host to request `http://127.0.0.1:15031/healthz` and accepts the probe only
 when SSH returns the exact `AGENT_TASK_SERVER_ROUTE_OK` sentinel. If that
@@ -119,14 +114,14 @@ ssh.exe -N -T `
 ```
 
 State and bounded transition logs live under
-`%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\`. Healthy scheduled runs stay
+`%LOCALAPPDATA%\Agent Studio\Tunnel\state\`. Healthy scheduled runs stay
 quiet. An ongoing failure is logged on transition and at most hourly, not on
 every five-minute invocation. `ExitOnForwardFailure=yes` matters: if the host's
 `15031` is still held by a half-dead previous session, SSH fails fast instead
 of connecting without the forward.
 
 The watchdog in
-[`deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh`](../../../deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh)
+[`tunnel-watchdog.sh`](./windows-control-plane-host/tunnel-watchdog.sh)
 runs the functional probe every 60 seconds. After two consecutive failures it
 uses the operator recovery sequence in this order:
 
@@ -137,14 +132,13 @@ uses the operator recovery sequence in this order:
 3. Retry the runner-side health request for up to 30 seconds and journal the
    outcome.
 
-The append-only journal is `<devspace>/.tunnel-watchdog.log`. A second
+The append-only journal is
+`%LOCALAPPDATA%\Agent Studio\Tunnel\state\watchdog-events.log`. A second
 consecutive failed heal appends one `severity=alarm` line to the configured
-operator-alarm channel. The default channel is
-`<devspace>/.operator-alarm.log`; pass the path already consumed by the stable
-operator watcher when a devspace uses a different path.
+operator-alarm channel beside it.
 
 Each keeper replacement now writes its stdout and stderr to timestamped files
-under `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\` and records the paths in
+under `%LOCALAPPDATA%\Agent Studio\Tunnel\state\` and records the paths in
 `ssh-attempts.log`. The keeper waits for the SSH process and always records its
 eventual exit code. The stderr file includes verbose OpenSSH disconnect and
 forwarding diagnostics, so a later incident can distinguish keepalive death,
@@ -253,13 +247,14 @@ claim poll.
    `JOB_RESULTS_DIR`:
 
    ```powershell
-   .\deploy\windows\agent-runner-tunnel\test-tunnel-watchdog-forced-kill.ps1 `
+   & "$env:LOCALAPPDATA\Agent Studio\Tunnel\test-tunnel-watchdog-forced-kill.ps1" `
        -SshTarget agent-runner `
        -RemotePort 15031 `
        -TimeoutSeconds 150
    ```
 
-4. Confirm `<devspace>/.tunnel-watchdog.log` contains two `probe_failed` rows,
+4. Confirm `%LOCALAPPDATA%\Agent Studio\Tunnel\state\watchdog-events.log`
+   contains two `probe_failed` rows,
    followed by `remote_listener_cleanup`, `keeper_restart`, and
    `heal_succeeded`. With the default cadence, recovery should complete in
    about two minutes plus the bounded replacement verification time.

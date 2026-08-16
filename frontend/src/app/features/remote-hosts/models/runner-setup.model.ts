@@ -11,6 +11,7 @@ export interface RunnerSetupConfig {
   clientId: string;
   gitRemote: string;
   gitPushRemote: string;
+  elevationConsent: boolean;
 }
 
 /** Validate the operator-owned values before a provisioning task can be queued. */
@@ -26,6 +27,9 @@ export function runnerSetupIssues(config: RunnerSetupConfig): string[] {
   if (!config.clientId.trim()) issues.push('Client identity is required.');
   if (!config.gitRemote.trim()) issues.push('Git remote URL is required.');
   if (!config.gitPushRemote.trim()) issues.push('Git push URL is required.');
+  if (config.connectionMode === 'tunnel' && !config.elevationConsent) {
+    issues.push('Confirm the one-time Windows administrator approval for tunnel supervision.');
+  }
   if (config.taskServerUrl.trim() && isLocalUrl(config.taskServerUrl) && config.connectionMode !== 'tunnel') {
     issues.push('A remote host cannot reach this loopback URL. Choose Tunnel or enter a central or LAN URL.');
   }
@@ -41,6 +45,16 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
   const gitPushRemote = config.gitPushRemote.trim();
   const connectionMode = config.connectionMode || 'not selected';
   const healthUrl = `${taskServerUrl}/healthz`;
+  const tunnelSetupCommand = [
+    'powershell.exe -NoProfile -ExecutionPolicy Bypass -File',
+    '".\\docs\\operations\\setup\\windows-control-plane-host\\install-tunnel-supervision.ps1"',
+    '-SshTarget', powerShellArg(sshTarget),
+    '-RemotePort 15031',
+    '-TaskServerPort 5031',
+  ].join(' ');
+  const executionBoundary = connectionMode === 'tunnel'
+    ? `Run remote Agent Host inspections and mutations through SSH target \`${sshTarget}\`. Tunnel supervision registration is the one local control-plane setup action; do not install agent-host on the operator workstation.`
+    : `Run every inspection and mutation through SSH target \`${sshTarget}\`; do not install or configure agent-host on the operator workstation.`;
   const controllerCommand = [
     'bash scripts/remote-runner-onboard.sh',
     `--host ${shellArg(sshTarget)}`,
@@ -68,13 +82,24 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
       gitRemote,
       gitPushRemote,
       executionBoundary: 'Run the controller agent locally; perform every host operation through SSH.',
+      tunnelSupervision: connectionMode === 'tunnel'
+        ? 'Install the product-managed Windows keeper and watchdog with one explicit UAC approval.'
+        : 'Not required for a directly reachable Task Server.',
     },
     prompt: [
-      `Set up remote host ${host.name}. Run every inspection and mutation through SSH target \`${sshTarget}\`; do not install or configure agent-host on the operator workstation.`,
+      `Set up remote host ${host.name}. ${executionBoundary}`,
       '',
       'Treat this as an idempotent remote-host process that is safe to repeat after a wipe. Report each phase in the task conversation and fail with a concrete recovery instruction instead of waiting silently.',
       '',
-      '1. Reachability gate (must run first)',
+      ...(connectionMode === 'tunnel' ? [
+        '0. Windows control-plane tunnel supervision (must run first)',
+        `- Run \`${tunnelSetupCommand}\` on the Windows control-plane host.`,
+        '- The product installer explains why administrator access is needed, opens one Windows User Account Control consent prompt, copies the keeper and watchdog into the stable Agent Studio application-data directory, and registers both Scheduled Tasks.',
+        '- Wait for the installer to report AgentRunner-TunnelKeeper and AgentRunner-TunnelWatchdog as registered. Never schedule a script from a source checkout.',
+        '- If the operator declines elevation, stop and report that tunnel registration is still pending. Do not continue to remote installation.',
+        '',
+      ] : []),
+      '1. Reachability gate',
       `- From the remote host, verify \`${healthUrl}\` with curl and the exact header \`X-Client-Id: ${clientId}\`.`,
       `- Connection mode is \`${connectionMode}\`. If it is \`tunnel\`, verify the tunnel on the remote host before curl.`,
       '- Do not install or start agent-host until this remote curl succeeds. On failure, show whether the operator needs a central URL, LAN binding, or tunnel.',
@@ -117,4 +142,8 @@ function isHttpUrl(value: string): boolean {
 
 function shellArg(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function powerShellArg(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
 }

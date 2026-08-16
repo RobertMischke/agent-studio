@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Windows-side functional watchdog for the reverse Task Server tunnel.
+# Product-managed Windows functional watchdog for the reverse Task Server tunnel.
 #
 # This process is intentionally separate from AgentRunner-TunnelKeeper. It is
 # registered as an S4U Scheduled Task so it survives interactive sessions. The
@@ -16,7 +16,7 @@ failure_threshold="2"
 verify_attempts="6"
 verify_interval_seconds="5"
 max_cycles="0"
-devspace_dir=""
+state_dir=""
 operator_alarm_path=""
 ssh_executable="${TUNNEL_WATCHDOG_SSH:-ssh}"
 powershell_executable="${TUNNEL_WATCHDOG_POWERSHELL:-powershell.exe}"
@@ -25,7 +25,7 @@ usage() {
   cat <<'EOF'
 Usage: tunnel-watchdog.sh [options]
 
-  --devspace PATH                 Parent directory of the dev and stable checkouts
+  --state-directory PATH          Product-owned status and journal directory
   --ssh-target TARGET             SSH alias for the runner host (default: agent-runner)
   --remote-port PORT              Runner-side reverse-forward port (default: 15031)
   --keeper-task NAME              Scheduled Task to restart (default: AgentRunner-TunnelKeeper)
@@ -44,7 +44,7 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --devspace) devspace_dir=${2-}; shift 2 ;;
+    --state-directory) state_dir=${2-}; shift 2 ;;
     --ssh-target) ssh_target=${2-}; shift 2 ;;
     --remote-port) remote_port=${2-}; shift 2 ;;
     --keeper-task) keeper_task=${2-}; shift 2 ;;
@@ -74,16 +74,19 @@ case "$keeper_task" in
   *[!A-Za-z0-9._-]*|'') printf 'tunnel-watchdog: keeper task name contains unsupported characters\n' >&2; exit 2 ;;
 esac
 
-script_dir=$(cd "$(dirname "$0")" && pwd)
-if [ -z "$devspace_dir" ]; then
-  repository_root=$(cd "$script_dir/../../.." && pwd)
-  devspace_dir=$(cd "$repository_root/.." && pwd)
+if [ -z "$state_dir" ]; then
+  local_app_data=${LOCALAPPDATA:-}
+  if [ -z "$local_app_data" ]; then
+    printf 'tunnel-watchdog: --state-directory is required when LOCALAPPDATA is unavailable\n' >&2
+    exit 2
+  fi
+  state_dir="$local_app_data/Agent Studio/Tunnel/state"
 fi
 
-log_path="$devspace_dir/.tunnel-watchdog.log"
-state_dir="$devspace_dir/.tunnel-watchdog-state"
+log_path="$state_dir/watchdog-events.log"
 lock_dir="$state_dir/lock"
-operator_alarm_path=${operator_alarm_path:-"$devspace_dir/.operator-alarm.log"}
+status_path="$state_dir/watchdog.json"
+operator_alarm_path=${operator_alarm_path:-"$state_dir/operator-alarm.log"}
 health_url="http://127.0.0.1:$remote_port/healthz"
 
 mkdir -p "$state_dir"
@@ -114,6 +117,31 @@ iso_now() {
 
 journal() {
   printf '%s %s\n' "$(iso_now)" "$*" >> "$log_path"
+}
+
+scheduled_task_state() {
+  task_name=$1
+  "$powershell_executable" -NoProfile -NonInteractive -Command \
+    "Get-ScheduledTask -TaskName '$task_name' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty State" \
+    2>/dev/null | tr -d '\r\n'
+}
+
+write_status() {
+  status=$1
+  message=$2
+  observed_at=$(iso_now)
+  keeper_state=$(scheduled_task_state "$keeper_task")
+  last_heal_at_json=null
+  last_heal_result_json=null
+  if [ -n "$last_heal_at" ]; then
+    last_heal_at_json="\"$last_heal_at\""
+    last_heal_result_json="\"$last_heal_result\""
+  fi
+  temporary_status="$status_path.tmp.$$"
+  printf '{"status":"%s","observedAt":"%s","message":"%s","keeperTaskState":"%s","lastHealAt":%s,"lastHealResult":%s,"consecutiveProbeFailures":%s}\n' \
+    "$status" "$observed_at" "$message" "${keeper_state:-Unknown}" \
+    "$last_heal_at_json" "$last_heal_result_json" "$probe_failures" >"$temporary_status"
+  mv -f "$temporary_status" "$status_path"
 }
 
 alarm() {
@@ -207,7 +235,10 @@ heal_route() {
 probe_failures=0
 heal_failures=0
 cycles=0
+last_heal_at=""
+last_heal_result=""
 journal "event=watchdog_started interval_seconds=$probe_interval_seconds threshold=$failure_threshold target=$ssh_target port=$remote_port"
+write_status "running" "Watchdog started."
 
 while :; do
   cycle_started_epoch=$(date +%s)
@@ -218,16 +249,23 @@ while :; do
     fi
     probe_failures=0
     heal_failures=0
+    write_status "running" "Functional route probe passed."
   else
     probe_failures=$((probe_failures + 1))
     journal "event=probe_failed consecutive=$probe_failures threshold=$failure_threshold"
     if [ "$probe_failures" -ge "$failure_threshold" ]; then
       if heal_route; then
+        last_heal_at=$(iso_now)
+        last_heal_result="succeeded"
         probe_failures=0
         heal_failures=0
+        write_status "running" "Tunnel heal succeeded."
       else
+        last_heal_at=$(iso_now)
+        last_heal_result="failed"
         heal_failures=$((heal_failures + 1))
         journal "event=heal_failure_count consecutive=$heal_failures alarm_threshold=2"
+        write_status "degraded" "Tunnel heal failed."
         if [ "$heal_failures" -eq 2 ]; then
           alarm
         fi
@@ -237,6 +275,7 @@ while :; do
 
   if [ "$max_cycles" -gt 0 ] && [ "$cycles" -ge "$max_cycles" ]; then
     journal "event=watchdog_stopped reason=max_cycles cycles=$cycles"
+    write_status "stopped" "Watchdog stopped after the requested test cycles."
     exit 0
   fi
   cycle_elapsed_seconds=$(( $(date +%s) - cycle_started_epoch ))

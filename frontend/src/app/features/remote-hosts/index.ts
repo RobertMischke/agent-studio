@@ -29,8 +29,10 @@ export type {
   HostTelemetryFinding,
   HostTelemetrySeries,
   HostStatusTone,
+  TunnelSupervisionStatus,
   MeterTone,
 } from './models/remote-host.model';
+export { tunnelSupervisionHealthy } from './models/remote-host.model';
 export type { RunnerSetupConfig, RunnerSetupConnectionMode } from './models/runner-setup.model';
 export { buildRunnerSetupRequest, runnerSetupIssues } from './models/runner-setup.model';
 export {

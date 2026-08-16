@@ -2,12 +2,15 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-keeper="$repo_root/deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1"
-registration="$repo_root/deploy/windows/agent-runner-tunnel/register-tunnel-keeper.ps1"
-watchdog="$repo_root/deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh"
-watchdog_registration="$repo_root/deploy/windows/agent-runner-tunnel/register-tunnel-watchdog.ps1"
-forced_kill_test="$repo_root/deploy/windows/agent-runner-tunnel/test-tunnel-watchdog-forced-kill.ps1"
+asset_root="$repo_root/docs/operations/setup/windows-control-plane-host"
+installer="$asset_root/install-tunnel-supervision.ps1"
+keeper="$asset_root/tunnel-keeper.ps1"
+registration="$asset_root/register-tunnel-keeper.ps1"
+watchdog="$asset_root/tunnel-watchdog.sh"
+watchdog_registration="$asset_root/register-tunnel-watchdog.ps1"
+forced_kill_test="$asset_root/test-tunnel-watchdog-forced-kill.ps1"
 
+test -f "$installer"
 test -f "$keeper"
 test -f "$registration"
 test -f "$watchdog"
@@ -37,10 +40,15 @@ if grep -Fq -- "-RestartCount" "$registration"; then
   exit 1
 fi
 grep -Fq "Register-ScheduledTask" "$registration"
+grep -Fq "Start-Process powershell.exe -Verb RunAs" "$installer"
+grep -Fq "Approve the Windows User Account Control prompt" "$installer"
+grep -Fq "registration.json" "$installer"
 grep -Fq "curl -sf --max-time 6" "$watchdog"
 grep -Fq "Stop-ScheduledTask" "$watchdog"
 grep -Fq "Start-ScheduledTask" "$watchdog"
 grep -Fq "event=heal_succeeded" "$watchdog"
+grep -Fq "watchdog.json" "$watchdog"
+grep -Fq "keeperTaskState" "$watchdog"
 grep -Fq "source=tunnel-watchdog severity=alarm" "$watchdog"
 grep -Fq -- "-LogonType S4U" "$watchdog_registration"
 grep -Fq -- "-AtStartup" "$watchdog_registration"
@@ -50,7 +58,7 @@ grep -Fq "tunnel-watchdog-forced-kill--real.md" "$forced_kill_test"
 
 if command -v pwsh >/dev/null 2>&1; then
   pwsh -NoProfile -NonInteractive -Command \
-    "[void][System.Management.Automation.Language.Parser]::ParseFile('$keeper',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$watchdog_registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$forced_kill_test',[ref]\$null,[ref]\$null)"
+    "[void][System.Management.Automation.Language.Parser]::ParseFile('$installer',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$keeper',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$watchdog_registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$forced_kill_test',[ref]\$null,[ref]\$null)"
 fi
 
-printf 'Tunnel assets contain functional probes, targeted cleanup, captured SSH diagnostics, and session-independent watchdog registration.\n'
+printf 'Product setup assets contain elevation consent, functional probes, status projection, targeted cleanup, captured SSH diagnostics, and session-independent watchdog registration.\n'

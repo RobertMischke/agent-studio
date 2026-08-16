@@ -115,6 +115,21 @@ export class RemoteHostCardComponent {
       case 'unknown': return 'not reported';
     }
   });
+  readonly keeperLabel = computed(() => this.tunnelTaskLabel(
+    this.host().tunnelSupervision?.keeper));
+  readonly watchdogLabel = computed(() => this.tunnelTaskLabel(
+    this.host().tunnelSupervision?.watchdog));
+  readonly tunnelSupervisionTone = computed(() => {
+    const supervision = this.host().tunnelSupervision;
+    if (!supervision) return 'unknown';
+    return supervision.keeper.registered
+      && supervision.keeper.state === 'running'
+      && supervision.watchdog.registered
+      && supervision.watchdog.state === 'running'
+      && supervision.lastHealResult !== 'failed'
+        ? 'ok'
+        : 'warn';
+  });
 
   readonly meters = computed<Meter[]>(() => {
     const h = this.host();
@@ -221,6 +236,14 @@ export class RemoteHostCardComponent {
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }
   quotaTone(pct: number | null): MeterTone { return meterTone(pct); }
+
+  private tunnelTaskLabel(
+    task: NonNullable<RemoteHost['tunnelSupervision']>['keeper'] | undefined,
+  ): string {
+    if (!task?.registered) return 'Not registered';
+    const state = task.state ? task.state.charAt(0).toUpperCase() + task.state.slice(1) : 'Unknown';
+    return `Registered · ${state}`;
+  }
 
   toggleExpanded(): void {
     this.expandedChange.emit(!this.expanded());

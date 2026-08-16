@@ -87,6 +87,26 @@
             <div><dt>Task inflow</dt><dd>{{ taskInflowLabel() }}</dd></div>
             <div><dt>Daemon</dt><dd>{{ daemonLabel() }}</dd></div>
             <div data-testid="remote-host-task-server-route"><dt>Task Server route</dt><dd>{{ taskServerRouteLabel() }}</dd></div>
+            @if (h.tunnelSupervision; as supervision) {
+              <div data-testid="remote-host-tunnel-keeper">
+                <dt>Tunnel keeper</dt>
+                <dd><span class="tunnel-task" [attr.data-tone]="tunnelSupervisionTone()">{{ keeperLabel() }}</span></dd>
+              </div>
+              <div data-testid="remote-host-tunnel-watchdog">
+                <dt>Tunnel watchdog</dt>
+                <dd><span class="tunnel-task" [attr.data-tone]="tunnelSupervisionTone()">{{ watchdogLabel() }}</span></dd>
+              </div>
+              <div data-testid="remote-host-tunnel-last-heal">
+                <dt>Last tunnel heal</dt>
+                <dd>
+                  @if (supervision.lastHealAt) {
+                    {{ supervision.lastHealAt | date:'short' }} · {{ supervision.lastHealResult || 'result unknown' }}
+                  } @else {
+                    No heal recorded
+                  }
+                </dd>
+              </div>
+            }
             <div><dt>Last claim</dt><dd>{{ h.lastClaimAt ? (h.lastClaimAt | date:'short') : 'None' }}</dd></div>
             <div><dt>Fallback probe</dt><dd>{{ h.gitPushCheckedAt ? (h.gitPushCheckedAt | date:'short') : 'Never' }}</dd></div>
           </dl>

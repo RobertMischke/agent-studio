@@ -438,13 +438,16 @@ test.describe('Execution Hosts settings section', () => {
     await page.getByTestId('runner-setup-git-remote').fill('https://github.com/example/agent-studio.git');
     await page.getByTestId('runner-setup-git-push-remote').fill('git@github.com:example/agent-studio.git');
     await page.getByTestId('runner-setup-connection-mode').selectOption('tunnel');
+    await expect(page.getByTestId('runner-setup-elevation-consent')).toBeVisible();
+    await page.getByTestId('runner-setup-elevation-consent').check();
     await page.getByTestId('runner-setup-provider-auth-secret').fill(providerSecret);
     await page.getByTestId('runner-setup-provider-auth-provision').click();
     await expect(page.getByTestId('runner-setup-provider-auth-secret')).toHaveValue('');
     await expect(page.getByTestId('runner-setup-provider-auth-status')).toHaveAttribute('data-state', 'waiting');
 
     await expect(page.getByTestId('visible-cli-task-card')).toBeVisible();
-    await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('Reachability gate (must run first)');
+    await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('Windows control-plane tunnel supervision');
+    await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('install-tunnel-supervision.ps1');
     await expect(page.getByTestId('visible-cli-task-prompt')).toContainText('/etc/agent-runner/provider-auth.env');
     await expect(page.getByTestId('visible-cli-task-prompt')).not.toContainText(providerSecret);
     await expect(page.getByTestId('visible-cli-task-duration')).toContainText('10 to 20 minutes');
@@ -460,6 +463,7 @@ test.describe('Execution Hosts settings section', () => {
     });
     expect(String(createBody?.['promptMarkdown'])).toContain('## CLI input');
     expect(String(createBody?.['promptMarkdown'])).toContain('bash scripts/remote-runner-onboard.sh');
+    expect(String(createBody?.['promptMarkdown'])).toContain('install-tunnel-supervision.ps1');
     expect(String(createBody?.['promptMarkdown'])).toContain("--host 'agent-runner'");
     expect(String(createBody?.['promptMarkdown'])).toContain('X-Client-Id: agent-runner-01');
     expect(String(createBody?.['promptMarkdown'])).toContain('Provider credentials were already delivered by Studio through SSH stdin');
@@ -616,6 +620,14 @@ test.describe('Execution Hosts settings section', () => {
           taskServerConnectionEscalatedAt: new Date(now - 60_000).toISOString(),
           taskServerConnectionLastError: 'connection refused',
         },
+        tunnelSupervision: {
+          sshTarget: 'agent-runner',
+          remotePort: 15031,
+          keeper: { registered: true, state: 'running', observedAt: failureStartedAt },
+          watchdog: { registered: true, state: 'degraded', observedAt: new Date(now).toISOString() },
+          lastHealAt: new Date(now - 30_000).toISOString(),
+          lastHealResult: 'failed',
+        },
       }]),
     }));
 
@@ -627,6 +639,13 @@ test.describe('Execution Hosts settings section', () => {
     await expect(route).toContainText('Task Server route unreachable');
     await expect(route).toContainText('No connectivity advertisement has arrived');
     await expect(route).toContainText('Check the tunnel');
+    await expect(remote.getByTestId('remote-host-tunnel-keeper')).toContainText('Registered · Running');
+    await expect(remote.getByTestId('remote-host-tunnel-watchdog')).toContainText('Registered · Degraded');
+    await expect(remote.getByTestId('remote-host-tunnel-last-heal')).toContainText('failed');
+    await expect(page.getByTestId('status-bar-running-divergence')).toHaveAttribute(
+      'aria-label',
+      'Tunnel supervision needs attention',
+    );
 
     await setTheme(page, 'dark');
     await remote.screenshot({ path: join(SHOT_DIR, 'task-server-route-outage-dark--mocked.png') });

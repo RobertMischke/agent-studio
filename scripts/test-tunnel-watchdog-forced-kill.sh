@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-watchdog="$repo_root/deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh"
+watchdog="$repo_root/docs/operations/setup/windows-control-plane-host/tunnel-watchdog.sh"
 test_root="$(mktemp -d)"
 
 cleanup() {
@@ -16,7 +16,7 @@ cleanup() {
 trap cleanup EXIT
 
 fake_bin="$test_root/bin"
-fake_devspace="$test_root/devspace"
+fake_product_state="$test_root/product-state"
 fake_state="$test_root/route"
 functional_interval_seconds="${TUNNEL_WATCHDOG_TEST_INTERVAL_SECONDS:-1}"
 case "$functional_interval_seconds" in
@@ -26,7 +26,7 @@ if [ "$functional_interval_seconds" -lt 1 ]; then
   printf 'TUNNEL_WATCHDOG_TEST_INTERVAL_SECONDS must be a positive integer.\n' >&2
   exit 2
 fi
-mkdir -p "$fake_bin" "$fake_devspace" "$fake_state"
+mkdir -p "$fake_bin" "$fake_product_state" "$fake_state"
 
 cat > "$fake_state/health-server.py" <<'EOF'
 import socketserver
@@ -63,6 +63,10 @@ cat > "$fake_bin/powershell.exe" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$FAKE_TUNNEL_STATE/powershell-calls.log"
+if [[ "$*" == *"Get-ScheduledTask"* ]]; then
+  printf 'Running\n'
+  exit 0
+fi
 if [ "${FAKE_POWERSHELL_FAIL:-0}" = "1" ]; then
   exit 1
 fi
@@ -94,12 +98,12 @@ if curl -sf --max-time 1 "http://127.0.0.1:$remote_port/healthz" >/dev/null 2>&1
   printf 'Forced-kill fixture unexpectedly remained healthy.\n' >&2
   exit 1
 fi
-mkdir -p "$fake_devspace/.tunnel-watchdog-state/lock"
-printf '99999999\n' > "$fake_devspace/.tunnel-watchdog-state/lock/pid"
+mkdir -p "$fake_product_state/lock"
+printf '99999999\n' > "$fake_product_state/lock/pid"
 
 started_epoch=$(date +%s)
 FAKE_TUNNEL_STATE="$fake_state" FAKE_REMOTE_PORT="$remote_port" "$watchdog" \
-  --devspace "$fake_devspace" \
+  --state-directory "$fake_product_state" \
   --ssh-target agent-runner \
   --remote-port "$remote_port" \
   --keeper-task AgentRunner-TunnelKeeper \
@@ -112,7 +116,7 @@ FAKE_TUNNEL_STATE="$fake_state" FAKE_REMOTE_PORT="$remote_port" "$watchdog" \
   --powershell-executable "$fake_bin/powershell.exe"
 elapsed=$(( $(date +%s) - started_epoch ))
 
-log="$fake_devspace/.tunnel-watchdog.log"
+log="$fake_product_state/watchdog-events.log"
 grep -Fq 'event=probe_failed consecutive=1 threshold=2' "$log"
 grep -Fq 'event=probe_failed consecutive=2 threshold=2' "$log"
 grep -Fq 'event=remote_listener_cleanup result=0 detail=stopped-pids=' "$log"
@@ -121,6 +125,8 @@ grep -Fq "event=heal_succeeded health_url=http://127.0.0.1:$remote_port/healthz"
 grep -Fq 'Stop-ScheduledTask' "$fake_state/powershell-calls.log"
 grep -Fq 'Start-ScheduledTask' "$fake_state/powershell-calls.log"
 curl -sf --max-time 1 "http://127.0.0.1:$remote_port/healthz" >/dev/null
+grep -Fq '"status":"stopped"' "$fake_product_state/watchdog.json"
+grep -Fq '"keeperTaskState":"Running"' "$fake_product_state/watchdog.json"
 test "$elapsed" -le $((functional_interval_seconds + 12))
 
 printf 'Isolated forced-kill watchdog harness passed in %ss with a %ss probe interval. Production worst-case detection budget: two 60s probe ticks.\n' \
@@ -129,13 +135,13 @@ sed -n '/event=probe_failed\|event=heal_started\|event=remote_listener_cleanup\|
 
 # A continuing failure gets one operator alarm on the second failed heal. The
 # failed-heal retry occurs on the next 60-second production tick.
-alarm_devspace="$test_root/alarm-devspace"
+alarm_product_state="$test_root/alarm-product-state"
 alarm_state="$test_root/alarm-route"
-mkdir -p "$alarm_devspace" "$alarm_state"
+mkdir -p "$alarm_product_state" "$alarm_state"
 cp "$fake_state/health-server.py" "$alarm_state/health-server.py"
 alarm_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
 FAKE_TUNNEL_STATE="$alarm_state" FAKE_REMOTE_PORT="$alarm_port" FAKE_POWERSHELL_FAIL=1 "$watchdog" \
-  --devspace "$alarm_devspace" \
+  --state-directory "$alarm_product_state" \
   --ssh-target agent-runner \
   --remote-port "$alarm_port" \
   --keeper-task AgentRunner-TunnelKeeper \
@@ -146,6 +152,6 @@ FAKE_TUNNEL_STATE="$alarm_state" FAKE_REMOTE_PORT="$alarm_port" FAKE_POWERSHELL_
   --max-cycles 3 \
   --ssh-executable "$fake_bin/ssh" \
   --powershell-executable "$fake_bin/powershell.exe"
-grep -Fq 'event=heal_failure_count consecutive=2 alarm_threshold=2' "$alarm_devspace/.tunnel-watchdog.log"
-test "$(grep -Fc 'source=tunnel-watchdog severity=alarm' "$alarm_devspace/.operator-alarm.log")" -eq 1
+grep -Fq 'event=heal_failure_count consecutive=2 alarm_threshold=2' "$alarm_product_state/watchdog-events.log"
+test "$(grep -Fc 'source=tunnel-watchdog severity=alarm' "$alarm_product_state/operator-alarm.log")" -eq 1
 printf 'Repeated-heal-failure alarm simulation passed; exactly one operator alarm was appended.\n'

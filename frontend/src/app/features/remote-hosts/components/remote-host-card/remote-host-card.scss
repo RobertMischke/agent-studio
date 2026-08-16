@@ -157,6 +157,23 @@
 .detail__facts dt { color: var(--studio-fg-muted); font-size: 10px; }
 .detail__facts dd { margin: 0; color: var(--studio-fg); font-size: 11px; overflow-wrap: anywhere; }
 .detail__facts code { font-family: var(--font-mono, monospace); font-size: 10px; }
+.tunnel-task {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border-radius: 999px;
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+}
+.tunnel-task[data-tone='ok'] {
+  background: var(--notify-success-tint);
+  color: var(--notify-success-icon-fg);
+}
+.tunnel-task[data-tone='warn'] {
+  background: var(--notify-warning-tint);
+  color: var(--notify-warning-icon-fg);
+}
 .detail__actions,
 .detail__badges { flex-wrap: wrap; gap: var(--studio-spacing-2); margin-top: var(--studio-spacing-3); }
 

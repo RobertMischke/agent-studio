@@ -43,6 +43,7 @@ export class StatusbarItemComponent {
   readonly signalCorrelation = input<string | null>(null);
   /** Small, explicit warning when independent live sources disagree. */
   readonly warning = input(false);
+  readonly warningLabel = input('Execution host warning');
   /** Bullet character used for read-only chips that pre-date the SVG icon
    *  set ("● running" / "↻ N/M auto"); takes precedence over `icon` so
    *  callers can keep the legacy glyph without forcing every status-bar

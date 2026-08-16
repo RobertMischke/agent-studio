@@ -38,6 +38,7 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
   readonly clientId = signal('');
   readonly gitRemote = signal('');
   readonly gitPushRemote = signal('');
+  readonly elevationConsent = signal(false);
   readonly providerAuthEnvironmentVariable = signal<ProviderAuthEnvironmentVariable>('CLAUDE_CODE_OAUTH_TOKEN');
   readonly providerAuthSecret = signal('');
   readonly providerAuthPhase = signal<ProvisioningPhase>('idle');
@@ -53,6 +54,7 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
     clientId: this.clientId(),
     gitRemote: this.gitRemote(),
     gitPushRemote: this.gitPushRemote(),
+    elevationConsent: this.elevationConsent(),
   }));
   readonly issues = computed(() => runnerSetupIssues(this.config()));
   readonly currentProviderAuth = computed(() => {
@@ -94,6 +96,7 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
       if (value === 'tunnel' && /^http:\/\/(localhost|127\.0\.0\.1):5031\/?$/i.test(this.taskServerUrl().trim())) {
         this.taskServerUrl.set('http://127.0.0.1:15031');
       }
+      if (value !== 'tunnel') this.elevationConsent.set(false);
     }
   }
 

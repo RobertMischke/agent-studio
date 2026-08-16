@@ -11,7 +11,7 @@ param(
 
     [string] $SshExecutable = 'ssh.exe',
 
-    [string] $StateDirectory = (Join-Path $env:LOCALAPPDATA 'AgentTaskboard\tunnel-keeper'),
+    [string] $StateDirectory = (Join-Path $env:LOCALAPPDATA 'Agent Studio\Tunnel\state'),
 
     [ValidateRange(10, 180)]
     [int] $RecoveryWaitSeconds = 45
@@ -21,8 +21,8 @@ $ErrorActionPreference = 'Stop'
 $sentinel = 'AGENT_TASK_SERVER_ROUTE_OK'
 $healthUrl = "http://127.0.0.1:$RemotePort/healthz"
 $forward = "${RemotePort}:127.0.0.1:${TaskServerPort}"
-$statePath = Join-Path $StateDirectory 'state.json'
-$logPath = Join-Path $StateDirectory 'events.log'
+$statePath = Join-Path $StateDirectory 'keeper.json'
+$logPath = Join-Path $StateDirectory 'keeper-events.log'
 $sshAttemptLogPath = Join-Path $StateDirectory 'ssh-attempts.log'
 $mutexName = "Local\AgentTaskboardTunnelKeeper-$RemotePort"
 $mutex = [Threading.Mutex]::new($false, $mutexName)

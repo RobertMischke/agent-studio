@@ -154,6 +154,21 @@ export interface TaskServerConnectionTelemetry {
   lastRecoveredAt: string | null;
 }
 
+export interface TunnelScheduledTaskStatus {
+  registered: boolean;
+  state: 'running' | 'degraded' | 'stopped' | 'stale' | 'unknown' | string;
+  observedAt: string | null;
+}
+
+export interface TunnelSupervisionStatus {
+  sshTarget: string;
+  remotePort: number;
+  keeper: TunnelScheduledTaskStatus;
+  watchdog: TunnelScheduledTaskStatus;
+  lastHealAt: string | null;
+  lastHealResult: 'succeeded' | 'failed' | string | null;
+}
+
 export type HostLiveDataState = 'loading' | 'ready' | 'error';
 
 export type CapabilityHealthState = 'healthy' | 'suspect' | 'draining' | 'half-open';
@@ -225,6 +240,7 @@ export interface TaskServerRunnerCapabilitySnapshot {
   runtimeCapacityAppliedAt?: string | null;
   runtimeCapacityAppliedVersion?: number | null;
   projectPolicy?: NonNullable<RemoteHost['projectPolicy']> | null;
+  tunnelSupervision?: TunnelSupervisionStatus | null;
 }
 
 export interface RemoteHostAdmission {
@@ -266,6 +282,8 @@ export interface RemoteHost {
   telemetry?: HostTelemetrySeries | null;
   /** Process-local route observation; capability freshness remains the remote alarm. */
   taskServerConnection?: TaskServerConnectionTelemetry | null;
+  /** Product-managed Windows Scheduled Tasks supervising a reverse tunnel. */
+  tunnelSupervision?: TunnelSupervisionStatus | null;
   /** Freshness of the client/daemon projection requested for this mount. */
   liveDataState?: HostLiveDataState;
   /** Acute registry failure projected from a synthetic /api/clients row. */
@@ -435,4 +453,13 @@ export function taskServerRouteDetail(host: RemoteHost): string {
     || capability?.reason
     || capability?.detail
     || 'No route observation has been reported yet.';
+}
+
+export function tunnelSupervisionHealthy(status: TunnelSupervisionStatus | null | undefined): boolean {
+  return !!status
+    && status.keeper.registered
+    && status.keeper.state === 'running'
+    && status.watchdog.registered
+    && status.watchdog.state === 'running'
+    && status.lastHealResult !== 'failed';
 }

@@ -24,6 +24,7 @@ import {
   deriveBoardRunningTruth,
   freshRemoteTelemetrySlots,
   RemoteHostsService,
+  tunnelSupervisionHealthy,
 } from '../../../remote-hosts';
 
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
@@ -105,6 +106,8 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     const telemetry = this.remoteTelemetrySlots();
     return telemetry !== null && telemetry !== this.runningTruth().remote;
   });
+  readonly tunnelSupervisionWarning = computed(() => this.remoteHosts.hosts().some(host =>
+    host.tunnelSupervision && !tunnelSupervisionHealthy(host.tunnelSupervision)));
 
   readonly hostLoad = computed(() =>
     summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
@@ -158,19 +161,22 @@ export class StatusBarComponent implements OnInit, OnDestroy {
       : this.runningSourcesDiverge()
         ? ` Warning: Board leases report ${truth.remote} remote, but fresh host telemetry reports ${telemetrySlots} active slots.`
         : ` Board leases and host telemetry agree on ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
+    const tunnel = this.tunnelSupervisionWarning()
+      ? ' Warning: Windows tunnel keeper or watchdog supervision is not fully running.'
+      : '';
     const load = this.hostLoad();
-    if (!load) return `Open execution hosts. ${execution}${comparison} Execution host load is unavailable.`;
+    if (!load) return `Open execution hosts. ${execution}${comparison}${tunnel} Execution host load is unavailable.`;
 
     const loadDetail = `Execution host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
       + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active execution `
       + `${load.activeSlots === 1 ? 'slot' : 'slots'}.`;
     if (load.correlation === 'load-without-runs') {
-      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
+      return `Open execution hosts. ${execution}${comparison}${tunnel} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
     }
     if (load.correlation === 'runs-without-load') {
-      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
+      return `Open execution hosts. ${execution}${comparison}${tunnel} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
     }
-    return `Open execution hosts. ${execution}${comparison} ${loadDetail}`;
+    return `Open execution hosts. ${execution}${comparison}${tunnel} ${loadDetail}`;
   }
 
   autoTooltip(): string {

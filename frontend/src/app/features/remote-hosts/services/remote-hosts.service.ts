@@ -247,6 +247,7 @@ export class RemoteHostsService {
               taskServerConnection: snapshot.telemetry
                 ? taskServerConnection(snapshot.telemetry)
                 : current.taskServerConnection ?? null,
+              tunnelSupervision: snapshot.tunnelSupervision ?? current.tunnelSupervision ?? null,
               stats,
             };
             if (index >= 0) projected[index] = next;

@@ -53,6 +53,7 @@ describe('RunnerSetupDialogComponent', () => {
     expect(el.querySelector('[data-testid="runner-setup-loopback-block"]')).toBeTruthy();
 
     component.setConnectionMode('tunnel');
+    component.elevationConsent.set(true);
     fixture.detectChanges();
     expect(component.taskServerUrl()).toBe('http://127.0.0.1:15031');
     expect(component.ready()).toBe(false);
@@ -106,6 +107,7 @@ describe('RunnerSetupDialogComponent', () => {
     fixture.detectChanges();
     const component = fixture.componentInstance;
     component.setConnectionMode('tunnel');
+    component.elevationConsent.set(true);
     component.gitRemote.set('git@github.com:example/agent-studio.git');
     component.gitPushRemote.set('git@github.com:example/agent-studio.git');
     component.providerAuthSecret.set('sk-ant-oat01-active-runner-fixture');

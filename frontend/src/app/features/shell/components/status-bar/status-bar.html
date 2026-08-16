@@ -7,7 +7,8 @@
       [signalCorrelation]="hostLoad()?.correlation ?? 'unknown'"
       [label]="runningLabel()"
       [tooltip]="runningTooltip()"
-      [warning]="runningSourcesDiverge()"
+      [warning]="runningSourcesDiverge() || tunnelSupervisionWarning()"
+      [warningLabel]="tunnelSupervisionWarning() ? 'Tunnel supervision needs attention' : 'Running sources disagree'"
       testid="status-bar-running"
       (activated)="navigateToExecutionHosts()" />
     <app-statusbar-item

@@ -19,7 +19,7 @@ param(
 
     [string] $WatchdogPath = (Join-Path $PSScriptRoot 'tunnel-watchdog.sh'),
 
-    [string] $DevspacePath = (Split-Path (Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent) -Parent),
+    [string] $StateDirectory = (Join-Path $env:LOCALAPPDATA 'Agent Studio\Tunnel\state'),
 
     [string] $OperatorAlarmPath,
 
@@ -30,13 +30,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $watchdog = (Resolve-Path -LiteralPath $WatchdogPath).Path
-$devspace = (Resolve-Path -LiteralPath $DevspacePath).Path
 $bash = (Resolve-Path -LiteralPath $BashExecutable).Path
 if ([string]::IsNullOrWhiteSpace($OperatorAlarmPath)) {
-    $OperatorAlarmPath = Join-Path $devspace '.operator-alarm.log'
+    $OperatorAlarmPath = Join-Path $StateDirectory 'operator-alarm.log'
 }
 $watchdogBashPath = $watchdog -replace '\\', '/'
-$devspaceBashPath = $devspace -replace '\\', '/'
+$stateDirectoryBashPath = $StateDirectory -replace '\\', '/'
 $operatorAlarmBashPath = $OperatorAlarmPath -replace '\\', '/'
 
 function Quote-TaskArgument {
@@ -46,7 +45,7 @@ function Quote-TaskArgument {
 
 $argumentList = @(
     (Quote-TaskArgument $watchdogBashPath),
-    '--devspace', (Quote-TaskArgument $devspaceBashPath),
+    '--state-directory', (Quote-TaskArgument $stateDirectoryBashPath),
     '--ssh-target', (Quote-TaskArgument $SshTarget),
     '--remote-port', $RemotePort,
     '--keeper-task', (Quote-TaskArgument $KeeperTaskName),

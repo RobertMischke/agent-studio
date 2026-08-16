@@ -9,7 +9,7 @@ param(
     [ValidateRange(60, 300)]
     [int] $TimeoutSeconds = 150,
 
-    [string] $DevspacePath = (Split-Path (Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent) -Parent),
+    [string] $StateDirectory = (Join-Path $env:LOCALAPPDATA 'Agent Studio\Tunnel\state'),
 
     [string] $ResultsDirectory = $env:JOB_RESULTS_DIR,
 
@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $healthUrl = "http://127.0.0.1:$RemotePort/healthz"
-$watchdogLog = Join-Path $DevspacePath '.tunnel-watchdog.log'
+$watchdogLog = Join-Path $StateDirectory 'watchdog-events.log'
 
 function Test-TunnelHealth {
     & $SshExecutable -T -o BatchMode=yes -o ConnectTimeout=10 $SshTarget `

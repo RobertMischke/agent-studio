@@ -21,11 +21,14 @@ public static class ManagementEndpoints
         group.MapGet("/remote-hosts", (
             HttpContext context,
             AgentStudio.Runner.V1ReviewExecutorRegistry registry,
+            TunnelSupervisionStatusReader tunnelSupervision,
             IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";
             if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
-            return Results.Ok(registry.ListCapabilitySnapshots());
+            return Results.Ok(TunnelSupervisionProjection.Attach(
+                registry.ListCapabilitySnapshots(),
+                tunnelSupervision.Read()));
         });
         group.MapPost("/remote-hosts/provider-auth", async (
             HttpContext context,
