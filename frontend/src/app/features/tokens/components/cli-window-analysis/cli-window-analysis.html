@@ -12,12 +12,12 @@
 
   <div class="cwa__levels" data-testid="cli-usage-levels">
     <article><span>Account</span><strong>{{ row()?.plan ?? 'Plan not reported' }}</strong><small>Identity exposed by the local CLI probe</small></article>
-    <article><span>Quota windows</span><strong>{{ row()?.windows?.length ?? 0 }} reported</strong><small>Provider units, not raw token totals</small></article>
-    <article><span>Recorded attribution</span><strong>{{ formatTokens(capturedTokens()) }}</strong><small>Workspace events mapped to {{ label() }} models</small></article>
+    <article><span>Quota windows</span><strong>{{ row()?.windows?.length ?? 0 }} reported</strong><small>Provider units · {{ quotaAsOf() ?? 'Probe time unavailable' }}</small></article>
+    <article><span>Recorded attribution</span><strong>{{ formatTokens(capturedTokens()) }}</strong><small>{{ recordedUsagePeriod() ?? 'Telemetry period unavailable' }}</small></article>
   </div>
 
   <section class="cwa__panel" data-testid="cli-window-cards">
-    <div class="cwa__section-head"><div><h3>Window progression</h3><p>Reported use is projected at its current average burn rate until reset.</p></div></div>
+    <div class="cwa__section-head"><div><h3>Window progression</h3><p>Reported use is projected at its current average burn rate until reset · {{ quotaAsOf() ?? 'Probe time unavailable' }}.</p></div></div>
     <div class="cwa__windows">
       @for (window of row()?.windows ?? []; track window.label) {
         <article class="cwa__window">
@@ -35,7 +35,7 @@
 
   <section class="cwa__panel" data-testid="cli-window-trend">
     <div class="cwa__section-head">
-      <div><h3>Captured token trend</h3><p>Workspace event baseline for plausibility. The current timeline API does not identify CLI per bucket.</p></div>
+      <div><h3>Captured token trend</h3><p>Workspace event baseline for plausibility · {{ trendAsOf() ?? 'Timeline end unavailable' }}. The current timeline API does not identify CLI per bucket.</p></div>
       <div class="cwa__periods" role="group" aria-label="Analysis period">
         @for (item of periods; track item) { <button type="button" [class.cwa__period--active]="period() === item" [attr.aria-pressed]="period() === item" [attr.data-testid]="'cli-window-period-' + item" (click)="period.set(item)">{{ item }}</button> }
       </div>

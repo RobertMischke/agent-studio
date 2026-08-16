@@ -21,6 +21,9 @@
           <span class="cum__plan">{{ plan }}</span>
         }
       </div>
+      <p class="cum__scope-note" data-testid="cli-usage-modal-quota-as-of">
+        Provider-reported windows · {{ quotaAsOf() ?? 'Probe time unavailable' }}
+      </p>
       @if (windowViews().length === 0) {
         <p class="cum__empty">No quota window data.</p>
       } @else {
@@ -69,7 +72,11 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
+      @if (recordedUsagePeriod(); as period) {
+        <p class="cum__scope-note" data-testid="cli-usage-modal-recorded-period">Recorded telemetry by model · {{ period }} · Independent of the active quota windows above.</p>
+      } @else {
+        <p class="cum__scope-note" data-testid="cli-usage-modal-recorded-period">Recorded telemetry by model · Period unavailable · Independent of the active quota windows above.</p>
+      }
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {

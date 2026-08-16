@@ -10,6 +10,7 @@ import type {
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
+import { formatAsOf, formatRecordedUsageTimeRange, recordedUsageTimeRange } from '../recorded-usage-time-range';
 
 interface SparkPoint {
   label: string;
@@ -76,6 +77,9 @@ export class CliUsageDetailComponent {
   readonly expensiveJobs = input<WorkspaceExpensiveJob[]>([]);
   readonly refreshing = input<Record<string, boolean>>({});
   readonly refreshingAll = input(false);
+  readonly recordedUsagePeriod = computed(() => formatRecordedUsageTimeRange(recordedUsageTimeRange([
+    ...(this.tokens()?.byModel ?? []), ...(this.adhoc()?.byModel ?? []),
+  ])));
 
   readonly refreshAll = output<Event>();
   readonly refreshOne = output<{ cliType: CliType; event: Event }>();
@@ -111,6 +115,8 @@ export class CliUsageDetailComponent {
     if (row.primaryPct == null) return 'unknown';
     return `${Math.max(0, 100 - row.primaryPct)}%`;
   }
+
+  quotaAsOf(row: CliUsageQuotaRow): string { return formatAsOf(row.fetchedAt) ?? row.freshness; }
 
   projectTooltip(project: ProjectUsageRow): string {
     return `${project.project} · ${this.formatTokens(project.totalTokens)} tokens · ${project.orchestratorLlmCalls} calls · ${this.formatUsd(project.estimatedApiCostUsd)} - open project settings`;
