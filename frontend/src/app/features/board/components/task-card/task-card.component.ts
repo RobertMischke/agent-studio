@@ -36,7 +36,6 @@ import {
   resolveDependencyTarget,
   cardNeedsAttention,
   commitChainVariant,
-  formatTokens,
   EPIC_ASSIGN_PREFIX,
   EPIC_DETACH_ID,
   FILTER_DEPENDENTS_ID,
@@ -67,6 +66,7 @@ import { PostProcessingActivityComponent } from '../post-processing-activity/pos
 import { TestEvidenceStatusComponent } from '../../../test-evidence';
 import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
 import { ProviderAuthStatusService, providerAuthWaitReason } from '../../../remote-hosts';
+import { TaskCardTokenPopoverComponent } from '../task-card-token-popover/task-card-token-popover.component';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -77,7 +77,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TestEvidenceStatusComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TestEvidenceStatusComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent, TaskCardTokenPopoverComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-card.component.html',
   styleUrl: './task-card.component.scss',
@@ -346,9 +346,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   loopTooltip(al: AutoLoopSnapshot): string { return buildLoopTooltip(al); }
 
   pendingTooltip(pi: PendingIntent): string { return buildPendingTooltip(pi); }
-
-  /** Compact tokens label: 850 -> "850", 2400 -> "2.4k", 850000 -> "850k", 3_100_000 -> "3.1M". */
-  formatTokens(n: number): string { return formatTokens(n); }
 
   /**
    * Token-bubble descriptor: returns null when the task has no recorded

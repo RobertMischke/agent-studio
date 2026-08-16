@@ -1,0 +1,94 @@
+<span class="token-popover"
+      role="tooltip"
+      data-token-popover
+      hidden
+      data-testid="task-card-token-popover">
+  <span class="token-popover__header">
+    <span class="token-popover__title">Token usage</span>
+    <span class="token-popover__headline-cost" data-testid="token-total-cost">{{ bubble().costLabel }}</span>
+  </span>
+
+  <span class="token-popover__summary" role="table" aria-label="Token totals">
+    <span class="token-popover__summary-row" role="row">
+      <span role="rowheader">Input</span>
+      <span role="cell" data-testid="token-row-input">{{ formatTokens(bubble().input) }}</span>
+    </span>
+    <span class="token-popover__summary-row" role="row">
+      <span role="rowheader">Output</span>
+      <span role="cell" data-testid="token-row-output">{{ formatTokens(bubble().output) }}</span>
+    </span>
+    <span class="token-popover__summary-row" role="row">
+      <span role="rowheader">Cache read</span>
+      <span role="cell" data-testid="token-row-cache-read">{{ formatTokens(bubble().cacheRead) }}</span>
+    </span>
+    <span class="token-popover__summary-row" role="row">
+      <span role="rowheader">Cache write</span>
+      <span role="cell" data-testid="token-row-cache-write">{{ formatTokens(bubble().cacheWrite) }}</span>
+    </span>
+    <span class="token-popover__summary-row token-popover__summary-row--total" role="row">
+      <span role="rowheader">Total</span>
+      <span role="cell" data-testid="token-row-total">{{ formatTokens(bubble().total) }}</span>
+    </span>
+    <span class="token-popover__summary-row" role="row">
+      <span role="rowheader">Model</span>
+      <span role="cell" data-testid="token-row-model">{{ bubble().model || '-' }}</span>
+    </span>
+    <span class="token-popover__summary-row" role="row">
+      <span role="rowheader">Updated</span>
+      <span role="cell" data-testid="token-row-last-update">{{ bubble().lastUpdate || '-' }}</span>
+    </span>
+  </span>
+
+  <span class="token-popover__breakdowns">
+    <span class="token-popover__section" data-testid="token-breakdown-by-type">
+      <span class="token-popover__section-title">By type</span>
+      <span class="token-popover__grid token-popover__grid--types" role="table" aria-label="Usage by type">
+        <span class="token-popover__grid-head" role="row">
+          <span role="columnheader">Type</span><span role="columnheader">Tokens</span><span role="columnheader">Cost</span>
+        </span>
+        @for (row of bubble().byType; track row.id) {
+          <span class="token-popover__grid-row" role="row" [attr.data-usage-type]="row.id">
+            <span role="rowheader">
+              <span>{{ row.label }}</span>
+              <span class="token-popover__secondary">{{ row.calls }} {{ row.calls === 1 ? 'call' : 'calls' }}</span>
+            </span>
+            <span role="cell">{{ formatTokens(row.total) }}</span>
+            <span role="cell" [class.token-popover__unknown]="!row.priceKnown">{{ row.costLabel }}</span>
+          </span>
+        }
+      </span>
+    </span>
+
+    @if (bubble().entries.length > 0) {
+      <span class="token-popover__section" data-testid="token-breakdown-by-run">
+        <span class="token-popover__section-title">Per run</span>
+        <span class="token-popover__grid token-popover__grid--runs" role="table" aria-label="Usage per dated run">
+          <span class="token-popover__grid-head" role="row">
+            <span role="columnheader">When / type</span><span role="columnheader">Tokens</span><span role="columnheader">Cost</span>
+          </span>
+          @for (row of bubble().entries; track row.id) {
+            <span class="token-popover__grid-row" role="row">
+              <span role="rowheader" [cacTooltip]="row.contextTooltip || row.contextLabel">
+                <span>{{ row.tsLabel }}</span>
+                <span class="token-popover__secondary">{{ row.typeLabel }} · {{ row.model || '-' }}</span>
+                <span class="token-popover__secondary">{{ row.contextLabel }}</span>
+              </span>
+              <span role="cell">{{ formatTokens(row.total) }}</span>
+              <span role="cell" [class.token-popover__unknown]="!row.priceKnown">{{ row.costLabel }}</span>
+            </span>
+          }
+        </span>
+      </span>
+    }
+  </span>
+
+  <span class="token-popover__footer">
+    <span class="token-popover__footnote"
+          data-testid="token-cost-footnote"
+          [cacTooltip]="bubble().costTooltip">Dated list-price estimate ⓘ</span>
+    <a class="token-popover__link"
+       href="/workspace/tokens"
+       data-testid="token-popover-timeline-link"
+       (click)="$event.stopPropagation()">Workspace timeline</a>
+  </span>
+</span>

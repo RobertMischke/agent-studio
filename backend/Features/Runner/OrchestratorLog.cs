@@ -131,6 +131,12 @@ public record OrchestratorLogEntry
     public string? JobId { get; init; }
 
     /// <summary>
+    /// Execution run correlation carried by the Agent Message Bus. Legacy
+    /// orchestrator-log entries leave this null.
+    /// </summary>
+    public string? RunId { get; init; }
+
+    /// <summary>
     /// Agent-message-bus participant that produced this token event, when the
     /// entry was projected from the bus. Legacy orchestrator.jsonl entries
     /// leave this null and keep their historical job-title categorisation.

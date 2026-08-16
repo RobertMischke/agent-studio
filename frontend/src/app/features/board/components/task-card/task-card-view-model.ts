@@ -9,7 +9,8 @@ import { shouldShowFailureToast } from '../../../task-detail/services/run-outcom
 import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
 import { isTaskRunActive } from '../../../../services/run-activity.util';
-import { buildTokenCostTooltip } from '../../../tokens';
+import { buildTokenCostTooltip, formatTokenCostDisplay } from '../../../tokens';
+import type { TaskTokenCall, TaskTokenTypeSummary, TaskTokenUsageType } from '../../../tokens';
 
 export interface TaskTypeChip {
   kind: string;
@@ -25,11 +26,31 @@ export interface TaskTokenBubble {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  costLabel: string;
   costTooltip: string;
   model: string | null;
   lastUpdate: string | null;
   tier: 'neutral' | 'blue' | 'mauve' | 'peach';
-  entries: { ts: string; tsLabel: string; model: string | null; total: number }[];
+  byType: {
+    id: string;
+    label: string;
+    calls: number;
+    total: number;
+    costLabel: string;
+    priceKnown: boolean;
+  }[];
+  entries: {
+    id: string;
+    ts: string;
+    tsLabel: string;
+    model: string | null;
+    typeLabel: string;
+    contextLabel: string;
+    contextTooltip: string;
+    total: number;
+    costLabel: string;
+    priceKnown: boolean;
+  }[];
 }
 
 const FILE_LIST_MAX = 12;
@@ -242,12 +263,36 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     : total >= 500_000 ? 'mauve'
       : total >= 50_000 ? 'blue'
         : 'neutral';
-  const entries = (tokenSummary.entries ?? []).map((entry) => ({
-    ts: entry.ts,
-    tsLabel: formatShortTime(entry.ts),
-    model: entry.model,
-    total: (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0) + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0),
+  const sourceEntries = tokenSummary.entries ?? [];
+  const entries = sourceEntries.map((entry, index) => {
+    const entryTotal = tokenCallTotal(entry);
+    const usageType = entry.usageType ?? classifyLegacyUsageType(entry);
+    const priceKnown = entry.modelPriced ?? tokenSummary.allModelsPriced === true;
+    return {
+      id: `${entry.ts}:${entry.runId ?? ''}:${entry.topic ?? ''}:${index}`,
+      ts: entry.ts,
+      tsLabel: formatShortTime(entry.ts),
+      model: entry.model,
+      typeLabel: usageTypeLabel(usageType),
+      contextLabel: usageContextLabel(entry.topic, usageType),
+      contextTooltip: [entry.topic, entry.runId, entry.participantId].filter(Boolean).join(' · '),
+      total: entryTotal,
+      costLabel: tokenCostLabel(entry.estimatedApiCostUsd, entryTotal, priceKnown),
+      priceKnown,
+    };
+  });
+  const typeSource = tokenSummary.byType?.length
+    ? tokenSummary.byType
+    : summarizeLegacyTypes(sourceEntries, tokenSummary.allModelsPriced === true);
+  const byType = typeSource.map((type) => ({
+    id: type.type,
+    label: usageTypeLabel(type.type),
+    calls: type.calls,
+    total: type.totalTokens,
+    costLabel: tokenCostLabel(type.estimatedApiCostUsd, type.totalTokens, type.allModelsPriced),
+    priceKnown: type.allModelsPriced,
   }));
+  const priceKnown = tokenSummary.allModelsPriced === true;
   return {
     label: formatTokens(total),
     total,
@@ -255,12 +300,85 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     output,
     cacheRead,
     cacheWrite,
-    costTooltip: buildTokenCostTooltip({ costUsd: tokenSummary.estimatedApiCostUsd, priceKnown: tokenSummary.allModelsPriced === true }),
+    costLabel: tokenCostLabel(tokenSummary.estimatedApiCostUsd, total, priceKnown),
+    costTooltip: buildTokenCostTooltip({
+      costUsd: tokenSummary.estimatedApiCostUsd,
+      priceKnown,
+      totalTokens: total,
+      unpricedRuns: sourceEntries.filter(entry => entry.modelPriced === false && tokenCallTotal(entry) > 0).length,
+    }),
     model: tokenSummary.lastModel ?? null,
     lastUpdate: tokenSummary.lastUpdate ? formatShortTime(tokenSummary.lastUpdate) : null,
     tier,
+    byType,
     entries,
   };
+}
+
+const USAGE_TYPE_ORDER: readonly TaskTokenUsageType[] = ['coding', 'review', 'gate', 'enrichment', 'other'];
+
+function usageTypeLabel(type: TaskTokenUsageType): string {
+  switch (type) {
+    case 'coding': return 'Coding run';
+    case 'review': return 'Review run';
+    case 'gate': return 'Gate';
+    case 'enrichment': return 'Enrichment';
+    default: return 'Other';
+  }
+}
+
+function classifyLegacyUsageType(entry: TaskTokenCall): TaskTokenUsageType {
+  const source = `${entry.topic ?? ''} ${entry.participantId ?? ''}`.toLowerCase();
+  if (/enrich|prompt-enhance|title-generation|summary-generation/.test(source)) return 'enrichment';
+  if (/review|aspect|grade|audit/.test(source)) return 'review';
+  if (/gate|decision|steer|needs-input|orchestrator/.test(source)) return 'gate';
+  if (entry.participantId?.toLowerCase().startsWith('agent:')) return 'coding';
+  if (entry.participantId?.toLowerCase().startsWith('support:')) return 'review';
+  return 'other';
+}
+
+function summarizeLegacyTypes(entries: readonly TaskTokenCall[], aggregatePriced: boolean): TaskTokenTypeSummary[] {
+  const groups = new Map<TaskTokenUsageType, TaskTokenCall[]>();
+  for (const entry of entries) {
+    const type = entry.usageType ?? classifyLegacyUsageType(entry);
+    groups.set(type, [...(groups.get(type) ?? []), entry]);
+  }
+  return USAGE_TYPE_ORDER
+    .filter(type => groups.has(type))
+    .map(type => {
+      const calls = groups.get(type)!;
+      return {
+        type,
+        calls: calls.length,
+        inputTokens: calls.reduce((sum, call) => sum + (call.inputTokens ?? 0), 0),
+        outputTokens: calls.reduce((sum, call) => sum + (call.outputTokens ?? 0), 0),
+        cacheReadTokens: calls.reduce((sum, call) => sum + (call.cacheReadTokens ?? 0), 0),
+        cacheCreationTokens: calls.reduce((sum, call) => sum + (call.cacheCreationTokens ?? 0), 0),
+        totalTokens: calls.reduce((sum, call) => sum + tokenCallTotal(call), 0),
+        estimatedApiCostUsd: calls.reduce((sum, call) => sum + (call.estimatedApiCostUsd ?? 0), 0),
+        allModelsPriced: calls.every(call => call.modelPriced ?? aggregatePriced),
+      };
+    });
+}
+
+function tokenCallTotal(entry: TaskTokenCall): number {
+  return (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0)
+    + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0);
+}
+
+function tokenCostLabel(costUsd: number | undefined, totalTokens: number, priceKnown: boolean): string {
+  if (!priceKnown && !(Number.isFinite(costUsd) && costUsd! > 0)) return 'No price';
+  const label = formatTokenCostDisplay({
+    costUsd: Number.isFinite(costUsd) ? costUsd! : null,
+    totalTokens,
+    unpricedRuns: priceKnown ? 0 : 1,
+  });
+  return priceKnown ? label : `${label} partial`;
+}
+
+function usageContextLabel(topic: string | null | undefined, type: TaskTokenUsageType): string {
+  if (!topic?.trim()) return usageTypeLabel(type);
+  return topic.trim().replace(/[-_]+/g, ' ');
 }
 
 /** Compact tokens label: 850 -> "850", 2400 -> "2.4k", 850000 -> "850k", 3_100_000 -> "3.1M". */

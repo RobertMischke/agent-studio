@@ -1197,8 +1197,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
+    expect(popover?.querySelector('[data-testid="token-total-cost"]')?.textContent).toContain('$1.25');
+    expect(popover?.querySelector('[data-testid="token-cost-footnote"]')?.textContent).toContain('Dated list-price estimate');
 
     fixture.destroy();
   });
@@ -1578,6 +1578,40 @@ describe('buildTokenBubble', () => {
       'GPT-5 Codex',
       'Claude Haiku 4.5',
     ]);
+  });
+
+  it('keeps partial dated costs explicit and reconciles fallback type groups', () => {
+    const bubble = buildTokenBubble({
+      calls: 2,
+      inputTokens: 3000,
+      outputTokens: 300,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 3300,
+      estimatedApiCostUsd: 0.02,
+      allModelsPriced: false,
+      lastModel: 'Claude Haiku 4.5',
+      lastUpdate: '2026-06-09T08:05:00Z',
+      entries: [
+        {
+          ts: '2026-06-09T08:00:00Z', model: 'Claude Haiku 4.5',
+          participantId: 'agent:claude', topic: 'claude-turn', usageType: 'coding',
+          inputTokens: 2000, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.02, modelPriced: true,
+        },
+        {
+          ts: '2026-06-09T08:05:00Z', model: 'future-model',
+          participantId: 'support:code-quality', topic: 'aspect-code-quality', usageType: 'review',
+          inputTokens: 1000, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0, modelPriced: false,
+        },
+      ],
+    });
+
+    expect(bubble?.costLabel).toBe('$0.02 partial');
+    expect(bubble?.entries[1].costLabel).toBe('No price');
+    expect(bubble?.byType.map((row) => row.label)).toEqual(['Coding run', 'Review run']);
+    expect(bubble?.byType.reduce((sum, row) => sum + row.total, 0)).toBe(bubble?.total);
   });
 });
 

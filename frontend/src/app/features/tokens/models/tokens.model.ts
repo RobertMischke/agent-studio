@@ -11,6 +11,9 @@
 export interface TaskTokenCall {
   ts: string;
   model: string | null;
+  runId?: string | null;
+  topic?: string | null;
+  usageType?: TaskTokenUsageType;
   participantId?: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -18,6 +21,20 @@ export interface TaskTokenCall {
   cacheCreationTokens: number;
   estimatedApiCostUsd?: number;
   modelPriced?: boolean;
+}
+
+export type TaskTokenUsageType = 'coding' | 'review' | 'gate' | 'enrichment' | 'other';
+
+export interface TaskTokenTypeSummary {
+  type: TaskTokenUsageType;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalTokens: number;
+  estimatedApiCostUsd: number;
+  allModelsPriced: boolean;
 }
 
 export interface TaskTokenSummary {
@@ -32,6 +49,7 @@ export interface TaskTokenSummary {
   lastModel: string | null;
   lastUpdate: string | null;
   entries: TaskTokenCall[];
+  byType?: TaskTokenTypeSummary[];
 }
 
 export interface TokenSummaryByModel {

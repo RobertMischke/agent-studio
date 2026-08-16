@@ -435,6 +435,9 @@ public class TaskMutationService
                 .Concat((attemptSummary.Entries ?? []).Select(entry => entry with
                 {
                     ParticipantId = participant,
+                    RunId = string.IsNullOrWhiteSpace(entry.RunId) ? runAttemptId : entry.RunId,
+                    Topic = string.IsNullOrWhiteSpace(entry.Topic) ? "coding-run" : entry.Topic,
+                    UsageType = TaskTokenUsageTypes.Coding,
                 }))
                 .OrderBy(entry => entry.Ts)
                 .ToList();
@@ -458,6 +461,7 @@ public class TaskMutationService
                     .LastOrDefault()?.Model,
                 LastUpdate = entries.Max(entry => entry.Ts),
                 Entries = entries,
+                ByType = TokenSummaryService.SummarizeByType(entries),
             };
             TaskJsonFile.UpdateFieldOrThrow(folderPath, "tokenSummary", summary);
             return Updated();

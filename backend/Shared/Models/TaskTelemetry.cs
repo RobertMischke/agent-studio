@@ -34,6 +34,8 @@ public record TaskTokenSummary
     public DateTime? LastUpdate { get; init; }
     /// <summary>Per-call rows for the popover, oldest first.</summary>
     public List<TaskTokenCall> Entries { get; init; } = [];
+    /// <summary>Per-type rollup derived from the same visible call ledger.</summary>
+    public List<TaskTokenTypeSummary> ByType { get; init; } = [];
 }
 
 /// <summary>
@@ -44,6 +46,12 @@ public record TaskTokenCall
 {
     public DateTime Ts { get; init; }
     public string? Model { get; init; }
+    /// <summary>Execution run correlation supplied by the source record.</summary>
+    public string? RunId { get; init; }
+    /// <summary>Source topic or pipeline-step context supplied by the source record.</summary>
+    public string? Topic { get; init; }
+    /// <summary>Stable operator-facing usage category derived from participant and topic.</summary>
+    public string UsageType { get; init; } = TaskTokenUsageTypes.Other;
     /// <summary>Bus participant that produced this token usage row, e.g. <c>agent:codex</c> or <c>orchestrator:Project</c>.</summary>
     public string? ParticipantId { get; init; }
     public long InputTokens { get; init; }
@@ -54,6 +62,29 @@ public record TaskTokenCall
     public decimal EstimatedApiCostUsd { get; init; }
     /// <summary>Whether the price catalog resolved the model at <see cref="Ts"/>.</summary>
     public bool ModelPriced { get; init; }
+}
+
+/// <summary>Token and dated-cost subtotal for one task usage category.</summary>
+public record TaskTokenTypeSummary
+{
+    public string Type { get; init; } = TaskTokenUsageTypes.Other;
+    public int Calls { get; init; }
+    public long InputTokens { get; init; }
+    public long OutputTokens { get; init; }
+    public long CacheReadTokens { get; init; }
+    public long CacheCreationTokens { get; init; }
+    public long TotalTokens { get; init; }
+    public decimal EstimatedApiCostUsd { get; init; }
+    public bool AllModelsPriced { get; init; }
+}
+
+public static class TaskTokenUsageTypes
+{
+    public const string Coding = "coding";
+    public const string Review = "review";
+    public const string Gate = "gate";
+    public const string Enrichment = "enrichment";
+    public const string Other = "other";
 }
 
 /// <summary>

@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-08-12
+Version: 2026-08-16
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -88,6 +88,10 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   auto-review status snapshot into a compact current-step or elapsed-wait
   indicator; the lane header reconciles those visible cards as active versus
   waiting, with machine-lock gate queueing remaining a distinct waiting state.
+  A card's token popover keeps one aligned summary, shows dated per-run token
+  and cost rows, and reconciles them with a coding, review, gate, enrichment,
+  and other breakdown. Its short list-price footnote discloses the full pricing
+  caveat through the shared tooltip.
 - `frontend/src/app/features/board/components/epic-overview-screen/`: the
   read-only Epics overview (`#/epics`, studio tab `epics:<project|__all__>`).
   Its main list is the active list, without a redundant Active section header.

@@ -56,10 +56,26 @@ interface JobInfoStub {
     entries: {
       ts: string;
       model: string | null;
+      runId?: string | null;
+      topic?: string | null;
+      usageType?: 'coding' | 'review' | 'gate' | 'enrichment' | 'other';
       inputTokens: number;
       outputTokens: number;
       cacheReadTokens: number;
       cacheCreationTokens: number;
+      estimatedApiCostUsd?: number;
+      modelPriced?: boolean;
+    }[];
+    byType?: {
+      type: 'coding' | 'review' | 'gate' | 'enrichment' | 'other';
+      calls: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
+      totalTokens: number;
+      estimatedApiCostUsd: number;
+      allModelsPriced: boolean;
     }[];
   };
 }
@@ -98,10 +114,11 @@ function jobStub(over: Partial<JobInfoStub>): JobInfoStub {
  * close it so it can't block the hover test.
  */
 async function dismissErrorDialogIfPresent(page: Page): Promise<void> {
-  const overlay = page.locator('app-error-dialog .overlay--error');
-  if (await overlay.isVisible().catch(() => false)) {
-    const close = page.locator('app-error-dialog button').first();
+  const dialog = page.getByTestId('error-dialog');
+  if (await dialog.isVisible().catch(() => false)) {
+    const close = page.getByTestId('error-dialog-close');
     await close.click({ trial: false }).catch(() => { /* best-effort */ });
+    await expect(dialog).toBeHidden().catch(() => { /* best-effort */ });
   }
 }
 
@@ -163,6 +180,9 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
         body: JSON.stringify({ isDev: false, devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false } }),
       });
     }
+    if (p.startsWith('/api/v1/management/remote-hosts')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    }
     if (p === '/api/projects/settings') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     }
@@ -185,6 +205,13 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
     if (p === '/api/tasks' || p === '/api/tasks/') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(jobs) });
     }
+    if (/^\/api\/clients\/[^/]+\/telemetry$/.test(p)) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ clientId: 'local-default', window: '14d', points: [] }),
+      });
+    }
     if (p.startsWith('/api/clients')) {
       const list = [{
         id: 'local-default', displayName: 'Local Default', emoji: '🤖', colour: '#64748b', kind: 'human',
@@ -206,10 +233,8 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
     if (p.startsWith('/api/runner')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projects: {} }) });
     }
-    // Catch-all: empty array works for list endpoints, empty object for
-    // single-record. Use null to cover both shapes safely; consumers
-    // should fall back to defaults when the response is empty.
-    return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
+    // The remaining startup reads are catalogue/list endpoints.
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
 }
 
@@ -252,9 +277,14 @@ test.describe('Token bubble on job cards', () => {
         lastModel: 'GPT-5 Codex',
         lastUpdate: '2026-05-05T08:30:00Z',
         entries: [
-          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000 }
+          { ts: '2026-05-05T08:00:00Z', runId: 'run-1', topic: 'core-agent-run', usageType: 'coding', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.55, modelPriced: true },
+          { ts: '2026-05-05T08:15:00Z', runId: 'review-1', topic: 'aspect-code-quality', usageType: 'review', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.25, modelPriced: true },
+          { ts: '2026-05-05T08:30:00Z', runId: 'gate-1', topic: 'orchestrator-decision', usageType: 'gate', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.45, modelPriced: true }
+        ],
+        byType: [
+          { type: 'coding', calls: 1, inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000, totalTokens: 160_000, estimatedApiCostUsd: 0.55, allModelsPriced: true },
+          { type: 'review', calls: 1, inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000, totalTokens: 130_000, estimatedApiCostUsd: 0.25, allModelsPriced: true },
+          { type: 'gate', calls: 1, inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000, totalTokens: 110_000, estimatedApiCostUsd: 0.45, allModelsPriced: true }
         ]
       }
     });
@@ -288,10 +318,18 @@ test.describe('Token bubble on job cards', () => {
     await expect(popover.getByTestId('token-row-cache-write')).toContainText('12k');
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
     await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated cost: $1.25');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated - historical list prices');
-    await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
+    await expect(popover.getByTestId('token-total-cost')).toContainText('$1.25');
+    await expect(popover.getByTestId('token-cost-footnote')).toHaveText('Dated list-price estimate ⓘ');
+    await expect(popover.getByTestId('token-breakdown-by-type')).toContainText('Coding run');
+    await expect(popover.getByTestId('token-breakdown-by-type')).toContainText('Review run');
+    await expect(popover.getByTestId('token-breakdown-by-type')).toContainText('Gate');
+    await expect(popover.getByTestId('token-breakdown-by-run')).toContainText('Claude Haiku 4.5');
+    await expect(popover.getByTestId('token-breakdown-by-run')).toContainText('$0.25');
+    await expect(popover.getByTestId('token-breakdown-by-run')).toContainText('2026');
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
+
+    await popover.getByTestId('token-cost-footnote').hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('discounts and provider-side caching adjustments');
 
     // Anti-clipping contract: the directive lifts the panel into the
     // shared body overlay portal, so the card's overflow/content-visibility
@@ -304,9 +342,18 @@ test.describe('Token bubble on job cards', () => {
     expect(popBox!.x + popBox!.width).toBeLessThanOrEqual(vp.width + 1);
     expect(popBox!.y + popBox!.height).toBeLessThanOrEqual(vp.height + 1);
 
-    // Screenshot evidence: bubble + overlay popover in the viewport.
+    // Screenshot evidence: the same hierarchy and geometry in both themes.
     mkdirSync(SHOTS, { recursive: true });
-    await page.screenshot({ path: `${SHOTS}/card-with-bubble-and-popover.png`, fullPage: false });
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset['studioTheme'] = value;
+        localStorage.setItem('atp.studio.theme', value);
+      }, theme);
+      await dismissErrorDialogIfPresent(page);
+      await bubble.focus();
+      await expect(popover).toBeVisible();
+      await page.screenshot({ path: `${SHOTS}/token-usage-popover-after-${theme}.png`, fullPage: false });
+    }
   });
 
   test('tier escalates with spend', async ({ page }) => {

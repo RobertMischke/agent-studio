@@ -33,14 +33,17 @@ public class TokenSummaryTests
         long output,
         DateTime ts,
         string jobId = "job-a",
-        string? participantId = null)
+        string? participantId = null,
+        string topic = "test-token",
+        string? runId = null)
         => new()
         {
             Ts = ts,
             Kind = OrchestratorLogKinds.Decision,
-            Topic = "test-token",
+            Topic = topic,
             Summary = "test job entry",
             JobId = jobId,
+            RunId = runId,
             ParticipantId = participantId,
             TokenUsage = new OrchestratorTokenUsage
             {
@@ -242,6 +245,35 @@ public class TokenSummaryTests
         Assert.Equal(
             summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
             summary.EstimatedApiCostUsd);
+    }
+
+    [Fact]
+    public void SummarizePerJob_GroupsDatedCostsByUsageTypeAndPreservesRunContext()
+    {
+        var t = new DateTime(2026, 7, 23, 8, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            JobEntry("claude-sonnet-4.6", 10_000, 1_000, t,
+                participantId: "agent:claude", topic: "claude-turn", runId: "run-1"),
+            JobEntry("claude-haiku-4.5", 3_000, 300, t.AddMinutes(5),
+                participantId: "support:code-quality", topic: "aspect-code-quality", runId: "review-1"),
+            JobEntry("claude-haiku-4.5", 2_000, 200, t.AddMinutes(10),
+                participantId: "orchestrator:Demo", topic: "orchestrator-decision"),
+            JobEntry("claude-haiku-4.5", 1_000, 100, t.AddMinutes(15),
+                participantId: "support:adhoc", topic: "prompt-enrichment"),
+        };
+
+        var summary = TokenSummaryService.SummarizePerJob(entries)["job-a"];
+
+        Assert.Equal(
+            summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
+            summary.ByType.Sum(type => type.EstimatedApiCostUsd));
+        Assert.Equal(summary.TotalTokens, summary.ByType.Sum(type => type.TotalTokens));
+        Assert.Equal(
+            [TaskTokenUsageTypes.Coding, TaskTokenUsageTypes.Review, TaskTokenUsageTypes.Gate, TaskTokenUsageTypes.Enrichment],
+            summary.ByType.Select(type => type.Type));
+        Assert.Equal("run-1", summary.Entries[0].RunId);
+        Assert.Equal("claude-turn", summary.Entries[0].Topic);
     }
 
     [Fact]

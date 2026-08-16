@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-08-11
+Version: 2026-08-16
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -205,6 +205,11 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   through `TaskMutationService`. The same pass materializes missing remote
   token receipts from that attempt's CLI-log window. Ambiguous cards remain
   unchanged and are listed in the durable migration report.
+- Task token receipts retain each call's recorded time, model, bus topic, and
+  run correlation. Read-time aggregation prices every call through
+  TokenEconomy's catalog at that recorded time, then derives reconciled coding,
+  review, gate, enrichment, and other subtotals. Unknown models or dates remain
+  unpriced; they are never folded into the total as zero-cost usage.
 - Accepted-card `integration.status` is a read-time projection of attributed
   commit membership in the configured target branch, cached against that
   branch's current HEAD. Lane state, provenance merge records, pipeline success,

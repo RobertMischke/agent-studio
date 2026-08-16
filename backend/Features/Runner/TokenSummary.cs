@@ -157,6 +157,9 @@ public class TokenSummaryService
             {
                 Ts = entry.Ts,
                 Model = displayModel,
+                RunId = entry.RunId,
+                Topic = entry.Topic,
+                UsageType = ClassifyUsageType(entry.ParticipantId, entry.Topic),
                 ParticipantId = entry.ParticipantId,
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,
@@ -183,7 +186,8 @@ public class TokenSummaryService
                 AllModelsPriced = !b.AnyUnpriced,
                 LastModel = b.LastAgentModel ?? b.LastAnyModel,
                 LastUpdate = b.LastUpdate,
-                Entries = b.Entries.OrderBy(e => e.Ts).ToList()
+                Entries = b.Entries.OrderBy(e => e.Ts).ToList(),
+                ByType = SummarizeByType(b.Entries),
             };
         }
         return result;
@@ -207,6 +211,7 @@ public class TokenSummaryService
         {
             LastModel = string.IsNullOrWhiteSpace(summary.LastModel) && hasAgentFallbackRow ? fallback : summary.LastModel,
             Entries = entries,
+            ByType = SummarizeByType(entries),
             EstimatedApiCostUsd = entries.Sum(e => e.EstimatedApiCostUsd),
             AllModelsPriced = entries.Count > 0 && entries.All(e => e.ModelPriced),
         };
@@ -226,6 +231,62 @@ public class TokenSummaryService
     private static bool ShouldApplyRunModelFallback(TaskTokenCall entry)
         => TokenModelDisplay.IsAgentParticipant(entry.ParticipantId)
            && string.IsNullOrWhiteSpace(TokenModelDisplay.Label(entry.Model));
+
+    /// <summary>
+    /// Classifies one ledger call without interpreting display copy. Topic is
+    /// the most specific evidence; participant family is the legacy fallback.
+    /// </summary>
+    public static string ClassifyUsageType(string? participantId, string? topic)
+    {
+        var source = $"{topic} {participantId}".ToLowerInvariant();
+        if (ContainsAny(source, "enrich", "prompt-enhance", "title-generation", "summary-generation"))
+            return TaskTokenUsageTypes.Enrichment;
+        if (ContainsAny(source, "review", "aspect", "grade", "audit"))
+            return TaskTokenUsageTypes.Review;
+        if (ContainsAny(source, "gate", "decision", "steer", "needs-input", "orchestrator"))
+            return TaskTokenUsageTypes.Gate;
+        if (participantId?.StartsWith("agent:", StringComparison.OrdinalIgnoreCase) == true)
+            return TaskTokenUsageTypes.Coding;
+        if (participantId?.StartsWith("support:", StringComparison.OrdinalIgnoreCase) == true)
+            return TaskTokenUsageTypes.Review;
+        return TaskTokenUsageTypes.Other;
+    }
+
+    public static List<TaskTokenTypeSummary> SummarizeByType(IEnumerable<TaskTokenCall> calls)
+    {
+        var order = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            [TaskTokenUsageTypes.Coding] = 0,
+            [TaskTokenUsageTypes.Review] = 1,
+            [TaskTokenUsageTypes.Gate] = 2,
+            [TaskTokenUsageTypes.Enrichment] = 3,
+            [TaskTokenUsageTypes.Other] = 4,
+        };
+        return calls
+            .GroupBy(call => string.IsNullOrWhiteSpace(call.UsageType)
+                ? ClassifyUsageType(call.ParticipantId, call.Topic)
+                : call.UsageType,
+                StringComparer.Ordinal)
+            .Select(group => new TaskTokenTypeSummary
+            {
+                Type = group.Key,
+                Calls = group.Count(),
+                InputTokens = group.Sum(call => call.InputTokens),
+                OutputTokens = group.Sum(call => call.OutputTokens),
+                CacheReadTokens = group.Sum(call => call.CacheReadTokens),
+                CacheCreationTokens = group.Sum(call => call.CacheCreationTokens),
+                TotalTokens = group.Sum(call => call.InputTokens + call.OutputTokens
+                    + call.CacheReadTokens + call.CacheCreationTokens),
+                EstimatedApiCostUsd = group.Sum(call => call.EstimatedApiCostUsd),
+                AllModelsPriced = group.All(call => call.ModelPriced),
+            })
+            .OrderBy(summary => order.GetValueOrDefault(summary.Type, int.MaxValue))
+            .ThenBy(summary => summary.Type, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool ContainsAny(string value, params string[] candidates)
+        => candidates.Any(candidate => value.Contains(candidate, StringComparison.Ordinal));
 
     private sealed class Bucket
     {
