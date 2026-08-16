@@ -20,6 +20,29 @@
   gap: var(--studio-spacing-2);
 }
 
+/*
+  Provenance marker, not a state signal. A replayed row is quiet by design, so
+  this reads as the teal "not real data" pigment rather than an acute warning,
+  and the row keeps its normal background: status stays on the badge.
+*/
+.replay__simulated {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-teal) 36%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent-teal) 12%, transparent);
+  color: var(--studio-accent-teal);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .replay__header h4 {
   margin: 0;
   font-size: var(--studio-font-size-sm, 13px);

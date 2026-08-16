@@ -2,15 +2,23 @@
   "schemaVersion": 1,
   "id": "demo-instanz",
   "title": "Public demo instance with no execution authority",
-  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs.",
+  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. The approved package is now in delivery: slice S3 has shipped the replay-only Runner, its signed fixed-trace contract, the exclusive demo.replay credential, and the compromise matrix behind it.",
   "entrypoint": "index.html",
-  "status": "decision-pending",
-  "phase": "decision-ready",
-  "updatedAt": "2026-08-11T12:00:00Z",
+  "status": "decided",
+  "phase": "accepted",
+  "updatedAt": "2026-08-16T22:00:00Z",
+  "editedBy": "AGT-2668",
+  "statusReason": "Operator approved the defense-in-depth package on 2026-08-17. Slice S3 (replay-only Runner) is delivered; S1, S2, and S4 are in progress and S5 through S7 remain queued.",
   "sourceTaskKeys": [
     "AGT-2582"
   ],
-  "implementationTasks": [],
+  "implementationTasks": [
+    "AGT-2666",
+    "AGT-2667",
+    "AGT-2668",
+    "AGT-2669",
+    "AGT-2670"
+  ],
   "relatedTaskKeys": [
     "AGT-2530",
     "AGT-2558",

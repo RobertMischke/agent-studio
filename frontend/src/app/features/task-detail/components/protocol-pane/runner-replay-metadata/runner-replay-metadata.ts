@@ -14,6 +14,13 @@ export class RunnerReplayMetadataComponent {
     event => event.kind === 'turn.completed' || event.kind === 'session.completed',
   ));
 
+  /**
+   * True as soon as one recorded row came from the public-demo replay plane
+   * (AGT-W34 slice S3). The section heading is what a visitor reads first, so
+   * provenance belongs there as well as on the individual rows.
+   */
+  readonly hasSimulated = computed(() => this.completions().some(event => event.simulated === true));
+
   label(event: RunnerRecordedEvent): string {
     return event.kind === 'turn.completed' ? 'Turn completed' : 'Session completed';
   }

@@ -80,6 +80,12 @@ export interface RunnerRecordedEvent {
   message?: string | null;
   implementationStatus?: string | null;
   pipelineStatus?: string | null;
+  /**
+   * True when the row came from the public-demo replay plane instead of a real
+   * run (AGT-W34 slice S3). The UI labels these Simulated so a visitor never
+   * reads a scripted scene as executed work.
+   */
+  simulated?: boolean;
 }
 
 /** One context input the CLI loaded for a run. Mirrors backend `CliContextSource`. */

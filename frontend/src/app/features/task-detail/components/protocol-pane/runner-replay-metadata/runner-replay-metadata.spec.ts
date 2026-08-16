@@ -26,4 +26,45 @@ describe('RunnerReplayMetadataComponent', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="runner-replay-implementation"]')?.textContent).toContain('completed');
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="runner-replay-pipeline"]')?.textContent).toContain('post-processing');
   });
+
+  it('leaves a real run unlabelled', async () => {
+    const element = await render([{
+      id: 'turn-1', kind: 'turn.completed', timestamp: '2026-07-22T10:00:00Z', durationMs: 1_000,
+    }]);
+
+    expect(element.querySelector('[data-testid="runner-replay-simulated"]')).toBeNull();
+    expect(element.querySelector('[data-testid="runner-replay-event-simulated"]')).toBeNull();
+  });
+
+  it('labels a replayed row Simulated on the row and on the section', async () => {
+    const element = await render([{
+      id: 'demo-replay:1:3', kind: 'turn.completed', timestamp: '2026-08-17T09:00:00Z',
+      durationMs: 18_000, simulated: true,
+    }]);
+
+    expect(element.querySelector('[data-testid="runner-replay-simulated"]')?.textContent).toContain('Simulated');
+    expect(element.querySelector('[data-testid="runner-replay-event-simulated"]')?.textContent).toContain('Simulated');
+    expect(element.querySelector('[data-testid="runner-replay-demo-replay:1:3"]')?.getAttribute('data-simulated')).toBe('true');
+  });
+
+  it('labels the section when only some rows are replayed', async () => {
+    const element = await render([
+      { id: 'turn-1', kind: 'turn.completed', timestamp: '2026-08-17T09:00:00Z', durationMs: 1_000 },
+      { id: 'demo-replay:1:3', kind: 'turn.completed', timestamp: '2026-08-17T09:01:00Z', durationMs: 1_000, simulated: true },
+    ]);
+
+    expect(element.querySelector('[data-testid="runner-replay-simulated"]')).not.toBeNull();
+    expect(element.querySelectorAll('[data-testid="runner-replay-event-simulated"]')).toHaveLength(1);
+  });
 });
+
+async function render(events: unknown[]): Promise<HTMLElement> {
+  await TestBed.configureTestingModule({
+    imports: [RunnerReplayMetadataComponent],
+    providers: [provideZonelessChangeDetection()],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(RunnerReplayMetadataComponent);
+  fixture.componentRef.setInput('events', events);
+  fixture.detectChanges();
+  return fixture.nativeElement as HTMLElement;
+}

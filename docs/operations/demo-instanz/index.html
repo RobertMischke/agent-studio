@@ -146,6 +146,7 @@
     <li><a href="#security">§6 Security and residual risk</a></li>
     <li><a href="#operations">§7 Reset and versioning</a></li>
     <li><a href="#slices">§8 Decision-ready slice plan</a></li>
+    <li><a href="#implementation-state">§8a Implementation state</a></li>
     <li><a href="#approval">§9 Decision request</a></li>
   </ul>
 </nav>
@@ -591,6 +592,42 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <h4>Recommended delivery order</h4>
   <p>Approve S1 through S6 as the public read-only launch package, with S2 as the non-negotiable gate. S1 and S2 can proceed in parallel from the integrated AGT-2530 baseline. S3 and S4 build on the denial contract. S5 freezes the verifiable release unit. S6 is the only infrastructure-changing slice and requires a separate launch approval. Keep S7 outside the launch commitment.</p>
 </div>
+
+<!-- agent-studio:implementation-section:start -->
+<h2 id="implementation-state"><span class="no">§8a</span>Implementation state: replay plane</h2>
+<p><b>AGT-2668 delivers slice S3, the replay-only Runner.</b> The slice moves the content authority off the replay process: the Task Server and the replay service hold the same signed fixed trace, and a replay request carries nothing but a cursor. A fully compromised replay host can advance a script a reviewer already read, and nothing else. The full contract lives in <a href="../../system/contracts/demo-replay-trace.md">the demo replay trace contract</a>.</p>
+
+<table>
+  <thead><tr><th>Layer</th><th>Implemented now</th><th>Boundary it holds</th></tr></thead>
+  <tbody>
+    <tr><td><b>Signed fixed trace</b></td><td>Versioned schema, deterministic line-based canonical form, SHA-256 digest, and detached HMAC. A 12-minute scene over the two <code>3-progress</code> demo cards is committed with its generator.</td><td>The digest is the unit the S5 release manifest pins. The replay service holds no signing key, so it forwards a signature it cannot produce.</td></tr>
+    <tr><td><b>Pure verification</b></td><td>Sixteen typed rejections over schema, scene scope, sequence density, offsets, event kinds, message shape, digest, and signature. Both sides run the same function.</td><td>The server refuses to start the plane on any rejection; the replay service refuses to boot, so a corrupted bundle never becomes rejected traffic.</td></tr>
+    <tr><td><b>Narrow ingestion scope</b></td><td>One route accepts a cursor and materializes the event body from the server's own trace copy. Pure admission policy over epoch monotonicity, minimum epoch interval, dense sequence, and a rolling rate budget. A refusal reports the authoritative cursor.</td><td>This is the small fixture-bound mutation surface the dossier names as the cost of variant C. It writes one simulated journal row and nothing else.</td></tr>
+    <tr><td><b>Exclusive credential</b></td><td><code>demo.replay</code> is outside the default runner scope set, and a composition policy refuses any credential holding it together with another scope, at issuance and at rotation.</td><td>A credential that can replay can never claim. The compromise matrix runs 23 execution routes and 4 read routes against the real networked pipeline.</td></tr>
+    <tr><td><b>Incapable service image</b></td><td>A separate program, not a runner mode. Runtime base image with no package installs, one project reference, one reachable route, credential from the environment, unprivileged, trace baked read-only.</td><td>Guard tests assert the Dockerfile ingredients, the reference set, and the absence of process-spawn code, so the property is a build fact rather than a runbook promise.</td></tr>
+    <tr><td><b>Simulated labeling</b></td><td><code>simulated</code> is a first-class field on the recorded runner event, carried into the projection metadata, and rendered as a quiet teal provenance badge on both the recorded-replay section and each affected row.</td><td>Only the replay ingestion path can set it, so no code path can produce a replay event the UI would render as real work.</td></tr>
+  </tbody>
+</table>
+
+<h3>Concept contract</h3>
+<ol>
+  <li><b>The trace carries the content, not the request.</b> A cursor is the only thing a replay identity can express, so forging prose, tokens, or a task key has no field to live in.</li>
+  <li><b>Separate the identity at issuance, not at request time.</b> The launch invariant refuses to treat a flag as a boundary, so replay and execution scopes are made mutually exclusive when a credential is minted.</li>
+  <li><b>Make incapability a build fact.</b> A replay mode inside the agent host would keep the CLI, Git, and worktree code in the shipped image. A separate project with guard tests is what makes the absence checkable.</li>
+  <li><b>Fail the process, not the request.</b> A misconfigured or unverifiable trace stops startup. A half-configured replay plane would be an unreviewed mutation surface.</li>
+  <li><b>Label provenance quietly.</b> Simulated is a provenance marker, not an acute state, so it reads as a neutral badge and never competes with real status signals.</li>
+</ol>
+
+<h3>Delivered slices</h3>
+<ul>
+<!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2668" data-delivered-at="2026-08-16" data-slice="s3-replay-only-runner"><b>S3 replay-only Runner.</b> Added the signed fixed-trace schema with a deterministic canonical form and shared pure verification, the narrow <code>demo.replay</code> ingestion scope with a pure admission policy and typed denials, the exclusive replay credential rule, a separate replay service whose image contains no CLI, Git, repository, or secret mount, Simulated labeling from the journal row through to the UI, and a compromise matrix proving the replay credential cannot claim or mutate tasks.</li>
+<!-- agent-studio:implementation-log:end -->
+</ul>
+
+<h3>Open dependencies</h3>
+<p>S3 carries its own denial barrier so the two failure modes stay independent, as variant C requires. It does not stand in for the S2 hard server lock: that slice still owns the startup-only execution profile and the route inventory guard. S4 owns the public visitor boundary, so the read-only cycle projection is currently a normal authenticated read. S5 pins the trace digest into the release manifest and owns the six-hour replacement job.</p>
+<!-- agent-studio:implementation-section:end -->
 
 <h2 id="approval" data-concept-section="open-decisions"><span class="no">§9</span>Decision request</h2>
 <p>This dossier is decision-ready. Approval is requested for the following package:</p>

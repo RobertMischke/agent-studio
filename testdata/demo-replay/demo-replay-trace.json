@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "traceId": "demo-instanz-cycle-1",
+  "cycleSeconds": 720,
+  "scene": {
+    "projects": [
+      "Demo App"
+    ],
+    "taskKeys": [
+      "DEMO-4",
+      "DEMO-12"
+    ]
+  },
+  "events": [
+    {
+      "sequence": 1,
+      "offsetMs": 0,
+      "taskKey": "DEMO-4",
+      "kind": "session.started",
+      "severity": "info",
+      "message": "Simulated run started for large avatar uploads.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 2,
+      "offsetMs": 12000,
+      "taskKey": "DEMO-4",
+      "kind": "turn.started",
+      "severity": "info",
+      "message": "Reading the upload size limits and the failing case.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 3,
+      "offsetMs": 48000,
+      "taskKey": "DEMO-12",
+      "kind": "session.started",
+      "severity": "info",
+      "message": "Simulated run started for the export progress stream.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 4,
+      "offsetMs": 66000,
+      "taskKey": "DEMO-12",
+      "kind": "turn.started",
+      "severity": "info",
+      "message": "Mapping the activity feed events the export should emit.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 5,
+      "offsetMs": 95000,
+      "taskKey": "DEMO-4",
+      "kind": "turn.completed",
+      "severity": "info",
+      "message": "Reproduced the failure for uploads above the configured limit.",
+      "durationMs": 21600,
+      "inputTokens": 1120,
+      "outputTokens": 320
+    },
+    {
+      "sequence": 6,
+      "offsetMs": 130000,
+      "taskKey": "DEMO-4",
+      "kind": "turn.started",
+      "severity": "info",
+      "message": "Adding a bounded read and a typed rejection for oversized files.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 7,
+      "offsetMs": 168000,
+      "taskKey": "DEMO-12",
+      "kind": "turn.completed",
+      "severity": "info",
+      "message": "Listed the three progress checkpoints the feed is missing.",
+      "durationMs": 23400,
+      "inputTokens": 1230,
+      "outputTokens": 360
+    },
+    {
+      "sequence": 8,
+      "offsetMs": 204000,
+      "taskKey": "DEMO-12",
+      "kind": "turn.started",
+      "severity": "info",
+      "message": "Emitting progress checkpoints from the export pipeline.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 9,
+      "offsetMs": 246000,
+      "taskKey": "DEMO-4",
+      "kind": "turn.completed",
+      "severity": "info",
+      "message": "Oversized uploads now fail with a typed message instead of a timeout.",
+      "durationMs": 25200,
+      "inputTokens": 1340,
+      "outputTokens": 400
+    },
+    {
+      "sequence": 10,
+      "offsetMs": 282000,
+      "taskKey": "DEMO-4",
+      "kind": "turn.started",
+      "severity": "info",
+      "message": "Covering the boundary with a direct policy test.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 11,
+      "offsetMs": 318000,
+      "taskKey": "DEMO-12",
+      "kind": "turn.completed",
+      "severity": "info",
+      "message": "Progress checkpoints reach the activity feed in order.",
+      "durationMs": 27000,
+      "inputTokens": 1450,
+      "outputTokens": 440
+    },
+    {
+      "sequence": 12,
+      "offsetMs": 354000,
+      "taskKey": "DEMO-12",
+      "kind": "turn.started",
+      "severity": "info",
+      "message": "Adding a regression test for the reconnect case.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 13,
+      "offsetMs": 402000,
+      "taskKey": "DEMO-4",
+      "kind": "turn.completed",
+      "severity": "info",
+      "message": "Policy test covers the limit, the boundary, and the rejection message.",
+      "durationMs": 28800,
+      "inputTokens": 1560,
+      "outputTokens": 480
+    },
+    {
+      "sequence": 14,
+      "offsetMs": 444000,
+      "taskKey": "DEMO-12",
+      "kind": "turn.completed",
+      "severity": "info",
+      "message": "Reconnect replays the checkpoints the client missed.",
+      "durationMs": 29700,
+      "inputTokens": 1615,
+      "outputTokens": 500
+    },
+    {
+      "sequence": 15,
+      "offsetMs": 486000,
+      "taskKey": "DEMO-4",
+      "kind": "turn.started",
+      "severity": "info",
+      "message": "Running the affected test project.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 16,
+      "offsetMs": 528000,
+      "taskKey": "DEMO-12",
+      "kind": "turn.started",
+      "severity": "info",
+      "message": "Running the export pipeline tests.",
+      "durationMs": null,
+      "inputTokens": null,
+      "outputTokens": null
+    },
+    {
+      "sequence": 17,
+      "offsetMs": 576000,
+      "taskKey": "DEMO-4",
+      "kind": "turn.completed",
+      "severity": "info",
+      "message": "Affected tests pass.",
+      "durationMs": 32400,
+      "inputTokens": 1780,
+      "outputTokens": 560
+    },
+    {
+      "sequence": 18,
+      "offsetMs": 612000,
+      "taskKey": "DEMO-12",
+      "kind": "turn.completed",
+      "severity": "info",
+      "message": "Export pipeline tests pass.",
+      "durationMs": 33300,
+      "inputTokens": 1835,
+      "outputTokens": 580
+    },
+    {
+      "sequence": 19,
+      "offsetMs": 648000,
+      "taskKey": "DEMO-4",
+      "kind": "session.completed",
+      "severity": "info",
+      "message": "Simulated run finished. Upload limit handling is covered.",
+      "durationMs": 76000,
+      "inputTokens": 2520,
+      "outputTokens": 890
+    },
+    {
+      "sequence": 20,
+      "offsetMs": 684000,
+      "taskKey": "DEMO-12",
+      "kind": "session.completed",
+      "severity": "info",
+      "message": "Simulated run finished. Progress streaming is covered.",
+      "durationMs": 80000,
+      "inputTokens": 2560,
+      "outputTokens": 905
+    }
+  ],
+  "signature": {
+    "algorithm": "hmac-sha256",
+    "keyId": "demo-replay-dev",
+    "digest": "c29d71cc6e748e50e19ce33e6dc9f5fa412e90e7e78a5455141883e945feca38",
+    "value": "f6b3912c7fdea8b99cd7eabd9893e8ebdea4d3492d24a569dc4e93ecedd0a0dd"
+  }
+}
