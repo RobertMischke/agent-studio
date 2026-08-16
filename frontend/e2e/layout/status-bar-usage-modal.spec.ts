@@ -26,11 +26,17 @@ import { setTheme } from '../helpers/theme';
 
 const SCREENSHOT_DIR = process.env.STATUS_BAR_RESULTS_DIR?.trim() || 'test-results';
 const CLIS = ['copilot', 'claude', 'codex'] as const;
+test.use({ serviceWorkers: 'block' });
 
 test.describe('Status bar usage modal', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 900 });
+    await page.route('**/api/auth/status', route => route.fulfill({
+      json: { profile: 'local', bootstrapRequired: false, authenticated: true, user: null },
+    }));
+    await page.route('**/api/runner/status**', route => route.fulfill({ json: { projects: {} } }));
+    await page.route('**/api/watch-paths', route => route.fulfill({ json: [] }));
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     // Let the first quota poll fire so the strip has cards to render.
@@ -124,11 +130,11 @@ test.describe('Status bar usage modal', () => {
       if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
         json: {
-          at: new Date().toISOString(),
+          at: '2026-07-11T12:45:00Z',
           ttlSeconds: 600,
           snapshots: [{
             cliType: 'codex',
-            fetchedAt: new Date().toISOString(),
+            fetchedAt: '2026-07-11T12:45:00Z',
             plan: 'Pro',
             source: '/status',
             error: null,
@@ -157,12 +163,14 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-05-03T08:15:00Z', lastRecordedAt: '2026-07-11T12:42:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-06-08T09:00:00Z', lastRecordedAt: '2026-07-10T18:30:00Z',
           },
         ],
         byProject: [],
@@ -201,21 +209,28 @@ test.describe('Status bar usage modal', () => {
     }));
 
     await page.reload();
-    await page.getByTestId('hquota-card-codex').click();
+    const connectionError = page.getByTestId('error-dialog');
+    if (await connectionError.isVisible()) {
+      await page.getByTestId('error-dialog-close').click();
+    }
+    const codexCard = page.getByTestId('hquota-card-codex');
+    await expect(codexCard).toHaveAttribute('aria-label', /3% used/);
+    await codexCard.click();
 
     const modal = page.getByTestId('cli-usage-modal-codex');
     await expect(modal).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByTestId('cli-usage-modal-recorded-period')).toContainText('Since May 3, 2026 · As of Jul 11, 2026');
+    await expect(modal.getByTestId('cli-usage-modal-quota-as-of')).toContainText('As of');
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
     await expect(modal.getByText('50.6M')).toHaveCount(2);
 
     await setTheme(page, 'light');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-model-period-after--mocked-light.png` });
     await setTheme(page, 'dark');
-    await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+    await modal.screenshot({ path: `${SCREENSHOT_DIR}/usage-model-period-after--mocked-dark.png` });
   });
 });

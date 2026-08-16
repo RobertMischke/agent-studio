@@ -12,7 +12,10 @@
 > current source for remote runner calls. Project summary, heatmap, and pipeline
 > cost responses include the newest successfully read usage timestamp and
 > report partial or unavailable sources instead of presenting an unexplained
-> zero. The legacy services (`TokenSummaryService`,
+> zero. Lifetime `byModel` rows also expose `firstRecordedAt` and
+> `lastRecordedAt`, folded from their contributing telemetry entries, so usage
+> surfaces can state the recorded period without substituting fetch time or
+> configuration. The legacy services (`TokenSummaryService`,
 > `WorkspaceTokensTimelineService`, `ProjectTokenUsageService`) retain the pure
 > fold helpers used by the canonical readers and parity fixtures. Each surface ships
 > with a Phase-5 parity test
@@ -252,6 +255,10 @@ mixed dashboard:
   captured workspace tokens and shows resets, average burn projection, the
   1h/24h/7d trend selector, effort-attribution availability, and a plausibility
   explanation.
+- Provider quota areas state the probe timestamp from `fetchedAt`. Recorded
+  model totals state the oldest and newest contributing `byModel` timestamps.
+  If legacy cached rows do not carry those bounds, the UI says the period is
+  unavailable instead of presenting the aggregate fetch time as telemetry age.
 - The current workspace timeline contract has no CLI field per bucket and the
   aggregate contract has no reasoning-effort field. The UI therefore labels
   the trend as a workspace plausibility baseline and effort as unattributed. It

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenTimeline } from '../../models/tokens.model';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import { formatAsOf, formatRecordedUsageTimeRange, recordedUsageTimeRange } from '../recorded-usage-time-range';
 
 type AnalysisPeriod = '1h' | '24h' | '7d';
 
@@ -31,6 +32,14 @@ export class CliWindowAnalysisComponent {
   readonly row = computed(() => this.quotaRows().find(row => row.cliType === this.cliType()) ?? null);
   readonly label = computed(() => this.cliType() === 'claude' ? 'Claude' : 'Codex');
   readonly cliModels = computed(() => (this.tokens()?.byModel ?? []).filter(row => this.modelMatches(row.model)));
+  readonly recordedUsagePeriod = computed(() => formatRecordedUsageTimeRange(recordedUsageTimeRange([
+    ...this.cliModels(),
+    ...(this.adhoc()?.byModel ?? []).filter(row => this.modelMatches(row.model)),
+  ])));
+  readonly quotaAsOf = computed(() => formatAsOf(this.row()?.fetchedAt));
+  readonly trendAsOf = computed(() => formatAsOf(
+    (this.period() === '7d' ? this.timeline7d() : this.timeline24h())?.windowEnd,
+  ));
   readonly capturedTokens = computed(() => this.cliModels().reduce((sum, model) => sum + this.modelTotal(model), 0)
     + (this.cliType() === 'claude' ? this.adhocTotal() : 0));
   readonly streamParts = computed<StreamPart[]>(() => {

@@ -38,7 +38,7 @@ describe('CliUsageModalComponent', () => {
     icon: '✴️',
     label: 'Claude',
     plan: 'Pro',
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: '2026-07-11T12:45:00Z',
     freshness: 'updated just now',
     stale: false,
     source: 'pty',
@@ -84,7 +84,7 @@ describe('CliUsageModalComponent', () => {
     icon: '🟪',
     label: 'Codex',
     plan: 'Pro',
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: '2026-07-11T12:45:00Z',
     freshness: 'updated just now',
     stale: false,
     source: '/status',
@@ -151,12 +151,14 @@ describe('CliUsageModalComponent', () => {
           inputTokens: 39_646_031, outputTokens: 97_412,
           cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstRecordedAt: '2026-05-03T08:15:00Z', lastRecordedAt: '2026-07-11T12:42:00Z',
         },
         {
           model: 'GPT-5.5', calls: 8,
           inputTokens: 10_782_081, outputTokens: 66_760,
           cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstRecordedAt: '2026-06-08T09:00:00Z', lastRecordedAt: '2026-07-10T18:30:00Z',
         },
       ],
       byProject: [],
@@ -197,6 +199,29 @@ describe('CliUsageModalComponent', () => {
     expect(component.modelRows().map(r => r.model)).toEqual(['gpt-5.6-sol', 'GPT-5.5']);
     expect(component.modelRows().every(r => r.source === 'project runtime')).toBe(true);
     expect(component.totals().tokens).toBe(50_592_284);
+    expect(component.recordedUsagePeriod()).toContain('Since May 3, 2026');
+    expect(component.recordedUsagePeriod()).toContain('As of Jul 11, 2026');
+    expect(component.quotaAsOf()).toContain('As of Jul 11, 2026');
+
+    fixture.componentRef.setInput('tokens', {
+      ...tokens,
+      byModel: Array.from({ length: 6 }, (_, index) => ({
+        model: `gpt-5-${index}`,
+        calls: 1,
+        inputTokens: 6 - index,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        estimatedApiCostUsd: 0,
+        modelPriced: false,
+        firstRecordedAt: index === 5 ? '2026-01-02T08:00:00Z' : '2026-06-01T08:00:00Z',
+        lastRecordedAt: '2026-07-11T12:42:00Z',
+      })),
+    });
+    fixture.detectChanges();
+
+    expect(component.modelRows()).toHaveLength(5);
+    expect(component.recordedUsagePeriod()).toContain('Since Jan 2, 2026');
   });
 
   it('still returns "n/a" when a window carries no usable number at all', async () => {
