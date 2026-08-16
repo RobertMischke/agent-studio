@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en" data-document-pattern="ui">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Applied surfaces | Admin Surface Design Guideline</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #fcfcfb;
+      --surface: #f2f1ee;
+      --strong: #e8e7e2;
+      --ink: #151515;
+      --muted: #5f5e59;
+      --faint: #7c7a74;
+      --line: #d8d6cf;
+      --link: #1f67b2;
+      --link-soft: #eaf1fb;
+      --good: #18753a;
+      --good-soft: #eaf4ea;
+      --bad: #b72f2f;
+      --bad-soft: #fbecec;
+      --warn: #8b6100;
+      --warn-soft: #f8f0dd;
+      --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --paper: #1a1a19;
+        --surface: #232322;
+        --strong: #2c2c2a;
+        --ink: #f7f7f4;
+        --muted: #c3c2b7;
+        --faint: #9d9c94;
+        --line: #3d3d3a;
+        --link: #78aef0;
+        --link-soft: #1e2a3a;
+        --good: #67b867;
+        --good-soft: #1f2f1f;
+        --bad: #e66767;
+        --bad-soft: #382222;
+        --warn: #d9a63f;
+        --warn-soft: #33301e;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--paper); scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.6 var(--sans); }
+    main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; padding-bottom: 72px; }
+    header { padding: 42px 0 28px; border-bottom: 1px solid var(--line); }
+    h1 { max-width: 820px; margin: 0 0 12px; font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.08; }
+    h2 { margin: 44px 0 7px; font-size: 1.2rem; }
+    p { max-width: 76ch; }
+    .kicker { margin: 0 0 10px; color: var(--faint); font: 700 .74rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+    .lede { margin: 0; color: var(--muted); font-size: 1.08rem; }
+    .page-links { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 18px; font-size: .82rem; }
+    a { color: var(--link); text-underline-offset: 3px; }
+    a:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
+    .contract-note { margin: 22px 0 0; padding: 14px 18px; background: var(--link-soft); font-size: .88rem; }
+    .contract-note p { margin: 0; max-width: 80ch; }
+    .contract-note strong { color: var(--ink); }
+    .audit-wrap { overflow-x: auto; margin-top: 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    th, td { padding: 10px 11px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--faint); font: 700 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+    td p { margin: 0 0 4px; }
+    td p:last-child { margin: 0; }
+    code { font: .85em/1.4 var(--mono); }
+    .card-key { display: inline-block; border-radius: 3px; padding: 1px 6px; background: var(--surface); color: var(--link); font: 700 .78rem/1.4 var(--mono); letter-spacing: .04em; }
+    .status-badge { display: inline-block; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
+    .status-applied { background: var(--good-soft); color: var(--good); }
+    .status-partial { background: var(--warn-soft); color: var(--warn); }
+    .thumb-cell { width: 240px; }
+    .thumb-wrap { display: grid; gap: 5px; }
+    .thumb-wrap svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+    footer { margin-top: 34px; color: var(--faint); font-size: .76rem; }
+    @media (max-width: 760px) {
+      main { width: min(100% - 24px, 1120px); }
+      header { padding-top: 28px; }
+      .thumb-cell { width: 140px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="kicker">AGT-W1 · Living standard · Multi-page reference from AGT-2617</p>
+    <h1>Applied surfaces</h1>
+    <p class="lede">Append-only register of admin surfaces that have adopted the flat grammar. Each row records the surface, the card that drove the change, the applied contract, and the review date.</p>
+    <nav class="page-links" aria-label="Dossier pages">
+      <a href="../index.html">Overview</a>
+      <a href="dos-and-donts.html">Visual dos and don'ts</a>
+      <a href="applied-surfaces.html" aria-current="page">Applied surfaces</a>
+    </nav>
+  </header>
+
+  <div class="contract-note">
+    <p><strong>Living register.</strong> Each revamp card in the AGT-2606 / AGT-2608 / AGT-2610 / AGT-2613 line appends one row here after its review is merged. Rows are never removed or edited; a subsequent card on the same surface adds a new row. Evidence filenames match the task <code>results/</code> inventory shipped with the delivery.</p>
+  </div>
+
+  <div class="audit-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Surface</th>
+          <th class="thumb-cell">Before / After</th>
+          <th>Applied contract</th>
+          <th>Card</th>
+          <th>State</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>11 Aug 2026</td>
+          <td>
+            <p><strong>Execution hosts settings</strong></p>
+            <p><code>#/workspace/settings/execution-hosts</code></p>
+          </td>
+          <td class="thumb-cell">
+            <div class="thumb-wrap">
+              <svg viewBox="0 0 240 90" aria-label="Execution hosts before/after thumbnails">
+                <!-- Before: card border accent violation -->
+                <rect width="240" height="42" fill="var(--bad-soft)" rx="3"/>
+                <text x="6" y="12" font="600 8px system-ui" fill="var(--bad)" font-size="8" font-weight="700">BEFORE</text>
+                <rect x="6" y="17" width="228" height="20" rx="3" fill="var(--surface)" stroke="var(--bad)" stroke-width="1"/>
+                <rect x="6" y="17" width="4" height="20" rx="2" fill="var(--bad)"/>
+                <text x="16" y="31" font-size="8" fill="var(--ink)">runner-01</text>
+                <text x="100" y="31" font-size="7" fill="var(--muted)">online  4 slots  0.2</text>
+                <!-- After: flat table row -->
+                <rect y="48" width="240" height="42" fill="var(--good-soft)" rx="3"/>
+                <text x="6" y="60" font="600 8px system-ui" fill="var(--good)" font-size="8" font-weight="700">AFTER</text>
+                <line x1="6" y1="67" x2="234" y2="67" stroke="var(--line)" stroke-width=".5"/>
+                <text x="6" y="80" font-size="8" fill="var(--ink)">runner-01</text>
+                <text x="80" y="80" font-size="7" fill="var(--good)">online</text>
+                <text x="120" y="80" font-size="7" fill="var(--muted)">4 slots  0.2</text>
+              </svg>
+            </div>
+          </td>
+          <td>
+            <p>One sortable host table: Name, Status, Slots, Load, Last activity, Release, Actions. Persisted row disclosure for identity, capabilities, connection, and telemetry. Warning semantics only for genuine host / auth / delivery failures.</p>
+          </td>
+          <td><span class="card-key">AGT-2568</span></td>
+          <td><span class="status-badge status-applied">Applied</span></td>
+        </tr>
+        <tr>
+          <td>11 Aug 2026</td>
+          <td>
+            <p><strong>Activity stream</strong></p>
+            <p><code>#/activity</code></p>
+          </td>
+          <td class="thumb-cell">
+            <div class="thumb-wrap">
+              <svg viewBox="0 0 240 90" aria-label="Activity before/after thumbnails">
+                <!-- Before: mixed indentation, coloured left bars -->
+                <rect width="240" height="42" fill="var(--bad-soft)" rx="3"/>
+                <text x="6" y="12" font-size="8" font-weight="700" fill="var(--bad)">BEFORE</text>
+                <rect x="6" y="17" width="4" height="20" rx="2" fill="var(--warn)"/>
+                <rect x="6" y="17" width="228" height="20" rx="2" fill="var(--surface)"/>
+                <text x="16" y="31" font-size="8" fill="var(--ink)">Pipeline · stage 3</text>
+                <rect x="18" y="38" width="4" height="14" rx="2" fill="var(--link)"/>
+                <!-- After: flat chronological stream -->
+                <rect y="48" width="240" height="42" fill="var(--good-soft)" rx="3"/>
+                <text x="6" y="60" font-size="8" font-weight="700" fill="var(--good)">AFTER</text>
+                <line x1="6" y1="67" x2="234" y2="67" stroke="var(--line)" stroke-width=".5"/>
+                <text x="6" y="79" font-size="7" fill="var(--muted)">10:02</text>
+                <text x="42" y="79" font-size="8" fill="var(--ink)">Pipeline stage 3 completed</text>
+                <line x1="6" y1="83" x2="234" y2="83" stroke="var(--line)" stroke-width=".5"/>
+              </svg>
+            </div>
+          </td>
+          <td>
+            <p>One chronological stream for all entry types. No coloured left accent bars; entry type expressed via whole-row tint only. Columns: time, identity, type, summary, state, disclosure. No project grouping sections.</p>
+          </td>
+          <td><span class="card-key">AGT-2565</span></td>
+          <td><span class="status-badge status-applied">Applied</span></td>
+        </tr>
+        <tr>
+          <td>12 Aug 2026</td>
+          <td>
+            <p><strong>Dossier list</strong></p>
+            <p><code>#/workspace/dossiers</code></p>
+          </td>
+          <td class="thumb-cell">
+            <div class="thumb-wrap">
+              <svg viewBox="0 0 240 90" aria-label="Dossier list before/after thumbnails">
+                <!-- Before: card border, orange pending pill -->
+                <rect width="240" height="42" fill="var(--bad-soft)" rx="3"/>
+                <text x="6" y="12" font-size="8" font-weight="700" fill="var(--bad)">BEFORE</text>
+                <rect x="6" y="17" width="228" height="20" rx="4" fill="var(--surface)" stroke="var(--line)" stroke-width="1"/>
+                <text x="12" y="30" font-size="8" fill="var(--ink)">Admin Guideline</text>
+                <rect x="150" y="20" width="60" height="12" rx="6" fill="var(--warn-soft)"/>
+                <text x="155" y="29" font-size="7" fill="var(--warn)">decision pending</text>
+                <!-- After: flat row, neutral metadata -->
+                <rect y="48" width="240" height="42" fill="var(--good-soft)" rx="3"/>
+                <text x="6" y="60" font-size="8" font-weight="700" fill="var(--good)">AFTER</text>
+                <line x1="6" y1="67" x2="234" y2="67" stroke="var(--line)" stroke-width=".5"/>
+                <text x="6" y="79" font-size="8" fill="var(--ink)">Admin Guideline</text>
+                <text x="130" y="79" font-size="7" fill="var(--muted)">Decision pending</text>
+                <line x1="6" y1="83" x2="234" y2="83" stroke="var(--line)" stroke-width=".5"/>
+              </svg>
+            </div>
+          </td>
+          <td>
+            <p>Flat entry rows: title, one quiet metadata line (key, lifecycle, date, open-decision count, compact card refs). Short summary within reading measure. No card borders, radii, inset frames, or resting shadows. Neutral lifecycle labels, not orange warnings for normal pending state.</p>
+          </td>
+          <td><span class="card-key">AGT-2606</span></td>
+          <td><span class="status-badge status-applied">Applied</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>How to add a row</h2>
+  <p>When a revamp card is reviewed and merged, the card author adds one row to this table following the pattern above. The row must include: the ISO date the review was merged, a short surface name and the canonical route, the before/after SVG schematic (inline, 240 x 90 viewBox), the applied contract in plain prose, the card key as a <code class="card-key">AGT-XXXX</code> chip, and the state badge.</p>
+  <p>Do not remove or edit existing rows. A subsequent improvement to the same surface adds a new row below the original.</p>
+
+  <footer>Applied-surfaces register introduced by AGT-2617 on 16 August 2026. Part of the Admin Surface Design Guideline living standard (AGT-W1). Source dossier: AGT-2583.</footer>
+</main>
+</body>
+</html>
