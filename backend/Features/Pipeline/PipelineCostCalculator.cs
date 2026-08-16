@@ -13,6 +13,19 @@ public sealed record PipelinePricingGap(
     int AffectedRuns);
 
 /// <summary>
+/// Token + cost rollup for one step kind (e.g. Core, Aspect, Orchestrator),
+/// summed across all runs. Powers the "Tokens by type" surface in the
+/// Overview pipeline popover.
+/// </summary>
+public sealed record PipelineKindTokenUsage(
+    string Kind,
+    string DisplayName,
+    long TotalTokens,
+    decimal CostUsd,
+    bool AnyModelUnknown,
+    IReadOnlyList<PipelinePricingGap> PricingGaps);
+
+/// <summary>
 /// Per-step cost (USD) breakdown for one step's recorded token usage.
 /// <see cref="ModelKnown"/> is false when the historical resolver has no
 /// price for the model and run date. <see cref="PricingGaps"/> carries the
@@ -104,6 +117,7 @@ public sealed record PipelineRunTokenUsage(
 public sealed record PipelineModelUsageSummary(
     IReadOnlyList<PipelineRunTokenUsage> Runs,
     IReadOnlyList<PipelineModelTokenUsage> TotalByModel,
+    IReadOnlyList<PipelineKindTokenUsage> TotalByKind,
     long TotalTokens,
     decimal TotalCostUsd,
     bool AnyModelUnknown,
@@ -344,11 +358,14 @@ public static class PipelineCostCalculator
             return new PipelineModelUsageSummary(
                 Array.Empty<PipelineRunTokenUsage>(),
                 Array.Empty<PipelineModelTokenUsage>(),
+                Array.Empty<PipelineKindTokenUsage>(),
                 0, 0m, false, 0, Array.Empty<PipelinePricingGap>(), 0);
         }
 
         // Oldest first: archived attempts (newest-first on disk) ascending by
         // attempt, then the live record last.
+        var allRecords = record.PreviousAttempts.OrderBy(p => p.Attempt).Append(record);
+        var kindBreakdown = GroupByKind(allRecords);
         var runs = new List<PipelineRunTokenUsage>();
         foreach (var prev in record.PreviousAttempts.OrderBy(p => p.Attempt))
         {
@@ -356,7 +373,7 @@ public static class PipelineCostCalculator
         }
         runs.Add(BuildRun(record, current: true));
 
-        return BuildModelSummary(runs);
+        return BuildModelSummary(runs, kindBreakdown);
     }
 
     /// <summary>
@@ -405,11 +422,15 @@ public static class PipelineCostCalculator
                 TokenUsageAvailable: runCalls.Count > 0));
         }
 
-        return BuildModelSummary(runs);
+        var kindBreakdown = record == null
+            ? Array.Empty<PipelineKindTokenUsage>()
+            : GroupByKind(record.PreviousAttempts.OrderBy(p => p.Attempt).Append(record));
+        return BuildModelSummary(runs, kindBreakdown);
     }
 
     private static PipelineModelUsageSummary BuildModelSummary(
-        IReadOnlyList<PipelineRunTokenUsage> runs)
+        IReadOnlyList<PipelineRunTokenUsage> runs,
+        IReadOnlyList<PipelineKindTokenUsage> kindBreakdown)
     {
         var totalByModel = runs
             .SelectMany(r => r.Models)
@@ -439,6 +460,7 @@ public static class PipelineCostCalculator
         return new PipelineModelUsageSummary(
             runs,
             totalByModel,
+            kindBreakdown,
             totalTokens,
             totalCost,
             anyUnknown,
@@ -640,6 +662,62 @@ public static class PipelineCostCalculator
         return byModel
             .OrderByDescending(m => m.TotalTokens)
             .ThenBy(m => m.Model, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string KindDisplayName(StepKind kind) => kind switch
+    {
+        StepKind.Core => "Coding run",
+        StepKind.Aspect => "Review",
+        StepKind.Orchestrator => "Gate",
+        StepKind.Module => "Enrichment",
+        StepKind.Drift => "Drift check",
+        StepKind.Tool => "Tool step",
+        _ => kind.ToString(),
+    };
+
+    private static IReadOnlyList<PipelineKindTokenUsage> GroupByKind(
+        IEnumerable<PipelineExecutionRecord> allRuns)
+    {
+        return allRuns
+            .SelectMany(r => r.Steps.Select(s => (Run: r, Step: s)))
+            .Where(item => item.Step.InputTokens + item.Step.OutputTokens
+                + item.Step.CacheReadTokens + item.Step.CacheCreationTokens > 0)
+            .GroupBy(item => item.Step.Kind)
+            .Select(g =>
+            {
+                long totalInput = g.Sum(item => item.Step.InputTokens);
+                long totalOutput = g.Sum(item => item.Step.OutputTokens);
+                long totalCacheRead = g.Sum(item => item.Step.CacheReadTokens);
+                long totalCacheCreation = g.Sum(item => item.Step.CacheCreationTokens);
+                long totalTokens = totalInput + totalOutput + totalCacheRead + totalCacheCreation;
+                decimal totalCost = 0m;
+                bool anyUnknown = false;
+                var gaps = new List<PipelinePricingGap>();
+                foreach (var (run, step) in g)
+                {
+                    var est = TokenPricing.Estimate(
+                        step.Model, step.InputTokens, step.OutputTokens,
+                        step.CacheReadTokens, step.CacheCreationTokens,
+                        run.StartedAt);
+                    var stepTokens = step.InputTokens + step.OutputTokens
+                        + step.CacheReadTokens + step.CacheCreationTokens;
+                    if (stepTokens > 0 && !est.ModelKnown)
+                    {
+                        anyUnknown = true;
+                        gaps.AddRange(PricingGapsFor(est, stepTokens, step.Model));
+                    }
+                    totalCost += est.Total;
+                }
+                return new PipelineKindTokenUsage(
+                    Kind: g.Key.ToString().ToLowerInvariant(),
+                    DisplayName: KindDisplayName(g.Key),
+                    TotalTokens: totalTokens,
+                    CostUsd: Round(totalCost),
+                    AnyModelUnknown: anyUnknown,
+                    PricingGaps: MergePricingGaps(gaps));
+            })
+            .OrderByDescending(k => k.TotalTokens)
             .ToList();
     }
 

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { formatTokens } from '../../../../../services/format.util';
 import type {
+  PipelineKindTokenUsage,
   PipelineModelTokenUsage,
   PipelineModelUsageSummary,
   PipelinePricingGap,
@@ -68,6 +69,11 @@ export class PipelineTokenUsageComponent {
   /** Per-model rollup summed over every run, busiest model first. */
   readonly totalByModel = computed<PipelineModelTokenUsage[]>(
     () => this.summary()?.totalByModel ?? [],
+  );
+
+  /** Per-kind (step type) rollup summed over every run. */
+  readonly totalByKind = computed<PipelineKindTokenUsage[]>(
+    () => this.summary()?.totalByKind ?? [],
   );
 
   readonly runCount = computed<number>(() => this.runs().length);
@@ -172,6 +178,21 @@ export class PipelineTokenUsageComponent {
       unpricedRuns,
       pricingGaps,
     }), usage].filter(Boolean).join('\n');
+  }
+
+  runDateLabel(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  kindCostLabel(kind: PipelineKindTokenUsage): string {
+    return formatTokenCostDisplay({
+      costUsd: kind.costUsd,
+      totalTokens: kind.totalTokens,
+      unpricedRuns: kind.anyModelUnknown ? 1 : 0,
+    });
   }
 
   relativeTime(iso: string | null | undefined): string {

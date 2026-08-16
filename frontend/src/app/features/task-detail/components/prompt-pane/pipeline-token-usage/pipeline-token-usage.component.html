@@ -78,6 +78,30 @@
     </div>
 
     <!-- ============================================================ -->
+    <!-- TOKENS BY TYPE - one row per step kind, summed over all runs  -->
+    <!-- ============================================================ -->
+    @if (totalByKind().length > 0) {
+      <div class="ptu__kind-section" data-testid="pipeline-token-usage-by-kind">
+        <h3 class="ptu__title ptu__title--kind">
+          Tokens by type
+        </h3>
+        <div class="ptu__kind-grid ptu__kind-grid--colhead" aria-hidden="true">
+          <span class="ptu__col-label">Type</span>
+          <span class="ptu__cell ptu__num">Tokens</span>
+          <span class="ptu__cell ptu__num">Cost</span>
+        </div>
+        @for (k of totalByKind(); track k.kind) {
+          <div class="ptu__kind-grid ptu__kind-grid--row"
+               data-testid="pipeline-token-usage-kind-row">
+            <span class="ptu__kind-name">{{ k.displayName }}</span>
+            <span class="ptu__cell ptu__num ptu__mono">{{ tokens(k.totalTokens) }}</span>
+            <span class="ptu__cell ptu__num ptu__mono" [class.ptu__na]="k.anyModelUnknown">{{ kindCostLabel(k) }}</span>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- ============================================================ -->
     <!-- TOKENS BY RUN - one collapsible row per run, newest first,    -->
     <!-- every run collapsed by default (scales to dozens of runs).    -->
     <!-- ============================================================ -->
@@ -107,6 +131,7 @@
             }
             @if (run.startedAt) {
               <span class="ptu__run-time">{{ relativeTime(run.startedAt) }}</span>
+              <span class="ptu__run-date" data-testid="pipeline-token-usage-run-date">{{ runDateLabel(run.startedAt) }}</span>
             }
           </span>
           <span class="ptu__head-total ptu__num ptu__strong"
@@ -161,5 +186,10 @@
         }
       </div>
     }
+
+    <p class="ptu__footnote" data-testid="pipeline-token-usage-footnote"
+       [cacTooltip]="'Prices come from the TokenEconomy catalog entry valid on the exact run date. Subscription and volume discounts are not applied. Cache pricing may differ from the displayed model rate.'">
+      * List prices at each run date; subscription billing differs.
+    </p>
   </section>
 }

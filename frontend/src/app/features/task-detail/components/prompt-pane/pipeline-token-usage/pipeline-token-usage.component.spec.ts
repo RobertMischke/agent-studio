@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { PipelineTokenUsageComponent } from './pipeline-token-usage.component';
 import type {
+  PipelineKindTokenUsage,
   PipelineModelTokenUsage,
   PipelineModelUsageSummary,
   PipelineRunTokenUsage,
@@ -292,6 +293,33 @@ describe('PipelineTokenUsageComponent', () => {
     expect(total).toContain('$5.50');
     expect(total).not.toContain('incomplete');
     expect(total).not.toContain('no price data');
+  });
+
+  it('renders a Tokens by type section when kind data is available', () => {
+    const summaryWithKinds: PipelineModelUsageSummary = {
+      ...SUMMARY,
+      totalByKind: [
+        { kind: 'core', displayName: 'Coding run', totalTokens: 1_500_000, costUsd: 2.50, anyModelUnknown: false, pricingGaps: [] },
+        { kind: 'aspect', displayName: 'Review', totalTokens: 800_000, costUsd: 0.80, anyModelUnknown: false, pricingGaps: [] },
+      ],
+    };
+    const fixture = setup(summaryWithKinds);
+    expect(one(root(fixture), 'pipeline-token-usage-by-kind')).not.toBeNull();
+    const rows = all(root(fixture), 'pipeline-token-usage-kind-row');
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain('Coding run');
+    expect(rows[1].textContent).toContain('Review');
+  });
+
+  it('does not render Tokens by type section when no kind data', () => {
+    const fixture = setup(SUMMARY); // SUMMARY has no totalByKind
+    expect(one(root(fixture), 'pipeline-token-usage-by-kind')).toBeNull();
+  });
+
+  it('renders a footnote at the bottom', () => {
+    const fixture = setup(SUMMARY);
+    expect(one(root(fixture), 'pipeline-token-usage-footnote')).not.toBeNull();
+    expect(one(root(fixture), 'pipeline-token-usage-footnote')?.textContent).toContain('List prices');
   });
 
   it('marks a mixed priced and unpriced lifetime aggregate as partial', () => {

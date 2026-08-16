@@ -187,6 +187,19 @@ export interface PipelineRunTokenUsage {
 }
 
 /**
+ * Token + cost rollup for one step kind, summed across all runs. Mirrors
+ * backend `PipelineKindTokenUsage`. Powers the "Tokens by type" section.
+ */
+export interface PipelineKindTokenUsage {
+  kind: string;
+  displayName: string;
+  totalTokens: number;
+  costUsd: number;
+  anyModelUnknown: boolean;
+  pricingGaps?: PipelinePricingGap[];
+}
+
+/**
  * Per-model token usage for one task across every run: a per-run breakdown
  * plus a grand total summing each model over all runs. Mirrors backend
  * `PipelineModelUsageSummary`. Powers the Overview "RUNS - tokens by model"
@@ -195,6 +208,7 @@ export interface PipelineRunTokenUsage {
 export interface PipelineModelUsageSummary {
   runs: PipelineRunTokenUsage[];
   totalByModel: PipelineModelTokenUsage[];
+  totalByKind?: PipelineKindTokenUsage[] | null;
   totalTokens: number;
   totalCostUsd: number;
   anyModelUnknown: boolean;

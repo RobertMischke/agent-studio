@@ -1,6 +1,6 @@
 /** Mandatory caveat shown on every token-to-money tooltip. */
 export const TOKEN_COST_ESTIMATE_NOTICE =
-  'Estimated - historical list prices; discounts and provider-side caching adjustments are not considered.';
+  'Estimated at list prices valid on each run date; subscription discounts are not applied.';
 
 export interface TokenCostTooltipOptions {
   costUsd: number | null | undefined;
