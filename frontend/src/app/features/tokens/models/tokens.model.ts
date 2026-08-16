@@ -45,6 +45,9 @@ export interface TokenSummaryByModel {
   modelPriced: boolean;
   /** False only when the model id is absent from the pinned price catalog. */
   modelInCatalog?: boolean;
+  /** Earliest and latest token-usage entries folded into this model bucket. */
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 export interface TokenSummaryByProject {
@@ -150,6 +153,8 @@ export interface AdHocUsageByModel {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 /**

@@ -10,6 +10,7 @@ import type {
   TokenTimeline,
   WorkspaceExpensiveJob,
 } from '../../models/tokens.model';
+import { formatRecordedUsageAsOf, formatRecordedUsageStart, recordedUsageRange } from '../../models/recorded-usage-range';
 
 interface SparkPoint {
   label: string;
@@ -176,6 +177,13 @@ export class CliUsageDetailComponent {
       .slice(0, 5);
   }
 
+  usageRangeLabel(cliType?: CliType): string | null {
+    const models = [...(this.tokens()?.byModel ?? []), ...(this.adhoc()?.byModel ?? [])]
+      .filter(model => (!cliType || this.modelBelongsToCli(model.model, cliType)) && this.modelTotal(model) > 0);
+    const range = recordedUsageRange(models);
+    return range ? `Since ${formatRecordedUsageStart(range.firstRecordedAt)} · as of ${formatRecordedUsageAsOf(range.lastRecordedAt)}` : null;
+  }
+
   sourceRowsFor(cliType: CliType) {
     if (cliType !== 'claude') return [];
     return (this.adhoc()?.bySource ?? []).slice(0, 5);
@@ -204,6 +212,8 @@ export class CliUsageDetailComponent {
   totalTokens(row: ModelUsageRow): number {
     return row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens;
   }
+
+  private modelTotal(row: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number }): number { return row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheCreationTokens; }
 
   private sparkByBucket(timeline: TokenTimeline | null, limit: number): SparkPoint[] {
     if (!timeline) return [];

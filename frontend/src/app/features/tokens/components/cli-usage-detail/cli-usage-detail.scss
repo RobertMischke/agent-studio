@@ -65,6 +65,8 @@
   font-size: 12px;
 }
 
+.cud__time-range { margin: calc(var(--studio-spacing-1) * -1) 0 var(--studio-spacing-2) !important; font-size: 11px; font-variant-numeric: tabular-nums; }
+
 .cud__actions { gap: 8px; }
 
 .cud__button,

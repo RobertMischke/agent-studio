@@ -53,7 +53,11 @@
     <div class="cud__trend-head">
       <h4>Token trend</h4>
       @if (tokens(); as t) {
-        <span>{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost</span>
+        <span>
+          {{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total
+          · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost
+          @if (usageRangeLabel(); as range) { · <span data-testid="cli-usage-detail-time-range">{{ range }}</span> }
+        </span>
       }
     </div>
     <div class="cud__sparks">
@@ -158,6 +162,7 @@
 
           <div class="cud__panel">
             <h5>Top models</h5>
+            @if (usageRangeLabel(row.cliType); as range) { <p class="cud__muted cud__time-range" data-testid="cli-usage-detail-model-time-range">{{ range }}</p> }
             @if (modelRowsFor(row.cliType).length === 0) {
               <p class="cud__empty">No model usage attributed.</p>
             } @else {

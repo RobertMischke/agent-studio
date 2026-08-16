@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { mkdirSync } from 'node:fs';
 import { setTheme } from '../helpers/theme';
 
@@ -31,8 +31,8 @@ test.describe('Status bar usage modal', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 900 });
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
+    await page.route('**/api/crash-recovery/pending**', route => route.fulfill({ json: { pending: [] } }));
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     // Let the first quota poll fire so the strip has cards to render.
     await page.waitForTimeout(800);
   });
@@ -119,7 +119,7 @@ test.describe('Status bar usage modal', () => {
     await expect(page.getByTestId('cli-usage-detail')).toBeVisible();
   });
 
-  test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page }) => {
+  test('Codex distinguishes used quota from lifetime usage without double-counting cache', async ({ page, devBackend: _devBackend }) => {
     await page.route('**/api/cli/quota**', async route => {
       if (route.request().method() !== 'GET') return route.continue();
       await route.fulfill({
@@ -157,12 +157,14 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-08-04T06:15:00Z', lastRecordedAt: '2026-08-11T13:20:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            firstRecordedAt: '2026-08-05T09:00:00Z', lastRecordedAt: '2026-08-11T14:35:00Z',
           },
         ],
         byProject: [],
@@ -201,6 +203,8 @@ test.describe('Status bar usage modal', () => {
     }));
 
     await page.reload();
+    const startupErrorClose = page.getByTestId('error-dialog-close');
+    if (await startupErrorClose.count()) await startupErrorClose.click();
     await page.getByTestId('hquota-card-codex').click();
 
     const modal = page.getByTestId('cli-usage-modal-codex');
@@ -208,6 +212,9 @@ test.describe('Status bar usage modal', () => {
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
     await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    await expect(modal.getByTestId('cli-usage-modal-time-range')).toHaveText(
+      'Since 2026-08-04 · as of 2026-08-11 14:35Z',
+    );
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);

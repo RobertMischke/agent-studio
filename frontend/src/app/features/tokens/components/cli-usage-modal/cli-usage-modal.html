@@ -56,7 +56,18 @@
 
     <section class="cum__panel">
       <div class="cum__panel-head">
-        <h5 class="cum__panel-title">Recorded model usage</h5>
+        <div class="cum__panel-heading">
+          <h5 class="cum__panel-title">Recorded model usage</h5>
+          <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
+          @if (usageRange(); as range) {
+            <p class="cum__time-range" data-testid="cli-usage-modal-time-range">
+              Since <time [attr.datetime]="range.firstRecordedAt">{{ formatUsageStart(range.firstRecordedAt) }}</time>
+              · as of <time [attr.datetime]="range.lastRecordedAt">{{ formatUsageAsOf(range.lastRecordedAt) }}</time>
+            </p>
+          } @else if (modelRows().length > 0) {
+            <p class="cum__time-range" data-testid="cli-usage-modal-time-range">Telemetry period unavailable for cached legacy entries.</p>
+          }
+        </div>
         <div class="cum__totals">
           <span class="cum__total">
             <span class="cum__total-label">Tokens</span>
@@ -69,7 +80,6 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {

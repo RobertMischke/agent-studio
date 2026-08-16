@@ -106,6 +106,29 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void AggregateSummaries_DerivesPerModelTelemetryBoundsFromEntries()
+    {
+        var first = new DateTime(2026, 8, 4, 6, 15, 0, DateTimeKind.Utc);
+        var last = new DateTime(2026, 8, 11, 14, 35, 0, DateTimeKind.Utc);
+        var projectA = TokenSummaryService.Summarize("A", [
+            JobEntry("gpt-5-codex", 1_000, 100, first.AddDays(2)),
+            JobEntry("gpt-5-codex", 1_000, 100, last),
+        ]);
+        var projectB = TokenSummaryService.Summarize("B", [
+            JobEntry("gpt-5-codex", 1_000, 100, first),
+        ]);
+
+        var aggregate = TokenSummaryService.AggregateSummaries([
+            ("A", projectA),
+            ("B", projectB),
+        ]);
+
+        var model = Assert.Single(aggregate.ByModel);
+        Assert.Equal(first, model.FirstRecordedAt);
+        Assert.Equal(last, model.LastRecordedAt);
+    }
+
+    [Fact]
     public void Summarize_HistoricalGpt56SolUsage_IsPriced()
     {
         var entry = Entry("gpt-5.6-sol", 1_000_000, 100_000) with

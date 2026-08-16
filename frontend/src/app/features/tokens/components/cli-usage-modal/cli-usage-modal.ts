@@ -7,6 +7,11 @@ import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../models/tokens.model';
 import { CostBreakdownService } from '../../services/cost-breakdown.service';
+import {
+  formatRecordedUsageAsOf,
+  formatRecordedUsageStart,
+  recordedUsageRange,
+} from '../../models/recorded-usage-range';
 
 interface ModelUsageRow {
   model: string;
@@ -20,6 +25,8 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  firstRecordedAt?: string | null;
+  lastRecordedAt?: string | null;
 }
 
 type WindowTone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -135,7 +142,7 @@ export class CliUsageModalComponent {
     return { costUsd, tokens, models: rows.length, anyPriced, allPriced: rows.length > 0 && rows.every(r => r.modelPriced) };
   });
 
-  readonly modelRows = computed<ModelUsageRow[]>(() => {
+  private readonly allModelRows = computed<ModelUsageRow[]>(() => {
     const cli = this.cliType();
     const rows: ModelUsageRow[] = [];
     for (const m of this.tokens()?.byModel ?? []) {
@@ -148,8 +155,19 @@ export class CliUsageModalComponent {
       const row = { ...m, source: 'ad-hoc', cacheIncludedInInput: cli === 'codex' };
       if (this.totalTokens(row) > 0) rows.push(row);
     }
-    return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
+    return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a));
   });
+
+  readonly modelRows = computed<ModelUsageRow[]>(() => this.allModelRows().slice(0, 5));
+  readonly usageRange = computed(() => recordedUsageRange(this.allModelRows()));
+
+  formatUsageStart(value: string): string {
+    return formatRecordedUsageStart(value);
+  }
+
+  formatUsageAsOf(value: string): string {
+    return formatRecordedUsageAsOf(value);
+  }
 
   limitText(window: QuotaWindow): string {
     if (window.used !== null && window.limit !== null) {

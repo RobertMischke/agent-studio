@@ -2,6 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import type { CliUsageQuotaRow } from '../../services/cli-usage.store';
 import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenTimeline } from '../../models/tokens.model';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import {
+  formatRecordedUsageAsOf,
+  formatRecordedUsageStart,
+  recordedUsageRange,
+} from '../../models/recorded-usage-range';
 
 type AnalysisPeriod = '1h' | '24h' | '7d';
 
@@ -33,6 +38,12 @@ export class CliWindowAnalysisComponent {
   readonly cliModels = computed(() => (this.tokens()?.byModel ?? []).filter(row => this.modelMatches(row.model)));
   readonly capturedTokens = computed(() => this.cliModels().reduce((sum, model) => sum + this.modelTotal(model), 0)
     + (this.cliType() === 'claude' ? this.adhocTotal() : 0));
+  readonly usageRange = computed(() => recordedUsageRange([
+    ...this.cliModels().filter(model => this.modelTotal(model) > 0),
+    ...(this.cliType() === 'claude'
+      ? (this.adhoc()?.byModel ?? []).filter(model => this.modelMatches(model.model) && this.modelTotal(model) > 0)
+      : []),
+  ]));
   readonly streamParts = computed<StreamPart[]>(() => {
     let input = 0, output = 0, cache = 0;
     for (const model of this.cliModels()) {
@@ -88,6 +99,8 @@ export class CliWindowAnalysisComponent {
     return `${(value / 1_000_000).toFixed(2)}M`;
   }
   formatPct(value: number | null): string { return value == null ? 'Unknown' : `${value.toFixed(1)}% / h`; }
+  formatUsageStart(value: string): string { return formatRecordedUsageStart(value); }
+  formatUsageAsOf(value: string): string { return formatRecordedUsageAsOf(value); }
 
   private adhocTotal(): number {
     const value = this.adhoc();

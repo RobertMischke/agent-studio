@@ -24,6 +24,11 @@
 > Remote completion now materializes that receipt from the fenced attempt's
 > provider usage frames in `logs/cli-output.log`; a bounded startup sweep repairs
 > recent remote cards that completed before this writer existed.
+> Per-model lifetime buckets also carry `firstRecordedAt` and
+> `lastRecordedAt`, derived from their contributing token events. Usage
+> surfaces use those bounds for a compact `Since ... · as of ...` line; they
+> never substitute a configuration date or the API fetch time for telemetry
+> time.
 
 ## Why this document exists
 
@@ -252,6 +257,9 @@ mixed dashboard:
   captured workspace tokens and shows resets, average burn projection, the
   1h/24h/7d trend selector, effort-attribution availability, and a plausibility
   explanation.
+- Lifetime model totals expose their event-derived start date and latest-entry
+  timestamp in UTC. Provider quota cards keep their own time basis visible
+  through the reported window name and reset time.
 - The current workspace timeline contract has no CLI field per bucket and the
   aggregate contract has no reasoning-effort field. The UI therefore labels
   the trend as a workspace plausibility baseline and effort as unattributed. It

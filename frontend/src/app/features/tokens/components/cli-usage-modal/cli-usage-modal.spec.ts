@@ -151,12 +151,14 @@ describe('CliUsageModalComponent', () => {
           inputTokens: 39_646_031, outputTokens: 97_412,
           cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstRecordedAt: '2026-08-04T06:15:00Z', lastRecordedAt: '2026-08-11T13:20:00Z',
         },
         {
           model: 'GPT-5.5', calls: 8,
           inputTokens: 10_782_081, outputTokens: 66_760,
           cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
           estimatedApiCostUsd: 0, modelPriced: false,
+          firstRecordedAt: '2026-08-05T09:00:00Z', lastRecordedAt: '2026-08-11T14:35:00Z',
         },
       ],
       byProject: [],
@@ -197,6 +199,12 @@ describe('CliUsageModalComponent', () => {
     expect(component.modelRows().map(r => r.model)).toEqual(['gpt-5.6-sol', 'GPT-5.5']);
     expect(component.modelRows().every(r => r.source === 'project runtime')).toBe(true);
     expect(component.totals().tokens).toBe(50_592_284);
+    expect(component.usageRange()).toEqual({
+      firstRecordedAt: '2026-08-04T06:15:00Z',
+      lastRecordedAt: '2026-08-11T14:35:00Z',
+    });
+    expect(component.formatUsageStart(component.usageRange()!.firstRecordedAt)).toBe('2026-08-04');
+    expect(component.formatUsageAsOf(component.usageRange()!.lastRecordedAt)).toBe('2026-08-11 14:35Z');
   });
 
   it('still returns "n/a" when a window carries no usable number at all', async () => {
