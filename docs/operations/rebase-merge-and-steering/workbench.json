@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "rebase-merge-and-steering",
+  "title": "Rebase, merge, and bounce steering",
+  "summary": "Decision-ready attribution analysis of the current hybrid: fresh agent delivery rounds rebase onto the current integration line and record a new fenced subject, while server integration preserves the reviewed Result SHA through merge-first admission and permits replay only with transactional one-to-one replacement attribution. Compares delivery and integration strategies against ancestry evidence, card-scoped review, truthful history, exact candidate-SHA promotion, and the pending Batch Gate design. Recommends one deterministic platform bounce, one evidence-reading guardian round only for a repeated or complex conflict, and then Human Review.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-16T15:45:28Z",
+  "sourceTaskKeys": [
+    "AGT-2662"
+  ],
+  "implementationTasks": [],
+  "relatedTaskKeys": [
+    "AGT-2544",
+    "AGT-2557",
+    "AGT-2563",
+    "AGT-2632",
+    "AGT-2648",
+    "AGT-2654"
+  ]
+}
