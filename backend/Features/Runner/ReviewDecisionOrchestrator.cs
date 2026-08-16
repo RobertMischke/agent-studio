@@ -180,6 +180,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly AgentStudio.Cli.CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
+    private readonly AgentStudio.Pipeline.QualityAnalysis.IQualityAnalysisStepRunner? _qualityAnalysisRunner;
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
@@ -264,7 +265,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AgentsWikiSyncPostStepRunner? agentsWikiSync = null,
         PipelineStepEconomyAdvisor? pipelineStepEconomy = null,
         AttemptAuthorityService? attemptAuthority = null,
-        DossierMaintenanceService? dossierMaintenance = null)
+        DossierMaintenanceService? dossierMaintenance = null,
+        AgentStudio.Pipeline.QualityAnalysis.IQualityAnalysisStepRunner? qualityAnalysisRunner = null)
     {
         _scanner = scanner;
         _taskAccess = taskAccess;
@@ -295,6 +297,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _agentsWikiSync = agentsWikiSync;
         _attemptAuthority = attemptAuthority;
         _dossierMaintenance = dossierMaintenance;
+        _qualityAnalysisRunner = qualityAnalysisRunner;
 
         _statusSnapshot.ConfigureEscalationRateAlert(
             _configuration.GetValue(
@@ -2250,6 +2253,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
+        var qualityAnalysis = await RunQualityAngularRulesPostStepAsync(
+            entry, current, pipelineRecord?.Attempt, ct);
+        var qualityGate = qualityAnalysis is null
+            ? null
+            : BuildQualityAnalysisGateDecision(
+                qualityAnalysis,
+                CountPriorReissues(workspace, entry.Name, current.Id),
+                ConfiguredMaxReissues());
+        if (qualityGate is not null)
+        {
+            await HandleCompletionGateAsync(workspace, entry, pending, current, qualityGate, ct);
+            return;
+        }
+
         // Per-project pipeline config: drop aspects the project disabled and
         // route each remaining aspect's CLI call to its configured model
         // (falling back to the run-wide aspectModel). The resolver keys on
@@ -3287,6 +3304,94 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             FollowUp: followUp),
             current.FolderPath,
             moved.FolderPath);
+    }
+
+    private async Task<AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepResult?>
+        RunQualityAngularRulesPostStepAsync(
+            WatchPathEntry entry,
+            TaskInfo current,
+            int? runIndex,
+            CancellationToken ct)
+    {
+        if (_qualityAnalysisRunner is null) return null;
+        var repositoryPath = string.IsNullOrWhiteSpace(entry.RepositoryPath)
+            ? entry.RootPath
+            : entry.RepositoryPath;
+        AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepResult result;
+        try
+        {
+            result = await _qualityAnalysisRunner.RunAngularRulesAsync(
+                repositoryPath,
+                current.FolderPath,
+                ResolveLatestRunChangedFiles(current, entry.Path),
+                runIndex,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Quality Studio Angular analysis failed for {Project}/{JobId}",
+                entry.Name, current.Id);
+            result = new AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepResult(
+                PipelineCatalogue.QualityAngularRulesStepId,
+                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.Unavailable,
+                0,
+                ex.Message,
+                null,
+                [],
+                []);
+        }
+
+        if (_pipelineLog is not null)
+        {
+            var status = result.Verdict switch
+            {
+                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.Passed => PipelineStepStatus.Passed,
+                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.Findings
+                    when result.BlockingFindings.Count > 0 => PipelineStepStatus.Failed,
+                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.Findings => PipelineStepStatus.Passed,
+                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.NotApplicable => PipelineStepStatus.NotApplicable,
+                _ => PipelineStepStatus.Skipped,
+            };
+            var now = DateTime.UtcNow;
+            _pipelineLog.RecordStep(current.FolderPath, new PipelineStepExecution
+            {
+                StepId = result.StepId,
+                Kind = StepKind.Analysis,
+                Status = status,
+                StartedAt = now - TimeSpan.FromMilliseconds(result.DurationMs),
+                CompletedAt = now,
+                DurationMs = result.DurationMs,
+                Verdict = result.Verdict.ToString().ToLowerInvariant(),
+                Reason = result.Reason,
+                EvidenceRef = result.EvidencePath,
+            });
+        }
+        return result;
+    }
+
+    internal static CompletionGate.Decision? BuildQualityAnalysisGateDecision(
+        AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepResult result,
+        int priorReissues,
+        int maxReissues)
+    {
+        if (result.BlockingFindings.Count == 0) return null;
+
+        return new CompletionGate.Decision
+        {
+            Action = priorReissues >= maxReissues
+                ? CompletionGate.CompletionGateAction.Escalate
+                : CompletionGate.CompletionGateAction.Reissue,
+            Findings = result.BlockingFindings.Select(finding =>
+            {
+                var location = finding.Locations.FirstOrDefault();
+                var reference = location is null
+                    ? finding.RuleId
+                    : $"{finding.RuleId} {location.Path}:{location.StartLine ?? 1}";
+                return $"{reference}: {finding.Title}";
+            }).ToList(),
+            Reason = "Quality Studio named-rule findings require a steered retry.",
+        };
     }
 
     /// <summary>

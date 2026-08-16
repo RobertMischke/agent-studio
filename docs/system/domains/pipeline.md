@@ -50,6 +50,46 @@ pipeline view.
 - `backend/Features/Pipeline/PipelineCatalogue.cs`: standard, report-only,
   concept, and UI pipeline definitions, step ids, default ordering, step run
   modes, and display names.
+- `backend/Features/Pipeline/QualityAnalysis/`: the Quality Studio in-process
+  package adapter, repository-owned activation policy, canonical finding
+  projection, and the first executable Angular named-rule pass.
+
+## Quality Studio analysis steps
+
+Quality Studio analysis is a standard pipeline category (`StepKind.Analysis`),
+not an optional generic tool invocation. The standard catalogue names seven
+separate post-core steps: Angular rules, C# rules, model review, visual quality,
+security, redundancy, and consistency. The Angular rule pass is the first
+executable slice; the other axes remain explicit catalogue slots until their QS
+package sensors land.
+
+The runtime consumes the `AgentOrchestrator.CodeQuality` analysis core as an
+in-process DLL. It calls `QualityAnalysisCore` and receives canonical Quality
+Studio findings; there is no HTTP fallback. Package publication and rule content
+remain owned by Quality Studio. Agent Studio references QS rule ids such as
+`QS-NG-002` and `QS-NG-003` and does not copy their statements or check logic.
+
+Default activation is conventional and derives from the changed paths of the
+completed card:
+
+| Card class | Default analysis steps |
+|---|---|
+| Frontend-touching Angular | Angular named-rule pass and visual quality |
+| Backend .NET | C# named-rule pass and security |
+| Mixed | Union of the frontend and backend defaults |
+
+Projects override step activation only through the versioned repository file
+`.quality/agent-studio.json`, validated by
+`docs/app/schemas/quality-analysis-policy.schema.json`. Per-card fields, central
+project settings, appsettings, and environment variables are not policy inputs.
+QS rule enablement and severity remain in QS-owned `.quality/rules.json`.
+
+Each completed pass writes `results/quality-analysis/<step-id>.json`, appends
+findings with their `ruleId` to `results/review-evidence.jsonl`, and records the
+artifact on `pipeline-execution.json`. Medium-or-higher findings from implemented
+quality axes feed the existing bounded steered-retry loop. In accordance with
+QS-90, unfixed security findings are documented and visible but do not block or
+steer the pipeline in this policy version.
 - `backend/Features/Pipeline/ConceptWorkbenchContract.cs`,
   `ConceptWorkbenchPublisher.cs`, and `ConceptPromotionService.cs`: the
   document-first concept contract. One isolated concept run may author exactly

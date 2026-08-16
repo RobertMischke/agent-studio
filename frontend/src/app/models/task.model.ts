@@ -984,6 +984,7 @@ export interface ReviewEvidenceEntry {
   source: ReviewEvidenceSource;
   severity: ReviewEvidenceSeverity;
   title: string;
+  ruleId?: string | null;
   body: string | null;
   createdAt: string;
   runIndex: number | null;

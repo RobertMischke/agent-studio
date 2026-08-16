@@ -146,6 +146,7 @@ export interface PipelineGroup {
 export function phaseForStep(step: PipelineCatalogueStep): string {
   if (step.kind === 'aspect') return 'aspect';
   if (step.kind === 'tool') return 'tool';
+  if (step.kind === 'analysis') return 'analysis';
   if (step.kind === 'drift') return 'drift';
   if (step.kind === 'core') return 'core';
   if (step.id.startsWith('pre-')) return 'pre';
@@ -160,6 +161,7 @@ export function pipelinePhaseLabel(phase: string): string {
     case 'core': return 'Core agent work';
     case 'aspect': return 'Aspect reviews';
     case 'tool': return 'Tool steps';
+    case 'analysis': return 'Quality analysis';
     case 'decision': return 'Decision';
     case 'drift': return 'Drift';
     case 'abort': return 'Abort-only';

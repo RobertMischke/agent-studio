@@ -39,6 +39,7 @@ const KIND_LABELS: Record<PipelineStepKindKey, string> = {
   core: 'Core run',
   aspect: 'Aspects',
   tool: 'Tool steps',
+  analysis: 'Analysis',
   orchestrator: 'Orchestrator',
   drift: 'Drift',
   module: 'Modules',

@@ -551,6 +551,10 @@ builder.Services.AddSingleton<AgentStudio.GeneratedFiles.FileGenerationIndex>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ProjectPipelineCostService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ILintScssRunner,
     AgentStudio.Pipeline.LintScssRunner>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.QualityAnalysis.IQualityStudioAnalysisCore,
+    AgentStudio.Pipeline.QualityAnalysis.QualityStudioAnalysisCoreAdapter>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.QualityAnalysis.IQualityAnalysisStepRunner,
+    AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepRunner>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.ITestSelectionAdvisor,
     AgentStudio.Pipeline.LlmTestSelectionAdvisor>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IBuildTestGateRunner,

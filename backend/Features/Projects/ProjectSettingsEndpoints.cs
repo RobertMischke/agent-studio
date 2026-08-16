@@ -196,6 +196,7 @@ public static class ProjectSettingsEndpoints
             {
                 if (step.Kind == StepKind.Aspect) return "aspect";
                 if (step.Kind == StepKind.Tool) return "tool";
+                if (step.Kind == StepKind.Analysis) return "analysis";
                 if (step.Kind == StepKind.Drift) return "drift";
                 if (string.Equals(step.Id, PipelineCatalogue.OrchestratorDecisionStepId, StringComparison.OrdinalIgnoreCase))
                     return "decision";
@@ -252,13 +253,12 @@ public static class ProjectSettingsEndpoints
                     // the pipeline step only mirrors its state, so it is not an
                     // opt-out toggle - making it disable-able would let a project
                     // hide a loop the breaker still acts on.
-                    canDisable =
-                        PipelineStepConfigResolver.CanDisable(s),
+                    canDisable = PipelineStepConfigResolver.CanDisable(s),
                     // The drift post-steps default off (opt-in); every other step
                     // defaults on. The Settings UI uses this to render the toggle's
                     // initial state when the project has no explicit override.
                     defaultEnabled = s.DefaultEnabled,
-                    supportsCondition = s.Kind != StepKind.Core,
+                    supportsCondition = s.Kind is not (StepKind.Core or StepKind.Analysis),
                     supportsMaxIterations = string.Equals(s.Id, PipelineCatalogue.UiPipelineRoutingStepId, StringComparison.OrdinalIgnoreCase),
                     defaultMaxIterations = string.Equals(s.Id, PipelineCatalogue.UiPipelineRoutingStepId, StringComparison.OrdinalIgnoreCase)
                         ? UiIterationGate.DefaultMaxIterations
@@ -316,6 +316,11 @@ public static class ProjectSettingsEndpoints
             // configurable target, so accept it explicitly.
             if (!IsKnownPipelineStep(req.StepId, pipelineType))
                 return Results.BadRequest(new { error = $"Unknown pipeline step '{req.StepId}'" });
+            if (PipelineStepConfigResolver.IsRepositoryOwnedAnalysisStep(req.StepId))
+                return Results.BadRequest(new
+                {
+                    error = $"Analysis step '{req.StepId}' is configured only by .quality/agent-studio.json in the project repository.",
+                });
 
             if (!string.IsNullOrWhiteSpace(req.Mode) && PostStepConfigResolver.ParseMode(req.Mode) is null)
                 return Results.BadRequest(new { error = $"Unsupported mode '{req.Mode}' (expected off / warn / fail)" });

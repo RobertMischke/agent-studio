@@ -63,6 +63,7 @@ public static class PipelineStepConfigResolver
     /// </summary>
     public static PipelineStepSetting? Lookup(ProjectSettings? settings, string stepId)
     {
+        if (IsRepositoryOwnedAnalysisStep(stepId)) return null;
         var map = settings?.PipelineSteps;
         if (map == null || map.Count == 0 || string.IsNullOrWhiteSpace(stepId)) return null;
 
@@ -113,13 +114,21 @@ public static class PipelineStepConfigResolver
     /// control.
     /// </summary>
     public static bool CanDisable(PipelineStep step)
-        => step.Kind != StepKind.Core
+        => step.Kind is not (StepKind.Core or StepKind.Analysis)
            && !string.Equals(step.Id, PipelineCatalogue.LoopGuardStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.DossierMaintenanceStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiIterationArtifactStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiVisualCaptureStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiVisualVerdictStepId, StringComparison.Ordinal)
            && !string.Equals(step.Id, PipelineCatalogue.UiHumanReviewGateStepId, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Quality analysis activation belongs exclusively to the versioned
+    /// repository policy. Central project settings deliberately ignore and
+    /// reject these ids.
+    /// </summary>
+    public static bool IsRepositoryOwnedAnalysisStep(string stepId) =>
+        PipelineCatalogue.QualityAnalysisStepIds.Contains(stepId, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Resolve and clamp the UI iteration cap from the named routing step.</summary>
     public static int ResolveUiMaxIterations(ProjectSettings? settings)

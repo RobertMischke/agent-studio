@@ -330,7 +330,7 @@ Append-only JSON-Lines file holding **task-level review evidence**: findings pro
 
 ```jsonl
 {"id":"e1","source":"security-audit","severity":"high","title":"Token logged in plaintext","body":"`AuthService.LogIn` writes the bearer token to `logs/cli-output.log`.","createdAt":"2026-05-08T12:34:00Z","runIndex":2,"fileRefs":["backend/Services/AuthService.cs:142"],"artifacts":["results/playwright/auth-spec/screenshot.png"]}
-{"id":"e2","source":"code-review","severity":"warn","title":"Defensive null check missing","body":"`JobScanner.GetJobDetail` dereferences `info.FolderPath` without a null guard.","createdAt":"2026-05-08T12:34:11Z"}
+{"id":"e2","source":"code-review","severity":"warn","ruleId":"QS-NG-002","title":"Angular quality rule matched","body":"See the QS-owned rule library for the rule statement and remediation guidance.","createdAt":"2026-05-08T12:34:11Z","fileRefs":["frontend/src/app/example.component.scss:18"],"artifacts":["results/quality-analysis/post-analysis-angular-rules.json"]}
 {"id":"e3","source":"human-note","severity":"info","title":"Visual regression spotted","body":"Compose box border looks 1px off when the steer pill is active.","createdAt":"2026-05-08T12:36:00Z","artifacts":["results/screenshots/compose-steer.png"]}
 ```
 
@@ -342,6 +342,7 @@ Schema, per line:
 | `source`         | string                      | yes      | One of `security-audit`, `code-review`, `task-check`, `human-note`, `other`. Unknown values fall back to `other` on read. |
 | `severity`       | string                      | yes      | One of `info`, `warn`, `high`. Unknown values fall back to `info`. |
 | `title`          | string                      | yes      | Single-line headline rendered in the panel. |
+| `ruleId`         | string                      | no       | Stable producer-owned rule identifier such as `QS-NG-002`; rendered separately from the finding title. |
 | `body`           | string                      | no       | Free-form Markdown (kept short — the panel does not virtualize). |
 | `createdAt`      | ISO-8601 string             | yes      | UTC. |
 | `runIndex`       | integer                     | no       | The 1-based run index this finding belongs to (matches `runs[].index` from `/api/tasks/{id}/runs`). |
@@ -353,7 +354,7 @@ Schema, per line:
 Hard rules:
 
 - **The endpoint and the UI must never break on a malformed line.** Skip non-parseable JSON and missing required fields with a warning; surface the rest.
-- **No state-machine effects.** Findings are review evidence, not blockers. `JobTransitionService` does not consult this file. The user can still move the job through `4-auto-review -> 5-human-review -> 6-completed` while findings are open.
+- **No state-machine effects from the file.** `JobTransitionService` does not consult this file. A producing pipeline step may independently use its in-memory result for a steered retry while appending the same findings here for review. Security findings are the explicit exception to quality gating in the current policy: they remain recorded and visible but never block or steer the pipeline.
 - **Mutating an existing finding** (acknowledging it, attaching a follow-up id) is done by appending a new line with the same `id` and the updated fields. Readers fold the file into latest-per-id; the file stays append-only.
 - **Storage location.** Inside the job folder, never inside `agent-taskboard-dev/` itself. Meta-level documentation (decisions, ADRs, doctrine) goes in source; task-level evidence stays beside the job.
 
