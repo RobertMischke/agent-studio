@@ -150,7 +150,14 @@ environment and the CLI status, never a credential path.
 **Remote coding hosts.** The standalone host keeps one primary
 `RUNNER_CLI_BIN` plus `RUNNER_CLAUDE_CLI_BIN` and `RUNNER_CODEX_CLI_BIN`.
 Capability probing tests binary presence and provider authentication for each
-configured provider before the first advertisement. A card requires the
+configured provider before the first advertisement. On Linux, the status command
+runs through `nice -n 10` with a 30-second timeout so review load does not look
+like logout. The runner keeps the last advertised auth verdict when a probe times
+out, returns empty output, cannot start, or reports an unsupported command. Two
+consecutive probes must contain an explicit logout signal before a ready verdict
+becomes unavailable. A later successful probe restores ready automatically,
+without restarting the runner. Indeterminate observations emit
+`runner-provider-auth-probe-degraded` for host diagnosis. A card requires the
 matching `cli-execution:<cliType>` and `provider-auth:<cliType>` keys. The CAR
 worker receives the matching provider path, so a Claude pin on a Codex-primary
 host cannot fall through to `codex -m <claude-model>`. On headless Linux hosts,
