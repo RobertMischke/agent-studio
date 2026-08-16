@@ -7,6 +7,11 @@ namespace AgentStudio.TaskServer;
 
 public sealed class LegacyMigrationService(TaskServerStore store)
 {
+    private static readonly JsonSerializerOptions LegacyJson = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     public async Task<LegacyMigrationInventory> InventoryAsync(LegacyMigrationRequest request, CancellationToken ct)
     {
         var root = ResolveLegacyRoot(request.LegacyRoot);
@@ -19,7 +24,12 @@ public sealed class LegacyMigrationService(TaskServerStore store)
             scan.EventCount,
             scan.ArtifactCount,
             scan.EvidenceGitRoots,
-            scan.Warnings);
+            scan.Warnings,
+            scan.Runners.Count,
+            scan.Runs.Count,
+            scan.Runs.Count(run => run.Lease is not null)
+                + scan.ReviewAttempts.Count(review => review.Lease is not null),
+            scan.ReviewAttempts.Count);
     }
 
     public async Task<LegacyMigrationResult> ImportAsync(LegacyMigrationRequest request, string actorId, CancellationToken ct)
@@ -47,7 +57,16 @@ public sealed class LegacyMigrationService(TaskServerStore store)
                 $"Its current migration id is '{scan.MigrationId}'. Inventory it again before import.");
         }
         var backup = await store.CreateBackupAsync(new BackupRequest("before-legacy-import"), actorId, ct);
-        await store.ImportLegacyBatchAsync(request.WorkspaceName, scan.Projects, actorId, ct);
+        await store.ImportLegacyBatchAsync(
+            scan.MigrationId,
+            request.WorkspaceName,
+            scan.Projects,
+            scan.Runners,
+            scan.Runs,
+            scan.ReviewAttempts,
+            scan.Fences,
+            actorId,
+            ct);
 
         if (request.PreserveEvidenceGit)
             await PreserveEvidenceGitAsync(scan.MigrationId, scan.EvidenceGitRoots, ct);
@@ -62,7 +81,12 @@ public sealed class LegacyMigrationService(TaskServerStore store)
             scan.ArtifactCount,
             digest,
             $"Restore backup '{backup.BackupId}' before enabling the new writer. The frozen legacy root remains untouched.",
-            scan.EvidenceGitRoots);
+            scan.EvidenceGitRoots,
+            scan.Runners.Count,
+            scan.Runs.Count,
+            scan.Runs.Count(run => run.Lease is not null)
+                + scan.ReviewAttempts.Count(review => review.Lease is not null),
+            scan.ReviewAttempts.Count);
     }
 
     private static string ResolveLegacyRoot(string value)
@@ -132,6 +156,17 @@ public sealed class LegacyMigrationService(TaskServerStore store)
             var next = pair.Value.Select(task => ParseTaskNumber(task.TaskKey)).DefaultIfEmpty(0).Max() + 1L;
             return new LegacyProjectImport(TaskServerStore.DeterministicId("prj", pair.Key), pair.Key, prefix, next, pair.Value);
         }).OrderBy(project => project.Name, StringComparer.Ordinal).ToArray();
+        var taskIds = projects
+            .SelectMany(project => project.Tasks)
+            .ToDictionary(task => task.TaskKey, task => task.TaskId, StringComparer.OrdinalIgnoreCase);
+        var authority = await ReadAuthorityAsync(root, taskIds, sourceFiles, warnings, ct);
+        var runners = await ReadRunnerIdentitiesAsync(
+            root,
+            authority.Runs,
+            authority.ReviewAttempts,
+            sourceFiles,
+            warnings,
+            ct);
         var evidenceGitRoots = FindEvidenceGitRoots(root);
         var identity = new StringBuilder(root);
         foreach (var file in sourceFiles.Order(StringComparer.Ordinal))
@@ -147,7 +182,343 @@ public sealed class LegacyMigrationService(TaskServerStore store)
                 .Append(Convert.ToHexString(digest));
         }
         var migrationId = TaskServerStore.DeterministicId("mig", identity.ToString());
-        return new LegacyScan(migrationId, projects, eventCount, artifactCount, evidenceGitRoots, warnings);
+        return new LegacyScan(
+            migrationId,
+            projects,
+            runners,
+            authority.Runs,
+            authority.ReviewAttempts,
+            authority.Fences,
+            eventCount,
+            artifactCount,
+            evidenceGitRoots,
+            warnings);
+    }
+
+    private static async Task<LegacyAuthorityScan> ReadAuthorityAsync(
+        string root,
+        IReadOnlyDictionary<string, string> taskIds,
+        ISet<string> sourceFiles,
+        ICollection<string> warnings,
+        CancellationToken ct)
+    {
+        var path = Path.Combine(root, ".metadata", "attempt-authority.json");
+        if (!File.Exists(path)) return new LegacyAuthorityScan([], [], []);
+        sourceFiles.Add(path);
+
+        await using var stream = File.OpenRead(path);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        var rootElement = document.RootElement;
+        var runs = new List<LegacyRunAuthorityImport>();
+        if (TryGetProperty(rootElement, "runAttempts", out var runAttempts)
+            && runAttempts.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in runAttempts.EnumerateArray())
+            {
+                var taskKey = ReadString(item, "taskKey")?.Trim().ToUpperInvariant() ?? string.Empty;
+                var state = ReadLifecycleState(item, "state");
+                if (!taskIds.TryGetValue(taskKey, out var taskId))
+                {
+                    var message = $"Attempt authority references missing task '{taskKey}'.";
+                    if (state == LegacyAttemptState.Leased)
+                        throw new InvalidDataException(message + " Active authority cannot be skipped safely.");
+                    warnings.Add(message + " Terminal history was skipped.");
+                    continue;
+                }
+                var attemptId = RequiredString(item, "attemptId", "RunAttempt id");
+                var lease = ReadLease(item);
+                if (state == LegacyAttemptState.Leased && lease is null)
+                    throw new InvalidDataException(
+                        $"Active RunAttempt '{attemptId}' has no lease. Authority cannot be migrated safely.");
+                runs.Add(new LegacyRunAuthorityImport(
+                    attemptId,
+                    taskId,
+                    taskKey,
+                    RequiredString(item, "repositoryId", $"RunAttempt '{attemptId}' repository"),
+                    state,
+                    Math.Max(ReadLong(item, "lastFence"), lease?.Fence ?? 0),
+                    ReadDate(item, "createdAt") ?? File.GetLastWriteTimeUtc(path),
+                    ReadDate(item, "terminalAt"),
+                    ReadString(item, "resultSha"),
+                    ReadString(item, "terminalOutcome"),
+                    ReadString(item, "terminalReason"),
+                    DeserializeOptional<ImmutableResultEnvelope>(item, "resultEnvelope"),
+                    ReadString(item, "resultEnvelopeDigest"),
+                    lease));
+            }
+        }
+
+        var reviews = new List<LegacyReviewAuthorityImport>();
+        if (TryGetProperty(rootElement, "reviewAttempts", out var reviewAttempts)
+            && reviewAttempts.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in reviewAttempts.EnumerateArray())
+            {
+                var taskKey = ReadString(item, "taskKey")?.Trim().ToUpperInvariant() ?? string.Empty;
+                var state = ReadLifecycleState(item, "state");
+                if (!taskIds.TryGetValue(taskKey, out var taskId))
+                {
+                    var message = $"Review authority references missing task '{taskKey}'.";
+                    if (state == LegacyAttemptState.Leased)
+                        throw new InvalidDataException(message + " Active authority cannot be skipped safely.");
+                    warnings.Add(message + " Terminal history was skipped.");
+                    continue;
+                }
+                var attemptId = RequiredString(item, "attemptId", "ReviewAttempt id");
+                if (!TryGetProperty(item, "subject", out var subject)
+                    || subject.ValueKind != JsonValueKind.Object)
+                    throw new InvalidDataException($"ReviewAttempt '{attemptId}' has no immutable subject.");
+                var lease = ReadLease(item);
+                if (state == LegacyAttemptState.Leased && lease is null)
+                    throw new InvalidDataException(
+                        $"Active ReviewAttempt '{attemptId}' has no lease. Authority cannot be migrated safely.");
+                var sourceRunAttemptId = RequiredString(
+                    item,
+                    "sourceRunAttemptId",
+                    $"ReviewAttempt '{attemptId}' source run");
+                var subjectId = RequiredString(subject, "subjectId", $"ReviewAttempt '{attemptId}' subject id");
+                reviews.Add(new LegacyReviewAuthorityImport(
+                    attemptId,
+                    subjectId,
+                    taskId,
+                    taskKey,
+                    sourceRunAttemptId,
+                    RequiredString(subject, "repositoryId", $"Review subject '{subjectId}' repository"),
+                    ReadString(subject, "repositoryUrl"),
+                    RequiredString(subject, "expectedResultSha", $"Review subject '{subjectId}' result SHA"),
+                    ReadString(subject, "resultRef"),
+                    ReadString(subject, "reviewPolicyHash") ?? "legacy",
+                    DeserializeOptional<ReviewPlanDto>(subject, "plan")
+                        ?? new ReviewPlanDto([], []),
+                    ReadDate(subject, "createdAt") ?? ReadDate(item, "createdAt") ?? File.GetLastWriteTimeUtc(path),
+                    state,
+                    Math.Max(ReadLong(item, "lastFence"), lease?.Fence ?? 0),
+                    ReadDate(item, "createdAt") ?? File.GetLastWriteTimeUtc(path),
+                    ReadDate(item, "terminalAt"),
+                    ReadEnumText(item, "outcome"),
+                    ReadString(item, "failureClassification"),
+                    ReadString(item, "terminalReason"),
+                    lease));
+            }
+        }
+
+        var fences = new List<LegacyTaskFenceImport>();
+        if (TryGetProperty(rootElement, "lastFenceByTask", out var fenceObject)
+            && fenceObject.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var fence in fenceObject.EnumerateObject())
+            {
+                var taskKey = fence.Name.Trim().ToUpperInvariant();
+                if (!taskIds.TryGetValue(taskKey, out var taskId))
+                {
+                    warnings.Add($"Fence history references missing task '{taskKey}' and was skipped.");
+                    continue;
+                }
+                if (!fence.Value.TryGetInt64(out var lastFence) || lastFence < 0)
+                    throw new InvalidDataException($"Fence history for task '{taskKey}' is invalid.");
+                fences.Add(new LegacyTaskFenceImport(taskId, lastFence));
+            }
+        }
+
+        var knownRuns = runs.Select(run => run.RunId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var review in reviews)
+            if (!knownRuns.Contains(review.SourceRunId))
+                throw new InvalidDataException(
+                    $"ReviewAttempt '{review.AttemptId}' references RunAttempt '{review.SourceRunId}', which is absent from the live authority store.");
+        return new LegacyAuthorityScan(runs, reviews, fences);
+    }
+
+    private static async Task<IReadOnlyList<LegacyRunnerImport>> ReadRunnerIdentitiesAsync(
+        string root,
+        IReadOnlyList<LegacyRunAuthorityImport> runs,
+        IReadOnlyList<LegacyReviewAuthorityImport> reviews,
+        ISet<string> sourceFiles,
+        ICollection<string> warnings,
+        CancellationToken ct)
+    {
+        var identities = new Dictionary<string, LegacyIdentity>(StringComparer.OrdinalIgnoreCase);
+        var identitiesDirectory = Path.Combine(root, "identities");
+        if (Directory.Exists(identitiesDirectory))
+        {
+            foreach (var path in Directory.EnumerateFiles(identitiesDirectory, "*.json").Order(StringComparer.Ordinal))
+            {
+                sourceFiles.Add(path);
+                try
+                {
+                    await using var stream = File.OpenRead(path);
+                    using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                    var json = document.RootElement;
+                    var id = ReadString(json, "id")?.Trim();
+                    if (string.IsNullOrWhiteSpace(id))
+                    {
+                        warnings.Add($"Skipped identity '{Path.GetFileName(path)}' because it has no id.");
+                        continue;
+                    }
+                    identities[id] = new LegacyIdentity(
+                        id,
+                        ReadString(json, "displayName") ?? id,
+                        ReadIdentityKind(json),
+                        ReadDate(json, "registeredAt") ?? File.GetCreationTimeUtc(path),
+                        ReadDate(json, "lastSeenAt") ?? File.GetLastWriteTimeUtc(path),
+                        ReadString(json, "runnerDaemonState"),
+                        ReadInt(json, "runnerDesiredMaxParallelism"),
+                        ReadInt(json, "runnerEffectiveMaxParallelism"));
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+                {
+                    warnings.Add($"Skipped unreadable identity '{Path.GetFileName(path)}': {exception.Message}");
+                }
+            }
+        }
+
+        var roles = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var leases = runs
+            .Where(run => run.Lease is not null)
+            .Select(run => (Role: ReviewCapabilities.CodingExecutor, Lease: run.Lease!))
+            .Concat(reviews
+                .Where(review => review.Lease is not null)
+                .Select(review => (Role: ReviewCapabilities.ReviewExecutor, Lease: review.Lease!)))
+            .ToList();
+        foreach (var entry in leases)
+        {
+            if (!roles.TryGetValue(entry.Lease.ExecutorId, out var runnerRoles))
+                roles[entry.Lease.ExecutorId] = runnerRoles = new HashSet<string>(StringComparer.Ordinal);
+            runnerRoles.Add(entry.Role);
+        }
+        foreach (var pair in roles.Where(pair => pair.Value.Count > 1))
+            throw new InvalidDataException(
+                $"Legacy executor '{pair.Key}' holds both coding and review authority. Split the identities before cutover.");
+
+        var runnerIds = identities.Values
+            .Where(identity => IsRunnerIdentity(identity) || roles.ContainsKey(identity.Id))
+            .Select(identity => identity.Id)
+            .Concat(roles.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var result = new List<LegacyRunnerImport>(runnerIds.Length);
+        foreach (var runnerId in runnerIds)
+        {
+            identities.TryGetValue(runnerId, out var identity);
+            var runnerLeases = leases
+                .Where(entry => string.Equals(entry.Lease.ExecutorId, runnerId, StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry.Lease)
+                .OrderByDescending(lease => lease.AcquiredAt)
+                .ToArray();
+            var currentLease = runnerLeases.FirstOrDefault();
+            var role = roles.TryGetValue(runnerId, out var runnerRoles)
+                ? runnerRoles.Single()
+                : string.Empty;
+            var registeredAt = identity?.RegisteredAt
+                ?? currentLease?.AcquiredAt
+                ?? DateTime.UnixEpoch;
+            var lastSeenAt = identity?.LastSeenAt
+                ?? currentLease?.LastHeartbeat
+                ?? registeredAt;
+            result.Add(new LegacyRunnerImport(
+                runnerId,
+                identity?.DisplayName ?? runnerId,
+                currentLease?.HostId ?? runnerId,
+                currentLease?.LeaseInstanceId ?? $"legacy-{runnerId}",
+                role,
+                string.Equals(identity?.Kind, "retired", StringComparison.OrdinalIgnoreCase)
+                    ? "retired"
+                    : "active",
+                registeredAt,
+                lastSeenAt,
+                identity?.DesiredMaxParallelism,
+                identity?.EffectiveMaxParallelism));
+        }
+        return result;
+    }
+
+    private static bool IsRunnerIdentity(LegacyIdentity identity)
+        => identity.Kind is "agentinstance" or "agent-instance" or "service" or "retired"
+           || !string.IsNullOrWhiteSpace(identity.RunnerDaemonState)
+           || identity.DesiredMaxParallelism is not null
+           || identity.EffectiveMaxParallelism is not null;
+
+    private static LegacyLeaseImport? ReadLease(JsonElement item)
+    {
+        if (!TryGetProperty(item, "lease", out var lease)
+            || lease.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        var leaseId = RequiredString(lease, "leaseId", "Attempt lease id");
+        return new LegacyLeaseImport(
+            leaseId,
+            RequiredString(lease, "executorId", $"Lease '{leaseId}' executor"),
+            RequiredString(lease, "hostId", $"Lease '{leaseId}' host"),
+            ReadString(lease, "leaseInstanceId") ?? $"legacy-{leaseId}",
+            Math.Max(1, ReadLong(lease, "fence")),
+            ReadDate(lease, "acquiredAt") ?? DateTime.UnixEpoch,
+            ReadDate(lease, "expiresAt") ?? DateTime.UnixEpoch,
+            ReadDate(lease, "lastHeartbeat") ?? DateTime.UnixEpoch);
+    }
+
+    private static LegacyAttemptState ReadLifecycleState(JsonElement item, string property)
+    {
+        if (!TryGetProperty(item, property, out var value)) return LegacyAttemptState.Pending;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)
+            && Enum.IsDefined(typeof(LegacyAttemptState), number))
+            return (LegacyAttemptState)number;
+        if (value.ValueKind == JsonValueKind.String
+            && Enum.TryParse<LegacyAttemptState>(value.GetString(), true, out var parsed))
+            return parsed;
+        throw new InvalidDataException($"Unknown legacy attempt state '{value}'.");
+    }
+
+    private static string ReadIdentityKind(JsonElement item)
+    {
+        if (!TryGetProperty(item, "kind", out var value)) return "human";
+        if (value.ValueKind == JsonValueKind.String)
+            return value.GetString()?.Replace("_", "-").ToLowerInvariant() ?? "human";
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+            return number switch
+            {
+                1 => "agent-instance",
+                2 => "external-tool",
+                3 => "service",
+                4 => "retired",
+                _ => "human",
+            };
+        return "human";
+    }
+
+    private static T? DeserializeOptional<T>(JsonElement item, string property) where T : class
+        => TryGetProperty(item, property, out var value)
+           && value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+            ? value.Deserialize<T>(LegacyJson)
+            : null;
+
+    private static string RequiredString(JsonElement item, string property, string label)
+        => ReadString(item, property) is { Length: > 0 } value
+            ? value.Trim()
+            : throw new InvalidDataException($"{label} is required.");
+
+    private static string? ReadEnumText(JsonElement item, string property)
+    {
+        if (!TryGetProperty(item, property, out var value)
+            || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
+    }
+
+    private static long ReadLong(JsonElement item, string property)
+        => TryGetProperty(item, property, out var value) && value.TryGetInt64(out var parsed) ? parsed : 0;
+
+    private static int? ReadInt(JsonElement item, string property)
+        => TryGetProperty(item, property, out var value) && value.TryGetInt32(out var parsed) ? parsed : null;
+
+    private static bool TryGetProperty(JsonElement item, string property, out JsonElement value)
+    {
+        foreach (var candidate in item.EnumerateObject())
+        {
+            if (!string.Equals(candidate.Name, property, StringComparison.OrdinalIgnoreCase)) continue;
+            value = candidate.Value;
+            return true;
+        }
+        value = default;
+        return false;
     }
 
     private static async Task<string?> ReadBodyAsync(JsonElement json, string taskDirectory, bool includeContent, CancellationToken ct)
@@ -296,7 +667,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
         => long.TryParse(taskKey.Split('-', 2).ElementAtOrDefault(1), out var value) ? value : 0;
 
     private static string? ReadString(JsonElement element, string property)
-        => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        => TryGetProperty(element, property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static DateTime? ReadDate(JsonElement element, string property)
         => DateTime.TryParse(ReadString(element, property), out var value) ? value.ToUniversalTime() : null;
@@ -315,8 +686,37 @@ public sealed class LegacyMigrationService(TaskServerStore store)
     private sealed record LegacyScan(
         string MigrationId,
         IReadOnlyList<LegacyProjectImport> Projects,
+        IReadOnlyList<LegacyRunnerImport> Runners,
+        IReadOnlyList<LegacyRunAuthorityImport> Runs,
+        IReadOnlyList<LegacyReviewAuthorityImport> ReviewAttempts,
+        IReadOnlyList<LegacyTaskFenceImport> Fences,
         int EventCount,
         int ArtifactCount,
         IReadOnlyList<string> EvidenceGitRoots,
         IReadOnlyList<string> Warnings);
+
+    private sealed record LegacyAuthorityScan(
+        IReadOnlyList<LegacyRunAuthorityImport> Runs,
+        IReadOnlyList<LegacyReviewAuthorityImport> ReviewAttempts,
+        IReadOnlyList<LegacyTaskFenceImport> Fences);
+
+    private sealed record LegacyIdentity(
+        string Id,
+        string DisplayName,
+        string Kind,
+        DateTime RegisteredAt,
+        DateTime LastSeenAt,
+        string? RunnerDaemonState,
+        int? DesiredMaxParallelism,
+        int? EffectiveMaxParallelism);
+}
+
+internal enum LegacyAttemptState
+{
+    Pending,
+    Leased,
+    Completed,
+    Failed,
+    Cancelled,
+    Superseded,
 }

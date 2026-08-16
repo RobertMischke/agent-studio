@@ -42,6 +42,11 @@
 #                            max wait for an active merge gate (default: 120)
 #   ATP_GATE_DRAIN_POLL_SECONDS
 #                            merge-gate poll interval (default: 2)
+#   ATP_TASK_SERVER_REQUIRED supervise standalone Task Server (default: 1 on Windows)
+#   ATP_TASK_SERVER_URL      direct Task Server origin (default: http://127.0.0.1:5071)
+#   ATP_TASK_SERVER_CONTROL_SCRIPT
+#                            supervised Task Server start/stop implementation
+#   ATP_POWERSHELL           Windows PowerShell executable
 #
 # Exit codes:
 #   0  decision tick handled (no-op or successful restart)
@@ -71,6 +76,15 @@ DEPLOY_REMOTE="${ATP_DEPLOY_REMOTE:-origin}"
 UPDATE_SCRIPT="${ATP_UPDATE_SCRIPT:-$THIS_CHECKOUT/scripts/update-stable.sh}"
 GATE_DRAIN_TIMEOUT="${ATP_GATE_DRAIN_TIMEOUT_SECONDS:-120}"
 GATE_DRAIN_POLL="${ATP_GATE_DRAIN_POLL_SECONDS:-2}"
+TASK_SERVER_URL="${ATP_TASK_SERVER_URL:-http://127.0.0.1:5071}"
+TASK_SERVER_CONTROL="${ATP_TASK_SERVER_CONTROL_SCRIPT:-$THIS_CHECKOUT/deploy/windows/task-server/task-server-control.ps1}"
+POWERSHELL_EXECUTABLE="${ATP_POWERSHELL:-powershell.exe}"
+
+case "$(uname -s 2>/dev/null || printf unknown)" in
+  MINGW*|MSYS*|CYGWIN*) DEFAULT_TASK_SERVER_REQUIRED=1 ;;
+  *) DEFAULT_TASK_SERVER_REQUIRED=0 ;;
+esac
+TASK_SERVER_REQUIRED="${ATP_TASK_SERVER_REQUIRED:-$DEFAULT_TASK_SERVER_REQUIRED}"
 
 LANE_DIR="$WORKSPACE/projects/$PROJECT/${ATP_RESTART_LANE:-4-auto-review}"
 LOG_DIR="$WORKSPACE/logs"
@@ -81,6 +95,40 @@ JSONL="$LOG_DIR/stable-restarts.jsonl"
 log() { printf '[restart-watcher] %s\n' "$*" >&2; }
 
 iso_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+windows_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
+run_task_server_control() {
+  case "$TASK_SERVER_CONTROL" in
+    *.ps1)
+      "$POWERSHELL_EXECUTABLE" -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+        -File "$(windows_path "$TASK_SERVER_CONTROL")" "$@"
+      ;;
+    *) "$TASK_SERVER_CONTROL" "$@" ;;
+  esac
+}
+
+ensure_task_server_ready() {
+  if curl -fsS --max-time 5 "$TASK_SERVER_URL/readyz" >/dev/null 2>&1; then
+    return 0
+  fi
+  log "Task Server is not ready at $TASK_SERVER_URL; asking its service manager to start it"
+  if ! run_task_server_control -Action Start -ReadyUrl "$TASK_SERVER_URL/readyz" >&2; then
+    log "Task Server service-manager start failed; skipping this tick"
+    return 1
+  fi
+  if ! curl -fsS --max-time 5 "$TASK_SERVER_URL/readyz" >/dev/null 2>&1; then
+    log "Task Server remains unavailable after supervised start; skipping this tick"
+    return 1
+  fi
+  log "Task Server recovered through its supervised service boundary"
+}
 
 # Build the sorted list of job folder names currently in 4-review.
 # Empty / missing lane → empty list, no error.
@@ -190,6 +238,17 @@ case "$TRIGGER" in
     exit 2
     ;;
 esac
+case "$TASK_SERVER_REQUIRED" in
+  0|1) ;;
+  *)
+    log "ERROR: ATP_TASK_SERVER_REQUIRED must be 0 or 1"
+    exit 2
+    ;;
+esac
+if [ "$TASK_SERVER_REQUIRED" -eq 1 ] && [ ! -f "$TASK_SERVER_CONTROL" ]; then
+  log "ERROR: Task Server control script missing: $TASK_SERVER_CONTROL"
+  exit 2
+fi
 case "$GATE_DRAIN_TIMEOUT:$GATE_DRAIN_POLL" in
   *[!0-9:]*|:*|*:)
     log "ERROR: gate drain timeout and poll interval must be non-negative integer seconds"
@@ -202,6 +261,10 @@ if [ "$GATE_DRAIN_POLL" -eq 0 ]; then
 fi
 
 mkdir -p "$STATE_DIR" "$LOG_DIR"
+
+if [ "$TASK_SERVER_REQUIRED" -eq 1 ] && ! ensure_task_server_ready; then
+  exit 0
+fi
 
 target_main=""
 new_count=0

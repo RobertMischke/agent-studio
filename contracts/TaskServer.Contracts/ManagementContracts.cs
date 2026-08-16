@@ -1,10 +1,17 @@
+using System.Text.Json.Serialization;
+
 namespace AgentStudio.TaskServer.Contracts;
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TaskServerMode
 {
+    [JsonStringEnumMemberName("normal")]
     Normal,
+    [JsonStringEnumMemberName("draining")]
     Draining,
+    [JsonStringEnumMemberName("readOnly")]
     ReadOnly,
+    [JsonStringEnumMemberName("maintenance")]
     Maintenance,
 }
 
@@ -57,7 +64,11 @@ public sealed record LegacyMigrationInventory(
     int Events,
     int Artifacts,
     IReadOnlyList<string> EvidenceGitRoots,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    int RunnerIdentities = 0,
+    int Runs = 0,
+    int Leases = 0,
+    int ReviewAttempts = 0);
 
 public sealed record LegacyMigrationResult(
     string MigrationId,
@@ -68,4 +79,8 @@ public sealed record LegacyMigrationResult(
     int Artifacts,
     string IntegritySha256,
     string RollbackBoundary,
-    IReadOnlyList<string> EvidenceGitRoots);
+    IReadOnlyList<string> EvidenceGitRoots,
+    int RunnerIdentities = 0,
+    int Runs = 0,
+    int Leases = 0,
+    int ReviewAttempts = 0);

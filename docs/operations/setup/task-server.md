@@ -1,7 +1,8 @@
 # Task Server deployment and recovery
 
-Status: production bootstrap, topology release, and sole v1 ownership contract,
-AGT-2192/AGT-2196/AGT-2330, 2026-07-25.
+Status: production bootstrap, topology release, sole v1 ownership contract, and
+Windows local-topology cutover, AGT-2192/AGT-2196/AGT-2330/AGT-2663,
+2026-08-16.
 
 This runbook implements the Task Server boundary from
 [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md).
@@ -78,6 +79,57 @@ Before an upgrade, put the server in `Draining`, wait for active attempts to
 finish, create a backup, switch to `Maintenance`, stop the unit, replace the
 published package, and start it again. Startup applies additive schema
 migrations before `/readyz` reports that lease and fence authority is restored.
+
+### Windows local operations host
+
+The Windows local topology uses an S4U Scheduled Task as its service boundary.
+Do not run Task Server from an interactive terminal, a Stable session task, or
+the Stable API process tree. S4U keeps the service independent of logon
+sessions and gives Task Scheduler restart ownership.
+
+From an elevated PowerShell on the operations host, package and install from
+the release checkout:
+
+```powershell
+$source = 'C:\Projects\agent-taskboard-stable'
+$devspace = 'C:\Projects'
+& "$source\deploy\windows\task-server\install-task-server.ps1" `
+  -SourceCheckout $source `
+  -DevspacePath $devspace
+```
+
+The installer publishes the self-contained `win-x64` executable, verifies
+that `task-server --version` contains the checkout commit, installs it under
+`<devspace>\services\task-server\releases\<commit>`, and registers
+`AgentStudio-TaskServer` with `LogonType S4U`. Mutable authority lives outside
+every release under `<devspace>\task-server-data`; backups live under its
+`backups` child. The default listener is `http://127.0.0.1:5071` with
+loopback-only `AUTH=none`.
+
+Use the service boundary for every lifecycle action:
+
+```powershell
+$control = "$source\deploy\windows\task-server\task-server-control.ps1"
+& $control -Action Status
+& $control -Action Start
+& $control -Action Stop
+& $control -Action Restart
+```
+
+`scripts/update-stable.sh` owns later package updates. On Windows it drains
+Task Server authority, stops Stable, stops Task Server, deploys the candidate
+checkout detached, installs the matching Task Server package, starts Task
+Server, waits for `/readyz`, and only then starts the Stable API. Its extended
+boot proof checks direct readiness, API health, the `/api/v1` proxy, the board
+projection, the management proxy, and the browser. After every check passes it
+returns Task Server to `Normal` and attaches Stable to local `main` tracking
+`origin/main`. A failed candidate therefore cannot silently remove a rollback
+pin.
+
+The external Stable restart watcher also probes direct Task Server readiness
+on every tick and asks the S4U task to start it when necessary. It does not
+start the executable itself. `ATP_TASK_SERVER_REQUIRED=0` is only for a host
+that deliberately has no standalone Task Server.
 
 ## Configuration and health
 
@@ -272,16 +324,33 @@ remains in `Maintenance` until an operator explicitly resumes normal service.
 Legacy absolute paths and `watchPath` are migration inputs only. They never
 become resource identity.
 
+Inventory and import cover the complete local cutover boundary:
+
+- task folders, prompts, timelines, result artifacts, and evidence Git roots;
+- registered Runner service identities and their host capacity bootstrap;
+- coding RunAttempts, monotonic task fences, and coding leases;
+- immutable ReviewSubjects, ReviewAttempts, review fences, and review leases.
+
+An imported live coding or review lease is always persisted as
+`process-unknown`. Import never assumes that a process stopped merely because
+its legacy writer was frozen. Coding authority requires audited containment
+resolution before a higher-fence claim. Review authority is reclaimed through
+the existing disposable-workspace higher-fence rule. The import refuses a
+non-empty Task Server authority store, a second different migration ID, an
+active attempt whose task is absent, or one legacy identity that holds both
+coding and review authority.
+
 1. Call `POST /api/v1/management/migrations/legacy/inventory` with the legacy
-   root and workspace name. Save the project/task/event/artifact counts,
-   warnings, evidence-Git roots, and migration ID.
+   root and workspace name. Save the project/task/event/artifact, Runner
+   identity, run, lease, and review-attempt counts, warnings, evidence Git
+   roots, and migration ID.
 2. Stop every legacy writer. Confirm Studio task mutations and the in-process
    runner are stopped. A delta replay is acceptable only if it ends with the
    same exclusive writer freeze.
 3. Put Task Server in `Maintenance` and call the matching `/import` route with
    `freezeConfirmed:true` and `expectedMigrationId` set to the saved inventory
-   ID. Import fails if task metadata, prompts, timelines, or result artifacts
-   changed after inventory.
+   ID. Import fails if task metadata, prompts, timelines, result artifacts,
+   identities, or attempt authority changed after inventory.
 4. The server creates a pre-import backup, imports the inventory in one
    transaction, preserves task `results/`, timeline events, stable generated
    identities, and copies evidence Git metadata into
@@ -297,6 +366,76 @@ The automated acceptance suite rehearses inventory, freeze enforcement,
 transactional import, integrity verification, backup/restore, evidence Git
 preservation, restart fencing, protocol rejection, and separate process
 lifecycle.
+
+### Planned Windows cutover
+
+Keep the Stable rollout hold in place throughout this sequence.
+
+1. Publish and install the S4U service as described above. Do not set
+   `TaskServer:BaseUrl` yet.
+2. Rehearse a full import against a copied legacy root and an isolated Task
+   Server store. The rehearsal owns only its exact child PID and writes its
+   inventory, import counts, integrity digest, stdout, and stderr beneath the
+   chosen evidence directory:
+
+   ```powershell
+   $assets = 'C:\Projects\agent-taskboard-stable\deploy\windows\task-server'
+   $taskServer = 'C:\Projects\services\task-server\releases\<commit>\task-server.exe'
+   & "$assets\rehearse-legacy-migration.ps1" `
+     -TaskServerExecutable $taskServer `
+     -LegacySourceRoot 'C:\Projects\agent-taskboard-workspace' `
+     -EvidenceDirectory 'C:\Projects\agent-taskboard-workspace\logs\cutovers\AGT-2663' `
+     -WorkspaceName 'Agent Studio for Software'
+   ```
+
+   Inventory and import counts must match for projects, tasks, events,
+   artifacts, Runner identities, runs, leases, and review attempts. Preserve
+   the returned integrity SHA-256.
+3. Stop every legacy writer, including Stable API pickup and every Runner that
+   points at its local `/api/v1`. Make a separate copy or backup of the frozen
+   legacy root. Start the supervised Task Server and perform the real import:
+
+   ```powershell
+   & "$assets\invoke-legacy-migration.ps1" `
+     -LegacyRoot 'C:\Projects\agent-taskboard-workspace' `
+     -WorkspaceName 'Agent Studio for Software' `
+     -Import `
+     -FreezeConfirmed `
+     -EvidencePath 'C:\Projects\agent-taskboard-workspace\logs\cutovers\AGT-2663\production-import.json'
+   ```
+
+   Leave Task Server in `Maintenance`. Resolve imported coding
+   `process-unknown` authority only with positive containment proof. Do not
+   restart a legacy writer.
+4. Add the proxy selection to the gitignored Stable local configuration:
+
+   ```powershell
+   & "$assets\set-task-server-proxy.ps1" `
+     -AppsettingsPath 'C:\Projects\agent-taskboard-stable\backend\appsettings.Local.json' `
+     -BaseUrl 'http://127.0.0.1:5071'
+   ```
+
+5. Run the versioned `scripts/update-stable.sh`. It deploys current `main`,
+   starts Task Server before the API, performs the extended boot proof, changes
+   Task Server to `Normal`, and reattaches the verified Stable checkout to
+   `main`.
+6. Let the real Coding and Review executors process post-cutover work. Then
+   require all four durable fleet facts and save the evidence:
+
+   ```powershell
+   & "$assets\verify-task-server-cutover.ps1" `
+     -Since ([DateTime]'2026-08-16T18:00:00Z') `
+     -RequireFleetEvidence `
+     -EvidencePath 'C:\Projects\agent-taskboard-workspace\logs\cutovers\AGT-2663\end-to-end.json'
+   ```
+
+   The verifier requires `run.claimed`, `run.completed`, `review.claimed`, and
+   `review.reported` after the supplied timestamp. It also compares the direct
+   and proxied server identity and reads the real board projection.
+7. Confirm `git -C C:\Projects\agent-taskboard-stable status --short --branch`
+   reports `main` tracking `origin/main`, copy the production evidence into the
+   task result directory, and only then lift the rollout hold. Roll back before
+   any new Task Server write if the imported counts or authority digest differ.
 
 ## Release topology rehearsal
 

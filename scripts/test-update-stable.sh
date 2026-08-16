@@ -15,6 +15,7 @@ devspace=$test_root/devspace
 fake_bin=$test_root/bin
 stop_marker=$test_root/stop-ran
 start_marker=$test_root/start-ran
+service_log=$test_root/service-order.log
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
@@ -80,18 +81,58 @@ cat > "$devspace/stop-stable.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 : > "$ATP_TEST_STOP_MARKER"
+[ -z "${ATP_TEST_SERVICE_LOG:-}" ] || printf '%s\n' stable-stop >> "$ATP_TEST_SERVICE_LOG"
 EOF
 cat > "$devspace/start-stable.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 : > "$ATP_TEST_START_MARKER"
+[ -z "${ATP_TEST_SERVICE_LOG:-}" ] || printf '%s\n' stable-start >> "$ATP_TEST_SERVICE_LOG"
 EOF
 cat > "$fake_bin/npm" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 printf '%s\n' patched > "$ATP_TEST_PACKAGE_FILE"
 EOF
-chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$fake_bin/npm"
+cat > "$test_root/task-server-control" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+action=
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-Action" ]; then
+    action=$2
+    shift 2
+    continue
+  fi
+  shift
+done
+printf 'task-server-%s\n' "$(printf '%s' "$action" | tr '[:upper:]' '[:lower:]')" >> "$ATP_TEST_SERVICE_LOG"
+EOF
+cat > "$test_root/task-server-install" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+printf '%s\n' task-server-install >> "$ATP_TEST_SERVICE_LOG"
+EOF
+cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+url=
+for arg in "$@"; do
+  case "$arg" in http://*) url=$arg ;; esac
+done
+case "$url" in
+  */api/v1/protocol) printf '%s\n' '{"current":3}' ;;
+  */api/v1/management/prepare-shutdown) printf '%s\n' '{"safeToStop":true}' ;;
+  *) printf '%s\n' '{}' ;;
+esac
+EOF
+chmod +x \
+  "$devspace/stop-stable.sh" \
+  "$devspace/start-stable.sh" \
+  "$fake_bin/npm" \
+  "$fake_bin/curl" \
+  "$test_root/task-server-control" \
+  "$test_root/task-server-install"
 
 run_update() {
   env \
@@ -105,6 +146,7 @@ run_update() {
     ATP_TEST_START_MARKER="$start_marker" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
     ATP_TEST_STALE_CACHE="$stable_checkout/frontend/.angular/cache/deps.js" \
+    ATP_TEST_SERVICE_LOG="$service_log" \
     PATH="$fake_bin:$PATH" \
     "$updater" 2>&1
 }
@@ -142,5 +184,33 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
+
+# A detached rollback target is upgraded in a verification state. The Task
+# Server package is installed and started before the Stable API, and the
+# checkout is re-attached to main only after all probes pass.
+printf '%s\n' 'release with standalone task server' > "$source_checkout/release.txt"
+git -C "$source_checkout" commit --quiet -am 'release with standalone task server'
+git -C "$source_checkout" push --quiet origin main
+target=$(git -C "$source_checkout" rev-parse HEAD)
+: > "$service_log"
+
+output=$( \
+  ATP_TASK_SERVER_REQUIRED=1 \
+  ATP_TASK_SERVER_INSTALL_SCRIPT="$test_root/task-server-install" \
+  ATP_TASK_SERVER_CONTROL_SCRIPT="$test_root/task-server-control" \
+  ATP_TASK_SERVER_URL=http://task-server.invalid \
+  ATP_STABLE_API_URL=http://stable-api.invalid \
+  run_update)
+
+test "$(git -C "$stable_checkout" rev-parse HEAD)" = "$target"
+test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
+test "$(cat "$service_log")" = "$(printf '%s\n' \
+  stable-stop \
+  task-server-stop \
+  task-server-install \
+  task-server-start \
+  stable-start)"
+printf '%s' "$output" | grep -q 'Probing Task Server, Stable proxy, API, and board projection'
+printf '%s' "$output" | grep -q 'Attaching verified Stable checkout to main'
 
 printf '%s\n' 'update-stable tests passed'
