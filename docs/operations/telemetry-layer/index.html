@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Organization-wide Telemetry Layer | Decision Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;
+    --taskbr: #4a3aa7;
+    --salvage: #eb6834;
+    --rescue: #b58500;
+    --ok: #008300;
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-control { fill: var(--accent-soft); stroke: var(--develop); rx: 8; }
+  .s-exec { fill: var(--ok-soft); stroke: var(--ok); rx: 8; }
+  .s-warn { fill: var(--warn-soft); stroke: var(--warn); rx: 8; }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-control-flow { stroke: var(--develop); stroke-width: 2; fill: none; }
+  .s-exec-flow { stroke: var(--ok); stroke-width: 2; fill: none; }
+  .s-warn-flow { stroke: var(--warn); stroke-width: 2; fill: none; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .decision-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+  .decision-grid .box { margin: 0; }
+  .wide-table { overflow-x: auto; }
+  .wide-table table { min-width: 920px; }
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } .decision-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Decision dossier · Agent Studio · AGT-2661</p>
+  <h1>Organization-wide telemetry layer</h1>
+  <p class="lede">A local-first event layer for every organization application, with durable files at the edge, Agent Studio as the operations hub, and policy-bounded conversion of repeated signals into visible, reviewable work.</p>
+  <div class="meta">
+    <span><b>Status:</b> decision pending</span>
+    <span><b>Phase:</b> decision ready</span>
+    <span><b>Current-state cut:</b> 16 August 2026</span>
+    <span><b>Scope:</b> concept only, no implementation</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#decision">§0 Decision at a glance</a></li>
+    <li><a href="#scope">§1 Scope and evidence</a></li>
+    <li><a href="#current-state">§2 Current-state inventory</a></li>
+    <li><a href="#event-model">§3 Event model and privacy</a></li>
+    <li><a href="#bus">§4 Bus options and recommendation</a></li>
+    <li><a href="#consumption">§5 Orchestrator consumption</a></li>
+    <li><a href="#hub">§6 Agent Studio as operations hub</a></li>
+    <li><a href="#slices">§7 Pilot and rollout slices</a></li>
+    <li><a href="#request">§8 Decision request</a></li>
+  </ul>
+</nav>
+
+<section id="decision" class="box accent">
+  <h4>Recommendation</h4>
+  <p><b>Adopt the hybrid architecture:</b> every app writes a local append-only JSONL buffer, a collector normalizes and deduplicates those records, and Agent Studio receives a fast local HTTP notification when reachable. Agent Studio persists derived observations on the existing Agent Message Bus and fans them out through the existing SignalR channel.</p>
+  <ul>
+    <li><b>Raw facts remain file-first and app-local.</b> Offline use never loses events, and Agent Studio downtime never blocks an app.</li>
+    <li><b>The bus remains an observability spine, not a workflow engine.</b> A policy service consumes observations and asks the orchestrator to act through existing application APIs.</li>
+    <li><b>Start with Coding Agent Chat.</b> Pilot one category, <code>chat.message-send.failed</code>, from the local workbench through clustering to one idempotent healing card in Backlog.</li>
+    <li><b>No cloud dependency and no implicit export.</b> Event files, fingerprints, bus messages, analysis, and cards stay on the operator's machine unless an existing, explicit repository or task delivery workflow publishes a reviewed artifact.</li>
+  </ul>
+</section>
+
+<h2 id="scope"><span class="no">§1</span>Scope and evidence basis</h2>
+<p>This dossier covers a shared telemetry contract for Agent Studio, Quality Studio, Coding Agent Chat, Coding Agent Runner, Token Economy and its website, the Agent Studio website, voice-lint, and later onboarded organization applications. The architecture is product-independent: app adapters own domain semantics, while Agent Studio owns cross-app operations.</p>
+
+<div class="box warn">
+  <h4>Inventory boundary</h4>
+  <p>The dated <a href="../../system/architecture/project-map.md">Project Map</a> currently inventories Agent Studio, Coding Agent Runner, Coding Agent Chat, Token Economy, and the Agent Studio website. Quality Studio and voice-lint are not present in that capture. Their rollout therefore begins with a stable <code>appId</code>, repository registration, and local event-root declaration. This dossier does not invent file names inside repositories that were not available in the current checkout.</p>
+</div>
+
+<p>The proposal extends two existing contracts without merging them:</p>
+<ul>
+  <li><a href="../runtime/observability.md">Product Runtime Observability</a> records what a built app did. Its current stream is read-only and has no lane or task authority.</li>
+  <li><a href="../../system/architecture/bus/agent-message-bus.md">Agent Message Bus</a> records who observed, decided, advised, or intervened. A message never performs the action it describes.</li>
+</ul>
+<p>The new layer is the bridge between these contracts: raw product events are normalized and clustered; a derived bus observation points back to the raw evidence; a separate orchestrator policy decides whether to observe, ask, prepare a card, or invoke an already-approved recovery recipe.</p>
+
+<h2 id="current-state"><span class="no">§2</span>Current-state inventory</h2>
+<p class="dim">The system already has useful telemetry, but it is distributed across request logs, task folders, runner state, review files, and UI-specific alarm projections. The table names the current writer and landing point. “Gap” means there is no common organization-level event contract or action loop yet.</p>
+
+<div class="wide-table">
+<table>
+  <thead><tr><th>Signal</th><th>Current owner and files</th><th>Where it lands</th><th>What exists now</th><th>Gap for this vision</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Git process telemetry</b></td>
+      <td><code>backend/Features/Git/GitProcessTelemetry.cs</code>, namespace <code>AgentStudio.Git</code>; scopes are opened by Docs, Git, Tasks, and Publishing services.</td>
+      <td>Structured <code>ILogger</code> rollups and slow-spawn warnings. Serilog writes console plus the backend file log; <code>api.sh</code> captures <code>.api.log.out</code> and <code>.api.log.err</code>.</td>
+      <td>Per-request spawn count, summed Git time, file reads, wall time, command breakdown, and a <span class="num">1,500 ms</span> slow-spawn warning.</td>
+      <td>Not a durable cross-app event and has no stable error or friction fingerprint.</td>
+    </tr>
+    <tr>
+      <td><b>Product runtime events</b></td>
+      <td><code>backend/Features/Runtime/ProductRuntimeEventStore.cs</code>, <code>RuntimeEventPaths.cs</code>, and <code>docs/app/schemas/product-runtime-event.schema.json</code>.</td>
+      <td><code>&lt;job&gt;/logs/runtime/&lt;date&gt;.jsonl</code> or <code>&lt;workspace&gt;/logs/runtime/&lt;project&gt;/&lt;date&gt;.jsonl</code>.</td>
+      <td>Level, stable event name, subsystem, timing, status, error, correlation, tags, and bounded payload.</td>
+      <td>The schema has no explicit organization app identity, actor, privacy class, or cross-app collection policy. It intentionally cannot trigger work.</td>
+    </tr>
+    <tr>
+      <td><b>Agent Message Bus</b></td>
+      <td><code>backend/Features/Bus/AgentMessageBusStore.cs</code>, <code>AgentMessageBusBridge.cs</code>, namespace <code>AgentStudio.Bus</code>; schema in <code>agent-message.schema.json</code>.</td>
+      <td><code>&lt;workspace&gt;/logs/bus/&lt;project&gt;/&lt;date&gt;.jsonl</code>, participant documents, in-memory projection, and <code>busMessageAdded</code> SignalR fan-out in <code>backend/Host/Program.cs</code>.</td>
+      <td>Typed observation, decision, advisory, intervention, lifecycle, error, heartbeat, token, and artifact-reference messages.</td>
+      <td>Current producers are Agent Studio runtime actors. There is no generic product-app collector or telemetry cluster producer.</td>
+    </tr>
+    <tr>
+      <td><b>Token ledgers and summaries</b></td>
+      <td><code>backend/Features/Tokens/BusBackedTokenSummaryReader.cs</code>, <code>TokenAggregationService.cs</code>, <code>ProjectTokenReceiptReader.cs</code>, and <code>ProjectTokenUsageService.cs</code>.</td>
+      <td>Bus <code>token-usage</code> messages, task receipts with optional <code>tokenSummary</code>, and planned rolling <code>logs/tokens/&lt;project&gt;.jsonl</code> aggregates.</td>
+      <td>Per-job and project summaries, participant attribution, context-window facts, and timeline APIs. The AGT-2652 dossier records that some inspected nightly task records still had null <code>tokenSummary</code>.</td>
+      <td>Durability and coverage are uneven; token facts should be an input to cost policy, never a generic usage proxy.</td>
+    </tr>
+    <tr>
+      <td><b>Runner journals</b></td>
+      <td><code>runner/DurableRunOutbox.cs</code>, <code>runner/HostOrchestratorJournal.cs</code>, <code>backend/Features/Diagnostics/RunnerEventJournal.cs</code>, and <code>RunnerEventSource.cs</code>.</td>
+      <td><code>$RUNNER_WORKDIR/outbox/&lt;run-id&gt;/journal.jsonl</code>, host journal JSON, and task-local <code>logs/runner-events.jsonl</code>.</td>
+      <td>Fenced write-ahead delivery facts, accepted work and sequenced host reports, plus normalized session, turn, token, and diagnostic events.</td>
+      <td>These are authority and recovery records, not a general product telemetry bus. Their exact semantics must not be weakened by normalization.</td>
+    </tr>
+    <tr>
+      <td><b>Run records, including QS cards</b></td>
+      <td><code>backend/Features/Runner/RunTimeline.cs</code>, namespace <code>AgentStudio.Runner</code>. <code>RunRecord</code> is derived by <code>RunTimelineBuilder</code>.</td>
+      <td>Read projection from task-local <code>session-events.jsonl</code> and <code>logs/cli-output.log</code>, served by <code>/api/tasks/{id}/runs</code> and rendered in task detail.</td>
+      <td>Intent, timestamps, terminal result, CLI, model, thinking level, execution location, duration, session identity, Git range, and context reference for any project card, including Quality Studio cards.</td>
+      <td>This is Agent Studio execution telemetry about QS work, not Quality Studio product-usage telemetry. No QS-owned event producer is evidenced here.</td>
+    </tr>
+    <tr>
+      <td><b>Review evidence</b></td>
+      <td><code>backend/Features/Runner/AspectRunnerService.cs</code>, <code>EvidenceGate.cs</code>, <code>RemoteReviewReportEvidence.cs</code>, and <code>backend/Features/Review/CodeReviewStepService.cs</code>.</td>
+      <td>Task-local <code>aspect-*.json</code> plus <code>aspect-*.md</code>, <code>code-review-*.md</code>, <code>remote-review-grade-*.md</code>, and <code>results/review-evidence.jsonl</code>.</td>
+      <td>Structured verdicts and human-readable twins, exact review subject, evidence links, and missing-evidence gating.</td>
+      <td>Evidence is rich but task-scoped. Cross-app defect recurrence is not clustered into one operational signal.</td>
+    </tr>
+    <tr>
+      <td><b>Runtime prompt call telemetry</b></td>
+      <td><code>backend/Features/Prompts/RuntimePromptService.cs</code> and <code>PromptCallTelemetryService.cs</code>, namespace <code>AgentStudio.Prompts</code>.</td>
+      <td><code>&lt;TaskRepository&gt;/logs/prompt-calls.jsonl</code> or <code>PromptTelemetry:Path</code>.</td>
+      <td>Prompt id, effective content hash, source, project, step, model, estimated input tokens, daily call buckets, version history, dead-prompt signal, and override difference counts.</td>
+      <td>Prompt churn is visible in its own catalogue but is not correlated with outcomes, repeated retries, or app friction on the shared bus.</td>
+    </tr>
+    <tr>
+      <td><b>Wiki usage telemetry</b></td>
+      <td><code>backend/Features/Docs/WikiAgentReadStore.cs</code> and <code>docs/app/schemas/wiki-usage-events.schema.json</code>.</td>
+      <td>Gitignored <code>&lt;repo&gt;/.orchestrator/wiki-agent-reads/</code> runtime state.</td>
+      <td>Visited, used, and changed document facts with tool counts and bounded evidence labels.</td>
+      <td>Useful precedent for local-first usage facts, but scoped to docs and not connected to feature-card preparation.</td>
+    </tr>
+    <tr>
+      <td><b>Operational alarms and banners</b></td>
+      <td><code>backend/Features/Pipeline/PipelineHealthService.cs</code>, <code>AcceptedIntegrationBackstopPolicy.cs</code>, and frontend <code>pipeline-health-block/</code>, <code>workspace-banner/</code>, <code>accepted-integration-alert-banner/</code>.</td>
+      <td>Deduplicated Activity feed <code>alert</code> / <code>pipeline-health</code> rows, project health snapshot, persistent workspace banners, and backend warning logs.</td>
+      <td>Hanging gates, repeated failure fingerprints, stalled lanes, queue starvation, and accepted-without-integration conditions are visible.</td>
+      <td>Alarm types are feature-specific. There is no common organization event intake, shared cluster receipt, or card linkage.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Current topology</h3>
+<figure>
+<svg viewBox="0 0 1040 460" role="img" aria-labelledby="flow-title flow-desc">
+  <title id="flow-title">Recommended telemetry event flow</title>
+  <desc id="flow-desc">Organization applications emit structured local events to app-owned JSONL buffers. A collector normalizes, redacts, deduplicates, and pushes references to Agent Studio. Agent Studio writes derived observations to its bus. The orchestrator policy produces Activity entries, decision needs, or idempotent task cards through existing APIs.</desc>
+  <defs>
+    <marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--ink-3)"/></marker>
+    <marker id="control-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--develop)"/></marker>
+  </defs>
+  <text x="35" y="40" class="s-tiny">PRODUCT EDGE</text>
+  <rect x="35" y="60" width="190" height="64" class="s-node"/>
+  <text x="130" y="86" text-anchor="middle" class="s-label">Agent Studio · QS · Chat</text>
+  <text x="130" y="106" text-anchor="middle" class="s-sub">TE · websites · voice-lint</text>
+  <rect x="35" y="152" width="190" height="64" class="s-exec"/>
+  <text x="130" y="178" text-anchor="middle" class="s-label">Structured log adapter</text>
+  <text x="130" y="198" text-anchor="middle" class="s-sub">stable event name + fields</text>
+  <path d="M130 124 L130 150" class="s-flow" marker-end="url(#flow-arrow)"/>
+
+  <text x="290" y="40" class="s-tiny">DURABLE LOCAL BUFFER</text>
+  <rect x="290" y="60" width="190" height="156" class="s-node"/>
+  <text x="385" y="88" text-anchor="middle" class="s-label">Per-app JSONL</text>
+  <text x="385" y="111" text-anchor="middle" class="s-sub">append-only · daily rotation</text>
+  <text x="385" y="133" text-anchor="middle" class="s-sub">offline · raw local evidence</text>
+  <text x="385" y="155" text-anchor="middle" class="s-sub">no source-repo commit</text>
+  <rect x="318" y="174" width="134" height="24" class="badge-ok" rx="12"/>
+  <text x="385" y="190" text-anchor="middle" class="t-ok">source of raw truth</text>
+  <path d="M225 184 L288 140" class="s-flow" marker-end="url(#flow-arrow)"/>
+
+  <text x="545" y="40" class="s-tiny">COLLECTION</text>
+  <rect x="545" y="60" width="190" height="156" class="s-warn"/>
+  <text x="640" y="88" text-anchor="middle" class="s-label">Local collector</text>
+  <text x="640" y="111" text-anchor="middle" class="s-sub">validate · redact · checkpoint</text>
+  <text x="640" y="133" text-anchor="middle" class="s-sub">fingerprint · deduplicate</text>
+  <text x="640" y="155" text-anchor="middle" class="s-sub">POST when Studio is reachable</text>
+  <rect x="568" y="174" width="144" height="24" class="badge-warn" rx="12"/>
+  <text x="640" y="190" text-anchor="middle" class="t-warn">never blocks the app</text>
+  <path d="M480 138 L543 138" class="s-flow" marker-end="url(#flow-arrow)"/>
+
+  <text x="800" y="40" class="s-tiny">AGENT STUDIO CONTROL PLANE</text>
+  <rect x="800" y="60" width="205" height="64" class="s-control"/>
+  <text x="902" y="86" text-anchor="middle" class="s-label">Telemetry intake</text>
+  <text x="902" y="106" text-anchor="middle" class="s-sub">receipt + evidence reference</text>
+  <rect x="800" y="152" width="205" height="64" class="s-control"/>
+  <text x="902" y="178" text-anchor="middle" class="s-label">Agent Message Bus</text>
+  <text x="902" y="198" text-anchor="middle" class="s-sub">derived observation + SignalR</text>
+  <path d="M735 138 L798 92" class="s-control-flow" marker-end="url(#control-arrow)"/>
+  <path d="M902 124 L902 150" class="s-control-flow" marker-end="url(#control-arrow)"/>
+
+  <rect x="310" y="300" width="190" height="76" class="s-control"/>
+  <text x="405" y="329" text-anchor="middle" class="s-label">Cluster and policy</text>
+  <text x="405" y="350" text-anchor="middle" class="s-sub">threshold · cooldown · budget</text>
+  <rect x="560" y="300" width="190" height="76" class="s-control"/>
+  <text x="655" y="329" text-anchor="middle" class="s-label">Orchestrator decision</text>
+  <text x="655" y="350" text-anchor="middle" class="s-sub">observe · ask · prepare · act</text>
+  <rect x="810" y="270" width="195" height="136" class="s-node"/>
+  <text x="907" y="299" text-anchor="middle" class="s-label">Reviewable outcomes</text>
+  <text x="907" y="325" text-anchor="middle" class="s-sub">Activity / alarm</text>
+  <text x="907" y="347" text-anchor="middle" class="s-sub">Needs decision</text>
+  <text x="907" y="369" text-anchor="middle" class="s-sub">Backlog card</text>
+  <text x="907" y="391" text-anchor="middle" class="s-sub">Existing safe intervention</text>
+  <path d="M902 216 C902 250 405 248 405 298" class="s-control-flow" marker-end="url(#control-arrow)"/>
+  <path d="M500 338 L558 338" class="s-control-flow" marker-end="url(#control-arrow)"/>
+  <path d="M750 338 L808 338" class="s-control-flow" marker-end="url(#control-arrow)"/>
+  <path d="M907 406 C907 440 386 440 386 378" class="s-flow" marker-end="url(#flow-arrow)"/>
+  <text x="620" y="433" text-anchor="middle" class="s-tiny">outcome receipt suppresses duplicates and measures whether the action helped</text>
+</svg>
+<figcaption><b>Recommended event flow.</b> The file is authoritative for the raw event. The bus is authoritative for the derived observation. The orchestrator decision receipt is authoritative for any resulting action.</figcaption>
+</figure>
+
+<h2 id="event-model"><span class="no">§3</span>Event model and privacy</h2>
+<p>The shared unit is an <code>OrgTelemetryEvent/v1</code>. It is a small immutable envelope produced directly by a logging adapter or derived from the existing <code>ProductRuntimeEvent</code>. This is a future schema, not an in-place edit in this concept card. The existing runtime schema has <code>additionalProperties: false</code>, so organization fields must be added through an explicit schema decision rather than smuggled into <code>payload</code>.</p>
+
+<div class="wide-table">
+<table>
+  <thead><tr><th>Field</th><th>Shape</th><th>Decision</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>schemaVersion</code>, <code>id</code></td><td>Required</td><td>Versioned envelope plus sortable UUID v7 or ULID. Retries preserve the id.</td><td><code>1</code>, <code>01K2...</code></td></tr>
+    <tr><td><code>occurredAt</code>, <code>observedAt</code></td><td>Required UTC</td><td>Keep producer time separate from collector time so offline replay stays honest.</td><td><code>2026-08-16T09:12:44Z</code></td></tr>
+    <tr><td><code>source</code></td><td>Required object</td><td><code>appId</code>, component, app version, local instance id, environment, and optional repository id. <code>appId</code> is stable across display-name changes.</td><td><code>coding-agent-chat</code> / <code>workbench-api</code></td></tr>
+    <tr><td><code>eventName</code></td><td>Required stable name</td><td>Kebab-case segments. Renames require an overlap period. Human prose is not an event name.</td><td><code>chat.message-send.failed</code></td></tr>
+    <tr><td><code>category</code></td><td>Required enum</td><td><code>usage</code>, <code>friction</code>, <code>error</code>, <code>performance</code>, <code>lifecycle</code>, <code>quality</code>, <code>delivery</code>, <code>security</code>, or <code>health</code>.</td><td><code>error</code></td></tr>
+    <tr><td><code>level</code></td><td>Required enum</td><td><code>Trace</code>, <code>Debug</code>, <code>Info</code>, <code>Warn</code>, <code>Error</code>, <code>Fatal</code>. It describes the individual record, not action authority.</td><td><code>Error</code></td></tr>
+    <tr><td><code>actor</code></td><td>Required object</td><td>Kind is <code>human</code>, <code>agent</code>, <code>system</code>, or <code>unknown</code>. Default identity is an app-local pseudonym; no account name is required.</td><td><code>{ kind: "human", id: "local:7c2..." }</code></td></tr>
+    <tr><td><code>contextRefs</code></td><td>Optional typed array</td><td>References only: project, task, job, run, correlation, trace, session, route, workbench, artifact. Heavy evidence stays at the referenced path.</td><td><code>run:run_123</code>, <code>route:/lab</code></td></tr>
+    <tr><td><code>fingerprint</code></td><td>Required for clusterable events</td><td>Hash stable dimensions such as app, event, normalized error type/code, component, and route family. Exclude timestamps, prose, and raw ids.</td><td><code>sha256:9b...</code></td></tr>
+    <tr><td><code>privacy</code></td><td>Required object</td><td>Classification, applied redactions, export policy, and content-presence flags. Collector rejects a record marked <code>containsSecret</code>.</td><td><code>local-sensitive</code>, <code>export: never</code></td></tr>
+    <tr><td><code>payload</code></td><td>Optional bounded object</td><td>Small allowlisted dimensions only. Each event contract documents keys and cardinality.</td><td><code>{ errorCode: "connection-refused", retry: 2 }</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Structured logging is the seam</h3>
+<p>Adapters attach to the logging system each app already uses: <code>ILogger</code> in .NET, a small typed logger in TypeScript, and equivalent native adapters elsewhere. An event is emitted only when the record has a stable <code>eventName</code> and structured dimensions, or when a narrowly configured adapter maps a known legacy template. Free-form text scanning is a migration aid, not the target contract.</p>
+
+<table>
+  <thead><tr><th>Log level</th><th>Local file</th><th>Collector and bus behavior</th><th>Default UI</th></tr></thead>
+  <tbody>
+    <tr><td><b>Trace</b></td><td>Optional diagnostic buffer with short retention.</td><td>Never forwarded by default. Available only through an explicit diagnostic capture.</td><td>Hidden.</td></tr>
+    <tr><td><b>Debug</b></td><td>Local buffer when debug capture is enabled.</td><td>No bus message. The collector may use it as evidence after a higher-level event points to the same correlation id.</td><td>Hidden.</td></tr>
+    <tr><td><b>Info</b></td><td>Persist.</td><td>Forward only allowlisted usage, lifecycle, quality, and completion events. Routine request logs stay local.</td><td>Collapsed counters and domain timeline.</td></tr>
+    <tr><td><b>Warn</b></td><td>Persist.</td><td>Collect immediately, deduplicate, and emit an observation only after its policy threshold or when explicitly acute.</td><td>Observation; alarm only if policy says acute.</td></tr>
+    <tr><td><b>Error</b></td><td>Persist with bounded error facts.</td><td>Collect immediately. Cluster by fingerprint. Emit one bus Problem observation with count and evidence refs, not one message per repeat.</td><td>Problem in Activity.</td></tr>
+    <tr><td><b>Fatal</b></td><td>Persist and flush synchronously where safe.</td><td>Emit one High observation immediately after durable append. It may open a needs-decision item; it does not invent restart authority.</td><td>Persistent alarm plus Activity.</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>Level is not policy</h4>
+  <p>An <code>Error</code> does not automatically create a task, and an <code>Info</code> usage event is not automatically harmless. Event name, category, privacy class, fingerprint, distinct correlations, cooldown, open-card state, and recipe authority are evaluated together. Logging configuration controls volume; policy controls action.</p>
+</div>
+
+<h3>Privacy posture</h3>
+<ul>
+  <li><b>Local first, export never by default.</b> No telemetry collector requires a cloud account, vendor endpoint, OpenTelemetry backend, or internet connection.</li>
+  <li><b>Never collect secrets.</b> Authentication headers, cookies, access tokens, credentials, private keys, environment secrets, and raw authorization failures are rejected or redacted before append.</li>
+  <li><b>Never collect content by default.</b> Chat messages, prompts, transcripts, audio, document bodies, source file contents, clipboard contents, and Quality Studio input artifacts stay out of the shared event payload.</li>
+  <li><b>Reduce identity.</b> Human actors use rotating app-local pseudonyms unless a task already has an authenticated principal that is required for an audit record.</li>
+  <li><b>Bound paths and stacks.</b> Prefer project-relative route or component ids. Absolute home paths and full stacks remain in local evidence; the bus carries a redacted summary and a reference.</li>
+  <li><b>Reviewed publication only.</b> A task result may cite selected telemetry evidence through existing artifact review. That is a separate explicit delivery action, not telemetry export.</li>
+</ul>
+
+<p><b>Retention recommendation:</b> raw edge buffers rotate daily and retain 30 days by default; Trace and Debug retain 3 days when enabled; derived bus observations and action receipts follow the workspace's task and Activity retention. The collector checkpoints files by app id, file identity, byte offset, and last event id. Retention never deletes an unacknowledged tail.</p>
+
+<h2 id="bus"><span class="no">§4</span>Bus architecture options</h2>
+<figure>
+<svg viewBox="0 0 1040 390" role="img" aria-labelledby="options-title options-desc">
+  <title id="options-title">Comparison of three local bus architectures</title>
+  <desc id="options-desc">Option A is a file-first event log with collector. Option B pushes over local HTTP to Agent Studio and uses SignalR for user interface updates. Option C combines the durable file buffer with best-effort push and is recommended.</desc>
+  <defs>
+    <marker id="option-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--ink-3)"/></marker>
+  </defs>
+  <rect x="25" y="35" width="310" height="315" class="s-node"/>
+  <text x="48" y="66" class="s-tiny">OPTION A</text>
+  <text x="48" y="92" class="s-label">File-first logs + collector</text>
+  <rect x="50" y="120" width="105" height="52" class="s-exec"/>
+  <text x="102" y="142" text-anchor="middle" class="s-label">App</text>
+  <text x="102" y="159" text-anchor="middle" class="s-sub">JSONL</text>
+  <rect x="205" y="120" width="105" height="52" class="s-node"/>
+  <text x="257" y="142" text-anchor="middle" class="s-label">Collector</text>
+  <text x="257" y="159" text-anchor="middle" class="s-sub">tail</text>
+  <path d="M155 146 L203 146" class="s-flow" marker-end="url(#option-arrow)"/>
+  <text x="48" y="210" class="s-sub">+ Durable and offline</text>
+  <text x="48" y="233" class="s-sub">+ Inspectable text contract</text>
+  <text x="48" y="256" class="s-sub">− Poll or watch latency</text>
+  <text x="48" y="279" class="s-sub">− App discovery and checkpoints</text>
+  <text x="48" y="318" class="s-tiny">GOOD BASELINE, SLOWER FEEDBACK</text>
+
+  <rect x="365" y="35" width="310" height="315" class="s-node"/>
+  <text x="388" y="66" class="s-tiny">OPTION B</text>
+  <text x="388" y="92" class="s-label">Local HTTP intake + SignalR</text>
+  <rect x="390" y="120" width="105" height="52" class="s-exec"/>
+  <text x="442" y="142" text-anchor="middle" class="s-label">App</text>
+  <text x="442" y="159" text-anchor="middle" class="s-sub">POST</text>
+  <rect x="545" y="120" width="105" height="52" class="s-control"/>
+  <text x="597" y="142" text-anchor="middle" class="s-label">Studio</text>
+  <text x="597" y="159" text-anchor="middle" class="s-sub">bus + UI</text>
+  <path d="M495 146 L543 146" class="s-flow" marker-end="url(#option-arrow)"/>
+  <text x="388" y="210" class="s-sub">+ Low latency and simple live UI</text>
+  <text x="388" y="233" class="s-sub">+ Existing backend and fan-out seam</text>
+  <text x="388" y="256" class="s-sub">− Studio outage risks loss or blocking</text>
+  <text x="388" y="279" class="s-sub">− Retry durability moves into every app</text>
+  <text x="388" y="318" class="s-tiny">NOT SUFFICIENT AS THE ONLY PATH</text>
+
+  <rect x="705" y="35" width="310" height="315" class="s-control"/>
+  <text x="728" y="66" class="s-tiny">OPTION C · RECOMMENDED</text>
+  <text x="728" y="92" class="s-label">File buffer + best-effort push</text>
+  <rect x="730" y="120" width="105" height="52" class="s-exec"/>
+  <text x="782" y="142" text-anchor="middle" class="s-label">App</text>
+  <text x="782" y="159" text-anchor="middle" class="s-sub">append</text>
+  <rect x="885" y="120" width="105" height="52" class="s-control"/>
+  <text x="937" y="142" text-anchor="middle" class="s-label">Studio</text>
+  <text x="937" y="159" text-anchor="middle" class="s-sub">receipt</text>
+  <path d="M835 146 L883 146" class="s-control-flow" marker-end="url(#option-arrow)"/>
+  <text x="728" y="210" class="s-sub">+ Durable while offline</text>
+  <text x="728" y="233" class="s-sub">+ Fast when Studio is present</text>
+  <text x="728" y="256" class="s-sub">+ One collector owns retry and dedupe</text>
+  <text x="728" y="279" class="s-sub">− Two delivery paths need parity tests</text>
+  <rect x="752" y="303" width="216" height="28" class="badge-ok" rx="14"/>
+  <text x="860" y="322" text-anchor="middle" class="t-ok">durability + responsiveness</text>
+</svg>
+<figcaption><b>Options.</b> SignalR remains server-to-client fan-out. Product apps use a loopback HTTP intake or collector wake-up; the local JSONL append is completed first.</figcaption>
+</figure>
+
+<div class="wide-table">
+<table>
+  <thead><tr><th>Criterion</th><th>A · File + collector</th><th>B · Local push</th><th>C · Hybrid</th></tr></thead>
+  <tbody>
+    <tr><td><b>Offline operation</b></td><td><span class="pill done">full</span></td><td><span class="pill open">weak</span> unless every app builds an outbox</td><td><span class="pill done">full</span></td></tr>
+    <tr><td><b>Loss boundary</b></td><td>Atomic file append.</td><td>HTTP acknowledgement; app-specific retry burden.</td><td>Atomic file append, then optional HTTP receipt.</td></tr>
+    <tr><td><b>Live latency</b></td><td>File watcher or short poll.</td><td>Immediate.</td><td>Immediate when reachable, replay otherwise.</td></tr>
+    <tr><td><b>Git and file-first fit</b></td><td>Strong. Text is inspectable, diffable, and easy to attach as evidence, but runtime logs remain gitignored by default.</td><td>Weak as sole source; requires backend persistence to be inspectable.</td><td>Strong. Raw files plus derived bus files preserve both layers.</td></tr>
+    <tr><td><b>Operational complexity</b></td><td>Collector discovery and checkpoints.</td><td>Endpoint security, availability, and per-app retry.</td><td>Collector plus a small push optimization and parity tests.</td></tr>
+    <tr><td><b>Failure behavior</b></td><td>Delayed visibility.</td><td>Potential loss or app coupling.</td><td>Delayed visibility with no loss and no app blocking.</td></tr>
+    <tr><td><b>Recommendation</b></td><td>Acceptable first technical slice.</td><td>Reject as sole architecture.</td><td><b>Approve.</b></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Hybrid write contract</h3>
+<ol>
+  <li>The app redacts and atomically appends the event to its configured local daily JSONL file.</li>
+  <li>The app optionally sends a tiny loopback wake-up containing <code>appId</code>, file identity, offset, and event id. It does not resend private payload by default.</li>
+  <li>The collector validates the event, advances a durable checkpoint only after acceptance, and computes a stable fingerprint. File watching and polling recover missed wake-ups.</li>
+  <li>Agent Studio persists a telemetry intake receipt, then emits one derived <code>observation</code> or <code>error</code> bus message with raw evidence references.</li>
+  <li>The existing <code>busMessageAdded</code> SignalR fan-out updates Activity. A reconnect replays from durable bus files, not from transient SignalR memory.</li>
+</ol>
+
+<p><b>Security boundary:</b> loopback intake is disabled or token-authenticated by default, binds only to the configured local interface, enforces registered app roots, rejects path traversal and unknown app ids, caps line and request size, and never permits a producer to choose a task lane or action.</p>
+
+<h2 id="consumption"><span class="no">§5</span>Orchestrator consumption: event to action</h2>
+<p>The orchestrator does not read every raw line. A deterministic cluster service produces a <code>TelemetrySignal</code> with policy version, source app, fingerprint, window, distinct correlation count, sample evidence refs, privacy summary, and any linked open card. The orchestrator then chooses from a bounded action vocabulary.</p>
+
+<figure>
+<svg viewBox="0 0 1040 350" role="img" aria-labelledby="loop-title loop-desc">
+  <title id="loop-title">Telemetry consumption and feedback loop</title>
+  <desc id="loop-desc">The collector forms clusters. Deterministic policy classifies them. The orchestrator chooses observe, prepare, intervene, or ask. Outcomes are recorded as receipts and later events measure whether the issue recovered.</desc>
+  <defs>
+    <marker id="loop-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--develop)"/></marker>
+  </defs>
+  <rect x="35" y="120" width="150" height="76" class="s-node"/>
+  <text x="110" y="149" text-anchor="middle" class="s-label">1 · Observe</text>
+  <text x="110" y="170" text-anchor="middle" class="s-sub">events + evidence refs</text>
+  <rect x="235" y="120" width="150" height="76" class="s-warn"/>
+  <text x="310" y="149" text-anchor="middle" class="s-label">2 · Cluster</text>
+  <text x="310" y="170" text-anchor="middle" class="s-sub">fingerprint + window</text>
+  <rect x="435" y="120" width="150" height="76" class="s-control"/>
+  <text x="510" y="149" text-anchor="middle" class="s-label">3 · Decide</text>
+  <text x="510" y="170" text-anchor="middle" class="s-sub">pure policy + budget</text>
+  <rect x="635" y="80" width="165" height="156" class="s-control"/>
+  <text x="717" y="109" text-anchor="middle" class="s-label">4 · Orchestrate</text>
+  <text x="717" y="137" text-anchor="middle" class="s-sub">Activity only</text>
+  <text x="717" y="159" text-anchor="middle" class="s-sub">prepare card</text>
+  <text x="717" y="181" text-anchor="middle" class="s-sub">needs decision</text>
+  <text x="717" y="203" text-anchor="middle" class="s-sub">approved safe recipe</text>
+  <rect x="850" y="120" width="155" height="76" class="s-exec"/>
+  <text x="927" y="149" text-anchor="middle" class="s-label">5 · Receipt</text>
+  <text x="927" y="170" text-anchor="middle" class="s-sub">task, decision, outcome</text>
+  <path d="M185 158 L233 158" class="s-control-flow" marker-end="url(#loop-arrow)"/>
+  <path d="M385 158 L433 158" class="s-control-flow" marker-end="url(#loop-arrow)"/>
+  <path d="M585 158 L633 158" class="s-control-flow" marker-end="url(#loop-arrow)"/>
+  <path d="M800 158 L848 158" class="s-control-flow" marker-end="url(#loop-arrow)"/>
+  <path d="M927 196 C927 300 110 300 110 198" class="s-control-flow" marker-end="url(#loop-arrow)"/>
+  <text x="520" y="286" text-anchor="middle" class="s-tiny">recovery, recurrence, dismissal, and human reversal become measured feedback</text>
+  <rect x="414" y="25" width="192" height="38" class="badge-warn" rx="19"/>
+  <text x="510" y="49" text-anchor="middle" class="t-warn">the bus never performs step 4</text>
+</svg>
+<figcaption><b>Consumption loop.</b> Every action keeps the signal fingerprint and policy version. An open card or prior dismissal suppresses duplicate preparation until the cooldown or evidence materially changes.</figcaption>
+</figure>
+
+<div class="wide-table">
+<table>
+  <thead><tr><th>Pattern</th><th>Initial rule</th><th>Orchestrator behavior</th><th>Authority and breaker</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Repeated usage friction</b></td>
+      <td>Same fingerprint at least 5 times across 3 distinct correlations or local sessions in 7 days.</td>
+      <td>Write an Activity observation and prepare a feature card with counts, affected flow, evidence refs, privacy-safe reproduction hints, and a proposed acceptance signal.</td>
+      <td>Default is <b>needs decision</b>. No queueing. One open card per <code>(appId, fingerprint, policyVersion)</code>.</td>
+    </tr>
+    <tr>
+      <td><b>Error cluster</b></td>
+      <td>Same Error fingerprint 3 times across 2 correlations in 30 minutes, or one Fatal.</td>
+      <td>Create or update one healing card in Backlog and surface a Problem entry. Link the raw event slice, recent version, and first/last occurrence.</td>
+      <td>Card creation uses the Task API and an idempotency key. It never starts a run. Fatal may also request an operator decision.</td>
+    </tr>
+    <tr>
+      <td><b>Performance regression</b></td>
+      <td>Three complete windows where p95 exceeds both a declared absolute budget and the rolling baseline by 50%.</td>
+      <td>Publish a trend observation. Prepare a card only after a second window set confirms the regression.</td>
+      <td>No single slow request can create work. Baseline version and sample count are stored in the receipt.</td>
+    </tr>
+    <tr>
+      <td><b>Noisy warning</b></td>
+      <td>High count but no user-visible failure, with identical fingerprint inside cooldown.</td>
+      <td>Collapse into one digest and suggest logging or dedupe cleanup only when volume crosses a configured disk or review-noise budget.</td>
+      <td>Maximum one digest per app and fingerprint per day.</td>
+    </tr>
+    <tr>
+      <td><b>Visual QA clear defect</b></td>
+      <td>Consume durable <code>verdict.json</code> receipts from AGT-2654, not screenshots or model prose alone.</td>
+      <td>Keep the existing one precise steer. On repeated defect or unavailable capture, publish a guardian Problem with task, review epoch, iteration, and evidence fingerprint.</td>
+      <td><code>VisualQaPolicy</code> owns the one-retry budget. Telemetry cannot replenish it.</td>
+    </tr>
+    <tr>
+      <td><b>Pipeline or delivery alarm</b></td>
+      <td>Reuse current hanging-gate, repeated fingerprint, stalled-lane, queue-starvation, and accepted-integration facts.</td>
+      <td>Project them into the same cluster and Activity vocabulary; optionally ask the Watcher to inspect an exception.</td>
+      <td>Existing pipeline and runner policies remain authoritative.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Guardian and visual-QA integration</h3>
+<p><a href="../orchestrator-waechter/index.html">AGT-W15 / AGT-2557</a> already defines the Global Orchestrator Watcher as an intelligent exception layer above mechanical guarantees. This telemetry layer supplies its missing cross-product trigger substrate. The Watcher consumes <i>clusters and receipts</i>, not unbounded raw streams. Observe-only signals stay cheap; ambiguous diagnosis follows the Watcher's strong-analysis floor and decision surface.</p>
+<p><a href="../../system/contracts/ui-task-pipeline.md">AGT-2654</a> is the first implemented guardian consumer: deterministic capture, a bounded multimodal verdict, one restart-safe defect steer, and proof-preserving escalation. Its shape becomes the reference for telemetry-triggered action: durable evidence first, pure policy next, bounded action through an existing authority, then a receipt visible to the operator.</p>
+
+<h3>Card contract</h3>
+<p>A telemetry-created or prepared card includes <code>sourceAppId</code>, <code>telemetryFingerprint</code>, <code>policyVersion</code>, time window, occurrence and distinct-correlation counts, first and last seen, app version range, redacted summary, evidence references, privacy classification, linked Activity message id, and the dedupe key. It never copies raw chat, prompt, audio, source, or Quality Studio analysis content into the prompt.</p>
+
+<h2 id="hub"><span class="no">§6</span>Agent Studio as the operations hub</h2>
+<p>The observed convergence should be explicit product architecture: <b>Agent Studio is the organization management layer for software delivery and operations.</b> It is where CI/CD state, telemetry, alarms, and orchestration become one inspectable operating picture across products. This is consistent with the repository's positioning language: management layers on top of coding work.</p>
+
+<div class="decision-grid">
+  <section class="box accent">
+    <h4>Agent Studio owns</h4>
+    <ul>
+      <li>App registry, stable ids, collector configuration, and local trust.</li>
+      <li>Cross-app normalization, redaction enforcement, checkpoints, dedupe, clustering, and retention visibility.</li>
+      <li>Derived Agent Message Bus observations and Activity projection.</li>
+      <li>Guardian and orchestrator policy, decision packets, task creation through the Task API, action receipts, and audit links.</li>
+      <li>CI/CD convergence: promotion train status, GitHub Actions hygiene, delivery alarms, deployment evidence, and cross-project health.</li>
+    </ul>
+  </section>
+  <section class="box">
+    <h4>Each product keeps</h4>
+    <ul>
+      <li>Domain event names, semantic dimensions, logging calls, local raw evidence, and product-specific retention overrides.</li>
+      <li>Quality Studio's analysis engine, scoring, rule packs, and report meaning.</li>
+      <li>Coding Agent Chat's conversation state and message content.</li>
+      <li>Token Economy's pricing and token-accounting logic.</li>
+      <li>voice-lint's audio and linguistic analysis; websites' audience analytics decisions and consent surfaces.</li>
+    </ul>
+  </section>
+</div>
+
+<p>Agent Studio does not become a runtime dependency for using an app, a warehouse for private product data, or a replacement for product-owned debugging. It hosts the management and action layer. Apps continue to run when Studio is stopped, and their domain cores remain independently testable and releasable.</p>
+
+<h3>One operations surface, several truths</h3>
+<table>
+  <thead><tr><th>Plane</th><th>Canonical truth</th><th>Agent Studio projection</th></tr></thead>
+  <tbody>
+    <tr><td><b>Application runtime</b></td><td>App-local structured JSONL and referenced evidence.</td><td>Recent events, clusters, latency, and privacy-safe drill-down.</td></tr>
+    <tr><td><b>Delivery and CI/CD</b></td><td>Exact Git SHAs, gate receipts, workflow results, promotion and deployment records.</td><td>Promotion train, actions hygiene, pipeline alarms, and linked remediation work.</td></tr>
+    <tr><td><b>Orchestration</b></td><td>Task Store, runner leases and fences, policy receipts, and lane transitions.</td><td>Activity, decision needs, guardian actions, and task linkage.</td></tr>
+    <tr><td><b>Product analysis</b></td><td>Product-owned core, for example Quality Studio's analysis outputs.</td><td>Only bounded status, health, and artifact references needed for operations.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="slices"><span class="no">§7</span>Pilot and rollout slices</h2>
+<p><b>Recommended pilot: Coding Agent Chat, not Quality Studio.</b> The current Project Map already proves the library, local workbench, website, and Agent Studio package relationship. A chat pilot also tests attribution for a reusable library embedded in more than one host. Quality Studio should follow after its own app identity and event root are confirmed, avoiding a first slice that accidentally centralizes its analysis core.</p>
+
+<div class="box ok">
+  <h4>Pilot acceptance story</h4>
+  <p>When the Coding Agent Chat workbench records three <code>chat.message-send.failed</code> events with the same normalized failure fingerprint across two distinct correlations inside 30 minutes, the app remains usable and the events survive Agent Studio being offline. On reconnect, the collector replays them once, Agent Studio shows one clustered Problem in Activity, and the orchestrator creates exactly one Backlog healing card with evidence references and an idempotency receipt. No message content leaves the chat app and no task is queued.</p>
+</div>
+
+<div class="wide-table">
+<table>
+  <thead><tr><th>Slice</th><th>Scope</th><th>Acceptance</th><th>Exit gate</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>T0 · Contract fixture</b></td>
+      <td>Publish the future <code>OrgTelemetryEvent/v1</code> schema, event-name registry format, privacy test fixtures, and app registration shape. No runtime wiring.</td>
+      <td>Valid, malformed, secret-bearing, high-cardinality, torn-tail, duplicate-id, and replay fixtures have deterministic results in .NET and TypeScript.</td>
+      <td>Schema and privacy review approved.</td>
+    </tr>
+    <tr>
+      <td><b>T1 · Chat edge</b></td>
+      <td>Instrument only <code>chat.message-send.failed</code> in the Coding Agent Chat workbench. Write the app-local JSONL before returning from the failure path.</td>
+      <td>No message body, prompt, transcript, email, token, or absolute home path appears. App behavior is unchanged when collector and Studio are absent.</td>
+      <td>Offline and redaction tests green.</td>
+    </tr>
+    <tr>
+      <td><b>T2 · Hybrid delivery</b></td>
+      <td>Collector checkpoint, file replay, optional loopback wake-up, intake receipt, and bus observation with evidence ref.</td>
+      <td>Crash after append, Studio outage, duplicate wake-up, collector restart, torn tail, and file rotation produce no loss and no duplicate bus observation.</td>
+      <td>File and push paths have parity.</td>
+    </tr>
+    <tr>
+      <td><b>T3 · One action</b></td>
+      <td>Pure error-cluster policy, Activity Problem, and Task API card creation in Backlog.</td>
+      <td>Threshold creates exactly one card; lower counts create none; an open card suppresses duplicates; changing policy version does not orphan the original receipt.</td>
+      <td>Operator reviews ten synthetic and five real local cases with zero content leaks and zero duplicate cards.</td>
+    </tr>
+    <tr>
+      <td><b>T4 · Observe-only soak</b></td>
+      <td>Two weeks in Chat with card creation switchable to “prepare only.”</td>
+      <td>Measure event volume, drop/replay count, false clusters, card acceptance, dismissals, recurrence, disk use, and time to visibility.</td>
+      <td>At least 95% of proposed cards judged useful, no privacy incident, and no app-blocking failure.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Rollout order after the pilot</h3>
+<ol>
+  <li><b>Quality Studio:</b> onboard stable identity and instrument analysis-run lifecycle plus one failure category. Keep reports and scoring in QS; Agent Studio receives status and references only.</li>
+  <li><b>Agent Studio and Coding Agent Runner:</b> adapt existing <code>GitProcessTelemetry</code>, pipeline health, runner diagnostics, and visual-QA receipts. Prefer adapters over duplicate logging calls.</li>
+  <li><b>Token Economy and its website:</b> connect durable token-ledger health, pricing drift, and one website delivery or runtime error category. Do not interpret token spend as user value.</li>
+  <li><b>Agent Studio website:</b> add consent-appropriate operational events for local preview and deployment verification; exclude audience tracking unless separately approved.</li>
+  <li><b>voice-lint:</b> onboard last because audio and linguistic payloads require the strictest content-exclusion proof. Emit processing status, duration, rule ids, and error codes, never audio or transcript text.</li>
+  <li><b>Remaining apps:</b> require stable app identity, event registry, privacy review, an offline test, and one named owner before enabling collector discovery.</li>
+</ol>
+
+<h3>Rollout controls</h3>
+<ul>
+  <li>Feature switches exist per app, event category, bus projection, card preparation, and card creation.</li>
+  <li>Default action mode is <code>observe</code>; the pilot alone may enable idempotent Backlog healing-card creation after fixture acceptance.</li>
+  <li>Collector health is itself a local operational signal: lag, invalid rows, rejected secret fields, checkpoint age, and disk pressure. It cannot recursively create unlimited telemetry about itself.</li>
+  <li>Every policy has a window, threshold, distinct-correlation minimum, cooldown, duplicate-card lookup, maximum actions per day, and versioned receipt.</li>
+</ul>
+
+<h2 id="request"><span class="no">§8</span>Decision request</h2>
+<div class="box warn">
+  <h4>Requested operator decisions</h4>
+  <ol>
+    <li><b>Architecture:</b> approve hybrid file-first buffering plus best-effort local push, with no cloud dependency.</li>
+    <li><b>Truth boundaries:</b> approve raw app JSONL as event truth, Agent Message Bus observations as cluster truth, and orchestrator receipts as action truth.</li>
+    <li><b>Positioning:</b> approve Agent Studio as the operations and management hub for CI/CD, telemetry, alarms, and orchestration across organization products.</li>
+    <li><b>Authority:</b> keep the bus inert; let only the orchestrator act through existing APIs and approved guardian recipes.</li>
+    <li><b>Pilot:</b> approve Coding Agent Chat and <code>chat.message-send.failed</code>, ending in one idempotent Backlog healing card.</li>
+    <li><b>Privacy:</b> approve local-only defaults and the never-collect content list in §3.</li>
+    <li><b>Rollout:</b> approve the order Chat, Quality Studio, Agent Studio and Runner, Token Economy and websites, voice-lint, then remaining apps.</li>
+  </ol>
+</div>
+
+<p><b>Recommended answer:</b> approve all seven decisions. The design builds on the repository's existing file-first runtime stream, Agent Message Bus, SignalR projection, alarm policies, and guardian receipts. It adds the missing cross-app collection and action loop while keeping raw product data local and preserving existing state-machine authority.</p>
+
+<h3>Explicit non-goals</h3>
+<ul>
+  <li>No cloud telemetry vendor, central SaaS account, data lake, or mandatory OpenTelemetry deployment.</li>
+  <li>No automatic feature implementation, task queueing, Git mutation, or lane movement from an event or bus message.</li>
+  <li>No replacement of runner journals, review evidence, task records, CI receipts, or product-owned analysis cores.</li>
+  <li>No full-text capture of user activity, conversations, prompts, code, audio, or documents.</li>
+  <li>No single global log level that turns all application logs into events.</li>
+</ul>
+
+<p class="dim">Related contracts and evidence: <a href="../runtime/observability.md">Product Runtime Observability</a>, <a href="../runtime/log-capture.md">log capture</a>, <a href="../../system/architecture/bus/agent-message-bus.md">Agent Message Bus</a>, <a href="../orchestrator-waechter/index.html">Global Orchestrator Watcher (AGT-W15)</a>, <a href="../../system/contracts/ui-task-pipeline.md">visual QA and steered retry</a>, <a href="../develop-main-promotion.md">develop-to-main promotion</a>, and <a href="../../system/architecture/project-map.md">Project Map</a>.</p>
+
+</main>
+</body>
+</html>

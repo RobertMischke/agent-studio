@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "telemetry-layer",
+  "title": "Organization-wide telemetry layer",
+  "summary": "Decision-ready dossier for a local-first telemetry layer across organization applications. It inventories current Agent Studio signals, defines a privacy-bounded event envelope and log-level mapping, compares file, push, and hybrid bus options, recommends durable per-app JSONL plus best-effort local push, maps clustered signals to bounded orchestrator actions, establishes Agent Studio as the CI/CD, telemetry, alarm, and orchestration hub, and proposes a Coding Agent Chat error-cluster pilot before broader rollout.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-16T00:00:00Z",
+  "sourceTaskKeys": [
+    "AGT-2661"
+  ],
+  "implementationTasks": [],
+  "relatedTaskKeys": [
+    "AGT-2557",
+    "AGT-2654"
+  ]
+}
