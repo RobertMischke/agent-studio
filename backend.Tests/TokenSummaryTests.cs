@@ -33,15 +33,18 @@ public class TokenSummaryTests
         long output,
         DateTime ts,
         string jobId = "job-a",
-        string? participantId = null)
+        string? participantId = null,
+        string topic = "test-token",
+        string? runId = null)
         => new()
         {
             Ts = ts,
             Kind = OrchestratorLogKinds.Decision,
-            Topic = "test-token",
+            Topic = topic,
             Summary = "test job entry",
             JobId = jobId,
             ParticipantId = participantId,
+            RunId = runId,
             TokenUsage = new OrchestratorTokenUsage
             {
                 Model = model,
@@ -242,6 +245,43 @@ public class TokenSummaryTests
         Assert.Equal(
             summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
             summary.EstimatedApiCostUsd);
+    }
+
+    [Theory]
+    [InlineData("agent:codex", "codex-turn", TokenUsageTypes.Coding)]
+    [InlineData("support:code-quality", "aspect-code-quality", TokenUsageTypes.Review)]
+    [InlineData("agent:remote-runner", "build-test-gate", TokenUsageTypes.Gate)]
+    [InlineData("support:adhoc", "prompt-enrichment", TokenUsageTypes.Enrichment)]
+    [InlineData("orchestrator:Demo", "orchestrator-decision", TokenUsageTypes.Orchestration)]
+    [InlineData("support:adhoc", "misc-support", TokenUsageTypes.Supporting)]
+    [InlineData(null, "general", TokenUsageTypes.Other)]
+    public void TokenUsageTypeClassifier_UsesStepContextBeforeParticipant(
+        string? participantId,
+        string topic,
+        string expected)
+    {
+        Assert.Equal(expected, TokenUsageTypeClassifier.Classify(participantId, topic));
+    }
+
+    [Fact]
+    public void SummarizePerJob_PreservesRunAndStepContextForTypeBreakdown()
+    {
+        var at = new DateTime(2026, 7, 23, 8, 0, 0, DateTimeKind.Utc);
+        var summary = TokenSummaryService.SummarizePerJob([
+            JobEntry(
+                "claude-haiku-4-5",
+                2_000,
+                200,
+                at,
+                participantId: "support:code-quality",
+                topic: "aspect-code-quality",
+                runId: "job-a:attempt-2")
+        ])["job-a"];
+
+        var call = Assert.Single(summary.Entries);
+        Assert.Equal("job-a:attempt-2", call.RunId);
+        Assert.Equal("aspect-code-quality", call.Topic);
+        Assert.Equal(TokenUsageTypes.Review, call.UsageType);
     }
 
     [Fact]

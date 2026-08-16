@@ -157,6 +157,9 @@ public class TokenSummaryService
             {
                 Ts = entry.Ts,
                 Model = displayModel,
+                RunId = entry.RunId,
+                Topic = entry.Topic,
+                UsageType = TokenUsageTypeClassifier.Classify(entry.ParticipantId, entry.Topic),
                 ParticipantId = entry.ParticipantId,
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,

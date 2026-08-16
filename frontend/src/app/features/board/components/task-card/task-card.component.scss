@@ -1449,11 +1449,11 @@
       inset: auto;
       margin: 0;
       z-index: var(--studio-z-overlay-panel);
-      min-width: 240px;
-      max-width: 320px;
+      width: min(560px, calc(100vw - var(--studio-spacing-6)));
+      max-width: none;
       max-height: 60vh;
       overflow: auto;
-      padding: 10px 12px;
+      padding: var(--studio-spacing-4);
       border-radius: 8px;
       background: var(--studio-tooltip-bg);
       border: 1px solid var(--studio-tooltip-border);
@@ -1470,7 +1470,22 @@
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: var(--studio-tooltip-fg-dim);
-      margin-bottom: 6px;
+      margin-bottom: var(--studio-spacing-2);
+    }
+    .task-card__token-summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: baseline;
+      gap: var(--studio-spacing-4);
+      padding-bottom: var(--studio-spacing-3);
+      border-bottom: 1px solid var(--studio-tooltip-border);
+      color: var(--studio-tooltip-fg-dim);
+      font-size: 11px;
+    }
+    .task-card__token-summary strong {
+      color: var(--studio-tooltip-fg-strong);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
     }
     .task-card__token-table {
       width: 100%;
@@ -1481,39 +1496,103 @@
       text-align: left;
       font-weight: 500;
       color: var(--studio-tooltip-fg-dim);
-      padding: 2px 8px 2px 0;
+      padding: var(--studio-spacing-1) var(--studio-spacing-2) var(--studio-spacing-1) 0;
     }
     .task-card__token-table td {
       text-align: right;
       font-variant-numeric: tabular-nums;
       color: var(--studio-tooltip-fg-strong);
-      padding: 2px 0;
+      padding: var(--studio-spacing-1) var(--studio-spacing-2) var(--studio-spacing-1) 0;
     }
-    .task-card__token-total-row th,
-    .task-card__token-total-row td {
-      border-top: 1px solid var(--studio-tooltip-border);
-      padding-top: 4px;
-      font-weight: 700;
+    .task-card__token-table th:last-child,
+    .task-card__token-table td:last-child {
+      padding-right: 0;
     }
-    .task-card__token-runs-title {
-      margin-top: 8px;
-      font-size: 11px;
-      font-weight: 700;
+    .task-card__token-table .task-card__numeric,
+    .task-card__token-table--runs th:nth-last-child(-n + 2) {
+      text-align: right;
+    }
+    .task-card__token-table--components {
+      margin-top: var(--studio-spacing-2);
+      table-layout: fixed;
+    }
+    .task-card__token-table--components th,
+    .task-card__token-table--components td {
+      text-align: right;
+    }
+    .task-card__token-details {
+      display: grid;
+      grid-template-columns: minmax(150px, 0.85fr) minmax(280px, 1.5fr);
+      gap: var(--studio-spacing-5);
+      margin-top: var(--studio-spacing-4);
+    }
+    .task-card__token-section {
+      min-width: 0;
+    }
+    .task-card__token-section h4 {
+      margin: 0 0 var(--studio-spacing-1);
       color: var(--studio-tooltip-fg-dim);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
     .task-card__token-table--runs th,
     .task-card__token-table--runs td {
       font-size: 10px;
-      padding: 2px 6px 2px 0;
+    }
+    .task-card__token-table--runs td:nth-last-child(-n + 2) {
+      white-space: nowrap;
+    }
+    .task-card__token-table--runs small {
+      display: block;
+      color: var(--studio-tooltip-fg-dim);
+      font-size: 9px;
+      white-space: nowrap;
+    }
+    .task-card__token-footnote {
+      display: block;
+      margin-top: var(--studio-spacing-3);
+      color: var(--studio-tooltip-fg-dim);
+      font-size: 10px;
+      line-height: 1.4;
+      text-decoration: underline dotted;
+      text-underline-offset: 2px;
+      cursor: help;
+    }
+    .task-card__token-meta {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: var(--studio-spacing-2);
+      margin-top: var(--studio-spacing-2);
+      color: var(--studio-tooltip-fg-dim);
+      font-size: 10px;
+    }
+    .task-card__token-meta strong {
+      overflow: hidden;
+      color: var(--studio-tooltip-fg);
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
     .task-card__token-link {
       display: inline-block;
-      margin-top: 8px;
+      margin-top: var(--studio-spacing-3);
       font-size: 11px;
       color: var(--studio-tooltip-link);
       text-decoration: none;
     }
     .task-card__token-link:hover { text-decoration: underline; }
+
+    @media (max-width: 620px) {
+      .task-card__token-popover {
+        width: calc(100vw - var(--studio-spacing-4));
+      }
+      .task-card__token-details {
+        grid-template-columns: 1fr;
+      }
+    }
 
     /* Compact-card mode: collapse the card to a single dense row showing
        only what is needed to find a task by name. CLI icon + project

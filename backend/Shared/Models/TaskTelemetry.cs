@@ -44,6 +44,12 @@ public record TaskTokenCall
 {
     public DateTime Ts { get; init; }
     public string? Model { get; init; }
+    /// <summary>Stable bus run id when the producer recorded one.</summary>
+    public string? RunId { get; init; }
+    /// <summary>Pipeline or event topic retained for operator-facing attribution.</summary>
+    public string? Topic { get; init; }
+    /// <summary>Purpose grouping derived from participant and topic context.</summary>
+    public string UsageType { get; init; } = TokenUsageTypes.Other;
     /// <summary>Bus participant that produced this token usage row, e.g. <c>agent:codex</c> or <c>orchestrator:Project</c>.</summary>
     public string? ParticipantId { get; init; }
     public long InputTokens { get; init; }

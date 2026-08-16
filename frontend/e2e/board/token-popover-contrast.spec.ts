@@ -81,6 +81,12 @@ const GROUPED = {
 async function installRoutes(page: Page) {
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: false, user: null }),
+    }));
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED) }));
   await page.route('**/api/watch-paths**', (route) =>
@@ -159,15 +165,15 @@ test.describe('Token popover WCAG-AA contrast', () => {
       await setTheme(page, theme);
       await page.waitForTimeout(200);
 
-      const card = page.locator('[data-testid="job-card"]').first();
+      const card = page.locator('[data-testid="task-card"]').first();
       await expect(card).toBeVisible({ timeout: 10_000 });
 
-      const bubble = card.locator('[data-testid="job-card-token-bubble"]');
+      const bubble = card.locator('[data-testid="task-card-token-bubble"]');
       await expect(bubble).toBeVisible({ timeout: 5_000 });
 
       // Open the popover via focus (keyboard-accessible path).
       await bubble.focus();
-      const popover = card.locator('[data-testid="job-card-token-popover"]');
+      const popover = page.locator('[data-testid="task-card-token-popover"]');
       await expect(popover).toBeVisible({ timeout: 3_000 });
       await page.waitForTimeout(100);
 
@@ -179,23 +185,21 @@ test.describe('Token popover WCAG-AA contrast', () => {
       const effectiveBg = compositeOnto(popoverBg, pageBg);
 
       // Sample representative text elements.
-      const titleEl = popover.locator('.job-card__token-popover-title');
-      const thEl = popover.locator('.job-card__token-table th').first();
-      const tdEl = popover.locator('.job-card__token-table td').first();
-      const linkEl = popover.locator('.job-card__token-link');
+      const titleEl = popover.locator('.task-card__token-popover-title');
+      const thEl = popover.locator('.task-card__token-table th').first();
+      const tdEl = popover.locator('.task-card__token-table td').first();
+      const linkEl = popover.locator('.task-card__token-link');
 
       const titleColor = await titleEl.evaluate((el) => getComputedStyle(el).color);
       const thColor = await thEl.evaluate((el) => getComputedStyle(el).color);
       const tdColor = await tdEl.evaluate((el) => getComputedStyle(el).color);
       const linkColor = await linkEl.evaluate((el) => getComputedStyle(el).color);
 
-      // Per-run table rows (if the per-run section is rendered).
-      const runsTitle = popover.locator('.job-card__token-runs-title');
-      let runsTitleColor: string | undefined;
-      if (await runsTitle.isVisible().catch(() => false)) {
-        runsTitleColor = await runsTitle.evaluate((el) => getComputedStyle(el).color);
-      }
-      const runsTd = popover.locator('.job-card__token-table--runs td').first();
+      const sectionTitle = popover.locator('.task-card__token-section h4').first();
+      const sectionTitleColor = await sectionTitle.evaluate((el) => getComputedStyle(el).color);
+      const footnote = popover.locator('.task-card__token-footnote');
+      const footnoteColor = await footnote.evaluate((el) => getComputedStyle(el).color);
+      const runsTd = popover.locator('.task-card__token-table--runs td').first();
       let runsTdColor: string | undefined;
       if (await runsTd.isVisible().catch(() => false)) {
         runsTdColor = await runsTd.evaluate((el) => getComputedStyle(el).color);
@@ -209,9 +213,10 @@ test.describe('Token popover WCAG-AA contrast', () => {
         { name: 'title', color: titleColor },
         { name: 'label (th)', color: thColor },
         { name: 'value (td)', color: tdColor },
+        { name: 'section title', color: sectionTitleColor },
+        { name: 'footnote', color: footnoteColor },
         { name: 'link', color: linkColor },
       ];
-      if (runsTitleColor) checks.push({ name: 'per-run title', color: runsTitleColor });
       if (runsTdColor) checks.push({ name: 'per-run value', color: runsTdColor });
 
       for (const { name, color } of checks) {

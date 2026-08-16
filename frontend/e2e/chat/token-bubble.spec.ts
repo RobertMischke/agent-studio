@@ -56,10 +56,16 @@ interface JobInfoStub {
     entries: {
       ts: string;
       model: string | null;
+      runId?: string;
+      topic?: string;
+      usageType?: 'coding' | 'review' | 'gate' | 'enrichment' | 'orchestration' | 'supporting' | 'other';
+      participantId?: string;
       inputTokens: number;
       outputTokens: number;
       cacheReadTokens: number;
       cacheCreationTokens: number;
+      estimatedApiCostUsd?: number;
+      modelPriced?: boolean;
     }[];
   };
 }
@@ -98,10 +104,12 @@ function jobStub(over: Partial<JobInfoStub>): JobInfoStub {
  * close it so it can't block the hover test.
  */
 async function dismissErrorDialogIfPresent(page: Page): Promise<void> {
-  const overlay = page.locator('app-error-dialog .overlay--error');
-  if (await overlay.isVisible().catch(() => false)) {
-    const close = page.locator('app-error-dialog button').first();
-    await close.click({ trial: false }).catch(() => { /* best-effort */ });
+  const dialog = page.getByTestId('error-dialog');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (await dialog.isVisible().catch(() => false)) {
+      await page.getByTestId('error-dialog-close').click().catch(() => { /* best-effort */ });
+    }
+    await page.waitForTimeout(100);
   }
 }
 
@@ -155,6 +163,16 @@ async function stubGroupedJobs(page: Page, jobs: JobInfoStub[]): Promise<void> {
         contentType: 'application/json',
         body: JSON.stringify({ clientId: 'local-default', defaultCliType: null, defaultModel: null }),
       });
+    }
+    if (/^\/api\/clients\/[^/]+\/telemetry$/.test(p)) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ window: '14d', points: [], findings: [] }),
+      });
+    }
+    if (p === '/api/v1/management/remote-hosts') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     }
     if (p === '/api/environment') {
       return route.fulfill({
@@ -252,9 +270,9 @@ test.describe('Token bubble on job cards', () => {
         lastModel: 'GPT-5 Codex',
         lastUpdate: '2026-05-05T08:30:00Z',
         entries: [
-          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000 }
+          { ts: '2026-05-05T08:00:00Z', runId: 'noisy-card:1', topic: 'codex-turn', usageType: 'coding', participantId: 'agent:codex', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.72, modelPriced: true },
+          { ts: '2026-05-05T08:15:00Z', runId: 'noisy-card:1', topic: 'aspect-code-quality', usageType: 'review', participantId: 'support:code-quality', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.18, modelPriced: true },
+          { ts: '2026-05-05T08:30:00Z', runId: 'noisy-card:2', topic: 'prompt-enrichment', usageType: 'enrichment', participantId: 'support:adhoc', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.35, modelPriced: true }
         ]
       }
     });
@@ -288,8 +306,12 @@ test.describe('Token bubble on job cards', () => {
     await expect(popover.getByTestId('token-row-cache-write')).toContainText('12k');
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
     await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated cost: $1.25');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated - historical list prices');
+    await expect(popover.getByTestId('token-cost-total')).toContainText('$1.25');
+    await expect(popover.getByTestId('token-cost-tooltip')).toHaveText('List prices at run dates.');
+    await expect(popover.getByTestId('token-by-type-table')).toContainText('Coding run');
+    await expect(popover.getByTestId('token-by-type-table')).toContainText('Review run');
+    await expect(popover.getByTestId('token-by-type-table')).toContainText('Enrichment');
+    await expect(popover.locator('.task-card__token-table--runs')).toContainText('$0.72');
     await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
 
@@ -306,7 +328,22 @@ test.describe('Token bubble on job cards', () => {
 
     // Screenshot evidence: bubble + overlay popover in the viewport.
     mkdirSync(SHOTS, { recursive: true });
-    await page.screenshot({ path: `${SHOTS}/card-with-bubble-and-popover.png`, fullPage: false });
+    await page.evaluate(() => {
+      document.documentElement.dataset['studioTheme'] = 'dark';
+      localStorage.setItem('atp.studio.theme', 'dark');
+    });
+    await dismissErrorDialogIfPresent(page);
+    await bubble.focus();
+    await expect(popover).toBeVisible();
+    await page.screenshot({ path: `${SHOTS}/token-usage-popover-after--dark--mocked.png`, fullPage: false });
+    await page.evaluate(() => {
+      document.documentElement.dataset['studioTheme'] = 'light';
+      localStorage.setItem('atp.studio.theme', 'light');
+    });
+    await dismissErrorDialogIfPresent(page);
+    await bubble.focus();
+    await expect(popover).toBeVisible();
+    await page.screenshot({ path: `${SHOTS}/token-usage-popover-after--light--mocked.png`, fullPage: false });
   });
 
   test('tier escalates with spend', async ({ page }) => {

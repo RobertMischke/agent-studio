@@ -174,9 +174,10 @@ public sealed class ProjectTokenReceiptReader
             {
                 Ts = call.Ts,
                 Kind = OrchestratorLogKinds.Observation,
-                Topic = "task-token-receipt",
+                Topic = string.IsNullOrWhiteSpace(call.Topic) ? "task-token-receipt" : call.Topic,
                 Summary = "Token usage recovered from the durable task receipt.",
                 JobId = jobId,
+                RunId = call.RunId,
                 ParticipantId = string.IsNullOrWhiteSpace(call.ParticipantId)
                     ? "agent:task-receipt"
                     : call.ParticipantId,

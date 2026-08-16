@@ -1197,8 +1197,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
+    expect(popover?.querySelector('[data-testid="token-cost-total"]')?.textContent).toContain('$1.25');
+    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('List prices at run dates');
 
     fixture.destroy();
   });
@@ -1554,29 +1554,43 @@ describe('buildTokenBubble', () => {
         {
           ts: '2026-06-09T08:00:00Z',
           model: 'GPT-5 Codex',
+          usageType: 'coding',
           participantId: 'agent:codex',
           inputTokens: 2000,
           outputTokens: 200,
           cacheReadTokens: 1000,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.07,
+          modelPriced: true,
         },
         {
           ts: '2026-06-09T08:05:00Z',
           model: 'Claude Haiku 4.5',
+          usageType: 'review',
           participantId: 'orchestrator:Test',
           inputTokens: 1000,
           outputTokens: 100,
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.02,
+          modelPriced: true,
         },
       ],
     });
 
     expect(bubble?.model).toBe('GPT-5 Codex');
     expect(bubble?.costTooltip).toContain('Estimated cost: $0.09');
+    expect(bubble?.costTooltip).toContain('historical list prices');
+    expect(bubble?.costLabel).toBe('$0.09');
+    expect(bubble?.costFootnote).toBe('List prices at run dates.');
     expect(bubble?.entries.map((entry) => entry.model)).toEqual([
       'GPT-5 Codex',
       'Claude Haiku 4.5',
+    ]);
+    expect(bubble?.entries.map((entry) => entry.costLabel)).toEqual(['$0.07', '$0.02']);
+    expect(bubble?.byType).toEqual([
+      { type: 'coding', label: 'Coding run', calls: 1, total: 3200, costLabel: '$0.07' },
+      { type: 'review', label: 'Review run', calls: 1, total: 1100, costLabel: '$0.02' },
     ]);
   });
 });
