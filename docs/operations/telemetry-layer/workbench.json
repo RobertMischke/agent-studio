@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "telemetry-layer",
+  "title": "Local telemetry layer across organization applications",
+  "summary": "Decision-ready architecture for a local-first telemetry outbox in every organization application, a hybrid file and local-push collector in Agent Studio, and bounded orchestrator rules that turn repeated friction and operational failures into visible, reviewable work.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-16T00:00:00Z",
+  "sourceTaskKeys": [
+    "AGT-2661"
+  ],
+  "relatedTaskKeys": [
+    "AGT-2557",
+    "AGT-2654"
+  ]
+}

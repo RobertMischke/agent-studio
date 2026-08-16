@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local telemetry layer | Decision dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #7a7973;
+    --line: #d8d6cf;
+    --control: #2a78d6;
+    --execution: #087f68;
+    --attention: #a15d18;
+    --problem: #c93736;
+    --control-soft: #eaf1fb;
+    --execution-soft: #e8f4f0;
+    --attention-soft: #f8f0dd;
+    --problem-soft: #fbecec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #99988f;
+      --line: #3d3d3a;
+      --control: #69a8ef;
+      --execution: #58cbb1;
+      --attention: #e0aa54;
+      --problem: #e66767;
+      --control-soft: #1e2a3a;
+      --execution-soft: #1b302b;
+      --attention-soft: #33301e;
+      --problem-soft: #382222;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.62 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { margin: 0 0 10px; color: var(--ink-3); font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+  h1 { margin: 0 0 12px; font-size: 34px; line-height: 1.2; letter-spacing: -.02em; }
+  .lede { max-width: 68ch; margin: 0; color: var(--ink-2); font-size: 18px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 18px; color: var(--ink-3); font-size: 13px; }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { margin: 56px 0 6px; font-size: 24px; scroll-margin-top: 20px; }
+  h2 .no { margin-right: 10px; color: var(--ink-3); font-weight: 600; }
+  h3 { margin: 34px 0 4px; font-size: 18px; }
+  h4 { margin: 0 0 8px; font-size: 15px; }
+  p { max-width: 80ch; }
+  p.dim, .dim { color: var(--ink-2); }
+  a { color: var(--control); text-underline-offset: 3px; }
+  code, .mono { border-radius: 4px; background: var(--surface-3); padding: 1px 5px; font: 13px/1.5 ui-monospace, Consolas, monospace; }
+  .box { margin: 20px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; }
+  .box.control { border-color: color-mix(in srgb, var(--control) 30%, var(--line)); background: var(--control-soft); }
+  .box.execution { border-color: color-mix(in srgb, var(--execution) 30%, var(--line)); background: var(--execution-soft); }
+  .box.attention { border-color: color-mix(in srgb, var(--attention) 35%, var(--line)); background: var(--attention-soft); }
+  .box.problem { border-color: color-mix(in srgb, var(--problem) 30%, var(--line)); background: var(--problem-soft); }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  .decision { display: grid; grid-template-columns: 150px 1fr; gap: 18px; align-items: start; }
+  .decision strong { color: var(--control); }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  ul, ol { padding-left: 22px; }
+  li { max-width: 84ch; margin: 5px 0; }
+  table { width: 100%; margin: 18px 0; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+  th { color: var(--ink-3); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  td b { font-weight: 650; }
+  .table-wrap { overflow-x: auto; }
+  .table-wrap table { min-width: 820px; }
+  .pill { display: inline-block; border-radius: 99px; padding: 2px 10px; font-size: 12px; font-weight: 650; white-space: nowrap; }
+  .pill.current { background: var(--execution-soft); color: var(--execution); }
+  .pill.gap { background: var(--attention-soft); color: var(--attention); }
+  .pill.recommend { background: var(--control-soft); color: var(--control); }
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 16px 18px; }
+  .card h3 { margin-top: 0; }
+  .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { max-width: 88ch; margin-top: 10px; color: var(--ink-2); font-size: 13.5px; }
+  .s-node { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-control { fill: var(--control-soft); stroke: var(--control); rx: 8; }
+  .s-execution { fill: var(--execution-soft); stroke: var(--execution); rx: 8; }
+  .s-attention { fill: var(--attention-soft); stroke: var(--attention); rx: 8; }
+  .s-problem { fill: var(--problem-soft); stroke: var(--problem); rx: 8; }
+  .s-label { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 11px ui-monospace, Consolas, monospace; }
+  .s-flow { fill: none; stroke: var(--ink-3); stroke-width: 1.6; }
+  .s-control-flow { fill: none; stroke: var(--control); stroke-width: 2; }
+  .s-execution-flow { fill: none; stroke: var(--execution); stroke-width: 2; }
+  .legend { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px; color: var(--ink-2); font-size: 13px; }
+  .legend span::before { display: inline-block; width: 20px; height: 4px; margin-right: 7px; border-radius: 2px; background: var(--c); content: ""; vertical-align: middle; }
+  .end-marker { margin-top: 54px; border-top: 1px solid var(--line); padding-top: 18px; color: var(--ink-3); font-size: 13px; }
+  @media (max-width: 760px) {
+    main { padding: 0 18px; }
+    h1 { font-size: 28px; }
+    .toc { columns: 1; }
+    .cards, .decision { grid-template-columns: 1fr; }
+    figure { overflow-x: auto; }
+    figure svg { min-width: 800px; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Decision dossier · organization operations</p>
+  <h1>A local telemetry layer across every organization application</h1>
+  <p class="lede">A shared event contract lets locally used applications report behavior and failures into Agent Studio. A bounded orchestrator consumer turns repeated, evidenced patterns into feature, healing, or decision work without making the event stream itself a workflow engine.</p>
+  <div class="meta">
+    <span><b>Status:</b> decision-pending · decision-ready</span>
+    <span><b>Source:</b> AGT-2661 · operator directive 14 August 2026</span>
+    <span><b>Scope:</b> concept only · no cloud dependency · no implementation</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ol class="toc">
+    <li><a href="#recommendation">Decision in one page</a></li>
+    <li><a href="#current-state">Current-state inventory</a></li>
+    <li><a href="#event-model">Event model and log-level seam</a></li>
+    <li><a href="#privacy">Local-first privacy posture</a></li>
+    <li><a href="#bus-options">Bus architecture options</a></li>
+    <li><a href="#consumption">Orchestrator consumption</a></li>
+    <li><a href="#ops-hub">Agent Studio as operations hub</a></li>
+    <li><a href="#slices">Pilot and rollout slices</a></li>
+    <li><a href="#decisions">Operator decision request</a></li>
+  </ol>
+</nav>
+
+<section id="recommendation">
+  <h2><span class="no">§1</span>Decision in one page</h2>
+  <div class="box control decision">
+    <strong>Recommendation</strong>
+    <div>
+      <p><b>Adopt the hybrid option:</b> every application writes a small, append-only local JSONL outbox first; an Agent Studio collector tails or receives that outbox over an authenticated local endpoint; Agent Studio stores the normalized runtime facts on disk, projects qualifying signals onto the existing Agent Message Bus, and pushes read-model updates to the UI through its existing SignalR hub.</p>
+      <p>The raw runtime stream remains passive evidence. A separate rules and case layer consumes bus messages and may call existing application boundaries to prepare a card, append an Activity item, request a decision, or invoke a pre-approved bounded recovery. Every action has a fingerprint, evidence references, a budget, a receipt, and a terminal.</p>
+    </div>
+  </div>
+  <div class="cards">
+    <article class="card">
+      <h3>Reuse, do not restart</h3>
+      <p>Agent Studio already has the <code>ProductRuntimeEvent</code> envelope, runtime JSONL capture, a project runtime panel, the file-backed Agent Message Bus, token projections, and SignalR fan-out. The new work is cross-app identity, local ingestion, policy, and action receipts.</p>
+    </article>
+    <article class="card">
+      <h3>Keep authority explicit</h3>
+      <p>Telemetry records facts. The orchestrator owns policy. Task creation uses the Task API or the same application service behind it, never direct task-folder writes. Existing runner and Git authorities remain unchanged.</p>
+    </article>
+  </div>
+
+  <figure aria-labelledby="event-flow-caption">
+    <svg viewBox="0 0 1030 340" role="img" aria-label="Recommended end to end telemetry event flow">
+      <defs>
+        <marker id="arrow-flow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="var(--ink-3)"/></marker>
+        <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="var(--control)"/></marker>
+      </defs>
+      <text x="32" y="36" class="s-label">Product plane</text>
+      <rect x="32" y="56" width="178" height="76" class="s-execution"/>
+      <text x="50" y="84" class="s-label">Local application</text>
+      <text x="50" y="107" class="s-sub">structured log call</text>
+      <text x="50" y="124" class="s-tiny">QS · chat · TE · voice · Studio</text>
+      <rect x="258" y="56" width="178" height="76" class="s-node"/>
+      <text x="276" y="84" class="s-label">Local outbox</text>
+      <text x="276" y="107" class="s-sub">append-only JSONL</text>
+      <text x="276" y="124" class="s-tiny">write before transport</text>
+      <path d="M210 94H258" class="s-execution-flow" marker-end="url(#arrow-flow)"/>
+
+      <text x="484" y="36" class="s-label">Agent Studio management plane</text>
+      <rect x="484" y="56" width="178" height="76" class="s-control"/>
+      <text x="502" y="84" class="s-label">Local collector</text>
+      <text x="502" y="107" class="s-sub">tail or HTTP ingest</text>
+      <text x="502" y="124" class="s-tiny">validate · redact · dedupe · ack</text>
+      <rect x="710" y="56" width="280" height="76" class="s-control"/>
+      <text x="728" y="84" class="s-label">Durable runtime stream</text>
+      <text x="728" y="107" class="s-sub">workspace logs/runtime/&lt;app&gt;/day.jsonl</text>
+      <text x="728" y="124" class="s-tiny">raw facts remain passive evidence</text>
+      <path d="M436 94H484" class="s-control-flow" marker-end="url(#arrow-blue)"/>
+      <path d="M662 94H710" class="s-control-flow" marker-end="url(#arrow-blue)"/>
+
+      <rect x="484" y="204" width="178" height="76" class="s-control"/>
+      <text x="502" y="232" class="s-label">Signal adapter</text>
+      <text x="502" y="255" class="s-sub">aggregate and fingerprint</text>
+      <text x="502" y="272" class="s-tiny">artifact ref, not payload copy</text>
+      <rect x="710" y="204" width="132" height="76" class="s-node"/>
+      <text x="728" y="232" class="s-label">Agent bus</text>
+      <text x="728" y="255" class="s-sub">typed signals</text>
+      <text x="728" y="272" class="s-tiny">Activity + Watcher</text>
+      <rect x="890" y="204" width="100" height="76" class="s-attention"/>
+      <text x="908" y="232" class="s-label">Action</text>
+      <text x="908" y="255" class="s-sub">card or</text>
+      <text x="908" y="272" class="s-sub">decision</text>
+      <path d="M850 132V170H573V204" class="s-flow" marker-end="url(#arrow-flow)"/>
+      <path d="M662 242H710" class="s-control-flow" marker-end="url(#arrow-blue)"/>
+      <path d="M842 242H890" class="s-control-flow" marker-end="url(#arrow-blue)"/>
+      <text x="32" y="320" class="s-sub">Failure behavior: the app keeps writing locally while Agent Studio is offline; replay keeps original event time and a stable event id.</text>
+    </svg>
+    <figcaption id="event-flow-caption"><b>Recommended event flow.</b> Local durability precedes transport. Agent Studio receives facts, retains a referenceable evidence stream, and derives only actionable, bounded signals onto the existing Agent Message Bus.</figcaption>
+  </figure>
+</section>
+
+<section id="current-state">
+  <h2><span class="no">§2</span>Current-state inventory</h2>
+  <p>The repository already contains two distinct observability planes. Product Runtime Observability records what built software did. The Agent Message Bus records which agent, supervisor, runtime component, or orchestrator acted and why. This dossier keeps that separation and adds the missing cross-application collection and action loop.</p>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Existing signal</th><th>Grounded implementation</th><th>Where it lands and who reads it</th><th>Gap for this vision</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Product runtime events</b><br><span class="pill current">implemented substrate</span></td>
+        <td><code>docs/app/schemas/product-runtime-event.schema.json</code>; <code>backend/Features/Runtime/RuntimeEventWriter.cs</code>, <code>ProductRuntimeEventStore.cs</code>, <code>RuntimeEventEndpoints.cs</code>; <code>frontend/e2e/helpers/runtime-capture.ts</code>.</td>
+        <td>Job or workspace JSONL under <code>logs/runtime/</code>; <code>GET /api/runtime/{project}/events</code>; <code>project-product-runtime-panel.component.ts</code> renders errors, latency, counters, timelines, and malformed-line warnings.</td>
+        <td>Build-bench and project scoped. It does not yet give every organization app a registered app identity, acknowledged local transport, or an automatic case-to-card policy.</td>
+      </tr>
+      <tr>
+        <td><b>Agent Message Bus</b><br><span class="pill current">implemented substrate</span></td>
+        <td><code>backend/Features/Bus/AgentMessageBusStore.cs</code>, <code>AgentMessageBusBridge.cs</code>, and <code>docs/system/architecture/bus/agent-message-bus.md</code>.</td>
+        <td>Day-partitioned <code>&lt;workspace&gt;/logs/bus/&lt;project|_workspace&gt;/*.jsonl</code>, in-memory projections, <code>/api/bus</code> queries, token aggregates, and <code>busMessageAdded</code> SignalR fan-out wired in <code>backend/Host/Program.cs</code>.</td>
+        <td>Most producers are Agent Studio internals. Runtime facts are joined by artifact reference, but there is no organization-app collector or general friction and error pattern policy.</td>
+      </tr>
+      <tr>
+        <td><b>Git process telemetry</b></td>
+        <td><code>backend/Features/Git/GitProcessTelemetry.cs</code>, invoked by <code>GitService</code>, task, publishing, and docs services.</td>
+        <td>Structured application logs: request label, spawn count, summed Git time, file reads, wall time, command breakdown; individual spawns over 1500 ms log a warning.</td>
+        <td>Useful measurements are log-only and Agent Studio-specific. They are not durable product runtime events or cross-app signals.</td>
+      </tr>
+      <tr>
+        <td><b>Token ledgers and <code>tokenSummary</code></b></td>
+        <td><code>backend/Features/Tokens/ITokenAggregator.cs</code>, bus-backed readers, <code>RemoteTokenReceiptService.cs</code>, and <code>TaskMutationService.SetRemoteTokenSummaryOnFolder</code>.</td>
+        <td><code>kind=token-usage</code> bus records plus durable per-task <code>task.json.tokenSummary</code> receipts. Project, workspace, task, and pipeline cost views consume the same attributed rows.</td>
+        <td>This is a strong model for replay and aggregation, but it is one telemetry category rather than a common product event contract.</td>
+      </tr>
+      <tr>
+        <td><b>Runner journals</b></td>
+        <td><code>backend/Features/Diagnostics/RunnerEventJournal.cs</code>, <code>RunnerEventSource.cs</code>, and <code>runner/HostOrchestratorJournal.cs</code>.</td>
+        <td>Per-task <code>logs/runner-events.jsonl</code> carries typed lifecycle and diagnostics. The host-local journal durably retains accepted permits, local queue order, and the unacknowledged report.</td>
+        <td>These streams protect execution authority. They should be referenced by telemetry cases, not folded into a looser product-event store.</td>
+      </tr>
+      <tr>
+        <td><b>Review evidence</b></td>
+        <td><code>backend/Features/Runner/ReviewEvidenceContext.cs</code> and the pipeline domain contract.</td>
+        <td>Review prompts receive the full branch range, a bounded <code>results/</code> file inventory with excerpts, and the card mode. Remote review also persists an exact review subject.</td>
+        <td>Evidence is task-centric and post-run. Telemetry cases need to cite it when present without copying diffs or artifacts into events.</td>
+      </tr>
+      <tr>
+        <td><b>Runtime prompt call telemetry</b></td>
+        <td><code>backend/Features/Prompts/PromptCallTelemetryService.cs</code> and <code>docs/system/contracts/runtime-prompts.md</code>.</td>
+        <td><code>&lt;TaskRepository&gt;/logs/prompt-calls.jsonl</code> records prompt id, content-hash version, source, estimated input tokens, model, project, and step. The catalogue reports 7-day use, 14-day history, cost, version churn, and prompts unused for 30 days.</td>
+        <td>Append-only version-aware telemetry is proven, but it has a dedicated shape and no generic case rules.</td>
+      </tr>
+      <tr>
+        <td><b>Quality Studio run records</b></td>
+        <td><code>backend/Features/Pipeline/PipelineExecutionLog.cs</code> and <code>RemotePipelineExecutionProjection.cs</code> persist and project task pipeline runs, including QS cards managed as an Agent Studio project.</td>
+        <td>Task folders, session timelines, pipeline execution records, review receipts, and token summaries are visible in Agent Studio.</td>
+        <td>These describe Agent Studio's execution of QS work. They are not telemetry from a person using the Quality Studio application. The pilot must add that missing product-side signal.</td>
+      </tr>
+      <tr>
+        <td><b>Alarms and banners</b></td>
+        <td><code>backend/Features/Pipeline/PipelineHealthService.cs</code>, <code>runner/TaskServerConnectivityMonitor.cs</code>, and shell banner components including <code>workspace-banner.html</code>.</td>
+        <td>Deduplicated pipeline alarms reach the orchestrator log and project health UI. Connectivity transitions are rate-limited. The workspace retains acute starvation and integration banners while ordinary verdicts use notifications.</td>
+        <td>Alarm sources and presentations are specialized. A common severity and case fingerprint would let the same Activity and needs-decision surfaces represent cross-app incidents.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="box attention">
+    <h4>Inventory conclusion</h4>
+    <p>This repository contains no grounded evidence that Quality Studio, the chat library, the TE website, or voice-lint currently emit this common envelope during ordinary local use. Their rollout status must therefore begin as <b>not integrated</b>, not as “no telemetry exists.” Each pilot starts with a small source-repository inventory before selecting event names.</p>
+  </div>
+</section>
+
+<section id="event-model">
+  <h2><span class="no">§3</span>Event model and the structured-log seam</h2>
+  <p>Do not introduce a third unrelated envelope. Evolve <code>ProductRuntimeEvent</code> additively into the organization-app fact contract and keep <code>AgentMessage</code> as the action and actor conversation contract. Existing readers ignore additive fields; the collector supplies missing environment context only when it can do so without guessing.</p>
+
+  <h3>Proposed event shape</h3>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Field group</th><th>Required content</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td><b>Identity</b></td><td><code>schemaVersion</code>, stable <code>eventId</code>, UTC <code>timestamp</code>, <code>source.appId</code>, optional app version/build, component, instance id, environment.</td><td>Deduplication, replay, rollout comparison, and clear source ownership.</td></tr>
+      <tr><td><b>Classification</b></td><td><code>event</code>, <code>category</code> from <code>usage | friction | operation | performance | error | security | lifecycle</code>, existing <code>level</code>, subsystem, operation, status.</td><td>Event names remain product-owned; categories and severity are common policy inputs.</td></tr>
+      <tr><td><b>Actor</b></td><td><code>actor.kind</code> from <code>human | system | agent | automation</code>; optional local pseudonymous <code>actor.id</code>. Never infer a human actor when the app does not know.</td><td>Distinguishes user friction from background churn without requiring identity export.</td></tr>
+      <tr><td><b>Context</b></td><td>Existing correlation, trace, project, job, run, and domain task ids plus <code>sessionId</code>, feature or command key, and typed <code>refs[]</code> to task, run, artifact, runtime-event line, or bus message.</td><td>Lets a case join facts to work without copying source, prompt, or artifact content.</td></tr>
+      <tr><td><b>Measurement</b></td><td>Existing duration, error, tags, and a small allowlisted payload. Add <code>count</code> only for producer-side rollups.</td><td>Supports latency, error grouping, and repeated-friction rules while keeping records bounded.</td></tr>
+      <tr><td><b>Transport</b></td><td><code>recordedAt</code>, optional collector version, and replay flag are collector metadata, not producer facts.</td><td>Preserves the original event time and makes delayed replay visible.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Which log levels become telemetry</h3>
+  <p>Structured logging is the seam, but “log everything onto the bus” is not the policy. A logger adapter accepts an explicit event name and structured fields. Plain prose remains a diagnostic log.</p>
+  <table>
+    <thead><tr><th>Log level</th><th>Local runtime stream</th><th>Agent Message Bus and action policy</th></tr></thead>
+    <tbody>
+      <tr><td><code>Trace</code> / <code>Debug</code></td><td>Off by default. Capture only in an operator-enabled diagnostic window with short retention.</td><td>Never forwarded by default. A case may cite the local file after an incident.</td></tr>
+      <tr><td><code>Info</code></td><td>Capture only explicit named usage, lifecycle, performance, or domain events. Do not convert every information log.</td><td>Aggregate silently. Emit a bus observation only when a declared rule reaches its threshold, such as repeated friction across sessions.</td></tr>
+      <tr><td><code>Warn</code></td><td>Capture explicit structured warnings. Preserve recovery status and retryability.</td><td>One warning is normally an observation. Repetition, duration, or a declared acute code opens or updates a case.</td></tr>
+      <tr><td><code>Error</code></td><td>Always capture a structured error event when the error crosses an application boundary. Keep the full sensitive diagnostic artifact local.</td><td>Emit a Problem observation immediately; cluster rules decide whether to prepare a healing card or request a decision.</td></tr>
+      <tr><td><code>Fatal</code></td><td>Always capture and flush synchronously within a bounded shutdown allowance.</td><td>Open an acute case immediately, surface it in Activity, and require a decision unless an already-approved recovery recipe applies.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box execution">
+    <h4>Fail-open application behavior</h4>
+    <p>Telemetry must not break the product action it observes. Producer serialization or transport failure writes one bounded local diagnostic and continues. The exception is audit-grade security events explicitly designated by a product's own policy; this dossier does not create such designations.</p>
+  </div>
+</section>
+
+<section id="privacy">
+  <h2><span class="no">§4</span>Local-first privacy posture</h2>
+  <p><b>Local-first means no default egress.</b> App outboxes, the collector, Agent Studio's runtime store, the Agent Message Bus, rules, cards, and Activity projection all operate on the same machine or explicitly configured private local network. There is no cloud broker, vendor account, analytics SDK, or background upload dependency.</p>
+  <div class="cards">
+    <article class="card">
+      <h3>Never enter telemetry</h3>
+      <ul>
+        <li>Secrets, credentials, access tokens, cookies, authorization headers, or encryption keys.</li>
+        <li>Prompt bodies, chat messages, source code, diffs, file contents, clipboard contents, or free-form form values.</li>
+        <li>Email bodies or addresses, voice audio, voice transcripts, contact data, or user-authored website content.</li>
+        <li>Full URLs with query strings, raw database statements with values, or unbounded request and response bodies.</li>
+        <li>Stable device fingerprints or external user identifiers.</li>
+      </ul>
+    </article>
+    <article class="card">
+      <h3>Allowed with controls</h3>
+      <ul>
+        <li>Stable event and feature keys, coarse route templates, outcome codes, durations, counts, and bounded error types.</li>
+        <li>A local pseudonymous actor id when cross-session deduplication is required. It never leaves the local installation.</li>
+        <li>Truncated stack data in the local raw stream. Bus signals carry a fingerprint and artifact reference, not the stack.</li>
+        <li>Explicit task, run, and artifact references already governed by Agent Studio's evidence model.</li>
+      </ul>
+    </article>
+  </div>
+  <p>Redaction happens at the producer before the first disk write. The collector validates an allowlist and rejects or quarantines unknown oversized fields. Local HTTP binds to loopback or a local socket, authenticates the app registration, and does not listen on a public interface by default. Per-app retention is visible and configurable; deletion removes local telemetry and derived cases only according to a documented evidence-retention policy.</p>
+</section>
+
+<section id="bus-options">
+  <h2><span class="no">§5</span>Bus architecture options</h2>
+
+  <figure aria-labelledby="bus-options-caption">
+    <svg viewBox="0 0 1030 390" role="img" aria-label="Comparison of file first, local push, and hybrid bus options">
+      <defs><marker id="arrow-opt" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="var(--ink-3)"/></marker></defs>
+      <text x="34" y="34" class="s-label">A · File first</text>
+      <rect x="34" y="54" width="180" height="66" class="s-execution"/>
+      <text x="52" y="82" class="s-label">App JSONL</text><text x="52" y="103" class="s-sub">one local outbox</text>
+      <rect x="278" y="54" width="180" height="66" class="s-node"/>
+      <text x="296" y="82" class="s-label">Tail collector</text><text x="296" y="103" class="s-sub">poll or file watch</text>
+      <path d="M214 87H278" class="s-flow" marker-end="url(#arrow-opt)"/>
+      <text x="500" y="82" class="s-sub">Strong offline behavior · slower discovery · path registration</text>
+
+      <text x="34" y="166" class="s-label">B · Local push</text>
+      <rect x="34" y="186" width="180" height="66" class="s-execution"/>
+      <text x="52" y="214" class="s-label">App adapter</text><text x="52" y="235" class="s-sub">HTTP batch</text>
+      <rect x="278" y="186" width="180" height="66" class="s-control"/>
+      <text x="296" y="214" class="s-label">Studio endpoint</text><text x="296" y="235" class="s-sub">validate and fan out</text>
+      <path d="M214 219H278" class="s-flow" marker-end="url(#arrow-opt)"/>
+      <text x="500" y="214" class="s-sub">Low latency · simple discovery · loses facts if Studio is unavailable</text>
+
+      <rect x="20" y="294" width="990" height="76" class="s-control"/>
+      <text x="34" y="286" class="s-label">C · Hybrid, recommended</text>
+      <rect x="44" y="309" width="170" height="46" class="s-execution"/>
+      <text x="62" y="337" class="s-label">App JSONL outbox</text>
+      <rect x="278" y="309" width="170" height="46" class="s-node"/>
+      <text x="296" y="337" class="s-label">Batch + ack cursor</text>
+      <rect x="512" y="309" width="170" height="46" class="s-control"/>
+      <text x="530" y="337" class="s-label">Studio collector</text>
+      <rect x="746" y="309" width="230" height="46" class="s-control"/>
+      <text x="764" y="337" class="s-label">Runtime store + bus projection</text>
+      <path d="M214 332H278M448 332H512M682 332H746" class="s-flow" marker-end="url(#arrow-opt)"/>
+    </svg>
+    <figcaption id="bus-options-caption"><b>Three local-only transport choices.</b> The hybrid retains the file-first source while gaining immediate delivery and explicit acknowledgement when Agent Studio is available.</figcaption>
+  </figure>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Criterion</th><th>A · Per-app file plus collector</th><th>B · Local HTTP / SignalR push</th><th>C · File buffer plus push</th></tr></thead>
+    <tbody>
+      <tr><td><b>Offline and crash safety</b></td><td>Strong. The event exists before collection.</td><td>Weak unless every app reimplements a queue.</td><td><b>Strong.</b> The outbox is the queue; push is an optimization.</td></tr>
+      <tr><td><b>Latency</b></td><td>Bounded by watcher or poll interval.</td><td>Immediate while Agent Studio is reachable.</td><td><b>Immediate when online, replayed when offline.</b></td></tr>
+      <tr><td><b>Operational complexity</b></td><td>Collector must discover paths, handle rotation, and recover watcher loss.</td><td>Endpoint and app registration are simple, but delivery failure logic leaks into each app.</td><td>One small shared adapter plus one collector acknowledgement protocol.</td></tr>
+      <tr><td><b>File-first fit</b></td><td>Excellent.</td><td>Poor as a sole source.</td><td><b>Excellent.</b></td></tr>
+      <tr><td><b>Reviewability</b></td><td>Human-readable and portable. “Git-friendly” means diffable and exportable, not that high-volume logs belong in product source commits.</td><td>Only after Agent Studio persists the request.</td><td><b>Readable at the app and Studio boundaries.</b></td></tr>
+      <tr><td><b>Recommendation</b></td><td>Acceptable fallback for apps that cannot push.</td><td>Reject as the only transport.</td><td><span class="pill recommend">approve</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Hybrid contract</h3>
+  <ol>
+    <li>The app appends a valid event with a stable <code>eventId</code> to its local outbox before returning from the telemetry adapter.</li>
+    <li>The adapter batches unacknowledged rows to an authenticated Agent Studio loopback endpoint. File tailing remains available for simple tools.</li>
+    <li>The collector validates schema and privacy limits, deduplicates by <code>(appId, eventId)</code>, preserves original time, and appends to Agent Studio's <code>logs/runtime/&lt;appId&gt;/</code> stream.</li>
+    <li>The collector acknowledges the highest contiguous outbox cursor. The app rotates only acknowledged segments after its local retention window.</li>
+    <li>A signal adapter aggregates and fingerprints relevant runtime facts, then appends a small <code>AgentMessage</code> with a <code>runtime-event</code> artifact reference. It does not copy the raw payload.</li>
+    <li>Agent Studio's existing SignalR path fans the bus update to connected UI clients. Reconnect always rehydrates from disk-backed projections.</li>
+  </ol>
+</section>
+
+<section id="consumption">
+  <h2><span class="no">§6</span>How the orchestrator turns events into action</h2>
+  <p>The action loop follows the Global Orchestrator Watcher dossier, AGT-2557 / AGT-W15: deterministic sensors first, one durable case per fingerprint, bounded analysis only when needed, explicit authority classes, and Activity as the shared chronological surface. Telemetry broadens the Watcher's trigger catalogue; it does not bypass runner or task policy.</p>
+
+  <figure aria-labelledby="consumption-loop-caption">
+    <svg viewBox="0 0 1030 340" role="img" aria-label="Telemetry consumption and action loop">
+      <defs><marker id="arrow-loop" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="var(--control)"/></marker></defs>
+      <rect x="38" y="120" width="154" height="76" class="s-node"/>
+      <text x="56" y="148" class="s-label">Facts</text><text x="56" y="171" class="s-sub">runtime events</text><text x="56" y="188" class="s-tiny">immutable · local</text>
+      <rect x="242" y="120" width="154" height="76" class="s-control"/>
+      <text x="260" y="148" class="s-label">Pattern rule</text><text x="260" y="171" class="s-sub">window + threshold</text><text x="260" y="188" class="s-tiny">pure and tested</text>
+      <rect x="446" y="120" width="154" height="76" class="s-control"/>
+      <text x="464" y="148" class="s-label">Watcher case</text><text x="464" y="171" class="s-sub">fingerprint + evidence</text><text x="464" y="188" class="s-tiny">one active terminal</text>
+      <rect x="650" y="42" width="154" height="76" class="s-execution"/>
+      <text x="668" y="70" class="s-label">Observe</text><text x="668" y="93" class="s-sub">Activity update</text><text x="668" y="110" class="s-tiny">no mutation</text>
+      <rect x="650" y="130" width="154" height="76" class="s-attention"/>
+      <text x="668" y="158" class="s-label">Prepare</text><text x="668" y="181" class="s-sub">draft card</text><text x="668" y="198" class="s-tiny">Task API boundary</text>
+      <rect x="650" y="218" width="154" height="76" class="s-problem"/>
+      <text x="668" y="246" class="s-label">Escalate</text><text x="668" y="269" class="s-sub">needs-decision</text><text x="668" y="286" class="s-tiny">or approved rescue</text>
+      <rect x="854" y="120" width="138" height="76" class="s-node"/>
+      <text x="872" y="148" class="s-label">Receipt</text><text x="872" y="171" class="s-sub">verify terminal</text><text x="872" y="188" class="s-tiny">cooldown · resolve</text>
+      <path d="M192 158H242M396 158H446M600 158H626V80H650M600 158H650M600 158H626V256H650M804 80H828V158H854M804 168H854M804 256H828V158H854" class="s-control-flow" marker-end="url(#arrow-loop)"/>
+      <path d="M923 196V316H319V196" class="s-flow" marker-end="url(#arrow-loop)"/>
+      <text x="436" y="330" class="s-sub">Later facts update or resolve the same fingerprinted case</text>
+    </svg>
+    <figcaption id="consumption-loop-caption"><b>Consumption loop.</b> Rules create cases, cases choose an authority-bounded action, and receipts close the loop. Repeated events update the existing case instead of producing duplicate cards.</figcaption>
+  </figure>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Pattern</th><th>Pilot rule and fingerprint</th><th>Action</th><th>Guardrails and terminal</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Repeated usage friction</b></td>
+        <td>At least 5 <code>category=friction</code> events across 3 local sessions within 7 days for the same <code>appId + featureKey + reasonCode</code>.</td>
+        <td>Prepare one feature card in Preparation with count, time window, affected versions, and evidence references. Publish an Activity action receipt.</td>
+        <td>No user text. Thirty-day cooldown after dismissal. New evidence updates the existing draft. Terminal: card prepared, operator dismissed, or signal expired.</td>
+      </tr>
+      <tr>
+        <td><b>Error cluster</b></td>
+        <td>At least 3 Error events within 15 minutes, or one Fatal event. Fingerprint <code>appId + event + error.type/code + normalized-stack-hash + appVersion</code>.</td>
+        <td>Open a Problem case. Prepare a healing card when the evidence is sufficient; otherwise publish <code>needs-decision</code>. A known, approved A1 recipe may intervene once.</td>
+        <td>No automatic code edit. One active case per fingerprint. Recovery events close the case only after a quiet verification window.</td>
+      </tr>
+      <tr>
+        <td><b>Performance regression</b></td>
+        <td>At least 20 successful samples and p95 above the declared operation budget in 2 consecutive windows, grouped by app, operation, and version.</td>
+        <td>Activity observation first. Prepare a performance card only after the second breached window.</td>
+        <td>No threshold is inferred from one run. Version change resets the baseline but links the prior case.</td>
+      </tr>
+      <tr>
+        <td><b>Acute operational alarm</b></td>
+        <td>Fatal, security-designated, route unavailable beyond its grace period, or a Watcher rule with declared acute severity.</td>
+        <td>Persistent Activity Problem plus needs-decision. Existing alarm banners remain reserved for acute current state.</td>
+        <td>Rate-limited transitions, not polling noise. Resolution requires an observed recovery fact and a receipt.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Existing consumers prove the control shape</h3>
+  <p><b>AGT-2654 is the first productive guardian slice.</b> Visual QA captures exact-checkout screenshots, uses a bounded classifier, lets pure <code>VisualQaPolicy</code> grant exactly one automatic defect steer, counts prior use from durable verdict receipts, and hands repeated or unavailable cases to Human Review. Telemetry-driven actions should copy that control structure: the model may summarize evidence, but pure policy owns thresholds, budgets, and lane-affecting actions.</p>
+  <p>The same visual-QA and steered-retry machinery becomes a consumer of telemetry rather than a special exception. Its <code>visual-qa-clear-defect</code> and <code>visual-qa-unavailable</code> receipts can enter the Watcher case store; wider telemetry cases can reuse the continuation-note boundary only when an approved recipe and retry budget exist.</p>
+</section>
+
+<section id="ops-hub">
+  <h2><span class="no">§7</span>Agent Studio as the organization operations hub</h2>
+  <div class="box control">
+    <h4>Positioning</h4>
+    <p>Agent Studio is the convergence point for management layers on top of coding work. It coordinates delivery and promotion, presents telemetry and alarms, runs the orchestrator and guardian policies, and keeps action receipts across all organization products. CI/CD, telemetry, and operations gravitate here because they all need the same project registry, task identity, evidence, authority, and Activity surface.</p>
+  </div>
+
+  <table>
+    <thead><tr><th>Agent Studio owns</th><th>Each product continues to own</th></tr></thead>
+    <tbody>
+      <tr><td>Organization app registry, local ingestion authentication, schema validation, redaction enforcement, dedupe, retention status, and collector health.</td><td>Where meaningful events occur, stable product event names, feature keys, error codes, product-local redaction, and proportional instrumentation.</td></tr>
+      <tr><td>Durable cross-app runtime projections, Agent Message Bus signals, Activity, alarms, needs-decision cases, task preparation, and action receipts.</td><td>Domain behavior and analysis. Quality Studio keeps its analysis core and run semantics; Agent Studio consumes facts and manages resulting work.</td></tr>
+      <tr><td>Promotion train visibility, exact-SHA gate evidence, actions hygiene, cross-project orchestration, guardian budgets, and operator control.</td><td>Build and test commands, release artifacts, app-specific health checks, and domain-safe recovery primitives.</td></tr>
+      <tr><td>Common envelope contract and compatibility tests.</td><td>Raw sensitive data. The chat library keeps message bodies; voice-lint keeps audio and transcripts; the TE website keeps form content out of telemetry.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Boundary against a central “god service”</h3>
+  <ul>
+    <li>Agent Studio does not become the runtime dependency for an app to function. Outbox writes are local and fail open.</li>
+    <li>Agent Studio does not execute Quality Studio analyses, interpret chat content, process audio, or own website domain logic.</li>
+    <li>The collector does not become a cloud relay. Remote or production telemetry is a later decision with a separate threat model.</li>
+    <li>The bus remains a record and signal layer, not a workflow engine. Orchestrator actions call existing public application boundaries and leave receipts.</li>
+    <li>CI/CD remains exact-SHA and pipeline owned. Telemetry may detect or explain a problem; it cannot redefine a green gate.</li>
+  </ul>
+</section>
+
+<section id="slices">
+  <h2><span class="no">§8</span>Pilot and rollout slices</h2>
+  <div class="box execution">
+    <h4>Recommended pilot: Quality Studio, one friction event</h4>
+    <p>Quality Studio is the best first app because it already has durable run concepts and is already managed as an Agent Studio project, while its analysis core remains a clean product boundary. The pilot emits only <code>analysis.run.retry-requested</code> with <code>category=friction</code>, feature or analysis-mode key, reason code, session id, outcome, app version, and duration. It contains no analyzed source, prompt, report, or user text.</p>
+  </div>
+
+  <table>
+    <thead><tr><th>Slice</th><th>Scope</th><th>Acceptance</th></tr></thead>
+    <tbody>
+      <tr><td><b>T0 · Contract fixture</b></td><td>Freeze the additive event fields, app registration, privacy allowlist, outbox rotation, ingest batch, acknowledgement, dedupe, and case receipt shapes.</td><td>Fixtures cover online, offline replay, duplicate batch, torn final line, rejected sensitive field, clock skew, version change, and collector restart.</td></tr>
+      <tr><td><b>T1 · QS emitter</b></td><td>Instrument the one retry-requested seam and write the local JSONL outbox. No other QS events.</td><td>A local retry creates one valid, inspectable record and normal application behavior is unchanged if the telemetry write fails.</td></tr>
+      <tr><td><b>T2 · Hybrid transport</b></td><td>Register QS, batch locally, ingest into Agent Studio, acknowledge, replay after downtime, and expose collector health.</td><td>Emit while Studio is stopped, restart Studio, and prove exactly one runtime fact with original timestamp and no cloud traffic.</td></tr>
+      <tr><td><b>T3 · Signal and card</b></td><td>Apply the 5 events / 3 sessions / 7 days pilot rule, publish one bus observation, open one Watcher case, and create one feature card through the Task API boundary.</td><td>The card contains counts and references only, lands in Preparation, is deduplicated on replay, updates on new evidence, and has an Activity receipt.</td></tr>
+      <tr><td><b>T4 · Shadow evaluation</b></td><td>Run 30 days in prepare-only mode. Operator accepts, edits, or dismisses each suggested card.</td><td>Report precision, duplicate rate, time from threshold to visibility, data rejections, collector gaps, and operator reversals before adding a second event category.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Rollout order after the pilot</h3>
+  <ol>
+    <li><b>Agent Studio dogfood.</b> Convert selected existing signals, starting with <code>GitProcessTelemetry</code> slow operations and one pipeline alarm, into the common runtime fact model without removing their current sinks.</li>
+    <li><b>Chat library.</b> Adopt usage and error metadata only. Never emit message bodies, prompts, participant names, or attachments. This proves a reusable library integration across host applications.</li>
+    <li><b>voice-lint.</b> Emit rule ids, operation durations, outcome codes, and counts. Audio, transcripts, recognized text, and file contents never enter the outbox.</li>
+    <li><b>TE website local preview.</b> Cover local development and preview flows first. Production visitor analytics remain out of scope because they would violate the current local-only decision and need consent plus deployment architecture.</li>
+    <li><b>Second categories across all apps.</b> Add error clustering only after each app passes the privacy and replay fixture suite. Add autonomous recovery only recipe by recipe under Watcher promotion evidence.</li>
+  </ol>
+</section>
+
+<section id="decisions">
+  <h2><span class="no">§9</span>Operator decision request</h2>
+  <div class="box attention">
+    <h4>Approve or amend this package</h4>
+    <ol>
+      <li><b>Architecture:</b> approve the hybrid file-first outbox plus authenticated local push, with Agent Studio as collector and operations hub and no cloud dependency.</li>
+      <li><b>Contracts:</b> approve additive evolution of <code>ProductRuntimeEvent</code> for product facts and continued use of <code>AgentMessage</code> for derived signals and action conversation.</li>
+      <li><b>Authority:</b> approve passive raw events, deterministic case rules, task creation only through the Task API boundary, and no automatic code edits. Existing A1 recipes remain separately budgeted.</li>
+      <li><b>Privacy:</b> approve producer-side allowlist redaction, the explicit never-collect list, local-only actor pseudonyms, and reference-only links to sensitive evidence.</li>
+      <li><b>Pilot:</b> approve Quality Studio and the single <code>analysis.run.retry-requested</code> friction event through one deduplicated Preparation card, followed by 30 days of shadow evaluation.</li>
+      <li><b>Positioning:</b> approve Agent Studio as the management and operations layer for CI/CD, telemetry, alarms, and orchestration across organization products while domain cores remain product-owned.</li>
+    </ol>
+  </div>
+  <p><b>Recommended answer:</b> approve all six items. They activate existing file-first observability and bus investments, preserve application independence and privacy, and add action only behind the same durable, bounded policy structure already proven by the visual guardian.</p>
+  <p class="dim">Related contracts: <a href="../runtime/observability.md">Product Runtime Observability</a>, <a href="../../system/architecture/bus/agent-message-bus.md">Agent Message Bus</a>, <a href="../orchestrator-waechter/index.html">Global Orchestrator Watcher</a>, <a href="../../system/contracts/ui-task-pipeline.md">UI task iteration and visual QA</a>, and <a href="../develop-main-promotion.md">develop to main promotion</a>.</p>
+</section>
+
+<p class="end-marker">Decision dossier as of 16 August 2026 · Source AGT-2661 · concept only · no implementation changes.</p>
+
+</main>
+</body>
+</html>
