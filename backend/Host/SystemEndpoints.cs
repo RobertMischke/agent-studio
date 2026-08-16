@@ -28,7 +28,7 @@ public static class SystemEndpoints
         // Returns flags that vary by per-checkout local config (appsettings.Local.json).
         // The frontend reads this before bootstrap to decide whether to show the DEV
         // banner and swap the PWA icon / favicon to the dev variants.
-        app.MapGet("/api/environment", (IConfiguration config) =>
+        app.MapGet("/api/environment", (IConfiguration config, AgentStudio.PublicDemo.PublicEdgeContract publicDemoContract) =>
         {
             var isDev = config.GetValue<bool>("Environment:IsDev");
             var devTools = new
@@ -36,7 +36,10 @@ public static class SystemEndpoints
                 updateStableEnabled = config.GetValue<bool>("DevTools:UpdateStableEnabled"),
                 deleteE2EJobsEnabled = config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled")
             };
-            return Results.Ok(new { isDev, devTools });
+            // W34 S4. The shell reads the same contract the edge enforces, so the
+            // read-only explanation and the denial behaviour cannot drift apart.
+            var publicDemo = AgentStudio.PublicDemo.PublicDemoEdgeStatus.From(config, publicDemoContract);
+            return Results.Ok(new { isDev, devTools, publicDemo });
         });
 
         // Runtime identity comes only from the immutable manifest copied beside

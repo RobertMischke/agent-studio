@@ -74,14 +74,14 @@ public static class EndpointMapping
         app.MapTestRunEndpoints();
         app.MapProjectGraphEndpoints();
         app.MapPublishEndpoints();
-        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapFilesystemLayerEndpoints();
+        if (!SecurityProfiles.IsHardened(app.Configuration)) app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
-        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapDevToolsEndpoints();
+        if (!SecurityProfiles.IsHardened(app.Configuration)) app.MapDevToolsEndpoints();
         app.MapAdminConfigEndpoints();
         app.MapSupervisorEndpoints();
-        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapDiagnosticsEndpoints();
-        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapInternalProbeEndpoints();
+        if (!SecurityProfiles.IsHardened(app.Configuration)) app.MapDiagnosticsEndpoints();
+        if (!SecurityProfiles.IsHardened(app.Configuration)) app.MapInternalProbeEndpoints();
         app.MapTitleGenerationEndpoints();
         app.MapPromptEnhancementEndpoints();
         app.MapAdHocUsageEndpoints();
@@ -94,6 +94,7 @@ public static class EndpointMapping
         app.MapProjectChatEndpoints();
         app.MapConceptDocsEndpoints();
         app.MapGlobalSearchEndpoints();
+        app.MapPublicDemoEndpoints();
         // Interim v1 adapters such as AGT-2325's review plane must remain
         // inside this ownership branch. Never mount a local v1 writer beside
         // the standalone proxy.

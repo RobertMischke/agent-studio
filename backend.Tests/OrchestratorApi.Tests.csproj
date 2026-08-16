@@ -95,6 +95,7 @@
     <Using Include="AgentStudio.Projection" />
     <Using Include="AgentStudio.Projects" />
     <Using Include="AgentStudio.Prompts" />
+    <Using Include="AgentStudio.PublicDemo" />
     <Using Include="AgentStudio.Registry" />
     <Using Include="AgentStudio.RegressionRadar" />
     <Using Include="AgentStudio.Review" />

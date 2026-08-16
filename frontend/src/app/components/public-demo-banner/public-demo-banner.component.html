@@ -1,0 +1,10 @@
+@if (demo.readOnly()) {
+  <app-notification
+    kind="info"
+    layout="banner"
+    ariaLive="polite"
+    testid="public-demo-banner">
+    <strong data-testid="notice-bar-headline">Public demo, read-only.</strong>
+    <span class="notification__detail" data-testid="notice-bar-detail">You can browse boards, tasks, evidence, the Wiki, and Dossiers. Creating, moving, starting, and deleting are disabled, and the server refuses them.</span>
+  </app-notification>
+}

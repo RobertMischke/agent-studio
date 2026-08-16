@@ -7,11 +7,36 @@ public static class SecurityProfiles
     public const string Local = "local";
     public const string Networked = "networked";
 
+    /// <summary>
+    /// W34 S4. The public demo profile: no login, an explicit read allowlist,
+    /// and every mutation denied at the edge. It is not <see cref="Networked"/>
+    /// because there is no operator credential to authenticate, and it must not
+    /// fall through to <see cref="Local"/>, which is deliberately open.
+    /// </summary>
+    public const string PublicDemo = AgentStudio.PublicDemo.PublicDemoProfile.ProfileName;
+
     public static bool IsNetworked(IConfiguration configuration)
         => string.Equals(configuration["Security:Profile"], Networked, StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsPublicDemo(IConfiguration configuration)
+        => string.Equals(configuration["Security:Profile"], PublicDemo, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True for every profile that must not expose the development carve-outs
+    /// (open CORS, devtools, diagnostics, filesystem layer, exception details).
+    /// </summary>
+    public static bool IsHardened(IConfiguration configuration)
+        => IsNetworked(configuration) || IsPublicDemo(configuration);
+
+    /// <summary>
+    /// Names the active profile. Unknown values still collapse to
+    /// <see cref="Local"/>, so every hardened profile has to be recognised here
+    /// explicitly rather than by absence.
+    /// </summary>
     public static string ActiveProfile(IConfiguration configuration)
-        => IsNetworked(configuration) ? Networked : Local;
+        => IsNetworked(configuration) ? Networked
+            : IsPublicDemo(configuration) ? PublicDemo
+            : Local;
 }
 
 public static class StudioRoles

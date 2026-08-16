@@ -120,6 +120,7 @@ import { StudioIconComponent } from './components/studio-icon/studio-icon.compon
 import { NotificationStackComponent } from './components/app-dialog/notification-stack/notification-stack.component';
 import { MediaLightboxComponent } from './components/media-lightbox/media-lightbox.component';
 import { OfflineBannerComponent } from './components/offline-banner/offline-banner.component';
+import { PublicDemoBannerComponent } from './components/public-demo-banner/public-demo-banner.component';
 import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
@@ -128,6 +129,7 @@ import { buildRunActivityBadge, freshestRunInfo } from './services/run-activity.
 import { NowTickService } from './services/now-tick.service';
 import { PageContextService } from './services/page-context.service';
 import { DevToolsService } from './services/dev-tools.service';
+import { PublicDemoService } from './services/public-demo.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
@@ -179,6 +181,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     NotificationStackComponent,
     MediaLightboxComponent,
     OfflineBannerComponent,
+    PublicDemoBannerComponent,
     ProjectTabsComponent,
     E2ECleanupDialogComponent,
     TagManagerDialogComponent,
@@ -228,6 +231,14 @@ export class App implements OnInit, OnDestroy {
   readonly jobService = inject(TaskService);
   readonly errorDialog = inject(ErrorDialogService);
   readonly devTools = inject(DevToolsService);
+  readonly publicDemo = inject(PublicDemoService);
+  /**
+   * One shell-wide gate for mutation affordances. An in-flight stable update
+   * pauses actions temporarily; the public demo disables them permanently. Both
+   * reach the same disabled state so a control can never look actionable while
+   * the request behind it would be refused.
+   */
+  readonly mutationsBlocked = computed(() => this.updateClient.mutationsBlocked() || this.publicDemo.readOnly());
   readonly clientService = inject(ClientService);
   private readonly notifications = inject(NotificationService);
   readonly featureFlags = inject(FeatureFlagsService);
@@ -1234,6 +1245,7 @@ export class App implements OnInit, OnDestroy {
     this.loadWatchPaths();
     this.jobService.refreshRunnerStatus();
     this.devTools.loadFlags();
+    this.publicDemo.load();
     this.clientService.refresh();
     this.jobSelection.restoreFromUrl();
 
@@ -1414,7 +1426,7 @@ export class App implements OnInit, OnDestroy {
     return this.selectedJob() !== null && !!this.jobDetailRef?.commitActionsAvailable();
   }
   studioTriageMenuItems(): MenuItem[] {
-    const blocked = this.updateClient.mutationsBlocked();
+    const blocked = this.mutationsBlocked();
     const items = this.studioTriageOverflow().map<MenuItem>(b => ({
       kind: 'row',
       id: b.id,
@@ -1455,7 +1467,7 @@ export class App implements OnInit, OnDestroy {
 
   toggleStudioTriageOverflow(event: MouseEvent): void {
     event.stopPropagation();
-    if (this.updateClient.mutationsBlocked()) return;
+    if (this.mutationsBlocked()) return;
     this.studioTriageOverflowAnchor.set(event.currentTarget as HTMLElement);
     this.studioTriageOverflowOpen.update(v => !v);
   }
@@ -2548,6 +2560,9 @@ export class App implements OnInit, OnDestroy {
    * endpoint is briefly unavailable.
    */
   laneReorderDisabled(state: string, jobs: TaskInfo[]): boolean {
+    // Drag affordances are a mutation. The public demo removes them so a
+    // visitor never drags a card into a request the server will refuse.
+    if (this.mutationsBlocked()) return true;
     const strategy = this.laneSortStrategy(state, jobs);
     if (!strategy) return false;
     return !allowsDragReorder(strategy);

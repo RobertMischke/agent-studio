@@ -757,7 +757,11 @@ builder.Services.AddSignalR();
 // below so the notifier subscriptions are live before the first mutation.
 builder.Services.AddSingleton<AgentStudio.Host.TaskHubBroadcaster>();
 builder.Services.AddSingleton<AgentStudio.Host.WorkbenchHubBroadcaster>();
-if (!SecurityProfiles.IsNetworked(builder.Configuration))
+// W34 S4. The visitor contract is built once from configuration and the
+// committed allowlist.
+builder.Services.AddPublicDemoEdge();
+
+if (!SecurityProfiles.IsHardened(builder.Configuration))
 {
     builder.Services.AddCors(options =>
     {
@@ -771,10 +775,20 @@ if (!SecurityProfiles.IsNetworked(builder.Configuration))
 
 var app = builder.Build();
 var networkedSecurityProfile = SecurityProfiles.IsNetworked(app.Configuration);
-var includeExceptionDetails = !networkedSecurityProfile && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
+var publicDemoProfile = PublicDemoProfile.IsActive(app.Configuration);
+// Project-scoped SignalR fan-out is a security boundary in every hardened
+// profile. The local profile keeps the wide fan-out that development relies on.
+var projectScopedEvents = networkedSecurityProfile || publicDemoProfile;
+var includeExceptionDetails = !SecurityProfiles.IsHardened(app.Configuration)
+                              && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
+
+// The dossier's launch invariant applies to the edge as well: an invalid
+// public-demo configuration must fail the boot instead of publishing a wider
+// surface than the approved allowlist.
+PublicDemoStartup.EnsureValidAtStartup(app.Services, app.Configuration);
 
 app.UseForwardedHeaders();
-if (networkedSecurityProfile) app.UseHsts();
+if (SecurityProfiles.IsHardened(app.Configuration)) app.UseHsts();
 
 app.UseExceptionHandler(exceptionApp =>
 {
@@ -791,7 +805,10 @@ app.UseExceptionHandler(exceptionApp =>
             ["error"] = includeExceptionDetails
                 ? exception?.Message ?? "An unexpected server error occurred."
                 : "An unexpected server error occurred.",
-            ["path"] = feature?.Path,
+            // The public demo answers with a correlation id only. Echoing the
+            // failed path back to an anonymous visitor maps the private surface
+            // for them one 500 at a time.
+            ["path"] = publicDemoProfile ? null : feature?.Path,
             ["traceId"] = context.TraceIdentifier,
             ["timestamp"] = DateTimeOffset.UtcNow
         };
@@ -807,7 +824,15 @@ app.UseExceptionHandler(exceptionApp =>
     });
 });
 
-if (!networkedSecurityProfile) app.UseCors();
+if (!SecurityProfiles.IsHardened(app.Configuration)) app.UseCors();
+
+// W34 S4 public read-only edge. It runs before the credential boundary because
+// the public demo has no login: an anonymous visitor is judged by the read
+// allowlist, and every unsafe method, unlisted route, oversized body, foreign
+// project, and excess request is refused here with a typed denial. This is the
+// second barrier; the hard server execution lock denies claims and starts on
+// its own and is not replaced by this layer.
+app.UsePublicDemoEdge();
 
 // In the networked profile this is the authentication and authorization
 // boundary. X-Client-Id remains attribution only and is never consulted as a
@@ -818,7 +843,7 @@ app.UseAccessSecurity();
 // unregistered identities and stamps lastSeenAt on known ones. This is local
 // attribution only, never authentication. Carve-outs for client registration,
 // hubs, and health checks live in the middleware itself.
-if (!networkedSecurityProfile) app.UseClientIdentity();
+if (!SecurityProfiles.IsHardened(app.Configuration)) app.UseClientIdentity();
 
 // Management intent is authoritative for admission. Reads, recovery controls,
 // and the bounded set of writes needed to drain an existing Runner remain live.
@@ -1067,7 +1092,7 @@ try
         try { cache.OnAppended(workspace, msg); } catch (Exception ex) { SilentCatch.Note(ex, "BusAggregationCache.OnAppended"); }
         try
         {
-            var recipients = !networkedSecurityProfile
+            var recipients = !projectScopedEvents
                 ? pushHub.Clients.All
                 : !string.IsNullOrWhiteSpace(msg.Project)
                     ? pushHub.Clients.Group(TaskHub.ProjectGroup(msg.Project, app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>()))
@@ -1119,12 +1144,12 @@ var hubContext = app.Services.GetRequiredService<IHubContext<TaskHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
 var eventProjects = app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>();
 IClientProxy ProjectEventClients(string projectName)
-    => networkedSecurityProfile
+    => projectScopedEvents
         ? hubContext.Clients.Group(TaskHub.ProjectGroup(projectName, eventProjects))
         : hubContext.Clients.All;
 IClientProxy TaskEventClients(string jobId)
 {
-    if (!networkedSecurityProfile) return hubContext.Clients.All;
+    if (!projectScopedEvents) return hubContext.Clients.All;
     var task = app.Services.GetRequiredService<TaskScannerService>().FindJob(jobId);
     return task is null
         ? hubContext.Clients.Group("project:unresolved")

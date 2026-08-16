@@ -13,7 +13,8 @@ export interface AuthUser {
 }
 
 export interface AuthStatus {
-  profile: 'local' | 'networked';
+  /** `public-demo` is the anonymous read-only visitor profile (W34 S4). */
+  profile: 'local' | 'networked' | 'public-demo';
   bootstrapRequired: boolean;
   authenticated: boolean;
   user?: AuthUser | null;
@@ -26,7 +27,11 @@ export class AuthSessionState {
   readonly loading = signal(true);
   readonly studioAllowed = computed(() => {
     const status = this.status();
+    // The public demo has no sign-in: the visitor surface is anonymous by
+    // design and the server enforces read-only. Showing the sign-in gate there
+    // would offer a credential nobody can have.
     return status?.profile === 'local'
+      || status?.profile === 'public-demo'
       || (status?.authenticated === true && !status.user?.mustChangePassword);
   });
   readonly networkedAuthenticated = computed(() => {

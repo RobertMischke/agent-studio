@@ -10,21 +10,39 @@ public class TaskHub : Hub
     private readonly AccessSecurityStore _security;
     private readonly TaskScannerService _scanner;
     private readonly AgentStudio.Registry.ProjectRegistry _projects;
+    private readonly AgentStudio.PublicDemo.PublicDemoProjectScope _publicDemo;
 
     public TaskHub(
         IConfiguration configuration,
         AccessSecurityStore security,
         TaskScannerService scanner,
-        AgentStudio.Registry.ProjectRegistry projects)
+        AgentStudio.Registry.ProjectRegistry projects,
+        AgentStudio.PublicDemo.PublicDemoProjectScope publicDemo)
     {
         _configuration = configuration;
         _security = security;
         _scanner = scanner;
         _projects = projects;
+        _publicDemo = publicDemo;
     }
 
     public override async Task OnConnectedAsync()
     {
+        // W34 S4. A public visitor joins the seeded demo projects and nothing
+        // else: no unscoped group, so an event from a project outside the scene
+        // has no path to the connection even if such a project were registered.
+        if (AgentStudio.PublicDemo.PublicDemoProfile.IsActive(_configuration))
+        {
+            foreach (var project in _projects.List())
+            {
+                if (_publicDemo.Allows(project.Id))
+                    await Groups.AddToGroupAsync(Context.ConnectionId, ProjectGroup(project.Id, _projects));
+            }
+
+            await base.OnConnectedAsync();
+            return;
+        }
+
         var principal = LivePrincipal();
         if (principal is null || principal.User.Role == StudioRoles.Owner || principal.User.Projects.Count == 0)
             await Groups.AddToGroupAsync(Context.ConnectionId, UnscopedSecurityGroup);
@@ -56,9 +74,12 @@ public class TaskHub : Hub
     /// </summary>
     public Task SubscribeToConversation(string jobId)
     {
-        var principal = LivePrincipal();
+        var publicDemo = AgentStudio.PublicDemo.PublicDemoProfile.IsActive(_configuration);
+        var principal = publicDemo ? null : LivePrincipal();
         var task = _scanner.FindJob(jobId);
         if (task is null) throw new HubException("Task not found.");
+        if (publicDemo && !_publicDemo.Allows(task.ProjectName))
+            throw new HubException("Project access denied.");
         if (principal is not null && !ProjectAccessAuthorization.Allows(principal.User, task.ProjectName, _projects))
             throw new HubException("Project access denied.");
         return Groups.AddToGroupAsync(Context.ConnectionId, ConversationProjector.GroupName(jobId));

@@ -63,6 +63,12 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   readonly jobs = input.required<TaskInfo[]>();
   readonly allBoardJobs = input<readonly TaskInfo[]>([]);
   readonly reorderDisabled = input<boolean>(false);
+  /**
+   * Hides the lane's create and archive affordances. Set by the public demo's
+   * read-only mode and by an in-flight stable update; the server refuses the
+   * matching requests either way.
+   */
+  readonly mutationsBlocked = input<boolean>(false);
   /** Resolved lane sort strategy; `mixed` means visible projects disagree. */
   readonly sortStrategy = input<string>('');
   readonly collapsed = input<boolean>(false);
@@ -359,6 +365,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   private readonly onAutoScrollEnd = () => { this.stopAutoScroll(); this.boardDrag.end(); };
 
   canAddTask(): boolean {
+    if (this.mutationsBlocked()) return false;
     const s = this.state();
     return s === TaskState.Preparation || s === TaskState.Ready;
   }
@@ -406,6 +413,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   readonly reviewGroups = computed(() => groupReviewJobs(this.jobs()));
 
   canArchiveAll(): boolean {
+    if (this.mutationsBlocked()) return false;
     return this.state() === TaskState.Completed || this.state() === '5-completed';
   }
 

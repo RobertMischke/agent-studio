@@ -129,9 +129,9 @@
   <div class="meta">
     <span><b>Date</b> 10 August 2026</span>
     <span><b>Source</b> AGT-2582</span>
-    <span><b>Status</b> Decision pending</span>
-    <span><b>Phase</b> Decision ready</span>
-    <span><b>Scope</b> Analysis only, no implementation</span>
+    <span><b>Status</b> Decided, approved 17 August 2026</span>
+    <span><b>Phase</b> Decision ready, in implementation</span>
+    <span><b>Scope</b> Implementation state in §8a</span>
   </div>
 </header>
 
@@ -146,6 +146,7 @@
     <li><a href="#security">§6 Security and residual risk</a></li>
     <li><a href="#operations">§7 Reset and versioning</a></li>
     <li><a href="#slices">§8 Decision-ready slice plan</a></li>
+    <li><a href="#implementation-state">§8a Implementation state</a></li>
     <li><a href="#approval">§9 Decision request</a></li>
   </ul>
 </nav>
@@ -591,6 +592,36 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <h4>Recommended delivery order</h4>
   <p>Approve S1 through S6 as the public read-only launch package, with S2 as the non-negotiable gate. S1 and S2 can proceed in parallel from the integrated AGT-2530 baseline. S3 and S4 build on the denial contract. S5 freezes the verifiable release unit. S6 is the only infrastructure-changing slice and requires a separate launch approval. Keep S7 outside the launch commitment.</p>
 </div>
+
+<!-- agent-studio:implementation-section:start -->
+<h2 id="implementation-state"><span class="no">§8a</span>Implementation state</h2>
+<p><b>The operator approved this dossier on 17 August 2026 as recommended: the defense-in-depth public demo.</b> This section tracks what is built. It is append-only and does not change any decision in §1 through §9.</p>
+
+<table>
+  <thead><tr><th>Slice</th><th>State</th><th>What exists in the product</th></tr></thead>
+  <tbody>
+    <tr><td><b>S1 · Seed content and gallery</b></td><td>Not started</td><td>The AGT-2530 pinned seed and the ADR-0056 generator remain the baseline. The Wiki trees and six-state Dossier gallery are not seeded yet.</td></tr>
+    <tr><td><b>S2 · Hard public-demo execution profile</b></td><td>Not started</td><td>The startup-only execution-admission policy and its denial matrix are still open. This remains the non-negotiable launch gate.</td></tr>
+    <tr><td><b>S3 · Replay-only Runner</b></td><td>Not started</td><td>Depends on the S2 policy and the trace schema.</td></tr>
+    <tr><td><b>S4 · Public read-only edge</b></td><td><b>Delivered (AGT-2669)</b></td><td>The <code>public-demo</code> security profile, its committed endpoint allowlist and inventory guard, the ephemeral viewer session, the project filter across REST and SignalR, CSP and document sandboxing, rate and body ceilings, safe error surfaces, and the read-only Angular mode.</td></tr>
+    <tr><td><b>S5 · Scrub, bundle, and reset contract</b></td><td>Not started</td><td>The edge publishes an allowlist digest for the release manifest; the scrub report, bundle, and reset job are still open.</td></tr>
+    <tr><td><b>S6 · Dedicated-VM launch rehearsal</b></td><td>Not started</td><td>Requires S2 through S5 and a separate operator launch approval.</td></tr>
+    <tr><td><b>S7 · Optional per-session sandbox</b></td><td>Out of scope</td><td>Outside the launch commitment, as decided.</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>The edge is the second barrier, not the launch gate</h4>
+  <p>S4 shrinks the reachable surface and answers every refused request with a typed denial. It does <b>not</b> deny execution: the hard server lock in S2 owns that, and the launch invariant in §1 is still unmet. A public demo must not go online on the strength of the edge alone.</p>
+</div>
+
+<h3>Delivered slices</h3>
+<ul>
+<!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2669" data-delivered-at="2026-08-16" data-slice="s4-public-read-only-edge"><b>S4 public read-only edge.</b> Added the <code>public-demo</code> security profile as a third, hardened profile that no longer collapses to <code>local</code>. A pure edge policy evaluates transport, same-origin, safe method, the committed endpoint allowlist, the body ceiling, project scope, and the per-visitor request budget, and returns one typed <code>public-demo-*</code> denial. The allowlist publishes 43 read routes out of 491 registered ones; everything else is denied by default and an inventory guard resolves every entry against the live endpoint table. The first allowed request mints an ephemeral <code>__Host-demo-viewer</code> session that authorizes nothing and only bounds cost. One project filter covers REST, search, and the SignalR hub, where a visitor joins the seeded demo groups and never the unscoped group. Responses carry a restrictive CSP and browser hardening, and seeded Wiki, Dossier, and evidence HTML is served under a stricter sandboxing policy. Errors expose a correlation id, never a path or an upstream message. The Angular shell reads the same contract and disables its mutation controls as explanatory UX. Live probe evidence against <code>worktree-test-stack.sh up --demo</code> is in the AGT-2669 result bundle; the contract is documented in <a href="../security/public-demo-read-only-edge.md">Public demo read-only edge</a>.</li>
+<!-- agent-studio:implementation-log:end -->
+</ul>
+<!-- agent-studio:implementation-section:end -->
 
 <h2 id="approval" data-concept-section="open-decisions"><span class="no">§9</span>Decision request</h2>
 <p>This dossier is decision-ready. Approval is requested for the following package:</p>
