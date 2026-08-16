@@ -101,6 +101,14 @@ aggregate wording, and the explicit `no price data` fallback. Review rows,
 task-detail pipeline totals, project Pipeline `Tokens / 90d`, and board badges
 must use this helper instead of composing local tooltip strings.
 
+The board task-token popover retains each call's recorded timestamp, bus topic,
+run correlation, TokenEconomy resolver status, historical price effective date,
+and estimated cost. It shows a dated per-run list and a reconciled grouping by
+recorded usage type (`coding`, `review`, `gate`, `enrichment`, `orchestration`,
+`supporting`, or `other`). Context-free legacy calls stay in `other`; model names
+are not used to guess a step type. The visible disclaimer remains one quiet line
+and discloses the complete historical-list-price caveat on hover or focus.
+
 ## Verification
 
 `backend.Tests/TokenPricingTests.cs` pins the provider adapter to the

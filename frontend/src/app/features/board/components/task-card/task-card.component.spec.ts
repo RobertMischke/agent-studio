@@ -1197,8 +1197,8 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
+    expect(popover?.querySelector('.popover-total')?.textContent).toContain('$1.25');
+    expect(popover?.querySelector('[data-testid="token-cost-footnote"]')?.textContent).toContain('Estimated at each run date');
 
     fixture.destroy();
   });
@@ -1555,19 +1555,29 @@ describe('buildTokenBubble', () => {
           ts: '2026-06-09T08:00:00Z',
           model: 'GPT-5 Codex',
           participantId: 'agent:codex',
+          topic: 'agent-run',
+          usageType: 'coding',
           inputTokens: 2000,
           outputTokens: 200,
           cacheReadTokens: 1000,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.06,
+          modelPriced: true,
+          priceValidFrom: '2026-06-01T00:00:00Z',
         },
         {
           ts: '2026-06-09T08:05:00Z',
           model: 'Claude Haiku 4.5',
           participantId: 'orchestrator:Test',
+          topic: 'review-gate',
+          usageType: 'review',
           inputTokens: 1000,
           outputTokens: 100,
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0.03,
+          modelPriced: true,
+          priceValidFrom: '2026-06-01T00:00:00Z',
         },
       ],
     });
@@ -1578,6 +1588,52 @@ describe('buildTokenBubble', () => {
       'GPT-5 Codex',
       'Claude Haiku 4.5',
     ]);
+    expect(bubble?.byType.map((entry) => entry.label)).toEqual(['Coding run', 'Review run']);
+    expect(bubble?.entries.map((entry) => entry.costLabel)).toEqual(['$0.06', '$0.03']);
+  });
+
+  it('keeps an unpriced dated run explicit in totals and type groups', () => {
+    const bubble = buildTokenBubble({
+      calls: 2,
+      inputTokens: 2000,
+      outputTokens: 200,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 2200,
+      estimatedApiCostUsd: 0.04,
+      allModelsPriced: false,
+      lastModel: 'GPT-5 Codex',
+      lastUpdate: '2026-05-05T08:05:00Z',
+      entries: [
+        { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', usageType: 'coding', inputTokens: 1000, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0.04, modelPriced: true },
+        { ts: '2026-05-05T08:05:00Z', model: 'Future model', usageType: 'gate', inputTokens: 1000, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0, estimatedApiCostUsd: 0, modelPriced: false, pricingStatus: 'NoPriceForDate' },
+      ],
+    });
+
+    expect(bubble?.costIncomplete).toBe(true);
+    expect(bubble?.entries[1].costLabel).toBe('No price');
+    expect(bubble?.byType.find(row => row.usageType === 'gate')?.costLabel).toBe('No price');
+    expect(bubble?.costTooltip).toContain('1 run without price');
+  });
+
+  it('marks a legacy aggregate as incomplete when its catalog status is unresolved', () => {
+    const bubble = buildTokenBubble({
+      calls: 1,
+      inputTokens: 1000,
+      outputTokens: 100,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 1100,
+      estimatedApiCostUsd: 0.04,
+      allModelsPriced: false,
+      lastModel: 'Legacy model',
+      lastUpdate: '2026-05-05T08:05:00Z',
+      entries: [],
+    });
+
+    expect(bubble?.costLabel).toBe('$0.04');
+    expect(bubble?.costIncomplete).toBe(true);
+    expect(bubble?.costTooltip).toContain('partial');
   });
 });
 

@@ -9,16 +9,31 @@
  */
 
 export interface TaskTokenCall {
+  id?: string | null;
   ts: string;
   model: string | null;
   participantId?: string | null;
+  runId?: string | null;
+  topic?: string | null;
+  usageType?: TaskTokenUsageType | null;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
   estimatedApiCostUsd?: number;
   modelPriced?: boolean;
+  pricingStatus?: string | null;
+  priceValidFrom?: string | null;
 }
+
+export type TaskTokenUsageType =
+  | 'coding'
+  | 'review'
+  | 'gate'
+  | 'enrichment'
+  | 'orchestration'
+  | 'supporting'
+  | 'other';
 
 export interface TaskTokenSummary {
   calls: number;

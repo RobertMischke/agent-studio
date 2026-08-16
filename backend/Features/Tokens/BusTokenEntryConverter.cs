@@ -35,11 +35,13 @@ internal static class BusTokenEntryConverter
 
         return new OrchestratorLogEntry
         {
+            EventId = m.Id,
             Ts = m.CreatedAt,
             Kind = OrchestratorLogKinds.Decision,
             Topic = m.Topic ?? OrchestratorLogTopics.General,
             Summary = m.Summary ?? string.Empty,
             JobId = m.JobId,
+            RunId = m.RunId,
             ParticipantId = includeParticipant ? m.ParticipantId : null,
             TokenUsage = usage,
         };

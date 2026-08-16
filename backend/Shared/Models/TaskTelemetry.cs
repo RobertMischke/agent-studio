@@ -42,10 +42,18 @@ public record TaskTokenSummary
 /// </summary>
 public record TaskTokenCall
 {
+    /// <summary>Stable source-event identity when the call came from the Agent Message Bus.</summary>
+    public string? Id { get; init; }
     public DateTime Ts { get; init; }
     public string? Model { get; init; }
     /// <summary>Bus participant that produced this token usage row, e.g. <c>agent:codex</c> or <c>orchestrator:Project</c>.</summary>
     public string? ParticipantId { get; init; }
+    /// <summary>Recorded run correlation id when the producer supplied one.</summary>
+    public string? RunId { get; init; }
+    /// <summary>Recorded bus or pipeline topic used to classify the call without parsing display copy.</summary>
+    public string? Topic { get; init; }
+    /// <summary>Stable operator-facing usage category derived from participant and topic context.</summary>
+    public string UsageType { get; init; } = "other";
     public long InputTokens { get; init; }
     public long OutputTokens { get; init; }
     public long CacheReadTokens { get; init; }
@@ -54,6 +62,10 @@ public record TaskTokenCall
     public decimal EstimatedApiCostUsd { get; init; }
     /// <summary>Whether the price catalog resolved the model at <see cref="Ts"/>.</summary>
     public bool ModelPriced { get; init; }
+    /// <summary>TokenEconomy resolver status for the model at <see cref="Ts"/>.</summary>
+    public string? PricingStatus { get; init; }
+    /// <summary>Effective date of the exact historical catalog price used for this call.</summary>
+    public DateTime? PriceValidFrom { get; init; }
 }
 
 /// <summary>

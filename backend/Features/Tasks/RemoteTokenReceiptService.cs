@@ -60,9 +60,11 @@ public sealed class RemoteTokenReceiptService
                 .ToList();
         }
         var entries = new List<OrchestratorLogEntry>();
+        var lineIndex = 0;
         foreach (var line in lines.Where(line =>
                      string.Equals(line.Stream, "stdout", StringComparison.OrdinalIgnoreCase)))
         {
+            var currentLineIndex = lineIndex++;
             if (!line.Text.AsSpan().TrimStart().StartsWith("{")) continue;
             try
             {
@@ -71,11 +73,13 @@ public sealed class RemoteTokenReceiptService
                 if (usage.Input + usage.Output + usage.CacheRead + usage.CacheWrite <= 0) continue;
                 entries.Add(new OrchestratorLogEntry
                 {
+                    EventId = $"{runAttemptId}:{line.Timestamp.Ticks}:{currentLineIndex}",
                     Ts = line.Timestamp == default ? DateTime.UtcNow : line.Timestamp,
                     Kind = OrchestratorLogKinds.Observation,
                     Topic = "remote-task-token-receipt",
                     Summary = "Remote coding-agent token usage.",
                     JobId = task.Id,
+                    RunId = runAttemptId,
                     ParticipantId = $"agent:remote-runner:{runAttemptId}",
                     TokenUsage = new OrchestratorTokenUsage
                     {

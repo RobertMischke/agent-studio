@@ -1,0 +1,102 @@
+<span class="token-wrap" appTokenPopover>
+  <button type="button"
+          class="token-bubble"
+          [class.token-bubble--neutral]="bubble().tier === 'neutral'"
+          [class.token-bubble--blue]="bubble().tier === 'blue'"
+          [class.token-bubble--mauve]="bubble().tier === 'mauve'"
+          [class.token-bubble--peach]="bubble().tier === 'peach'"
+          data-testid="task-card-token-bubble"
+          [attr.data-token-tier]="bubble().tier"
+          [attr.data-token-total]="bubble().total"
+          [attr.aria-label]="'Token usage: ' + bubble().label + ' total tokens'"
+          (click)="$event.stopPropagation()">
+    <span class="token-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+    <span class="token-label">{{ bubble().label }}</span>
+  </button>
+
+  <span class="token-popover"
+        role="tooltip"
+        data-token-popover
+        hidden
+        data-testid="task-card-token-popover">
+    <span class="popover-header">
+      <span class="popover-title">Token usage</span>
+      <span class="popover-total">
+        {{ formatTokens(bubble().total) }} tokens · {{ bubble().costLabel }}
+        @if (bubble().costIncomplete) { <span class="partial">partial</span> }
+      </span>
+    </span>
+
+    <span class="popover-context">
+      <span>{{ bubble().model || 'Model unavailable' }}</span>
+      <span>{{ bubble().lastUpdate ? 'Updated ' + bubble().lastUpdate : 'Update time unavailable' }}</span>
+    </span>
+
+    <table class="token-parts" aria-label="Token totals by counter">
+      <thead>
+        <tr>
+          <th>Input</th><th>Output</th><th>Cache read</th><th>Cache write</th><th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-testid="token-row-input">{{ formatTokens(bubble().input) }}</td>
+          <td data-testid="token-row-output">{{ formatTokens(bubble().output) }}</td>
+          <td data-testid="token-row-cache-read">{{ formatTokens(bubble().cacheRead) }}</td>
+          <td data-testid="token-row-cache-write">{{ formatTokens(bubble().cacheWrite) }}</td>
+          <td data-testid="token-row-total">{{ formatTokens(bubble().total) }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    @if (bubble().entries.length > 0) {
+      <span class="breakdowns">
+        <span class="breakdown-section" data-testid="token-breakdown-by-type">
+          <span class="section-title">By type</span>
+          <table class="breakdown-table" aria-label="Token usage by type">
+            <thead><tr><th>Type</th><th>Tokens</th><th>Cost</th></tr></thead>
+            <tbody>
+              @for (row of bubble().byType; track row.usageType) {
+                <tr [attr.data-usage-type]="row.usageType">
+                  <td>{{ row.label }}</td>
+                  <td>{{ formatTokens(row.total) }}</td>
+                  <td>{{ row.costLabel }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </span>
+
+        <span class="breakdown-section" data-testid="token-breakdown-by-run">
+          <span class="section-title">Per run</span>
+          <table class="breakdown-table run-table" aria-label="Token usage by run">
+            <thead><tr><th>When</th><th>Run</th><th>Tokens</th><th>Cost</th></tr></thead>
+            <tbody>
+              @for (row of bubble().entries; track row.id) {
+                <tr>
+                  <td>{{ row.tsLabel }}</td>
+                  <td [attr.title]="row.contextTooltip">
+                    <span class="run-type">{{ row.typeLabel }}</span>
+                    <span class="run-model">{{ row.model || 'Model unavailable' }}</span>
+                  </td>
+                  <td>{{ formatTokens(row.total) }}</td>
+                  <td>{{ row.costLabel }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </span>
+      </span>
+    }
+
+    <span class="popover-footer">
+      <span class="cost-footnote"
+            data-testid="token-cost-footnote"
+            [cacTooltip]="bubble().costNotice">Estimated at each run date</span>
+      <a class="token-link"
+         href="/workspace/tokens"
+         data-testid="token-popover-timeline-link"
+         (click)="$event.stopPropagation()">View timeline</a>
+    </span>
+  </span>
+</span>

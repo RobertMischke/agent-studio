@@ -105,6 +105,8 @@ public class OrchestratorLog
 /// </summary>
 public record OrchestratorLogEntry
 {
+    /// <summary>Stable source-event identity when projected from the Agent Message Bus.</summary>
+    public string? EventId { get; init; }
     public DateTime Ts { get; init; } = DateTime.UtcNow;
 
     /// <summary>
@@ -129,6 +131,9 @@ public record OrchestratorLogEntry
 
     /// <summary>Job that was the subject of this entry, when applicable.</summary>
     public string? JobId { get; init; }
+
+    /// <summary>Run correlation supplied by the producer, when available.</summary>
+    public string? RunId { get; init; }
 
     /// <summary>
     /// Agent-message-bus participant that produced this token event, when the

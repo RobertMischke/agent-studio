@@ -28,6 +28,7 @@ export type {
 export type {
   TaskTokenCall,
   TaskTokenSummary,
+  TaskTokenUsageType,
   TokenSummaryByModel,
   TokenSummaryByProject,
   TokenSummary,

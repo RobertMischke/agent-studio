@@ -155,15 +155,21 @@ public class TokenSummaryService
             }
             bucket.Entries.Add(new TaskTokenCall
             {
+                Id = entry.EventId,
                 Ts = entry.Ts,
                 Model = displayModel,
                 ParticipantId = entry.ParticipantId,
+                RunId = entry.RunId,
+                Topic = entry.Topic,
+                UsageType = TaskTokenUsageType.Classify(entry.ParticipantId, entry.Topic),
                 InputTokens = u.InputTokens,
                 OutputTokens = u.OutputTokens,
                 CacheReadTokens = u.CacheReadTokens,
                 CacheCreationTokens = u.CacheCreationTokens,
                 EstimatedApiCostUsd = cost.Total,
                 ModelPriced = cost.ModelKnown,
+                PricingStatus = cost.Status.ToString(),
+                PriceValidFrom = cost.PriceBasis?.ValidFrom,
             });
         }
 

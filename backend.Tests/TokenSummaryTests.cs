@@ -242,6 +242,30 @@ public class TokenSummaryTests
         Assert.Equal(
             summary.Entries.Sum(entry => entry.EstimatedApiCostUsd),
             summary.EstimatedApiCostUsd);
+        Assert.All(summary.Entries, entry => Assert.Equal("Resolved", entry.PricingStatus));
+        Assert.All(summary.Entries, entry => Assert.NotNull(entry.PriceValidFrom));
+    }
+
+    [Fact]
+    public void SummarizePerJob_PreservesRunContextAndClassifiesType()
+    {
+        var at = new DateTime(2026, 8, 12, 8, 0, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            JobEntry("claude-haiku-4-5", 1_000, 100, at, participantId: "support:review") with
+            {
+                EventId = "evt-review-1",
+                RunId = "run-7",
+                Topic = "aspect-review",
+            },
+        };
+
+        var call = Assert.Single(TokenSummaryService.SummarizePerJob(entries)["job-a"].Entries);
+
+        Assert.Equal("evt-review-1", call.Id);
+        Assert.Equal("run-7", call.RunId);
+        Assert.Equal("aspect-review", call.Topic);
+        Assert.Equal(TaskTokenUsageType.Review, call.UsageType);
     }
 
     [Fact]
