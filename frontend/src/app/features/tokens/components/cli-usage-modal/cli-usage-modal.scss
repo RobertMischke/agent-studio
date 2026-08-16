@@ -152,6 +152,21 @@
   font-size: 11px;
 }
 
+.cum__scope-range {
+  display: inline-block;
+  margin: 0 4px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  color: var(--studio-fg-dim);
+  background: var(--studio-bg-elevated);
+  border: 1px solid var(--studio-border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .cum__totals {
   display: inline-flex;
   gap: var(--studio-spacing-2);

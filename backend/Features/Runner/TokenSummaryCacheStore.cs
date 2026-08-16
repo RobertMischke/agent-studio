@@ -30,6 +30,8 @@ public sealed record TokenSummaryAggregate(
     IReadOnlyList<TokenSummaryByModel> ByModel,
     IReadOnlyList<TokenSummaryByProject> ByProject,
     string FetchedAt,
+    string? FirstActivity,
+    string? LastActivity,
     string Disclaimer);
 
 public sealed record TokenSummaryByProject(
