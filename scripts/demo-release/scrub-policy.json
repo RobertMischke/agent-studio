@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "allowedTaskKeyNamespaces": [
+    "DEMO",
+    "PLAT"
+  ],
+  "allowedReferenceNamespaces": [
+    "ADR"
+  ],
+  "allowedSyntheticUsers": [
+    "local-default"
+  ],
+  "allowedSyntheticModels": [
+    "claude-opus-4-8",
+    "claude-haiku-4-5",
+    "gpt-5.4",
+    "gpt-5.4-mini"
+  ],
+  "allowedValues": [
+    {
+      "value": "d3e0c9f84a1b7e62551a7a51c3b84cf6d2a09871",
+      "category": "fixture-commit-sha",
+      "matchCategories": [
+        "high-entropy"
+      ],
+      "derivation": "Fixed synthetic reports-export commit literal defined by demo-seed-generator/v1; it is not read from Git or a source workspace."
+    }
+  ]
+}

@@ -22,7 +22,7 @@
 // deterministic registry on the next dev start.
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 
@@ -37,7 +37,9 @@ function parseArgs(argv) {
   return args;
 }
 
-const PINNED_SNAPSHOT_PATH = fileURLToPath(new URL('./presentation-capture/pinned-seed.json', import.meta.url));
+const PINNED_SNAPSHOT_PATH = process.env.ATP_DEMO_PINNED_SEED
+  ? resolve(process.env.ATP_DEMO_PINNED_SEED)
+  : fileURLToPath(new URL('./presentation-capture/pinned-seed.json', import.meta.url));
 const PINNED_SNAPSHOT = JSON.parse(readFileSync(PINNED_SNAPSHOT_PATH, 'utf8'));
 
 // Deterministic timestamps so a re-seed produces byte-identical files and the
