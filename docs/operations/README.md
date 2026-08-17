@@ -47,6 +47,7 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [statusmd-konzept-karten/](statusmd-konzept-karten/index.html) | Decision dossier on missing generated `status.md` for Concept and Planning cards: complete scaffold inventory, remote V1 finalization root cause, reissue evidence, and decision-ready repair options (AGT-2555). |
 | [article-document-authoring.md](article-document-authoring.md) | Authoring contract for the canonical article template, `ui` and `concept` patterns, full-bleed screenshot evidence, capture dates and provenance, and touch-only migration. |
 | [demo-instanz/](demo-instanz/index.html) | Decision dossier for a public, read-only demo instance with pinned mock data, a full Dossier lifecycle gallery, a real Task Server, a replay-only Runner, hard execution denial, scrub proof, isolated hosting, reset operations, and implementation slices (AGT-2582). |
+| [demo-instanz/replay-only-runner.md](demo-instanz/replay-only-runner.md) | Operator contract for slice S3: the signed replay trace schema, the sealing tool, the narrow `demo.replay` server scope and its typed denials, the claim-free service image, the Simulated labelling rule, and the compromise proofs (AGT-2668). |
 
 Konvergenz-Probe 2026-07-30: develop ist der Arbeitsbranch.
 | [deck-icon-exploration/](deck-icon-exploration/index.html) | Round 2 Deck icon alternatives for the multi-faceted project console, with light and dark proofs, recommendation, rejected Round 1 direction, and implementation seam (AGT-2355). |

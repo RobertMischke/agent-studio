@@ -174,6 +174,9 @@ public sealed class AccessSecurityMiddleware
 
     private static string? RequiredRunnerScope(string method, string path)
     {
+        // The replay ingest sits above the general runner routes because its
+        // credential must never satisfy any of them.
+        if (HttpMethods.IsPost(method) && path.Equals("/api/runner/replay/events", StringComparison.OrdinalIgnoreCase)) return RunnerScopes.DemoReplay;
         if (HttpMethods.IsPost(method) && path.Equals("/api/runner/claim", StringComparison.OrdinalIgnoreCase)) return RunnerScopes.Claim;
         if (path.StartsWith("/api/runner/lease", StringComparison.OrdinalIgnoreCase)) return RunnerScopes.Lease;
         if (HttpMethods.IsPost(method) && path.Equals("/api/runner/logs", StringComparison.OrdinalIgnoreCase)) return RunnerScopes.Logs;

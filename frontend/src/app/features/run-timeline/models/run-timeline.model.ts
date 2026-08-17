@@ -65,6 +65,12 @@ export interface RunnerRecordedEvent {
   id: string;
   kind: 'session.started' | 'session.completed' | 'turn.started' | 'turn.completed' | 'diagnostic';
   timestamp: string;
+  /**
+   * Server-assigned provenance. `simulated` marks an event replayed into the
+   * public demo instance from a signed fixed trace; it never represents work
+   * that happened. Absent or `live` means a real runner produced it.
+   */
+  origin?: string | null;
   sessionId?: string | null;
   turnId?: string | null;
   runIndex?: number | null;

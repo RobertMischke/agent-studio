@@ -621,6 +621,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
     <li><a href="#benchmark-framework">§11 Benchmark framework and Result Dossier</a></li>
     <li><a href="#cost-model">§12 Cost model and hard caps</a></li>
     <li><a href="#overlaps">§13 Product and marketing overlaps</a></li>
+    <li><a href="#implementation-state">§14 Implementation state</a></li>
   </ul>
 </nav>
 
@@ -966,9 +967,35 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 
 <!-- agent-studio:implementation-section:start -->
 <h2 id="implementation-state"><span class="no">§14</span>Implementation state</h2>
-<p>The operator approved the defense-in-depth recommendation on 17 August 2026 and cut S1 through S5 as AGT-2666 through AGT-2670. Delivery remains intentionally split at the dossier boundaries: content, execution denial, replay, edge, and release operations stay independently reviewable while consuming one seed family and one release contract.</p>
+<p>The operator approved the defense-in-depth recommendation on 17 August 2026 and cut S1 through S5 as AGT-2666 through AGT-2670. Delivery remains intentionally split at the dossier boundaries: content, execution denial, replay, edge, and release operations stay independently reviewable while consuming one seed family and one release contract. This section tracks what is actually in the product, so the dossier stays a living record rather than a frozen proposal.</p>
 
-<h3>S5 release boundary</h3>
+<table>
+  <thead><tr><th>Slice</th><th>State</th><th>What exists in the product</th></tr></thead>
+  <tbody>
+    <tr><td><b>S1</b> Seed content and gallery</td><td>Not started</td><td>The AGT-2530 pinned seed and its two projects remain the baseline. The Wiki trees and the six-Dossier gallery are not seeded yet.</td></tr>
+    <tr><td><b>S2</b> Hard public-demo execution profile</td><td>Not started</td><td>No startup-only deny profile exists. The launch invariant is therefore not satisfiable yet, and no public instance may start.</td></tr>
+    <tr><td><b>S3</b> Replay-only Runner</td><td><b>Delivered</b></td><td>Signed trace schema with per-frame seals, the narrow <code>demo.replay</code> server scope and its typed denial matrix, a claim-free replay service image, Simulated labelling end to end, and compromise tests. See the <a href="replay-only-runner.md">operator contract</a>.</td></tr>
+    <tr><td><b>S4</b> Public read-only edge</td><td>Not started</td><td>No TLS edge, viewer boundary, endpoint allowlist, or rate limiting has been added.</td></tr>
+    <tr><td><b>S5</b> Scrub, bundle, and reset contract</td><td><b>Delivered</b></td><td>Content-bound scrub attestation, immutable release manifest, compatibility gate, and the six-hour replacement and rollback job. Pins the S3 <code>replayTraceDigest</code>. See <a href="#s5-release-boundary">below</a>.</td></tr>
+    <tr><td><b>S6</b> Dedicated-VM launch rehearsal</td><td>Not started</td><td>No hosting, DNS, or infrastructure change has been made by any delivered slice.</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>The launch invariant is not met yet</h4>
+  <p>S3 and S5 each deliver one of the recommended barriers, but neither substitutes for S2: a replay credential cannot claim or mutate tasks, and a candidate release cannot go live without a clean scrub and digest match, but the server itself still admits execution on every other path. The public demo does not start until S2 proves the startup lock across its route matrix.</p>
+</div>
+
+<h3 id="s3-replay-only-runner">S3 replay-only Runner</h3>
+<ul>
+  <li><b>Signed trace:</b> a content-addressed replay trace contract carries per-frame ECDSA seals, a scene namespace, event kind, epoch, and monotonic sequence. A release-side sealing tool (<code>scripts/demo-replay/seal-trace.mjs</code>) produces the signed fixture and prints its digest.</li>
+  <li><b>Narrow admission:</b> a pure policy admits a replay frame only when trace, digest, seal, scene namespace, event kind, epoch, and sequence all match the pinned expectation. Every other shape returns the same typed denial.</li>
+  <li><b>Incapable credential:</b> the <code>demo.replay</code> scope is exclusive and carries no claim, lease, task-mutation, log, artifact, or completion authority. The replay service image contains no CLI, Git, repository, secret mount, or broad egress.</li>
+  <li><b>Simulated labelling:</b> replay-admitted events carry a server-assigned <code>simulated</code> origin, surfaced as a Simulated marker in the Activity transcript and the replay metadata panel. The UI never implies a live agent is editing a repository.</li>
+  <li><b>Compromise tests:</b> direct tests prove the replay credential is refused by claim, lease, logs, events, artifacts, completion, and every task mutation route, and that a tampered or foreign-signed frame is rejected. See the <a href="replay-only-runner.md">operator contract</a> for the full scope and denial matrix.</li>
+</ul>
+
+<h3 id="s5-release-boundary">S5 release boundary</h3>
 <ul>
   <li><b>Scrub proof:</b> the release builder now generates into two empty temporary roots, requires a clean recursive manifest diff, scans disclosure categories without persisting raw matches, proves generated PNG metadata and raster text-shape results, and emits <code>demo-seed-scrub-report.json</code>.</li>
   <li><b>Approval binding:</b> a machine-clean candidate is not deployable. Human review names the reviewer and time and binds to the generated content and manifest digests. Any changed datastore byte invalidates that approval.</li>
@@ -980,6 +1007,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 <h3>Delivered slices</h3>
 <ul>
 <!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2668" data-delivered-at="2026-08-18" data-slice="replay-only-runner"><b>Replay-only Runner (S3).</b> Added a content-addressed replay trace contract with per-frame ECDSA seals, a release-side sealing tool, a pure admission policy pinning trace, digest, seal, scene namespace, event kind, epoch, and monotonic sequence, an exclusive <code>demo.replay</code> credential scope, a server-assigned <code>simulated</code> origin surfaced as a Simulated marker in the Activity transcript and the replay metadata, and a separate service image with no CLI, Git, repository, secret, or broad egress. Compromise tests prove the replay credential is refused by claim, lease, logs, events, artifacts, completion, and every task mutation, and that a tampered or foreign-signed frame is rejected.</li>
   <li data-implementation-entry="" data-task-key="AGT-2670" data-delivered-at="2026-08-17" data-slice="scrub-bundle-reset-contract"><b>S5 scrub, bundle, and reset contract.</b> Added content-bound scrub attestation, two-pass datastore proof, image OCR and metadata evidence, compatibility-checked immutable bundle construction, deployment verification, six-hour replacement units, failure-safe whole-runtime cutover, and rollback rehearsal. Host provisioning and launch remain outside this slice.</li>
 <!-- agent-studio:implementation-log:end -->
 </ul>
