@@ -1,16 +1,17 @@
 {
   "schemaVersion": 1,
   "id": "nordstern",
-  "title": "\u2605 Nordstern \u2014 Agent Studio Zielbild \u0026 Umsetzung",
-  "summary": "Der eine Einstiegspunkt fuer das Zielbild-Komplex. Haelt den grossen Bogen (Zielbild in Kuerze, Stand jetzt, die vier Phasen als Schritte, die entschiedenen Leitplanken) und verlinkt als Landkarte in die fokussierten Tiefen-Dokumente: Umsetzungsplan (Detail-Phasen \u002B Kartenzuordnung), Architektur \u0026 Protokolle, Ausfuehrungsmodell Container-Default, Modell-Routing-Policy, Log-Retention. Grosser Bogen hier, Detail im jeweiligen verlinkten Doc. Die Tiefen-Docs stehen auf decided und erscheinen unter History.",
+  "title": "\u2605 Nordstern \u2014 Agent Studio Zielbild & Umsetzung",
+  "summary": "Der eine Einstiegspunkt fuer das Zielbild-Komplex. Haelt den grossen Bogen (Zielbild in Kuerze, Stand jetzt, die vier Phasen als Schritte, die entschiedenen Leitplanken) und verlinkt als Landkarte in die fokussierten Tiefen-Dokumente: Umsetzungsplan (Detail-Phasen + Kartenzuordnung), Architektur & Protokolle, Ausfuehrungsmodell Container-Default, Modell-Routing-Policy, Log-Retention. Grosser Bogen hier, Detail im jeweiligen verlinkten Doc. Die Tiefen-Docs stehen auf decided und erscheinen unter History. [Curation 2026-08-18 (AGT-2671): reviewed as part of an operator-mandated dossier curation pass. This is the permanent umbrella hub by design - its own text states deep-dive docs move to decided/History while Nordstern stays active. No closure applicable, no action taken.]",
   "entrypoint": "index.html",
   "status": "active",
-  "updatedAt": "2026-07-29T20:35:44Z",
+  "updatedAt": "2026-08-18T12:00:00Z",
   "sourceTaskKeys": [
     "AGT-2129",
     "AGT-2130",
     "AGT-2132",
     "AGT-2370"
   ],
-  "key": "AGT-W14"
+  "key": "AGT-W14",
+  "editedBy": "Claude / AGT-2671"
 }

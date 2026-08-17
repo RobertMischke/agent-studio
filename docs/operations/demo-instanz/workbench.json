@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "demo-instanz",
   "title": "Public demo instance with no execution authority",
-  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670.]",
+  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670.] [Curation 2026-08-18 (AGT-2671): DONE CHECK - only slice S5 (AGT-2670) is archived; S1/S2/S4 (AGT-2666/2667/2669) are in review, S3 (AGT-2668) is in progress. Not ready for History; stays accepted/in-progress. No dossier is archived while an attached slice is open.]",
   "entrypoint": "index.html",
   "status": "accepted",
   "phase": "in-progress",
-  "updatedAt": "2026-08-17T12:00:00Z",
+  "updatedAt": "2026-08-18T12:00:00Z",
   "sourceTaskKeys": [
     "AGT-2582"
   ],
@@ -22,5 +22,6 @@
     "AGT-2558",
     "WEB-17"
   ],
-  "key": "AGT-W34"
+  "key": "AGT-W34",
+  "editedBy": "Claude / AGT-2671"
 }

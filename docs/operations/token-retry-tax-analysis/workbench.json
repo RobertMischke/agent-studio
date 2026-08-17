@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "token-retry-tax-analysis",
   "title": "Token and retry tax, 11 to 12 August 2026",
-  "summary": "Decision dossier reconciling the observed 68 to 95 percent GPT weekly-quota rise against Codex token events, coding rounds, deterministic reviews, infrastructure incidents, API-equivalent cost, and concrete savings controls.",
+  "summary": "Decision dossier reconciling the observed 68 to 95 percent GPT weekly-quota rise against Codex token events, coding rounds, deterministic reviews, infrastructure incidents, API-equivalent cost, and concrete savings controls. [Curation 2026-08-18 (AGT-2671): DONE CHECK - all four recurrence-control cards named in this dossier's own closing warning (AGT-2646, AGT-2649, AGT-2650, AGT-2651) are now verified archived/delivered, satisfying the condition the dossier itself set for declaring the recurrence closed. Recommend the owning team add an explicit closure note and consider promoting this dossier toward documented; left at decision-pending this pass since AGT-2671's mandate covers documentation curation, not incident sign-off. Durable retry-tax accounting methodology noted as a candidate addition to docs/concepts/token-aggregation.md, not applied this pass.]",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-12T08:00:00Z",
+  "updatedAt": "2026-08-18T12:00:00Z",
   "sourceTaskKeys": [
     "AGT-2652"
   ],
@@ -18,5 +18,6 @@
     "AGT-2651",
     "TE-22"
   ],
-  "key": "AGT-2652"
+  "key": "AGT-2652",
+  "editedBy": "Claude / AGT-2671"
 }

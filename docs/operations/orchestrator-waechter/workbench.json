@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "orchestrator-waechter",
   "title": "Global Orchestrator Watcher",
-  "summary": "Decision dossier for a global intelligent exception layer above the mechanical delivery invariants. The central event bus is the shared substrate: the Watcher consumes typed escalation, integration, delivery, starvation, stale, loop, and contradiction signals, then publishes findings, recipe receipts, analyses, and decision needs into the same All-Activity-default stream. Three theme-aware mockups show interleaved Activity entries, persistent Studio-shell presence, and an AGT-2531 NoTaskBranch finding detail. The observe-first recommendation and approval-gated fence policy remain unchanged.",
+  "summary": "Decision dossier for a global intelligent exception layer above the mechanical delivery invariants. The central event bus is the shared substrate: the Watcher consumes typed escalation, integration, delivery, starvation, stale, loop, and contradiction signals, then publishes findings, recipe receipts, analyses, and decision needs into the same All-Activity-default stream. Three theme-aware mockups show interleaved Activity entries, persistent Studio-shell presence, and an AGT-2531 NoTaskBranch finding detail. The observe-first recommendation and approval-gated fence policy remain unchanged. [Curation 2026-08-18 (AGT-2671): DONE CHECK - the pilot decision is still open, stays decision-pending. Section 8a's already-shipped visual QA guardian (AGT-2654) is now cited as a precedent pattern in docs/concepts/telemetry-layer.md; the rest of this dossier's substantial architecture content (WatcherCase contract, capability ladder, autonomy classes) was not transferred this pass pending the pilot decision, to avoid documenting an unapproved mechanism as settled.]",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-10T01:23:01Z",
+  "updatedAt": "2026-08-18T12:00:00Z",
   "sourceTaskKeys": [
     "AGT-2557",
     "AGT-2581"
@@ -20,5 +20,6 @@
     "AGT-2569",
     "AGT-2579"
   ],
-  "key": "AGT-W15"
+  "key": "AGT-W15",
+  "editedBy": "Claude / AGT-2671"
 }
