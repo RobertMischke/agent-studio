@@ -53,6 +53,12 @@ state.
   and eventual exit codes under its local state directory for incident root
   cause analysis. It has no automatic Scheduled Task retry, so it cannot race
   the watchdog recovery policy.
+  `deploy/windows/agent-runner-tunnel/install-tunnel-supervision.ps1` is the
+  guided, self-elevating product entry point that registers both this and the
+  keeper task; `backend/Features/WindowsTunnelSupervision/` reports their
+  read-only status (`GET /api/v1/windows-tunnel-supervision/status`) to the
+  Execution Hosts admin panel. See
+  [Windows control-plane host](../../operations/setup/windows-control-plane-host.md).
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
 - `cli-hosting/TaskCleanContextStore.cs`,

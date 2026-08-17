@@ -15,6 +15,7 @@ import {
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
+import { WindowsTunnelSupervisionPanelComponent } from '../windows-tunnel-supervision-panel/windows-tunnel-supervision-panel';
 import {
   RemoteHostTableState,
   type RemoteHostSortKey,
@@ -35,7 +36,12 @@ import {
 @Component({
   selector: 'app-remote-hosts-panel',
   standalone: true,
-  imports: [RemoteHostCardComponent, AddHostWizardComponent, RunnerSetupDialogComponent],
+  imports: [
+    RemoteHostCardComponent,
+    AddHostWizardComponent,
+    RunnerSetupDialogComponent,
+    WindowsTunnelSupervisionPanelComponent,
+  ],
   templateUrl: './remote-hosts-panel.html',
   styleUrl: './remote-hosts-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

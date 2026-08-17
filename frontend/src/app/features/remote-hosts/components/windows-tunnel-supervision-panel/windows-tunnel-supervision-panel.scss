@@ -1,0 +1,152 @@
+// Windows control-plane host setup (AGT-2664). Flat admin surface, no
+// max-width cap; colours read --studio-* tokens for both themes (R2, R5).
+
+:host { display: block; }
+
+.wts {
+  margin-bottom: var(--studio-spacing-4);
+  padding: var(--studio-spacing-3) var(--studio-spacing-4);
+  border: 1px solid var(--studio-border);
+  background: var(--studio-surface-muted);
+  color: var(--studio-fg);
+}
+
+.wts__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--studio-spacing-4);
+}
+.wts__title {
+  margin: 0 0 var(--studio-spacing-1);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--studio-fg-strong);
+}
+.wts__subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+  max-width: 64ch;
+  line-height: 1.45;
+}
+.wts__toggle {
+  margin-left: auto;
+  flex: 0 0 auto;
+  background: var(--studio-bg-hover);
+  border: 1px solid var(--studio-border-strong);
+  color: var(--studio-fg);
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.wts__toggle:hover { background: var(--studio-bg-selected); }
+.wts__toggle:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+
+.wts__error { color: var(--notify-error-icon-fg); font-size: 12px; margin: var(--studio-spacing-2) 0 0; }
+.wts__loading,
+.wts__note {
+  margin: var(--studio-spacing-2) 0 0;
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+}
+
+.wts__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--studio-spacing-3);
+  margin-top: var(--studio-spacing-2);
+  font-size: 12px;
+}
+.wts__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  padding: 1px var(--studio-spacing-2);
+  border-radius: 999px;
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-dim);
+  font-weight: 600;
+}
+.wts__chip[data-tone='ok'] { background: var(--notify-success-tint); color: var(--notify-success-icon-fg); }
+.wts__chip[data-tone='warn'] { background: var(--notify-warning-icon-bg); color: var(--notify-warning-icon-fg); }
+.wts__chip[data-tone='error'] { background: var(--notify-error-icon-bg); color: var(--notify-error-icon-fg); }
+.wts__chip[data-tone='idle'] { color: var(--studio-fg-dim); }
+.wts__chip[data-tone='calm'] { color: var(--studio-fg-muted); }
+
+.wts__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.wts__heal { color: var(--studio-fg-dim); }
+.wts__number { font-variant-numeric: tabular-nums; }
+
+.wts__detail {
+  margin-top: var(--studio-spacing-3);
+  padding-top: var(--studio-spacing-3);
+  border-top: 1px solid var(--studio-border);
+}
+.wts__detail-text { margin: 0 0 var(--studio-spacing-2); font-size: 12px; color: var(--studio-fg-dim); }
+.wts__setup-hint {
+  margin: 0 0 var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  background: var(--notify-warning-tint);
+  color: var(--studio-fg);
+  font-size: 12px;
+}
+
+.wts__params {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--studio-spacing-2) var(--studio-spacing-3);
+  margin-bottom: var(--studio-spacing-3);
+}
+.wts__params label {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  font-size: 11px;
+  color: var(--studio-fg-dim);
+}
+.wts__params input {
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg);
+  color: var(--studio-fg);
+  font-size: 12px;
+}
+
+.wts__command {
+  margin: 0 0 var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg);
+  color: var(--studio-fg);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wts__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  font-size: 12px;
+}
+.wts__actions button {
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 6px;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  cursor: pointer;
+}
+.wts__actions button:hover:not(:disabled) { background: var(--studio-bg-selected); }
+.wts__actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+.wts__actions a { color: var(--studio-accent-3-strong); }

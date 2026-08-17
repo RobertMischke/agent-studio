@@ -1,0 +1,86 @@
+<section class="wts" data-testid="windows-tunnel-supervision-panel">
+  <header class="wts__head">
+    <div>
+      <h3 class="wts__title">Windows control-plane host</h3>
+      <p class="wts__subtitle">
+        Tunnel keeper and watchdog Scheduled Tasks that keep the reverse SSH tunnel to a remote Linux runner host alive.
+      </p>
+    </div>
+    <button type="button"
+            class="wts__toggle"
+            data-testid="windows-tunnel-supervision-toggle"
+            [attr.aria-expanded]="expanded()"
+            (click)="toggleExpanded()">
+      {{ expanded() ? 'Hide' : 'Set up / details' }}
+    </button>
+  </header>
+
+  @if (error(); as err) {
+    <p class="wts__error" data-testid="windows-tunnel-supervision-error">{{ err }}</p>
+  } @else if (!status() && loading()) {
+    <p class="wts__loading" data-testid="windows-tunnel-supervision-loading">Checking tunnel supervision status…</p>
+  } @else if (status(); as s) {
+    @if (!s.isWindowsHost) {
+      <p class="wts__note" data-testid="windows-tunnel-supervision-not-applicable">{{ s.detail }}</p>
+    } @else {
+      <div class="wts__chips" data-testid="windows-tunnel-supervision-chips">
+        <span class="wts__chip" [attr.data-tone]="taskTone(s.keeper)" data-testid="windows-tunnel-supervision-keeper">
+          <span class="wts__dot" aria-hidden="true"></span>
+          Keeper: {{ taskLabel(s.keeper) }}
+        </span>
+        <span class="wts__chip" [attr.data-tone]="taskTone(s.watchdog)" data-testid="windows-tunnel-supervision-watchdog">
+          <span class="wts__dot" aria-hidden="true"></span>
+          Watchdog: {{ taskLabel(s.watchdog) }}
+        </span>
+        <span class="wts__heal" data-testid="windows-tunnel-supervision-last-heal">
+          Last heal: {{ s.lastHealAt ? (s.lastHealAt | date:'short') : 'None recorded' }}
+          @if (s.consecutiveHealFailures > 0) {
+            <span class="wts__number">({{ s.consecutiveHealFailures }} failed since)</span>
+          }
+        </span>
+      </div>
+
+      @if (expanded()) {
+        <div class="wts__detail" data-testid="windows-tunnel-supervision-details">
+          <p class="wts__detail-text">{{ s.detail }}</p>
+          @if (needsSetup()) {
+            <p class="wts__setup-hint" data-testid="windows-tunnel-supervision-setup-hint">
+              Registering a Scheduled Task needs one elevated session. Run the command below from the repository
+              root; it explains the Windows UAC consent prompt and self-elevates, then registers both tasks.
+            </p>
+          }
+          <div class="wts__params">
+            <label>SSH target
+              <input type="text" [ngModel]="sshTarget()" (ngModelChange)="sshTarget.set($event)"
+                     data-testid="windows-tunnel-supervision-ssh-target" />
+            </label>
+            <label>Remote port
+              <input type="number" [ngModel]="remotePort()" (ngModelChange)="remotePort.set($event)"
+                     data-testid="windows-tunnel-supervision-remote-port" />
+            </label>
+            <label>Task Server port
+              <input type="number" [ngModel]="taskServerPort()" (ngModelChange)="taskServerPort.set($event)"
+                     data-testid="windows-tunnel-supervision-task-server-port" />
+            </label>
+            <label>Devspace path
+              <input type="text" [ngModel]="devspacePath()" (ngModelChange)="devspacePath.set($event)"
+                     data-testid="windows-tunnel-supervision-devspace-path" />
+            </label>
+          </div>
+          <pre class="wts__command" data-testid="windows-tunnel-supervision-command">{{ installCommand() }}</pre>
+          <div class="wts__actions">
+            <button type="button" (click)="copyInstallCommand()" data-testid="windows-tunnel-supervision-copy">
+              {{ copyLabel() }}
+            </button>
+            <button type="button" [disabled]="loading()" (click)="reload()" data-testid="windows-tunnel-supervision-refresh">
+              {{ loading() ? 'Refreshing…' : 'Refresh status' }}
+            </button>
+            <a href="https://github.com/agent-orc/agent-studio/blob/main/docs/operations/setup/windows-control-plane-host.md"
+               target="_blank" rel="noopener noreferrer"
+               data-testid="windows-tunnel-supervision-doc-link">Setup guide</a>
+          </div>
+        </div>
+      }
+    }
+  }
+</section>

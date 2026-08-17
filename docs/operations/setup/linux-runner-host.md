@@ -123,22 +123,25 @@ The tunnel procedure and health gate are documented in
 ### Own the Task Server route
 
 Do not run the tunnel as an unattended bare `ssh -N` process. For the current
-Windows-to-Linux reverse route, register the repository-owned functional keeper
-from the Studio checkout:
+Windows-to-Linux reverse route, run the guided, self-elevating installer from
+the Studio checkout - it registers both the keeper and its watchdog in one
+step and explains the one-time elevation prompt:
 
 ```powershell
-.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
+.\deploy\windows\agent-runner-tunnel\install-tunnel-supervision.ps1 `
     -SshTarget agent-runner `
     -RemotePort 15031 `
-    -TaskServerPort 5031 `
-    -IntervalMinutes 5
+    -TaskServerPort 5031
 ```
 
-The keeper probes `/healthz` from the Linux host, removes only the matching dead
-forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
-host can initiate the SSH connection, prefer the host-owned `autossh` plus
-systemd form in the linked tunnel runbook because it starts before an
-interactive Windows logon.
+See [Windows control-plane host](./windows-control-plane-host.md) for the full
+setup procedure, configuration reference, and the Execution Hosts admin status
+panel. The keeper probes `/healthz` from the Linux host, removes only the
+matching dead forward, and recreates it with SSH keepalives and
+`ExitOnForwardFailure`; the watchdog re-probes independently and heals a stuck
+tunnel after two consecutive failures. If the host can initiate the SSH
+connection, prefer the host-owned `autossh` plus systemd form in the linked
+tunnel runbook because it starts before an interactive Windows logon.
 
 Treat either tunnel form as an interim local-profile topology. Once an
 authenticated private Task Server URL is available to the host, point
@@ -1108,10 +1111,12 @@ proof.
   `task-server:connectivity` advertisement is stale or explicitly unavailable.
   This is the board-visible transport alarm even when the host itself is still
   running, because a broken route cannot carry a fresh failure report through
-  itself. For the Windows-to-Linux reverse-tunnel topology, inspect
-  `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\events.log`, then run the
+  itself. For the Windows-to-Linux reverse-tunnel topology, check the
+  "Windows control-plane host" panel on Execution Hosts first (registered /
+  running / last heal for both Scheduled Tasks), then inspect
+  `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\events.log` and run the
   functional host-side curl from
-  [Remote runner: persistent connection](./remote-runner-persistent-connection.md).
+  [Windows control-plane host](./windows-control-plane-host.md).
   Repair the route instead of restarting the review daemon.
 - **`lease lost: StaleToken` mid-run** - a TTL takeover happened; the network was
   slow enough that heartbeats missed the window. Raise `RUNNER_TTL_SECONDS` /

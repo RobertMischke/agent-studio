@@ -88,6 +88,9 @@ public static class EndpointMapping
         app.MapBusEndpoints();
         app.MapRuntimeEventEndpoints();
         app.MapClientEndpoints();
+        // Reads local Scheduled Task state; unrelated to the Task Server proxy
+        // split above, so it maps regardless of mapsLocalV1.
+        app.MapWindowsTunnelSupervisionEndpoints();
         app.MapAnalysisReportEndpoints();
         app.MapDriftReportEndpoints();
         app.MapTagEndpoints();

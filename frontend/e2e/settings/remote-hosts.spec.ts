@@ -70,6 +70,15 @@ async function stubBackgroundApis(page: Page) {
   }], findings: [] }));
   await page.route('**/api/dev-tools/flags', json({ updateStableEnabled: false, deleteE2EJobsEnabled: false }));
   await page.route('**/api/workspaces*', json([]));
+  await page.route('**/api/v1/windows-tunnel-supervision/status', json({
+    isWindowsHost: false,
+    keeper: { taskName: '', presence: 'notApplicable', lastRunResult: null, lastRunAt: null },
+    watchdog: { taskName: '', presence: 'notApplicable', lastRunResult: null, lastRunAt: null },
+    lastHealAt: null,
+    lastHealDetail: null,
+    consecutiveHealFailures: 0,
+    detail: 'This Task Server is not running on Windows; tunnel supervision only applies to a Windows control-plane host.',
+  }));
 }
 
 test.describe('Execution Hosts settings section', () => {
@@ -1004,6 +1013,63 @@ test.describe('Execution Hosts settings section', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-slots-stale-dark--mocked.png'), fullPage: false });
     await setTheme(page, 'light');
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-slots-stale-light--mocked.png'), fullPage: false });
+  });
+
+  test('Windows control-plane host panel shows not-applicable on a non-Windows Task Server (AGT-2664)', async ({ page }) => {
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const panel = page.getByTestId('windows-tunnel-supervision-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByTestId('windows-tunnel-supervision-not-applicable'))
+      .toContainText('not running on Windows');
+    await expect(panel.getByTestId('windows-tunnel-supervision-chips')).toHaveCount(0);
+  });
+
+  test('Windows control-plane host panel shows keeper/watchdog status, last heal, and the guided install command (AGT-2664)', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.unroute('**/api/v1/windows-tunnel-supervision/status');
+    await page.route('**/api/v1/windows-tunnel-supervision/status', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        isWindowsHost: true,
+        keeper: { taskName: 'AgentRunner-TunnelKeeper', presence: 'running', lastRunResult: '0', lastRunAt: '8/18/2026 3:00:01 AM' },
+        watchdog: { taskName: 'AgentRunner-TunnelWatchdog', presence: 'notRegistered', lastRunResult: null, lastRunAt: null },
+        lastHealAt: '2026-08-18T02:00:15Z',
+        lastHealDetail: 'Tunnel restored after a functional probe failure.',
+        consecutiveHealFailures: 1,
+        detail: 'Read from the watchdog journal tail.',
+      }),
+    }));
+
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const panel = page.getByTestId('windows-tunnel-supervision-panel');
+    await expect(panel).toBeVisible();
+
+    const keeper = panel.getByTestId('windows-tunnel-supervision-keeper');
+    await expect(keeper).toHaveAttribute('data-tone', 'ok');
+    await expect(keeper).toContainText('Running');
+    const watchdog = panel.getByTestId('windows-tunnel-supervision-watchdog');
+    await expect(watchdog).toHaveAttribute('data-tone', 'error');
+    await expect(watchdog).toContainText('Not registered');
+    await expect(panel.getByTestId('windows-tunnel-supervision-last-heal')).toContainText('1 failed since');
+
+    await panel.getByTestId('windows-tunnel-supervision-toggle').click();
+    const details = panel.getByTestId('windows-tunnel-supervision-details');
+    await expect(details).toBeVisible();
+    await expect(panel.getByTestId('windows-tunnel-supervision-setup-hint')).toContainText('elevated session');
+    await expect(panel.getByTestId('windows-tunnel-supervision-command')).toContainText('install-tunnel-supervision.ps1');
+    await expect(panel.getByTestId('windows-tunnel-supervision-doc-link'))
+      .toHaveAttribute('href', /windows-control-plane-host\.md$/);
+
+    await panel.getByTestId('windows-tunnel-supervision-copy').click();
+    await expect(panel.getByTestId('windows-tunnel-supervision-copy')).toHaveText('✓ Copied');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toContain('install-tunnel-supervision.ps1');
+
+    await setTheme(page, 'dark');
+    await panel.screenshot({ path: join(SHOT_DIR, 'windows-tunnel-supervision-dark--mocked.png') });
+    await setTheme(page, 'light');
+    await panel.screenshot({ path: join(SHOT_DIR, 'windows-tunnel-supervision-light--mocked.png') });
   });
 
   test('deep-link opens the Execution Hosts section directly', async ({ page }) => {

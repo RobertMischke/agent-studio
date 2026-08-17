@@ -7,12 +7,14 @@ registration="$repo_root/deploy/windows/agent-runner-tunnel/register-tunnel-keep
 watchdog="$repo_root/deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh"
 watchdog_registration="$repo_root/deploy/windows/agent-runner-tunnel/register-tunnel-watchdog.ps1"
 forced_kill_test="$repo_root/deploy/windows/agent-runner-tunnel/test-tunnel-watchdog-forced-kill.ps1"
+installer="$repo_root/deploy/windows/agent-runner-tunnel/install-tunnel-supervision.ps1"
 
 test -f "$keeper"
 test -f "$registration"
 test -f "$watchdog"
 test -f "$watchdog_registration"
 test -f "$forced_kill_test"
+test -f "$installer"
 
 grep -Fq "AGENT_TASK_SERVER_ROUTE_OK" "$keeper"
 grep -Fq "curl --fail --silent --show-error --max-time 10" "$keeper"
@@ -48,9 +50,17 @@ grep -Fq -- "-ExecutionTimeLimit ([TimeSpan]::Zero)" "$watchdog_registration"
 grep -Fq "forced-kill-pids" "$forced_kill_test"
 grep -Fq "tunnel-watchdog-forced-kill--real.md" "$forced_kill_test"
 
+# The guided product entry point (AGT-2664): self-elevates, explains why, then
+# registers both Scheduled Tasks. It must never silently proceed unelevated.
+grep -Fq "WindowsBuiltInRole]::Administrator" "$installer"
+grep -Fq -- "-Verb RunAs" "$installer"
+grep -Fq "register-tunnel-keeper.ps1" "$installer"
+grep -Fq "register-tunnel-watchdog.ps1" "$installer"
+grep -Fq "elevated session" "$installer"
+
 if command -v pwsh >/dev/null 2>&1; then
   pwsh -NoProfile -NonInteractive -Command \
-    "[void][System.Management.Automation.Language.Parser]::ParseFile('$keeper',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$watchdog_registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$forced_kill_test',[ref]\$null,[ref]\$null)"
+    "[void][System.Management.Automation.Language.Parser]::ParseFile('$keeper',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$watchdog_registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$forced_kill_test',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$installer',[ref]\$null,[ref]\$null)"
 fi
 
 printf 'Tunnel assets contain functional probes, targeted cleanup, captured SSH diagnostics, and session-independent watchdog registration.\n'
