@@ -15,6 +15,18 @@ describe('formatRunningLabel', () => {
   ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
     expect(formatRunningLabel(local, remote)).toBe(expected);
   });
+
+  it('never renders "no runners" while the review plane has active workers (AGT-2645)', () => {
+    expect(formatRunningLabel(0, 0, 3)).not.toContain('no runners');
+  });
+
+  it('falls back to a vague label when the coding slot ceiling is unknown', () => {
+    expect(formatRunningLabel(0, 0, 3)).toBe('coding idle');
+  });
+
+  it('shows the honest coding slot ceiling once it is known', () => {
+    expect(formatRunningLabel(0, 0, 3, 8)).toBe('coding 0/8');
+  });
 });
 
 /**
