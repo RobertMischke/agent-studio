@@ -7,6 +7,9 @@ export interface ReviewQueueSnapshot {
   isStagnant: boolean;
   stagnantSince: string | null;
   stagnantThresholdMinutes: number;
+  drainRatePerMinute: number;
+  medianReviewDurationMs: number | null;
+  throughputWindowMinutes: number;
   observedAt: string;
 }
 
