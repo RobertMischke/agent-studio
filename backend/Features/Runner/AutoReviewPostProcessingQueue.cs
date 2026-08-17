@@ -39,8 +39,22 @@ public sealed class AutoReviewPostProcessingQueue : IAutoReviewPostProcessingQue
             SingleReader = true,
             SingleWriter = false,
         });
+    private DateTime _lastStartedAt = DateTime.MinValue;
 
     public ChannelReader<AutoReviewPostProcessingRequest> Reader => _channel.Reader;
+
+    /// <summary>Number of cards waiting in queue (not yet picked up for processing).</summary>
+    public int PendingCount { get { lock (_pendingLock) return _pending.Count; } }
+
+    /// <summary>
+    /// UTC time when a card was most recently dequeued and handed to a processing
+    /// slot. Null if no card has ever been picked up. Used by the stagnation
+    /// watchdog to detect a queue that has depth but no drain progress.
+    /// </summary>
+    public DateTime? LastStartedAt
+    {
+        get { lock (_pendingLock) return _lastStartedAt == DateTime.MinValue ? null : _lastStartedAt; }
+    }
 
     public bool Enqueue(AutoReviewPostProcessingRequest request)
     {
@@ -69,6 +83,7 @@ public sealed class AutoReviewPostProcessingQueue : IAutoReviewPostProcessingQue
     {
         lock (_pendingLock)
         {
+            _lastStartedAt = DateTime.UtcNow;
             var index = _pending.FindIndex(candidate =>
                 candidate.EnqueuedAtUtc == request.EnqueuedAtUtc
                 && string.Equals(candidate.ProjectName, request.ProjectName, StringComparison.Ordinal)
