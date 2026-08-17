@@ -84,6 +84,7 @@ public class TaskRunnerService : BackgroundService
     private readonly RunnerIdentity? _runnerIdentity;
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly AgentStudio.Clients.ClientIdentityStore? _clients;
+    private readonly StartupExecutionAdmission? _executionAdmission;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -150,7 +151,8 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
-        VisualQaService? visualQa = null)
+        VisualQaService? visualQa = null,
+        StartupExecutionAdmission? executionAdmission = null)
     {
         _config = config;
         _logger = logger;
@@ -198,6 +200,7 @@ public class TaskRunnerService : BackgroundService
         _runnerIdentity = runnerIdentity;
         _clients = clients;
         _quotaWaitPolicy = quotaWaitPolicy;
+        _executionAdmission = executionAdmission;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -322,6 +325,8 @@ public class TaskRunnerService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _executionAdmission?.Demand(ExecutionAdmissionPath.Start);
+
         // Initialize runners for each watch path
         var entries = _scanner.GetWatchPaths();
         foreach (var rawEntry in entries)
@@ -571,6 +576,7 @@ public class TaskRunnerService : BackgroundService
     /// </remarks>
     public ModeChangeResult? RequestModeChange(string projectName, string mode, string? reason = null)
     {
+        _executionAdmission?.Demand(ExecutionAdmissionPath.Start);
         if (!_runners.TryGetValue(projectName, out var runner)) return null;
         var validModes = new[] { "manual", "auto-single", "auto-continuous", "paused" };
         if (!validModes.Contains(mode))
@@ -604,6 +610,7 @@ public class TaskRunnerService : BackgroundService
 
     public async Task<ContinueJobResponse> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, string? thinkingLevelOverride = null, CancellationToken ct = default)
     {
+        _executionAdmission?.Demand(ExecutionAdmissionPath.Start);
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) throw new TaskOperationException("Job not found", 404);
 
@@ -648,6 +655,7 @@ public class TaskRunnerService : BackgroundService
     /// </summary>
     public async Task<ContinueJobResponse> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, string? thinkingLevelOverride = null, string? mode = null, CancellationToken ct = default)
     {
+        _executionAdmission?.Demand(ExecutionAdmissionPath.Continue);
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) throw new TaskOperationException("Job not found", 404);
 
@@ -1332,6 +1340,7 @@ public class TaskRunnerService : BackgroundService
 
     public bool StartRunner(string projectName)
     {
+        _executionAdmission?.Demand(ExecutionAdmissionPath.Start);
         if (!_runners.TryGetValue(projectName, out var runner)) return false;
         // Starting is always immediate: auto-* never defers.
         runner.SetMode("auto-single", "api: POST /api/runner/{project}/start");

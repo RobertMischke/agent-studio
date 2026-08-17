@@ -28,6 +28,6 @@ public static class PromptEnhancementEndpoints
             {
                 return Results.Problem(ex.Message, statusCode: 502);
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
     }
 }

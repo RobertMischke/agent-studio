@@ -120,6 +120,7 @@
     <Using Include="AgentStudio.Shared" />
     <Using Include="AgentStudio.State" />
     <Using Include="AgentStudio.Supervisor" />
+    <Using Include="AgentStudio.TaskServer.Contracts.ExecutionAdmissionPath" Alias="ExecutionAdmissionPath" />
     <Using Include="AgentStudio.Tags" />
     <Using Include="AgentStudio.TaskAccess" />
     <Using Include="AgentStudio.Tasks" />

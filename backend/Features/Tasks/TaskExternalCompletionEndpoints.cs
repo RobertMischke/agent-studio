@@ -64,6 +64,6 @@ public static class TaskExternalCompletionEndpoints
                     new { error = outcome.Message ?? "External completion failed." },
                     statusCode: StatusCodes.Status500InternalServerError),
             };
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
     }
 }

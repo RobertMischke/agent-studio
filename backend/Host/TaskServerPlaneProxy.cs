@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using AgentStudio.Security;
 using AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Host;
@@ -59,6 +60,26 @@ public static class TaskServerPlaneProxy
     public static bool MapTaskServerPlaneProxy(this WebApplication app)
     {
         if (!IsConfigured(app.Configuration)) return false;
+
+        if (SecurityProfiles.IsPublicDemo(app.Configuration))
+        {
+            app.MapMethods(
+                "/api/v1/{**path}",
+                ["GET", "HEAD", "OPTIONS"],
+                ForwardAsync);
+            var unsafeProxy = app.MapMethods(
+                "/api/v1/{**path}",
+                ["POST", "PUT", "PATCH", "DELETE"],
+                ForwardAsync);
+            unsafeProxy.Add(endpoint =>
+            {
+                endpoint.Metadata.Add(new ExecutionRouteMetadata(ExecutionAdmissionPath.PostStep));
+                endpoint.Metadata.Add(new PublicDemoExecutionExpectationMetadata(
+                    ExecutionAdmissionPath.PostStep,
+                    ExecutionAdmissionPolicy.ExecutionDisabledCode));
+            });
+            return true;
+        }
 
         app.MapMethods(
             "/api/v1/{**path}",

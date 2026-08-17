@@ -426,11 +426,17 @@ public sealed class ResultRefGcHostedService(
     TaskServerStore store,
     IResultRefDeleter deleter,
     IOptions<TaskServerOptions> options,
+    TaskServerStartupExecutionAdmission executionAdmission,
     ILogger<ResultRefGcHostedService> logger) : BackgroundService
 {
+    public bool ExecutionSuppressed => executionAdmission.IsPublicDemo;
+
     public async Task<ResultRefGcSweepResult> RunOnceAsync(
         CancellationToken ct = default)
     {
+        if (ExecutionSuppressed)
+            return new ResultRefGcSweepResult(DateTime.UtcNow, []);
+
         var result = await store.SweepResultRefsAsync(deleter, ct);
         foreach (var item in result.Decisions)
         {
@@ -453,6 +459,8 @@ public sealed class ResultRefGcHostedService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (ExecutionSuppressed) return;
+
         if (!options.Value.ResultRefGcEnabled)
         {
             logger.LogInformation("result-ref-gc disabled");

@@ -50,7 +50,7 @@ public static class TaskGitEndpoints
             return result.Success
                 ? Results.Ok(new { sha = result.Sha })
                 : Results.BadRequest(new { error = result.Error });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         group.MapPost("/{jobId}/git/generate-message", async (string jobId, string? project, string? watchPath, GitService git, AgentStudio.Registry.ProjectRegistry projects, CancellationToken ct) =>
         {
@@ -59,7 +59,7 @@ public static class TaskGitEndpoints
             return result.Message is not null
                 ? Results.Ok(new { message = result.Message })
                 : Results.BadRequest(new { error = result.Error });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         // Per-job commit details: returns the cached snapshot from task.json plus
         // a live re-derivation of the file list from `git show --name-status`,
@@ -177,7 +177,7 @@ public static class TaskGitEndpoints
                 commit = refreshed?.Commit ?? commit,
                 commits = refreshed?.Commits ?? [commit],
             });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         group.MapGet("/{jobId}/commits/files", (
             string jobId, string? project, string? watchPath,
@@ -354,7 +354,7 @@ public static class TaskGitEndpoints
             catch (Exception __ex) { SilentCatch.Note(__ex, "TaskGitEndpoints: chat-log is best-effort"); /* chat-log is best-effort */ }
 
             return Results.Ok(new { commit = commitInfo });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         group.MapPost("/{jobId}/open-in-vscode", (string jobId, string? project, string? watchPath, GitService git, AgentStudio.Registry.ProjectRegistry projects) =>
         {
@@ -362,7 +362,7 @@ public static class TaskGitEndpoints
             return git.OpenInVsCode(jobId, watchPath, out var error)
                 ? Results.Ok()
                 : Results.BadRequest(new { error });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
     }
 
     // Lanes where commit attribution is considered final: the job has left

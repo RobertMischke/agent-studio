@@ -115,7 +115,7 @@ public static class RunnerEndpoints
                 Mode: result.CurrentMode,
                 PendingMode: result.PendingMode,
                 WillApplyAfterJobId: result.WillApplyAfterJobId));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         // Live, in-progress decision surface (ADR-0027): unresolved
         // [[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]] sentinels the named
@@ -150,7 +150,7 @@ public static class RunnerEndpoints
         {
             var success = runner.StartRunner(projectName);
             return success ? Results.Ok() : Results.NotFound();
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         runnerGroup.MapPost("/{projectName}/stop", (string projectName, TaskRunnerService runner) =>
         {
@@ -285,7 +285,7 @@ public static class RunnerEndpoints
                 }
 
                 return Results.Ok(new { applied = false, note = "Override recorded in the feed; no jobId was given to route to." });
-            });
+            }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         // Orchestrator chat (Phase 3): the side-sheet conversation surface.
         // Different from the orchestrator log: the log records what the
@@ -326,7 +326,7 @@ public static class RunnerEndpoints
                 {
                     return Results.BadRequest(new { code = exception.Code, error = exception.Message });
                 }
-            });
+            }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
 
         // Per-context transcript history (MC-2, Concept §4). The side sheet's
         // context follows the operator's navigation — the board yields a
@@ -390,10 +390,12 @@ public static class RunnerEndpoints
 
         runnerGroup.MapPost("/project:{projectId}/orchestrator-chat",
             (string projectId, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
-                SendContextChat($"project:{projectId}", req, ctx, scanner, chatService, ct));
+                SendContextChat($"project:{projectId}", req, ctx, scanner, chatService, ct))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
         runnerGroup.MapPost("/task:{projectId}/{taskKey}/orchestrator-chat",
             (string projectId, string taskKey, SendOrchestratorChatRequest req, HttpContext ctx, TaskScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
-                SendContextChat($"task:{projectId}/{taskKey}", req, ctx, scanner, chatService, ct));
+                SendContextChat($"task:{projectId}/{taskKey}", req, ctx, scanner, chatService, ct))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
 
         // Image upload + serving for the orchestrator chat composer.
         // Files land under <watchPath>/.orchestrator/chat-attachments/.

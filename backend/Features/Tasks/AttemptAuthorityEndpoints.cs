@@ -17,7 +17,8 @@ public static class AttemptAuthorityEndpoints
             authority.GetReview(attemptId) is { } review ? Results.Ok(review) : Results.NotFound());
 
         group.MapPost("/reviews", (CreateReviewAttemptRequest request, AttemptAuthorityService authority) =>
-            ToHttp(authority.CreateReviewAttempt(request)));
+            ToHttp(authority.CreateReviewAttempt(request)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
 
         group.MapPost("/reviews/{attemptId}/claim", (
             string attemptId,
@@ -28,7 +29,8 @@ public static class AttemptAuthorityEndpoints
                 request.ExecutorId,
                 request.HostId,
                 request.RequestedTtlSeconds,
-                request.IdempotencyKey)));
+                request.IdempotencyKey)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
 
         group.MapPost("/reviews/{attemptId}/settle", (
             string attemptId,
@@ -39,7 +41,7 @@ public static class AttemptAuthorityEndpoints
                 return Results.BadRequest(new AttemptWriteResult(
                     AttemptWriteStatus.Invalid, attemptId, "Route AttemptId must match the write reference."));
             return ToHttp(authority.SettleReview(request));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         group.MapPost("/reviews/{attemptId}/renew", (
             string attemptId,
@@ -50,7 +52,7 @@ public static class AttemptAuthorityEndpoints
                 return Results.BadRequest(new AttemptWriteResult(
                     AttemptWriteStatus.Invalid, attemptId, "Route AttemptId must match the write reference."));
             return ToHttp(authority.RenewReview(request.Write, request.ExecutorId, request.RequestedTtlSeconds));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
     }
 
     private static IResult ToHttp(AttemptWriteResult result) => result.Status switch
