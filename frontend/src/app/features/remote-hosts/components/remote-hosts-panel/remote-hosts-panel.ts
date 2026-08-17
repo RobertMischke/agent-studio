@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
+import { ReviewQueueService } from '../../services/review-queue.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
 import type { HostActionKind, HostProjectSlots, RemoteHost } from '../../models/remote-host.model';
 import type {
@@ -19,6 +20,7 @@ import {
   RemoteHostTableState,
   type RemoteHostSortKey,
 } from './remote-host-table-state';
+import { formatDrainRate, formatReviewDuration } from './auto-review-queue-format';
 
 /**
  * Execution Hosts settings page (AGT-1921).
@@ -43,6 +45,7 @@ import {
 export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private readonly service = inject(RemoteHostsService);
   private readonly tasks = inject(TaskService);
+  private readonly reviewQueue = inject(ReviewQueueService);
   private readonly tableState = new RemoteHostTableState();
 
   readonly hosts = this.service.hosts;
@@ -85,9 +88,21 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly sortedHosts = computed(() =>
     this.tableState.sort(this.hosts(), host => this.boardSlots(host)));
 
+  /** Auto-review post-processing queue snapshot (AGT-2645). */
+  readonly reviewQueueSnapshot = computed(() => this.reviewQueue.snapshot());
+  readonly reviewDrainRateLabel = computed(() => {
+    const snapshot = this.reviewQueueSnapshot();
+    return snapshot ? formatDrainRate(snapshot.drainRatePerMinute) : '-';
+  });
+  readonly reviewDurationLabel = computed(() => {
+    const snapshot = this.reviewQueueSnapshot();
+    return snapshot ? formatReviewDuration(snapshot.medianReviewDurationMs) : '-';
+  });
+
   ngOnInit(): void {
     this.tableState.hydrate();
     this.service.ensureLoaded();
+    this.reviewQueue.refresh();
     this.tickHandle = setInterval(() => this.now.set(Date.now()), 30_000);
   }
 
