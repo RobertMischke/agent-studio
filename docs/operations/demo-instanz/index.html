@@ -146,6 +146,7 @@
     <li><a href="#security">§6 Security and residual risk</a></li>
     <li><a href="#operations">§7 Reset and versioning</a></li>
     <li><a href="#slices">§8 Decision-ready slice plan</a></li>
+    <li><a href="#implementation-state">§8a Implementation state</a></li>
     <li><a href="#approval">§9 Decision request</a></li>
   </ul>
 </nav>
@@ -591,6 +592,35 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <h4>Recommended delivery order</h4>
   <p>Approve S1 through S6 as the public read-only launch package, with S2 as the non-negotiable gate. S1 and S2 can proceed in parallel from the integrated AGT-2530 baseline. S3 and S4 build on the denial contract. S5 freezes the verifiable release unit. S6 is the only infrastructure-changing slice and requires a separate launch approval. Keep S7 outside the launch commitment.</p>
 </div>
+
+<!-- agent-studio:implementation-section:start -->
+<h2 id="implementation-state"><span class="no">§8a</span>Implementation state</h2>
+<p>The operator approved this package on 17 August 2026 and cut slices S1 to S5 as AGT-2666 to AGT-2670. This section tracks what is actually in the product, so the dossier stays a living record rather than a frozen proposal.</p>
+
+<table>
+  <thead><tr><th>Slice</th><th>State</th><th>What exists in the product</th></tr></thead>
+  <tbody>
+    <tr><td><b>S1</b> Seed content and gallery</td><td>Not started</td><td>The AGT-2530 pinned seed and its two projects remain the baseline. The Wiki trees and the six-Dossier gallery are not seeded yet.</td></tr>
+    <tr><td><b>S2</b> Hard public-demo execution profile</td><td>Not started</td><td>No startup-only deny profile exists. The launch invariant is therefore not satisfiable yet, and no public instance may start.</td></tr>
+    <tr><td><b>S3</b> Replay-only Runner</td><td><b>Delivered</b></td><td>Signed trace schema with per-frame seals, the narrow <code>demo.replay</code> server scope and its typed denial matrix, a claim-free replay service image, Simulated labelling end to end, and compromise tests. See the <a href="replay-only-runner.md">operator contract</a>.</td></tr>
+    <tr><td><b>S4</b> Public read-only edge</td><td>Not started</td><td>No TLS edge, viewer boundary, endpoint allowlist, or rate limiting has been added.</td></tr>
+    <tr><td><b>S5</b> Scrub, bundle, and reset contract</td><td>Not started</td><td>The release manifest, scrub report, and replacement job do not exist. The S3 sealing tool already prints the <code>replayTraceDigest</code> that manifest will pin.</td></tr>
+    <tr><td><b>S6</b> Dedicated-VM launch rehearsal</td><td>Not started</td><td>No hosting, DNS, or infrastructure change has been made by any delivered slice.</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>The launch invariant is not met yet</h4>
+  <p>S3 delivers one of the two independent barriers the recommended topology asks for. It does not substitute for S2: a replay credential cannot claim or mutate tasks, but the server itself still admits execution on every other path. The public demo does not start until S2 proves the startup lock across its route matrix.</p>
+</div>
+
+<h3>Delivered slices</h3>
+<ul>
+<!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2668" data-delivered-at="2026-08-17" data-slice="replay-only-runner"><b>Replay-only Runner (S3).</b> Added a content-addressed replay trace contract with per-frame ECDSA seals, a release-side sealing tool, a pure admission policy pinning trace, digest, seal, scene namespace, event kind, epoch, and monotonic sequence, an exclusive <code>demo.replay</code> credential scope, a server-assigned <code>simulated</code> origin surfaced as a Simulated marker in the Activity transcript and the replay metadata, and a separate service image with no CLI, Git, repository, secret, or broad egress. Compromise tests prove the replay credential is refused by claim, lease, logs, events, artifacts, completion, and every task mutation, and that a tampered or foreign-signed frame is rejected.</li>
+<!-- agent-studio:implementation-log:end -->
+</ul>
+<!-- agent-studio:implementation-section:end -->
 
 <h2 id="approval" data-concept-section="open-decisions"><span class="no">§9</span>Decision request</h2>
 <p>This dossier is decision-ready. Approval is requested for the following package:</p>

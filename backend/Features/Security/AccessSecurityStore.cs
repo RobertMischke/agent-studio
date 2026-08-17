@@ -519,6 +519,10 @@ public sealed class AccessSecurityStore
             .Select(x => x.Trim().ToLowerInvariant()).Distinct(StringComparer.Ordinal).ToList();
         var unknown = normalized.Where(x => !RunnerScopes.All.Contains(x)).ToList();
         if (unknown.Count > 0) throw new SecurityOperationException(400, "invalid-scope", $"Unknown Runner scope: {string.Join(", ", unknown)}.");
+        // The replay scope is structurally exclusive so a public-demo credential
+        // cannot be widened into an execution credential by configuration.
+        if (normalized.Count > 1 && normalized.Any(RunnerScopes.IsExclusive))
+            throw new SecurityOperationException(400, "invalid-scope", $"The '{RunnerScopes.DemoReplay}' scope is exclusive and cannot be combined with other Runner scopes.");
         return normalized;
     }
 

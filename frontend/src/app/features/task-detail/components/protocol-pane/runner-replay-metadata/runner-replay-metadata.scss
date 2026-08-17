@@ -32,6 +32,32 @@ dt {
   font-size: var(--studio-font-size-xs, 11px);
 }
 
+.replay__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+
+// Provenance, not an alarm: the marker stays dim in both themes and never
+// competes with acute run status.
+.replay__origin {
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid var(--studio-border-subtle);
+  border-radius: 999px;
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-dim);
+  font-size: var(--studio-font-size-xs, 11px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.replay__event-head strong .replay__origin {
+  margin-left: var(--studio-spacing-2);
+  font-weight: 700;
+}
+
 .replay__events {
   display: grid;
   gap: var(--studio-spacing-2);

@@ -25,5 +25,23 @@ describe('RunnerReplayMetadataComponent', () => {
     expect(text).not.toContain('Turn completed (tokens:');
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="runner-replay-implementation"]')?.textContent).toContain('completed');
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="runner-replay-pipeline"]')?.textContent).toContain('post-processing');
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="runner-replay-simulated"]')).toBeNull();
+  });
+
+  it('marks replayed demo turns as Simulated on the section and on every event', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RunnerReplayMetadataComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RunnerReplayMetadataComponent);
+    fixture.componentRef.setInput('events', [{
+      id: 'replay:4:3', kind: 'turn.completed', timestamp: '2026-08-09T08:00:40Z',
+      origin: 'simulated', model: 'claude-opus-4-8', outputTokens: 1_200,
+    }]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-testid="runner-replay-simulated"]')?.textContent?.trim()).toBe('Simulated');
+    expect(host.querySelector('[data-testid="runner-replay-simulated-replay:4:3"]')?.textContent?.trim()).toBe('Simulated');
   });
 });

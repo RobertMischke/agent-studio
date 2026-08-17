@@ -51,6 +51,7 @@ public static class EndpointMapping
         app.MapIntegrationLeaseEndpoints();
         app.MapLogIngestionEndpoints();
         app.MapRunnerEventIngestionEndpoints();
+        app.MapDemoReplayEndpoints();
         app.MapArtifactIngestionEndpoints();
         app.MapRegistryEndpoints();
         app.MapWorkspaceEndpoints();

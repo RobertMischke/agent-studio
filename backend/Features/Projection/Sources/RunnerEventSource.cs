@@ -95,6 +95,7 @@ public sealed class RunnerEventSource : IConversationEventSource
             ["reasoningTokens"] = record.ReasoningTokens,
             ["implementationStatus"] = record.ImplementationStatus,
             ["pipelineStatus"] = record.PipelineStatus,
+            ["origin"] = record.Origin,
         };
         return new RawSourceEvent
         {
@@ -132,6 +133,7 @@ public sealed class RunnerEventSource : IConversationEventSource
                  ?? $"runner:{timestamp:O}:{lineIndex}",
             Kind = kind,
             Timestamp = timestamp,
+            Origin = Text(envelope, "origin") ?? Text(payload, "origin"),
             SessionId = Text(payload, "sessionId", "session_id"),
             TurnId = Text(payload, "turnId", "turn_id"),
             RunIndex = Integer(payload, "runIndex", "runId", "turnIndex"),

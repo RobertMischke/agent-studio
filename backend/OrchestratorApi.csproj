@@ -94,6 +94,7 @@
     <Using Include="AgentStudio.Companion" />
     <Using Include="AgentStudio.Configuration" />
     <Using Include="AgentStudio.Conversation" />
+    <Using Include="AgentStudio.DemoReplay" />
     <Using Include="AgentStudio.Design" />
     <Using Include="AgentStudio.Diagnostics" />
     <Using Include="AgentStudio.Docs" />

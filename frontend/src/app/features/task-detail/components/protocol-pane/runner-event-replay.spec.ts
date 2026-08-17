@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunnerRecordedEvent } from '../../../run-timeline';
-import { mergeReplayEvents, projectRunnerReplay } from './runner-event-replay';
+import { isSimulated, mergeReplayEvents, projectRunnerReplay } from './runner-event-replay';
 
 const records: RunnerRecordedEvent[] = [
   {
@@ -40,5 +40,40 @@ describe('projectRunnerReplay', () => {
       rawRange: { source: 'AGT-2149', start: 1, end: 1 },
     }], replay);
     expect(merged.map(event => event.id)).toEqual(['session-1', 'message', 'turn-1', 'turn-1:usage']);
+  });
+
+  it('labels replayed public-demo events as simulated in the feed and in the trace', () => {
+    const simulated: RunnerRecordedEvent[] = [
+      {
+        id: 'replay:4:2', kind: 'turn.completed', timestamp: '2026-08-09T08:00:40Z',
+        origin: 'simulated', runIndex: 1, outputTokens: 1_200,
+      },
+      {
+        id: 'replay:4:3', kind: 'diagnostic', timestamp: '2026-08-09T08:00:50Z',
+        origin: 'simulated', severity: 'warning', code: 'demo', message: 'Scene note.',
+      },
+    ];
+
+    const result = projectRunnerReplay(simulated, 'DEMO-5');
+
+    expect(result.timelineEvents[0]).toMatchObject({ label: 'Simulated turn completed' });
+    expect(result.diagnosticLines[0].text).toBe('[simulated] [demo] Scene note.');
+  });
+
+  it('leaves live runner events unlabelled so the marker stays meaningful', () => {
+    const result = projectRunnerReplay(records, 'AGT-2149');
+
+    expect(result.timelineEvents[1]).toMatchObject({ label: 'Turn completed' });
+    expect(result.diagnosticLines[0].text).not.toContain('simulated');
+  });
+
+  it.each([
+    ['simulated', true],
+    ['  Simulated ', true],
+    ['live', false],
+    [undefined, false],
+    [null, false],
+  ])('reads origin %s as simulated=%s', (origin, expected) => {
+    expect(isSimulated({ origin })).toBe(expected);
   });
 });
