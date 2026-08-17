@@ -110,6 +110,7 @@
     <Using Include="AgentStudio.Projects" />
     <Using Include="AgentStudio.ProjectGraph" />
     <Using Include="AgentStudio.Prompts" />
+    <Using Include="AgentStudio.PublicDemo" />
     <Using Include="AgentStudio.Publishing" />
     <Using Include="AgentStudio.Registry" />
     <Using Include="AgentStudio.RegressionRadar" />

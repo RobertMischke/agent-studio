@@ -621,6 +621,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
     <li><a href="#benchmark-framework">§11 Benchmark framework and Result Dossier</a></li>
     <li><a href="#cost-model">§12 Cost model and hard caps</a></li>
     <li><a href="#overlaps">§13 Product and marketing overlaps</a></li>
+    <li><a href="#implementation-state">§14 Implementation state</a></li>
   </ul>
 </nav>
 
@@ -961,6 +962,59 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
     <li>Approve Token Economy as benchmark and history owner, the Agent Studio website as product-proof consumer, and Pelican and The Deep Blue as independently deployable marketing projects.</li>
   </ol>
 </section>
+
+<hr style="border:none;border-top:1px solid var(--line);margin:64px 0 0">
+
+<h2 id="implementation-state"><span class="no">§14</span>Implementation state</h2>
+<p>Living record of what the approved package has actually shipped. Each slice moves from planned to delivered only with named code and evidence; the slice text in §8 stays the binding acceptance.</p>
+
+<table>
+  <thead><tr><th>Slice</th><th>Task</th><th>State</th><th>Delivered surface</th></tr></thead>
+  <tbody>
+    <tr><td><b>S1</b> Seed content and gallery</td><td>AGT-2666</td><td><span class="pill control">Planned</span></td><td>-</td></tr>
+    <tr><td><b>S2</b> Hard public-demo execution profile</td><td>AGT-2667</td><td><span class="pill control">Planned</span></td><td>-</td></tr>
+    <tr><td><b>S3</b> Replay-only Runner</td><td>AGT-2668</td><td><span class="pill control">Planned</span></td><td>-</td></tr>
+    <tr>
+      <td><b>S4</b> Public read-only edge</td>
+      <td>AGT-2669</td>
+      <td><span class="pill ok">Delivered</span></td>
+      <td>
+        <code>backend/Features/PublicDemo/</code> plus the <code>public-demo</code> security profile.
+        Deny-by-default edge over an explicit endpoint allowlist, safe methods only, same-origin TLS,
+        ephemeral viewer boundary, per-viewer request budget, body ceiling, two content-security
+        policies, project-filtered SignalR, and read-only UI controls in the Angular shell.
+      </td>
+    </tr>
+    <tr><td><b>S5</b> Scrub, bundle, and reset contract</td><td>AGT-2670</td><td><span class="pill control">Planned</span></td><td>-</td></tr>
+    <tr><td><b>S6</b> Dedicated-VM launch rehearsal</td><td>-</td><td><span class="pill control">Not cut</span></td><td>Requires a separate operator launch approval.</td></tr>
+    <tr><td><b>S7</b> Optional per-session sandbox</td><td>-</td><td><span class="pill control">Out of launch</span></td><td>-</td></tr>
+  </tbody>
+</table>
+
+<h3>S4 as delivered · 17 August 2026 · AGT-2669</h3>
+<p>The edge is one middleware placed ahead of authentication, routing, and every handler. Its admission decision is a pure function, so the matrix is proved without a host: same-origin, TLS, safe method, body ceiling, allowlist. Everything else is a typed denial carrying a stable machine code, the answering profile, and the read-only fact.</p>
+
+<table>
+  <thead><tr><th>Required measure</th><th>How S4 meets it</th><th>Denial code</th></tr></thead>
+  <tbody>
+    <tr><td>Same-origin TLS</td><td>Plain HTTP is refused before any other rule; a request carrying a foreign <code>Origin</code> is refused on HTTP and on the WebSocket upgrade alike. HSTS is on for every internet-facing profile.</td><td><code>public-demo-https-required</code>, <code>public-demo-cross-origin-denied</code></td></tr>
+    <tr><td>Ephemeral viewer boundary</td><td>Opaque HttpOnly, Secure, SameSite=Strict session cookie with no Expires, a sliding lifetime, and a hard ceiling on tracked viewers. Public authority by design, never persisted, gone on reset.</td><td>-</td></tr>
+    <tr><td>Explicit endpoint allowlist</td><td>One reviewed inventory of GET-reachable routes grouped by the visitor story each serves. Anything absent is unreachable, so a newly mapped route arrives denied.</td><td><code>public-demo-endpoint-denied</code></td></tr>
+    <tr><td>Project-filtered SignalR</td><td>A visitor joins only the announced demo project groups, never the unscoped group, and conversation subscriptions are refused outside those projects. REST fan-out uses the same groups, and <code>/api/projects</code> applies the same filter so a drifted or mis-seeded store cannot announce a project the demo never claimed.</td><td>-</td></tr>
+    <tr><td>Content minimization</td><td><code>/api/projects</code> returns the unchanged wire shape with storage locations, repository paths, roots, remotes, watched URLs, and ownership mappings cleared. Those describe the machine the demo runs on, not the demo content, and the scrub contract names absolute paths and repository remotes explicitly. <code>/api/watch-paths</code> stays denied outright.</td><td>-</td></tr>
+    <tr><td>CSP and sandboxing</td><td>A self-only policy for the shell and API; a second <code>sandbox</code> policy with <code>default-src 'none'</code> for seeded document content, so a script fragment surviving the scrub gate still has no origin authority. No remote embeds, no framing, no form posts.</td><td>-</td></tr>
+    <tr><td>Rate and body limits</td><td>Per-viewer rolling-minute budget with a bounded, self-sweeping store; declared and chunked bodies both capped.</td><td><code>public-demo-rate-limited</code>, <code>public-demo-body-too-large</code></td></tr>
+    <tr><td>Safe error surfaces</td><td>No exception detail, type, or path in any internet-facing profile. Denials say only that the request was denied.</td><td>-</td></tr>
+    <tr><td>Disabled UI controls</td><td>The profile reaches Angular as one signal that feeds the existing <code>mutationsBlocked</code> gate, so create, drag-reorder, triage, and decision controls disable together, a banner explains why, and a client guard turns a stray write into a readable message.</td><td><code>public-demo-read-only</code></td></tr>
+    <tr><td>Raw unsafe request returns a typed denial</td><td>The read-only verdict is evaluated before the allowlist, so any POST, PUT, PATCH, or DELETE - known route, unknown route, or forged - lands on the one denial that names the launch invariant. The SignalR negotiate POST is the single, path-exact exception.</td><td><code>public-demo-read-only</code></td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>Dependency note and residual risk</h4>
+  <p>S4 was built while the S2 route inventory was still open. The edge therefore carries its own inventory and two guard tests: one walks every route the host maps and fails when a mutating verb is reachable, the other fails when an allowlist entry no longer matches a mapped route. That is a reachability guard, not an execution-admission guard. It does not replace S2: a caller reaching the Task Server without passing this edge is exactly the case S2 owns, and the launch invariant still requires the server-side denial matrix before the demo starts.</p>
+  <p>Two known follow-ups for the S6 rehearsal. First, <code>/api/watch-paths</code> stays denied because it discloses host filesystem paths; the shell must resolve projects from <code>/api/projects</code> alone in the demo build. Second, the allowlist admits the seeded evidence and Dossier routes, so the S5 scrub gate remains the primary confidentiality control for that content, with the sandbox policy as the second layer.</p>
+</div>
 
 <p class="dim" style="font-size:12.5px;margin-top:36px">Extension evidence basis: the canonical Model Routing Policy; Token Aggregation and Token Pricing contracts; Context-aware Orchestrator Chats; Pipeline Time Economy and its Async Validation proposal; and the §1 through §9 public-demo security and replay decisions. Proposed caps and scenario scores are decision inputs, not measured outcomes. No scenario was executed and no benchmark result is claimed by this planning extension.</p>
 

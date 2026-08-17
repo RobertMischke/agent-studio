@@ -5,6 +5,7 @@ import { provideCodingAgentChat } from 'coding-agent-chat';
 import { ModalErrorHandler } from './services/error-dialog.service';
 import { clientIdInterceptor } from './services/client-id.interceptor';
 import { offlineGuardInterceptor } from './services/offline-guard.interceptor';
+import { publicDemoGuardInterceptor } from './services/public-demo-guard.interceptor';
 import { sessionSecurityInterceptor } from './services/session-security.interceptor';
 import { TaskReferenceNavigationService } from './services/task-reference-navigation.service';
 import { MediaLightboxService } from './services/media-lightbox.service';
@@ -14,7 +15,7 @@ import { ProviderAuthStatusService } from './features/remote-hosts';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideHttpClient(withInterceptors([offlineGuardInterceptor, sessionSecurityInterceptor, clientIdInterceptor])),
+    provideHttpClient(withInterceptors([publicDemoGuardInterceptor, offlineGuardInterceptor, sessionSecurityInterceptor, clientIdInterceptor])),
     { provide: ErrorHandler, useClass: ModalErrorHandler },
     // coding-agent-chat host seams: markdown task-reference auto-linking and
     // click-to-enlarge images route into the app's existing root services.

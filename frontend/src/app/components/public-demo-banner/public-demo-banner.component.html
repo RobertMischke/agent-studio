@@ -1,0 +1,10 @@
+@if (auth.publicDemo()) {
+  <div class="demo-banner" role="status" aria-live="polite" data-testid="public-demo-banner">
+    <span class="demo-banner__dot" aria-hidden="true"></span>
+    <span class="demo-banner__text">
+      <strong>Public read-only demo.</strong>
+      You are browsing a recorded snapshot. Cards, runs, and evidence are shown exactly as
+      they happened; nothing can be started, changed, or deleted here.
+    </span>
+  </div>
+}

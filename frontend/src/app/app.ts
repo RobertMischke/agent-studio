@@ -120,6 +120,7 @@ import { StudioIconComponent } from './components/studio-icon/studio-icon.compon
 import { NotificationStackComponent } from './components/app-dialog/notification-stack/notification-stack.component';
 import { MediaLightboxComponent } from './components/media-lightbox/media-lightbox.component';
 import { OfflineBannerComponent } from './components/offline-banner/offline-banner.component';
+import { PublicDemoBannerComponent } from './components/public-demo-banner/public-demo-banner.component';
 import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
@@ -179,6 +180,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     NotificationStackComponent,
     MediaLightboxComponent,
     OfflineBannerComponent,
+    PublicDemoBannerComponent,
     ProjectTabsComponent,
     E2ECleanupDialogComponent,
     TagManagerDialogComponent,
@@ -2548,6 +2550,9 @@ export class App implements OnInit, OnDestroy {
    * endpoint is briefly unavailable.
    */
   laneReorderDisabled(state: string, jobs: TaskInfo[]): boolean {
+    // The public read-only demo has no lane mutation at all: the server denies
+    // the move, so the card must not offer the drag affordance either.
+    if (this.updateClient.mutationsBlocked()) return true;
     const strategy = this.laneSortStrategy(state, jobs);
     if (!strategy) return false;
     return !allowsDragReorder(strategy);

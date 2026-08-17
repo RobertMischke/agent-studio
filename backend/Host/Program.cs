@@ -757,7 +757,10 @@ builder.Services.AddSignalR();
 // below so the notifier subscriptions are live before the first mutation.
 builder.Services.AddSingleton<AgentStudio.Host.TaskHubBroadcaster>();
 builder.Services.AddSingleton<AgentStudio.Host.WorkbenchHubBroadcaster>();
-if (!SecurityProfiles.IsNetworked(builder.Configuration))
+// The public read-only demo edge (AGT-W34 slice S4). Registration is
+// unconditional and inert; only the middleware below is profile-gated.
+builder.Services.AddPublicDemoEdge(builder.Configuration);
+if (!SecurityProfiles.IsInternetFacing(builder.Configuration))
 {
     builder.Services.AddCors(options =>
     {
@@ -770,11 +773,14 @@ if (!SecurityProfiles.IsNetworked(builder.Configuration))
 }
 
 var app = builder.Build();
-var networkedSecurityProfile = SecurityProfiles.IsNetworked(app.Configuration);
-var includeExceptionDetails = !networkedSecurityProfile && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
+var publicDemoProfile = SecurityProfiles.IsPublicDemo(app.Configuration);
+var internetFacingProfile = SecurityProfiles.IsInternetFacing(app.Configuration);
+// Safe error surfaces: no exposed profile ever returns a stack trace, an
+// exception type, or a server-side path to a visitor.
+var includeExceptionDetails = !internetFacingProfile && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
 
 app.UseForwardedHeaders();
-if (networkedSecurityProfile) app.UseHsts();
+if (internetFacingProfile) app.UseHsts();
 
 app.UseExceptionHandler(exceptionApp =>
 {
@@ -807,7 +813,13 @@ app.UseExceptionHandler(exceptionApp =>
     });
 });
 
-if (!networkedSecurityProfile) app.UseCors();
+if (!internetFacingProfile) app.UseCors();
+
+// The public read-only demo edge runs ahead of every other boundary so a denied
+// request never reaches authentication, routing, or a handler. It is the sole
+// authority in that profile: deny-by-default over an explicit endpoint
+// allowlist, safe methods only, same-origin TLS, and a typed denial otherwise.
+if (publicDemoProfile) app.UsePublicDemoEdge();
 
 // In the networked profile this is the authentication and authorization
 // boundary. X-Client-Id remains attribution only and is never consulted as a
@@ -818,7 +830,7 @@ app.UseAccessSecurity();
 // unregistered identities and stamps lastSeenAt on known ones. This is local
 // attribution only, never authentication. Carve-outs for client registration,
 // hubs, and health checks live in the middleware itself.
-if (!networkedSecurityProfile) app.UseClientIdentity();
+if (!internetFacingProfile) app.UseClientIdentity();
 
 // Management intent is authoritative for admission. Reads, recovery controls,
 // and the bounded set of writes needed to drain an existing Runner remain live.
@@ -1067,7 +1079,7 @@ try
         try { cache.OnAppended(workspace, msg); } catch (Exception ex) { SilentCatch.Note(ex, "BusAggregationCache.OnAppended"); }
         try
         {
-            var recipients = !networkedSecurityProfile
+            var recipients = !internetFacingProfile
                 ? pushHub.Clients.All
                 : !string.IsNullOrWhiteSpace(msg.Project)
                     ? pushHub.Clients.Group(TaskHub.ProjectGroup(msg.Project, app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>()))
@@ -1119,12 +1131,12 @@ var hubContext = app.Services.GetRequiredService<IHubContext<TaskHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
 var eventProjects = app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>();
 IClientProxy ProjectEventClients(string projectName)
-    => networkedSecurityProfile
+    => internetFacingProfile
         ? hubContext.Clients.Group(TaskHub.ProjectGroup(projectName, eventProjects))
         : hubContext.Clients.All;
 IClientProxy TaskEventClients(string jobId)
 {
-    if (!networkedSecurityProfile) return hubContext.Clients.All;
+    if (!internetFacingProfile) return hubContext.Clients.All;
     var task = app.Services.GetRequiredService<TaskScannerService>().FindJob(jobId);
     return task is null
         ? hubContext.Clients.Group("project:unresolved")

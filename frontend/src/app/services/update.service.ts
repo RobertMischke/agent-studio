@@ -2,6 +2,7 @@ import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { RollbackRequest, RollbackResponse, TriggerRequest, TriggerResponse, UpdateHistoryEntry, UpdateStatus } from '../models/update-service.model';
+import { AuthSessionState } from './auth.service';
 
 /**
  * Talks to the standalone UpdateService (default port 5039). The endpoint
@@ -18,6 +19,7 @@ import { RollbackRequest, RollbackResponse, TriggerRequest, TriggerResponse, Upd
 @Injectable({ providedIn: 'root' })
 export class UpdateClientService {
   private readonly http = inject(HttpClient);
+  private readonly auth = inject(AuthSessionState);
 
   /** Resolves the base URL for the UpdateService (host of the FE, port 5039). */
   private readonly baseUrl = (() => {
@@ -45,11 +47,13 @@ export class UpdateClientService {
   readonly headLocal = computed(() => this.status()?.headLocal ?? '');
 
   /**
-   * UI feature gate: while an update is running, mutations should be
-   * blocked at the call site (job create / move / mode change) so the
-   * banner and the actual behaviour stay aligned.
+   * UI feature gate: mutations are blocked at the call site (job create /
+   * move / mode change) so the banner and the actual behaviour stay aligned.
+   * Two reasons block them: an update is running, or the instance is the
+   * public read-only demo, where the server edge denies every mutation
+   * anyway (AGT-W34 slice S4).
    */
-  readonly mutationsBlocked = computed(() => this.isRunning());
+  readonly mutationsBlocked = computed(() => this.isRunning() || this.auth.publicDemo());
 
   /** Whether the Update Center drawer is currently open. */
   readonly centerOpen = signal(false);

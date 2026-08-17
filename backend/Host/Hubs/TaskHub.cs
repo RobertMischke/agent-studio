@@ -25,6 +25,17 @@ public class TaskHub : Hub
 
     public override async Task OnConnectedAsync()
     {
+        // Public demo: an anonymous visitor is scoped to the announced demo
+        // projects and never joins the unscoped group, so a project the seed did
+        // not announce cannot reach the socket even if it exists in the store.
+        if (SecurityProfiles.IsPublicDemo(_configuration))
+        {
+            foreach (var project in DemoProjects())
+                await Groups.AddToGroupAsync(Context.ConnectionId, ProjectGroup(project, _projects));
+            await base.OnConnectedAsync();
+            return;
+        }
+
         var principal = LivePrincipal();
         if (principal is null || principal.User.Role == StudioRoles.Owner || principal.User.Projects.Count == 0)
             await Groups.AddToGroupAsync(Context.ConnectionId, UnscopedSecurityGroup);
@@ -56,6 +67,15 @@ public class TaskHub : Hub
     /// </summary>
     public Task SubscribeToConversation(string jobId)
     {
+        if (SecurityProfiles.IsPublicDemo(_configuration))
+        {
+            var demoTask = _scanner.FindJob(jobId);
+            if (demoTask is null) throw new HubException("Task not found.");
+            if (!IsDemoProjectGroup(ProjectGroup(demoTask.ProjectName, _projects)))
+                throw new HubException("Project access denied.");
+            return Groups.AddToGroupAsync(Context.ConnectionId, ConversationProjector.GroupName(jobId));
+        }
+
         var principal = LivePrincipal();
         var task = _scanner.FindJob(jobId);
         if (task is null) throw new HubException("Task not found.");
@@ -66,6 +86,24 @@ public class TaskHub : Hub
 
     public Task UnsubscribeFromConversation(string jobId)
         => Groups.RemoveFromGroupAsync(Context.ConnectionId, ConversationProjector.GroupName(jobId));
+
+    /// <summary>The announced demo projects, defaulting to the ADR-0056 pair.</summary>
+    private IReadOnlyList<string> DemoProjects()
+    {
+        var configured = _configuration
+            .GetSection($"{PublicDemoOptions.SectionName}:Projects")
+            .Get<string[]>();
+        return configured is { Length: > 0 } ? configured : new PublicDemoOptions().Projects;
+    }
+
+    /// <summary>
+    /// Compare on the resolved group name so a task addressed by display name,
+    /// short code, or storage location is judged exactly the way its events are
+    /// routed. One resolution rule, not two.
+    /// </summary>
+    private bool IsDemoProjectGroup(string group)
+        => DemoProjects().Any(project =>
+            string.Equals(ProjectGroup(project, _projects), group, StringComparison.Ordinal));
 
     internal static string ProjectGroup(string projectHandle, AgentStudio.Registry.ProjectRegistry projects)
     {

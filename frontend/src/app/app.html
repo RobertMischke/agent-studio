@@ -1,6 +1,8 @@
 @if (auth.studioAllowed()) {
     <!-- Backend-offline warning shown whenever the SignalR socket is down. Present in both layout branches. -->
     <app-offline-banner />
+    <!-- Public read-only demo notice (AGT-W34 S4). Present in both layout branches. -->
+    <app-public-demo-banner />
     @if (featureFlags.vsCodeLayout()) {
       <!--
         Agent Software Studio redesign — VS-Code-inspired shell.
@@ -110,6 +112,7 @@
               <button type="button"
                       class="studio-tab-action studio-tab-action--primary"
                       data-testid="studio-board-add-task"
+                      [disabled]="updateClient.mutationsBlocked()"
                       (click)="openCreate()">＋ Add task</button>
             </div>
           }
@@ -297,6 +300,7 @@
                           [highlightJobId]="justCreatedJobId()"
                           [sortStrategy]="laneSortStrategy(lane.state, lane.jobs)"
                           [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)"
+                      [mutationsBlocked]="updateClient.mutationsBlocked()"
                           [autoProject]="laneAutoProject(lane.state, lane.jobs)"
                           [projectScope]="boardProjectScope()"
                           [autoMode]="laneAutoMode(lane.state, lane.jobs)"
@@ -612,7 +616,7 @@
             [activeTagIds]="activeTagFilter()"
             (setType)="onSetType($event)"
             (toggleTag)="toggleTagFilter($event)" />
-          <button class="btn btn--create" (click)="openCreate()">
+          <button class="btn btn--create" [disabled]="updateClient.mutationsBlocked()" (click)="openCreate()">
             ＋ Add Task
           </button>
           <div class="devtools-menu">
@@ -783,6 +787,7 @@
                       [highlightJobId]="justCreatedJobId()"
                       [sortStrategy]="laneSortStrategy(lane.state, lane.jobs)"
                       [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)"
+                      [mutationsBlocked]="updateClient.mutationsBlocked()"
                       (collapseToggle)="toggleLaneCollapse(lane.state)"
                       (jobClick)="openDetail($event)"
                       (jobDrop)="onJobDrop($event)"
