@@ -1,0 +1,12 @@
+[Unit]
+Description=Replace the Agent Studio public-demo runtime every six hours
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=6h
+AccuracySec=1min
+Persistent=true
+Unit=agent-studio-demo-reset.service
+
+[Install]
+WantedBy=timers.target

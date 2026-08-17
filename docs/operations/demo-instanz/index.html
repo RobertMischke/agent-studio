@@ -129,9 +129,9 @@
   <div class="meta">
     <span><b>Date</b> 10 August 2026</span>
     <span><b>Source</b> AGT-2582</span>
-    <span><b>Status</b> Decision pending</span>
-    <span><b>Phase</b> Decision ready</span>
-    <span><b>Scope</b> Analysis only, no implementation</span>
+    <span><b>Status</b> Operator approved</span>
+    <span><b>Phase</b> In progress</span>
+    <span><b>Scope</b> Approved slices S1 through S5</span>
   </div>
 </header>
 
@@ -963,6 +963,27 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 </section>
 
 <p class="dim" style="font-size:12.5px;margin-top:36px">Extension evidence basis: the canonical Model Routing Policy; Token Aggregation and Token Pricing contracts; Context-aware Orchestrator Chats; Pipeline Time Economy and its Async Validation proposal; and the §1 through §9 public-demo security and replay decisions. Proposed caps and scenario scores are decision inputs, not measured outcomes. No scenario was executed and no benchmark result is claimed by this planning extension.</p>
+
+<!-- agent-studio:implementation-section:start -->
+<h2 id="implementation-state"><span class="no">§14</span>Implementation state</h2>
+<p>The operator approved the defense-in-depth recommendation on 17 August 2026 and cut S1 through S5 as AGT-2666 through AGT-2670. Delivery remains intentionally split at the dossier boundaries: content, execution denial, replay, edge, and release operations stay independently reviewable while consuming one seed family and one release contract.</p>
+
+<h3>S5 release boundary</h3>
+<ul>
+  <li><b>Scrub proof:</b> the release builder now generates into two empty temporary roots, requires a clean recursive manifest diff, scans disclosure categories without persisting raw matches, proves generated PNG metadata and raster text-shape results, and emits <code>demo-seed-scrub-report.json</code>.</li>
+  <li><b>Approval binding:</b> a machine-clean candidate is not deployable. Human review names the reviewer and time and binds to the generated content and manifest digests. Any changed datastore byte invalidates that approval.</li>
+  <li><b>Immutable unit:</b> one <code>YYYY.MM.N</code> archive pins the product image digest, seed and generator, replay trace, <code>public-demo-readonly</code> policy, compatibility range, scrub report, and complete generated datastore with per-file hashes.</li>
+  <li><b>Replacement:</b> the reset path extracts and verifies a separate candidate, requires start, browse-and-denial probe, and atomic switch hooks, then retains the previous healthy release. Candidate failure never rewrites the active datastore.</li>
+  <li><b>Cadence and rollback:</b> the service is callable on deploy and operator demand; its timer runs after boot and every six hours. Rollback verifies, starts, probes, and atomically restores the complete previous unit. Cleanup retains current and previous only, not backups of older writable drift.</li>
+</ul>
+
+<h3>Delivered slices</h3>
+<ul>
+<!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2670" data-delivered-at="2026-08-17" data-slice="scrub-bundle-reset-contract"><b>S5 scrub, bundle, and reset contract.</b> Added content-bound scrub attestation, two-pass datastore proof, image OCR and metadata evidence, compatibility-checked immutable bundle construction, deployment verification, six-hour replacement units, failure-safe whole-runtime cutover, and rollback rehearsal. Host provisioning and launch remain outside this slice.</li>
+<!-- agent-studio:implementation-log:end -->
+</ul>
+<!-- agent-studio:implementation-section:end -->
 
 </main>
 </body>

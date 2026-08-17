@@ -1,0 +1,16 @@
+[Unit]
+Description=Replace the Agent Studio public-demo runtime from its approved bundle
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/agent-studio-demo/reset.env
+ExecStart=/opt/agent-studio-demo/tools/reset-demo-runtime.sh --bundle ${DEMO_RELEASE_BUNDLE} --bundle-digest ${DEMO_RELEASE_BUNDLE_SHA256} --runtime-root /var/lib/agent-studio-demo/runtime --start-hook /opt/agent-studio-demo/hooks/start-candidate --probe-hook /opt/agent-studio-demo/hooks/probe-candidate --switch-hook /opt/agent-studio-demo/hooks/switch-candidate --stop-hook /opt/agent-studio-demo/hooks/stop-release
+User=agent-studio-demo-reset
+Group=agent-studio-demo-reset
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/agent-studio-demo/runtime
