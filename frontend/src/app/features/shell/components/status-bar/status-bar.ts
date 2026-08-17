@@ -29,7 +29,7 @@ import {
 
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
-import { summarizeStatusBarHostLoad } from './status-bar-host-load';
+import { summarizeStatusBarHostLoad, summarizeStatusBarSlotsByRole } from './status-bar-host-load';
 import { withRouteSegment } from '../../../../services/url-hash.util';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
@@ -41,12 +41,17 @@ export function formatRunningLabel(
   local: number,
   remote: number,
   reviewActive = 0,
+  codingSlotCeiling: number | null = null,
 ): string {
   if (local > 0 && remote > 0) return `${local} local · ${remote} remote`;
   if (local > 0) return `${local} local`;
   if (remote > 0) return `${remote} remote`;
   // "no runners" is forbidden when any plane has active workers (AGT-2645).
-  if (reviewActive > 0) return 'coding idle';
+  // Once the coding plane's own slot ceiling is known, show it honestly
+  // ("coding 0/8") instead of the vague "coding idle" placeholder.
+  if (reviewActive > 0) {
+    return codingSlotCeiling !== null ? `coding 0/${codingSlotCeiling}` : 'coding idle';
+  }
   return 'no runners';
 }
 
@@ -103,9 +108,23 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
   readonly runningCount = computed(() => this.runningTruth().total);
+
+  /**
+   * Active execution slots and configured ceilings split by executor plane
+   * (coding vs review, AGT-2645). Coding and review daemons register as
+   * separate RunnerIds, so this is a read of the existing execution-host
+   * registry, not a new data source.
+   */
+  readonly slotsByRole = computed(() => summarizeStatusBarSlotsByRole(this.remoteHosts.hosts()));
+
   readonly runningLabel = computed(() => {
     const truth = this.runningTruth();
-    return formatRunningLabel(truth.local, truth.remote, this.reviewActiveJobs());
+    return formatRunningLabel(
+      truth.local,
+      truth.remote,
+      this.reviewActiveJobs(),
+      this.slotsByRole().coding.ceiling,
+    );
   });
   readonly remoteTelemetrySlots = computed(() =>
     freshRemoteTelemetrySlots(this.remoteHosts.hosts()));
@@ -136,13 +155,21 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly reviewAttention = computed(() =>
     this.reviewWaiting() > 0 && this.reviewActiveJobs() === 0);
 
-  /** One-line label for the review plane status-bar item. */
+  /**
+   * One-line label for the review plane status-bar item. Appends "/ceiling"
+   * (AGT-2645, e.g. "review 2/6") once the review plane's own configured slot
+   * ceiling is known, so utilization reads at a glance next to the coding
+   * plane's figure; falls back to a bare active count when no review host has
+   * reported a ceiling yet.
+   */
   readonly reviewLabel = computed(() => {
     const active = this.reviewActiveJobs();
     const waiting = this.reviewWaiting();
     if (active === 0 && waiting === 0) return 'review idle';
-    if (waiting > 0) return `review ${active} active · ${waiting} waiting`;
-    return `review ${active} active`;
+    const ceiling = this.slotsByRole().review.ceiling;
+    const activeLabel = ceiling !== null ? `${active}/${ceiling}` : `${active}`;
+    if (waiting > 0) return `review ${activeLabel} active · ${waiting} waiting`;
+    return `review ${activeLabel} active`;
   });
 
   /** Tooltip for the review plane item. */
