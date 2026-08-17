@@ -6,6 +6,22 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { RemoteHostsPanelComponent } from './remote-hosts-panel';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
+import { ReviewQueueService, type ReviewQueueSnapshot } from '../../services/review-queue.service';
+
+function reviewSnapshot(overrides: Partial<ReviewQueueSnapshot> = {}): ReviewQueueSnapshot {
+  return {
+    queueDepth: 3,
+    activeJobs: 2,
+    isStagnant: false,
+    stagnantSince: null,
+    stagnantThresholdMinutes: 20,
+    drainRatePerMinute: 1.4,
+    medianReviewDurationMs: 190_000,
+    throughputWindowMinutes: 60,
+    observedAt: '2026-08-17T12:00:00Z',
+    ...overrides,
+  };
+}
 
 /**
  * Render-path test: the panel seeds its registry on init and renders one table
@@ -92,5 +108,80 @@ describe('RemoteHostsPanelComponent', () => {
     expect(diagnostic?.textContent).toContain('identity file corrupt: agent-runner-01.json');
     expect(diagnostic?.textContent).toContain('POST /api/clients/register');
     fixture.destroy();
+  });
+
+  describe('auto-review queue summary', () => {
+    async function mountWithReviewSnapshot(snapshot: ReviewQueueSnapshot | null) {
+      await TestBed.configureTestingModule({
+        imports: [RemoteHostsPanelComponent],
+        providers: [
+          provideZonelessChangeDetection(),
+          provideHttpClient(),
+          provideHttpClientTesting(),
+          provideRouter([]),
+        ],
+      }).compileComponents();
+      const reviewQueue = TestBed.inject(ReviewQueueService);
+      reviewQueue.snapshot.set(snapshot);
+      const fixture = TestBed.createComponent(RemoteHostsPanelComponent);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('renders the normal state (cards waiting, actively draining)', async () => {
+      const fixture = await mountWithReviewSnapshot(reviewSnapshot());
+      const el: HTMLElement = fixture.nativeElement;
+      const summary = el.querySelector('[data-testid="auto-review-queue-summary"]') as HTMLElement;
+
+      expect(summary).toBeTruthy();
+      expect(summary.classList.contains('rh__review--attention')).toBe(false);
+      expect(el.querySelector('[data-testid="auto-review-queue-depth"]')?.textContent).toContain('3');
+      expect(el.querySelector('[data-testid="auto-review-queue-active"]')?.textContent).toContain('2');
+      expect(el.querySelector('[data-testid="auto-review-queue-drain-rate"]')?.textContent).toContain('1.4/min');
+      expect(el.querySelector('[data-testid="auto-review-queue-duration"]')?.textContent).toContain('3m 10s');
+      expect(el.querySelector('[data-testid="auto-review-queue-attention"]')).toBeFalsy();
+      fixture.destroy();
+    });
+
+    it('renders the idle state (empty queue)', async () => {
+      const fixture = await mountWithReviewSnapshot(reviewSnapshot({
+        queueDepth: 0,
+        activeJobs: 0,
+        drainRatePerMinute: 0,
+        medianReviewDurationMs: null,
+      }));
+      const el: HTMLElement = fixture.nativeElement;
+
+      expect(el.querySelector('[data-testid="auto-review-queue-depth"]')?.textContent).toContain('0');
+      expect(el.querySelector('[data-testid="auto-review-queue-active"]')?.textContent).toContain('0');
+      expect(el.querySelector('[data-testid="auto-review-queue-duration"]')?.textContent).toContain('-');
+      expect(el.querySelector('[data-testid="auto-review-queue-attention"]')).toBeFalsy();
+      fixture.destroy();
+    });
+
+    it('renders the stagnant ATTENTION state', async () => {
+      const fixture = await mountWithReviewSnapshot(reviewSnapshot({
+        queueDepth: 12,
+        activeJobs: 0,
+        isStagnant: true,
+        stagnantSince: '2026-08-17T11:00:00Z',
+        stagnantThresholdMinutes: 20,
+      }));
+      const el: HTMLElement = fixture.nativeElement;
+      const summary = el.querySelector('[data-testid="auto-review-queue-summary"]') as HTMLElement;
+
+      expect(summary.classList.contains('rh__review--attention')).toBe(true);
+      const attention = el.querySelector('[data-testid="auto-review-queue-attention"]');
+      expect(attention?.textContent).toContain('20 minutes');
+      fixture.destroy();
+    });
+
+    it('omits the summary section when no snapshot has loaded yet', async () => {
+      const fixture = await mountWithReviewSnapshot(null);
+      const el: HTMLElement = fixture.nativeElement;
+
+      expect(el.querySelector('[data-testid="auto-review-queue-summary"]')).toBeFalsy();
+      fixture.destroy();
+    });
   });
 });
