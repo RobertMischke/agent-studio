@@ -117,9 +117,12 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Planning-task lifecycle (plan → spawn → accept; spawn-contract gate; AGT-2069) | [concepts/planning-task-lifecycle.md](../concepts/planning-task-lifecycle.md) |
 | Experiment workbenches (Explorer, orchestrator chat, decision-to-task) | [concept](../concepts/experimentier-workbench.md) · [interactive mockup](../concepts/mockups/experimentier-workbench.html) |
 | Decoupled agent-session lifecycles (holder, consumer channel, multi-client attach) | [concept](../concepts/decoupled-lifecycles.md) · [interactive Dossier-family mockup](../concepts/mockups/decoupled-lifecycles.html) |
-| Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, and component projects) | [concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md) |
+| Distributed Agent Studio target architecture (Studio, Task Server, Runner, security, lifecycle, component projects, and lease/fence/authority-epoch mechanics) | [concepts/distributed-agent-studio-target-architecture.md](../concepts/distributed-agent-studio-target-architecture.md) |
 | Distributed runtime packaging and installation decisions | [distributable concept](../operations/haertung-verteilte-ausfuehrung/target-architecture/distributable.html) |
-| Remote gate target architecture (claimable gate steps vs Review Plane vs capability-only dispatch; AGT-2369) | [operations/remote-gate-zielbild/](../operations/remote-gate-zielbild/index.html) |
+| Batch Gate mechanics (batched integration, exact-SHA publication, per-member evidence, bounded halving; target, unimplemented) | [concepts/batch-gate-mechanics.md](../concepts/batch-gate-mechanics.md) |
+| Remote gate target architecture (claimable gate steps vs Review Plane vs capability-only dispatch; AGT-2369; target, unimplemented) | [concepts/remote-gate-target-architecture.md](../concepts/remote-gate-target-architecture.md) · [operations/remote-gate-zielbild/](../operations/remote-gate-zielbild/index.html) |
+| Rebase/merge and integration attribution invariants (mostly implemented, one open bounce-handler proposal) | [concepts/rebase-merge-invariants.md](../concepts/rebase-merge-invariants.md) |
+| Telemetry layer (Product Runtime Observability + Agent Message Bus bridge, `OrgTelemetryEvent/v1`; proposal, unimplemented) | [concepts/telemetry-layer.md](../concepts/telemetry-layer.md) |
 | OSS setup path decision and clean-host evidence | [setup path decision](../operations/haertung-verteilte-ausfuehrung/target-architecture/setup-scenarios.md) |
 | Release assets, version matrix, install, update, rollback, and honest CI | [operations/releases.md](../operations/releases.md) |
 | Develop to main promotion train, full gate, release marker, and deploy cron | [operations/develop-main-promotion.md](../operations/develop-main-promotion.md) |
