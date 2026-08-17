@@ -1,8 +1,18 @@
-export const ISOLATED_HTML_CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
-  "img-src data:; font-src data:; connect-src 'none'; media-src data:; " +
-  "object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; " +
-  "form-action 'none'; base-uri 'none'";
+/**
+ * `extraImgOrigin` lets the host's own origin serve `img-src` requests, so
+ * artifact `<img>` references rewritten to the wiki assets API (see
+ * `resolveAssetSrc` on `buildIsolatedHtmlSrcdoc`) can actually load; the
+ * sandboxed iframe has an opaque origin, so `'self'` would not match it.
+ */
+export function buildIsolatedHtmlCsp(extraImgOrigin?: string): string {
+  const imgSrc = extraImgOrigin ? `data: ${extraImgOrigin}` : 'data:';
+  return "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
+    `img-src ${imgSrc}; font-src data:; connect-src 'none'; media-src data:; ` +
+    "object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; " +
+    "form-action 'none'; base-uri 'none'";
+}
+
+export const ISOLATED_HTML_CSP = buildIsolatedHtmlCsp();
 
 export const ISOLATED_HTML_LINK_MESSAGE = 'agent-studio:isolated-html-link';
 export const ISOLATED_HTML_ANCHORS_READY_MESSAGE = 'agent-studio:isolated-html-anchors-ready';
@@ -25,7 +35,17 @@ export type IsolatedHtmlNavigation =
  */
 export function buildIsolatedHtmlSrcdoc(
   html: string,
-  options: { workbenchDecisions?: boolean; documentPattern?: 'ui' | 'concept' } = {},
+  options: {
+    workbenchDecisions?: boolean;
+    documentPattern?: 'ui' | 'concept';
+    /**
+     * Rewrites an artifact-authored `<img src>` (relative to the dossier/wiki
+     * doc's own folder, e.g. `assets/foo.png`) to a loadable URL, typically
+     * the wiki assets API via `resolveWikiImageSrc`. Without this, sibling
+     * assets 404 because the frame's base is forced to `about:blank`.
+     */
+    resolveAssetSrc?: (src: string) => string;
+  } = {},
 ): string {
   if (!html) return '';
   const parser = new DOMParser();
@@ -39,9 +59,22 @@ export function buildIsolatedHtmlSrcdoc(
     if (isArtifactSecurityControl(control)) control.remove();
   }
 
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  let permitOriginImages = false;
+  if (options.resolveAssetSrc) {
+    const resolveAssetSrc = options.resolveAssetSrc;
+    for (const image of Array.from(artifact.querySelectorAll('img[src]'))) {
+      const src = image.getAttribute('src');
+      if (!src) continue;
+      const resolved = absolutizeAssetUrl(resolveAssetSrc(src), origin);
+      if (resolved !== src) permitOriginImages = true;
+      image.setAttribute('src', resolved);
+    }
+  }
+
   const policy = wrapper.createElement('meta');
   policy.httpEquiv = 'Content-Security-Policy';
-  policy.content = ISOLATED_HTML_CSP;
+  policy.content = buildIsolatedHtmlCsp(permitOriginImages ? origin : undefined);
   const base = wrapper.createElement('base');
   base.href = 'about:blank';
   wrapper.head.append(policy, base);
@@ -325,6 +358,21 @@ export function resolveIsolatedHtmlNavigation(
     return relPath ? { kind: 'wiki', relPath } : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The frame's forced `about:blank` base makes root-relative URLs (the wiki
+ * assets API returns `/api/...`) resolve unpredictably. Qualifying them
+ * against the host's own origin up front sidesteps that entirely; already
+ * absolute or `data:` URLs pass through `new URL` unchanged.
+ */
+function absolutizeAssetUrl(src: string, origin: string): string {
+  if (!origin) return src;
+  try {
+    return new URL(src, origin).href;
+  } catch {
+    return src;
   }
 }
 
