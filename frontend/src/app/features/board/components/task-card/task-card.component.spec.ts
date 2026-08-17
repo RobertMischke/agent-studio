@@ -1197,8 +1197,13 @@ describe('TaskCardComponent (smoke)', () => {
     wrap?.dispatchEvent(new MouseEvent('mouseenter'));
     fixture.detectChanges();
     expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('Estimated cost: $1.25');
-    expect(popover?.querySelector('[data-testid="token-cost-tooltip"]')?.textContent).toContain('historical list prices');
+    // Calm layout: the footnote line is short; the full disclaimer text
+    // (incl. "historical list prices") lives in the tooltip, not inline.
+    const footnote = popover?.querySelector('[data-testid="token-cost-tooltip"]');
+    expect(footnote?.textContent).toContain('Total (est.): $1.25');
+    expect(footnote?.textContent).not.toContain('historical list prices');
+    expect(footnote?.getAttribute('aria-label')).toContain('Estimated cost: $1.25');
+    expect(footnote?.getAttribute('aria-label')).toContain('historical list prices');
 
     fixture.destroy();
   });

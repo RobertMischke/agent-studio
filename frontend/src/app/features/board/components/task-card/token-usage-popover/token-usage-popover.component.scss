@@ -1,0 +1,120 @@
+/* TokenPopoverDirective portals this host to the central body overlay root,
+   escaping the card's overflow:hidden + content-visibility paint containment
+   and the lane scroll container. The directive only sets left/top offsets;
+   `position: fixed` must already be in CSS. */
+:host {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  z-index: var(--studio-z-overlay-panel);
+  display: block;
+  min-width: 240px;
+  max-width: 340px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border-radius: 8px;
+  background: var(--studio-tooltip-bg);
+  border: 1px solid var(--studio-tooltip-border);
+  box-shadow: var(--elevation-tooltip);
+  backdrop-filter: blur(6px) saturate(120%);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  color: var(--studio-tooltip-fg);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One quiet type hierarchy: a single uppercase micro-label for the panel
+   title and every section head, one body size for every value. */
+.tup__title,
+.tup__section-title {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--studio-tooltip-fg-dim);
+}
+.tup__title {
+  margin-bottom: var(--studio-spacing-1);
+}
+.tup__section-title {
+  margin-top: var(--studio-spacing-2);
+  padding-top: var(--studio-spacing-1);
+  border-top: 1px solid var(--studio-tooltip-border);
+}
+
+/* Totals: a two-column label/value grid so every number lands in the same
+   right-aligned column regardless of label length. */
+.tup__grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: var(--studio-spacing-2);
+  row-gap: 1px;
+  font-size: 11px;
+}
+.tup__label,
+.tup__value {
+  color: var(--studio-tooltip-fg-dim);
+  padding-block: 1px;
+}
+.tup__value {
+  color: var(--studio-tooltip-fg-strong);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tup__num {
+  color: var(--studio-tooltip-fg-strong);
+  text-align: right;
+  padding-block: 1px;
+}
+.tup__label--strong,
+.tup__num--strong {
+  font-weight: 700;
+  border-top: 1px solid var(--studio-tooltip-border);
+  padding-top: 3px;
+  margin-top: 2px;
+}
+
+/* By-type and per-run tables share the same compact right-aligned numeric
+   layout as the totals grid above, just row-based instead of two-column. */
+.tup__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.tup__table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--studio-tooltip-fg-dim);
+  padding: 1px var(--studio-spacing-1) 1px 0;
+}
+.tup__table td {
+  color: var(--studio-tooltip-fg-strong);
+  padding: 1px 0;
+}
+.tup__table .tup__num {
+  font-size: inherit;
+}
+
+.tup__footnote {
+  margin-top: var(--studio-spacing-2);
+  padding-top: var(--studio-spacing-1);
+  border-top: 1px solid var(--studio-tooltip-border);
+  font-size: 10px;
+  color: var(--studio-tooltip-fg-dim);
+  cursor: help;
+}
+
+.tup__link {
+  display: inline-block;
+  margin-top: var(--studio-spacing-1);
+  font-size: 11px;
+  color: var(--studio-tooltip-link);
+  text-decoration: none;
+}
+.tup__link:hover {
+  text-decoration: underline;
+}

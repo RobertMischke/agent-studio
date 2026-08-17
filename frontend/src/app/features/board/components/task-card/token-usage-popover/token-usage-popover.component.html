@@ -1,0 +1,62 @@
+@if (bubble(); as tb) {
+  <span class="tup__title">Token usage</span>
+
+  <div class="tup__grid" data-testid="token-usage-totals">
+    <span class="tup__label">Input</span><span class="tup__num" data-testid="token-row-input">{{ formatTokens(tb.input) }}</span>
+    <span class="tup__label">Output</span><span class="tup__num" data-testid="token-row-output">{{ formatTokens(tb.output) }}</span>
+    <span class="tup__label">Cache read</span><span class="tup__num" data-testid="token-row-cache-read">{{ formatTokens(tb.cacheRead) }}</span>
+    <span class="tup__label">Cache write</span><span class="tup__num" data-testid="token-row-cache-write">{{ formatTokens(tb.cacheWrite) }}</span>
+    <span class="tup__label tup__label--strong">Total</span><span class="tup__num tup__num--strong" data-testid="token-row-total">{{ formatTokens(tb.total) }}</span>
+    <span class="tup__label">Model</span><span class="tup__value" data-testid="token-row-model">{{ tb.model || '-' }}</span>
+    <span class="tup__label">Last update</span><span class="tup__value" data-testid="token-row-last-update">{{ tb.lastUpdate || '-' }}</span>
+  </div>
+
+  @if (typeBreakdown().length > 1) {
+    <span class="tup__section-title">By type</span>
+    <table class="tup__table" data-testid="token-usage-by-type">
+      <tbody>
+        @for (row of typeBreakdown(); track row.kind) {
+          <tr>
+            <th>{{ row.label }}</th>
+            <td class="tup__num">{{ formatTokens(row.totalTokens) }}</td>
+            <td class="tup__num">{{ row.costLabel }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  @if (tb.entries.length > 1) {
+    <span class="tup__section-title">Per run</span>
+    <table class="tup__table tup__table--runs" data-testid="token-usage-runs">
+      <thead>
+        <tr><th>When</th><th>Model</th><th class="tup__num">Tokens</th><th class="tup__num">Cost</th></tr>
+      </thead>
+      <tbody>
+        @for (row of tb.entries; track row.ts) {
+          <tr>
+            <td>{{ row.tsLabel }}</td>
+            <td>{{ row.model || '-' }}</td>
+            <td class="tup__num">{{ formatTokens(row.total) }}</td>
+            <td class="tup__num">{{ row.costLabel }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  <div class="tup__footnote"
+       tabindex="0"
+       data-testid="token-cost-tooltip"
+       [attr.aria-label]="tb.costTooltip"
+       [cacTooltip]="tb.costTooltip">
+    Total (est.): {{ tb.costLine }}
+  </div>
+
+  <a class="tup__link"
+     href="/workspace/tokens"
+     data-testid="token-popover-timeline-link"
+     (click)="$event.stopPropagation()">
+    View workspace timeline
+  </a>
+}

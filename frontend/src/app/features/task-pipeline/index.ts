@@ -36,3 +36,4 @@ export type {
   PipelineLaneDrainHealth,
   PipelineHealthSnapshot,
 } from './models/pipeline-health.model';
+export { stepKindLabel } from './step-kind-display.util';

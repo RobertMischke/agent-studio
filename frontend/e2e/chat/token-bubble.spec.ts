@@ -60,6 +60,8 @@ interface JobInfoStub {
       outputTokens: number;
       cacheReadTokens: number;
       cacheCreationTokens: number;
+      estimatedApiCostUsd?: number;
+      modelPriced?: boolean;
     }[];
   };
 }
@@ -252,13 +254,35 @@ test.describe('Token bubble on job cards', () => {
         lastModel: 'GPT-5 Codex',
         lastUpdate: '2026-05-05T08:30:00Z',
         entries: [
-          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000 },
-          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000 }
+          // Each entry is priced at its own timestamp (estimatedApiCostUsd),
+          // not today's rate — the popover must show these dated per-run
+          // costs, not just one combined estimate.
+          { ts: '2026-05-05T08:00:00Z', model: 'GPT-5 Codex', inputTokens: 50_000, outputTokens: 6_000, cacheReadTokens: 100_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.6, modelPriced: true },
+          { ts: '2026-05-05T08:15:00Z', model: 'Claude Haiku 4.5', inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 80_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.15, modelPriced: true },
+          { ts: '2026-05-05T08:30:00Z', model: 'GPT-5 Codex', inputTokens: 30_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000, estimatedApiCostUsd: 0.5, modelPriced: true }
         ]
       }
     });
     await stubGroupedJobs(page, [noisyJob]);
+    await page.route('**/api/tasks/noisy-card/pipeline**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          pipeline: { id: 'default', displayName: 'Default', version: 1, pre: [], core: [], post: [] },
+          execution: null,
+          cost: {
+            steps: [
+              { stepId: 'core', kind: 'core', model: 'GPT-5 Codex', modelKnown: true, inputTokens: 80_000, outputTokens: 12_000, cacheReadTokens: 180_000, cacheCreationTokens: 8_000, totalTokens: 280_000, inputCostUsd: 0.8, outputCostUsd: 0.15, cacheReadCostUsd: 0.1, cacheCreationCostUsd: 0.05, costUsd: 1.1 },
+              { stepId: 'code-quality', kind: 'aspect', model: 'Claude Haiku 4.5', modelKnown: true, inputTokens: 40_000, outputTokens: 6_000, cacheReadTokens: 70_000, cacheCreationTokens: 4_000, totalTokens: 120_000, inputCostUsd: 0.1, outputCostUsd: 0.03, cacheReadCostUsd: 0.02, cacheCreationCostUsd: 0, costUsd: 0.15 },
+            ],
+            totalInputTokens: 120_000, totalOutputTokens: 18_000, totalCacheReadTokens: 250_000, totalCacheCreationTokens: 12_000, totalTokens: 400_000,
+            totalInputCostUsd: 0.9, totalOutputCostUsd: 0.18, totalCacheReadCostUsd: 0.12, totalCacheCreationCostUsd: 0.05, totalCostUsd: 1.25,
+            anyModelUnknown: false,
+          },
+          config: {},
+        }),
+      }));
 
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
@@ -288,9 +312,30 @@ test.describe('Token bubble on job cards', () => {
     await expect(popover.getByTestId('token-row-cache-write')).toContainText('12k');
     await expect(popover.getByTestId('token-row-total')).toContainText('400k');
     await expect(popover.getByTestId('token-row-model')).toContainText('GPT-5 Codex');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated cost: $1.25');
-    await expect(popover.getByTestId('token-cost-tooltip')).toContainText('Estimated - historical list prices');
-    await expect(popover.locator('.task-card__token-table--runs')).toContainText('Claude Haiku 4.5');
+
+    // Calm layout: the estimate caveat is a single quiet footnote line with
+    // the honest total, not a paragraph. The full disclaimer text (incl.
+    // "historical list prices") lives in the tooltip, not inline. Focus
+    // (not hover) for the same pointer-events-race reason as the bubble above.
+    const footnote = popover.getByTestId('token-cost-tooltip');
+    await expect(footnote).toContainText('Total (est.): $1.25');
+    await expect(footnote).not.toContainText('historical list prices');
+    await footnote.focus();
+    const tooltip = page.getByTestId('cac-tooltip');
+    await expect(tooltip).toContainText('Estimated - historical list prices');
+
+    // Per-run dated costs: each run is priced at its own timestamp.
+    const runs = popover.getByTestId('token-usage-runs');
+    await expect(runs).toContainText('Claude Haiku 4.5');
+    await expect(runs).toContainText('$0.15');
+    await expect(runs).toContainText('$0.60');
+
+    // Breakdown by type (lazy-fetched from the job's pipeline endpoint):
+    // the core coding run and the aspect review pass show up as separate rows.
+    const byType = popover.getByTestId('token-usage-by-type');
+    await expect(byType).toContainText('Core agent work');
+    await expect(byType).toContainText('Aspect');
+
     await expect(popover.getByTestId('token-popover-timeline-link')).toBeVisible();
 
     // Anti-clipping contract: the directive lifts the panel into the
@@ -304,7 +349,11 @@ test.describe('Token bubble on job cards', () => {
     expect(popBox!.x + popBox!.width).toBeLessThanOrEqual(vp.width + 1);
     expect(popBox!.y + popBox!.height).toBeLessThanOrEqual(vp.height + 1);
 
-    // Screenshot evidence: bubble + overlay popover in the viewport.
+    // Screenshot evidence: bubble + overlay popover in the viewport. A
+    // background poll unrelated to tokens can pop the shared error dialog
+    // between assertions above and here; clear it so the evidence shot
+    // shows the popover, not an incidental toast.
+    await dismissErrorDialogIfPresent(page);
     mkdirSync(SHOTS, { recursive: true });
     await page.screenshot({ path: `${SHOTS}/card-with-bubble-and-popover.png`, fullPage: false });
   });
