@@ -29,6 +29,10 @@ import { deflateSync } from 'node:zlib';
 const DEFAULT_ROOT = 'C:\\Projects\\agent-taskboard-workspace-demo';
 const OWNER = 'local-default';
 
+// Every recorded execution says what it is. A visitor must never have to infer
+// from the UI alone that a run is replayed rather than live.
+const PROVENANCE = 'pinned-demo-simulated';
+
 function parseArgs(argv) {
   const args = { root: process.env.ATP_DEMO_ROOT || DEFAULT_ROOT };
   for (let i = 0; i < argv.length; i++) {
@@ -42,6 +46,18 @@ const PINNED_SNAPSHOT_PATH = process.env.ATP_DEMO_PINNED_SEED
   : fileURLToPath(new URL('./presentation-capture/pinned-seed.json', import.meta.url));
 const PINNED_SNAPSHOT = JSON.parse(readFileSync(PINNED_SNAPSHOT_PATH, 'utf8'));
 
+// Second pinned input of the same seed family: the invented Wiki trees and the
+// Dossier gallery. It is authored rather than exported, because no real
+// workspace may contribute knowledge content to a publicly browsable instance.
+const PINNED_CONTENT_PATH = fileURLToPath(new URL('./presentation-capture/pinned-demo-content.json', import.meta.url));
+const PINNED_CONTENT = JSON.parse(readFileSync(PINNED_CONTENT_PATH, 'utf8'));
+
+// The canonical article document is the house style for every Dossier, so the
+// demo gallery renders from it instead of inventing a second colour system.
+const ARTICLE_TEMPLATE_PATH = fileURLToPath(
+  new URL('../docs/app/templates/article-document-v2.html', import.meta.url));
+const ARTICLE_TEMPLATE = readFileSync(ARTICLE_TEMPLATE_PATH, 'utf8');
+
 // Deterministic timestamps so a re-seed produces byte-identical files and the
 // UI never derives capture-visible dates from a re-seed's wall clock.
 const BASE = Date.parse(PINNED_SNAPSHOT.fixedTimeBase);
@@ -49,11 +65,20 @@ function iso(offsetMinutes) {
   return new Date(BASE + offsetMinutes * 60_000).toISOString();
 }
 
+/** Second-precision UTC stamp, the lifecycle timestamp form descriptors use. */
+function isoSeconds(offsetMinutes) {
+  return `${iso(offsetMinutes).slice(0, 19)}Z`;
+}
+
 // ---- Fixture definition -------------------------------------------------
 
 const PROJECTS = PINNED_SNAPSHOT.projects;
 const TASKS = PINNED_SNAPSHOT.tasks;
 const DECISION = PINNED_SNAPSHOT.decision;
+const WIKI_TREES = PINNED_CONTENT.wiki;
+const DOSSIERS = PINNED_CONTENT.dossiers;
+const CARD_WORKBENCH_REFS = PINNED_CONTENT.cardWorkbenchReferences;
+const CARD_WIKI_PAGES = PINNED_CONTENT.cardWikiPages;
 
 // ---- Writers ------------------------------------------------------------
 
@@ -139,6 +164,26 @@ function writeTask(root, task, index) {
     }
   }
 
+  // Canonical card edge into the Dossier gallery. relatedTaskKeys on the
+  // descriptor remains populated as the current compatibility bridge.
+  const workbenchRefs = CARD_WORKBENCH_REFS[task.key];
+  if (workbenchRefs) json.references = { workbenches: workbenchRefs };
+
+  const wikiPages = CARD_WIKI_PAGES[task.key];
+  if (wikiPages) {
+    json.relatedWikiPages = wikiPages.map((relPath) => {
+      const page = wikiPage(task.project, relPath);
+      return {
+        // Repository-relative, like every page reference the product writes:
+        // the scanner resolves existence against the repository root.
+        relPath: `docs/${relPath}`,
+        title: page.title,
+        linkedAt: iso(page.offsetMinutes),
+        source: 'manual',
+      };
+    });
+  }
+
   if (task.decision) {
     json.tags = ['demo', 'frontend', 'code-review:concerns', 'code-review:grade-b'];
     json.commits = [
@@ -158,7 +203,7 @@ function writeTask(root, task, index) {
   writeJson(join(dir, 'task.json'), json);
   writeText(join(dir, 'prompt.md'), task.decision
     ? DECISION.promptMarkdown
-    : `# ${task.title}\n\nPinned demo task seeded by scripts/seed-demo-workspace.mjs for the slim DEV demo store (ADR-0056). The data is sanitized and safe to reset; a re-seed restores the exact captured state.\n`);
+    : `# ${task.title}\n\nPinned demo data. This card belongs to the deterministic two-project demo scene; its content is invented and safe to reset. A re-seed restores the exact captured state.\n`);
 
   if (task.history) writeHistory(dir, task, id, index);
   if (task.key === 'DEMO-5') {
@@ -227,7 +272,7 @@ index 6a70b17..d3e0c9f 100644
     join(dir, 'results', 'gallery-notes.md'),
     `# Gallery review notes
 
-The CSV export scene is pinned for the ADR-0056 presentation flow.
+The CSV export scene is pinned demo data, captured once and replayed unchanged.
 
 - Light and dark views use the same deterministic report fixture.
 - The dialog, empty state, filter panel, and mobile table are included.
@@ -453,11 +498,11 @@ index 0b15ad0..d3e0c9f 100644
   });
 
   writeJsonl(join(dir, 'logs', 'timeline.jsonl'), [
-    { ts: iso(250), kind: 'prompt_created', actor: `human:${OWNER}`, payloadRef: 'prompt.md', summary: `Task created: ${task.title}`, details: { targetState: '0-backlog', agent: 'codex' } },
-    { ts: iso(252), kind: 'agent_run_started', actor: 'system', summary: 'codex CLI start', details: { cli: 'codex', intent: 'start', resumed: 'false' } },
-    { ts: iso(270), kind: 'agent_run_finished', actor: 'agent', summary: 'codex run completed', details: { cli: 'codex', status: 'completed' } },
-    { ts: iso(272), kind: 'code_review_grade_completed', actor: 'review', summary: 'Quality grade B with one focused gap', details: { grade: 'B', verdict: 'concerns', reviewFile } },
-    { ts: iso(273), kind: 'orchestrator_escalated', actor: 'orchestrator', summary: 'Escalated for operator decision', details: { reason: '[review-loop-budget-exhausted] One focused assertion remains.', cause: 'completion-gate', attempt: '3', maxAttempts: '3' } }
+    { ts: iso(250), kind: 'prompt_created', actor: `human:${OWNER}`, payloadRef: 'prompt.md', summary: `Task created: ${task.title}`, details: { targetState: '0-backlog', agent: 'codex', provenance: PROVENANCE } },
+    { ts: iso(252), kind: 'agent_run_started', actor: 'system', summary: 'codex CLI start', details: { cli: 'codex', intent: 'start', resumed: 'false', provenance: PROVENANCE } },
+    { ts: iso(270), kind: 'agent_run_finished', actor: 'agent', summary: 'codex run completed', details: { cli: 'codex', status: 'completed', provenance: PROVENANCE } },
+    { ts: iso(272), kind: 'code_review_grade_completed', actor: 'review', summary: 'Quality grade B with one focused gap', details: { grade: 'B', verdict: 'concerns', reviewFile, provenance: PROVENANCE } },
+    { ts: iso(273), kind: 'orchestrator_escalated', actor: 'orchestrator', summary: 'Escalated for operator decision', details: { reason: '[review-loop-budget-exhausted] One focused assertion remains.', cause: 'completion-gate', attempt: '3', maxAttempts: '3', provenance: PROVENANCE } }
   ]);
 }
 
@@ -572,16 +617,17 @@ function writeHistory(dir, task, id, index) {
   const sha = 'demo000000000000000000000000000000000000';
 
   writeJsonl(join(dir, 'logs', 'timeline.jsonl'), [
-    { ts: t0, kind: 'prompt_created', actor: `human:${OWNER}`, payloadRef: 'prompt.md', summary: `Task created: ${task.title}`, details: { targetState: '0-backlog', agent: 'claude' } },
-    { ts: t1, kind: 'agent_run_started', actor: 'system', summary: 'claude CLI start', details: { cli: 'claude', intent: 'start', resumed: 'false' } },
-    { ts: t2, kind: 'agent_run_finished', actor: 'agent', summary: 'claude run finished in 354,2s', details: { cli: 'claude', status: 'completed' } },
+    { ts: t0, kind: 'prompt_created', actor: `human:${OWNER}`, payloadRef: 'prompt.md', summary: `Task created: ${task.title}`, details: { targetState: '0-backlog', agent: 'claude', provenance: PROVENANCE } },
+    { ts: t1, kind: 'agent_run_started', actor: 'system', summary: 'claude CLI start', details: { cli: 'claude', intent: 'start', resumed: 'false', provenance: PROVENANCE } },
+    { ts: t2, kind: 'agent_run_finished', actor: 'agent', summary: 'claude run finished in 354,2s', details: { cli: 'claude', status: 'completed', provenance: PROVENANCE } },
   ]);
 
   writeJsonl(join(dir, 'logs', 'session-events.jsonl'), [
-    { Ts: t1, Kind: 'start', Cli: 'claude', InputSessionId: null, CapturedSessionId: `demo-session-${task.key.toLowerCase()}`, Resumed: false, Reason: null, HeadShaBefore: sha, HeadShaAfter: sha, ContextRef: 'logs/run-context/run-demo.md' },
+    { Ts: t1, Kind: 'start', Cli: 'claude', InputSessionId: null, CapturedSessionId: `demo-session-${task.key.toLowerCase()}`, Resumed: false, Reason: null, HeadShaBefore: sha, HeadShaAfter: sha, ContextRef: 'logs/run-context/run-demo.md', Provenance: PROVENANCE },
   ]);
 
   writeJson(join(dir, 'pipeline-execution.json'), {
+    provenance: PROVENANCE,
     pipelineId: 'standard-task-pipeline',
     pipelineVersion: 1,
     jobId: id,
@@ -706,6 +752,347 @@ function writePinnedRepositoryMarker(projectRoot) {
   writeText(join(projectRoot, '.gitignore'), 'tasks/\n.orchestrator/\n');
 }
 
+// ---- Wiki trees and Dossier gallery ------------------------------------
+//
+// The Wiki of a project is the docs/ folder of its repository checkout, and a
+// Dossier is any folder below docs/ that carries a workbench.json descriptor.
+// Both trees are rendered from one pinned block model so a page and a document
+// stay in the same voice and a re-seed stays byte-identical.
+
+function wikiPage(project, relPath) {
+  const tree = WIKI_TREES.find((candidate) => candidate.project === project);
+  const page = tree?.pages.find((candidate) => candidate.path === relPath);
+  if (!page) throw new Error(`Pinned wiki page is missing: ${project}/${relPath}`);
+  return page;
+}
+
+function escapeHtml(text) {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+/**
+ * Inline markdown links and code spans, rendered into escaped HTML. A `task:`
+ * link stays readable text: the Wiki reader resolves that scheme, but the
+ * sandboxed Dossier host refuses every scheme-prefixed href, so rendering it as
+ * an anchor there would produce a link that silently does nothing.
+ */
+function inlineHtml(text) {
+  return escapeHtml(text)
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label, href) =>
+      href.startsWith('task:') ? `<code>${label}</code>` : `<a href="${href}">${label}</a>`)
+    .replace(/`([^`]+)`/g, (_match, code) => `<code>${code}</code>`);
+}
+
+function markdownCell(value) {
+  return value.replaceAll('|', '\\|');
+}
+
+function markdownTable(table) {
+  const header = `| ${table.columns.map(markdownCell).join(' | ')} |`;
+  const divider = `| ${table.columns.map(() => '---').join(' | ')} |`;
+  const rows = table.rows.map((row) => `| ${row.map(markdownCell).join(' | ')} |`);
+  return [header, divider, ...rows].join('\n');
+}
+
+function blocksToMarkdown(blocks) {
+  const out = [];
+  for (const block of blocks) {
+    if (block.h !== undefined) out.push(`## ${block.h}`);
+    else if (block.h3 !== undefined) out.push(`### ${block.h3}`);
+    else if (block.p !== undefined) out.push(block.p);
+    else if (block.ul !== undefined) out.push(block.ul.map((item) => `- ${item}`).join('\n'));
+    else if (block.ol !== undefined) out.push(block.ol.map((item, index) => `${index + 1}. ${item}`).join('\n'));
+    else if (block.table !== undefined) out.push(markdownTable(block.table));
+    else if (block.note !== undefined) out.push(`> ${block.note}`);
+    else if (block.decision !== undefined) {
+      out.push(`### ${block.decision.question}`);
+      out.push(block.decision.options.map((option) => `- **${option.label}**: ${option.summary}`).join('\n'));
+    } else throw new Error(`Unsupported pinned block: ${JSON.stringify(block)}`);
+  }
+  return out.join('\n\n');
+}
+
+function decisionHtml(decision) {
+  const options = decision.options
+    .map((option) => `        <li data-option-id="${escapeHtml(option.id)}"><b>${escapeHtml(option.label)}</b>: ${inlineHtml(option.summary)}</li>`)
+    .join('\n');
+  return [
+    `    <div class="callout" data-tone="accent" data-decision-id="${escapeHtml(decision.id)}" data-decision-kind="${escapeHtml(decision.kind)}">`,
+    `      <h3>${inlineHtml(decision.question)}</h3>`,
+    '      <ul>',
+    options,
+    '      </ul>',
+    '      <label>Optional note',
+    `        <textarea data-comment="${escapeHtml(decision.comment)}" rows="2"></textarea>`,
+    '      </label>',
+    '    </div>',
+  ].join('\n');
+}
+
+function blockHtml(block) {
+  if (block.h3 !== undefined) return `    <h3>${inlineHtml(block.h3)}</h3>`;
+  if (block.p !== undefined) return `    <p>${inlineHtml(block.p)}</p>`;
+  if (block.ul !== undefined)
+    return `    <ul>\n${block.ul.map((item) => `      <li>${inlineHtml(item)}</li>`).join('\n')}\n    </ul>`;
+  if (block.ol !== undefined)
+    return `    <ol>\n${block.ol.map((item) => `      <li>${inlineHtml(item)}</li>`).join('\n')}\n    </ol>`;
+  if (block.table !== undefined) return tableHtml(block.table);
+  if (block.note !== undefined) return `    <p class="dim">${inlineHtml(block.note)}</p>`;
+  if (block.decision !== undefined) return decisionHtml(block.decision);
+  throw new Error(`Unsupported pinned block: ${JSON.stringify(block)}`);
+}
+
+/**
+ * Renders the block list as numbered house-style sections: every h block opens
+ * one section, and blocks before the first heading form the opening section.
+ */
+function blocksToHtml(blocks) {
+  const sections = [];
+  for (const block of blocks) {
+    if (block.h !== undefined) sections.push({ title: block.h, body: [] });
+    else if (sections.length === 0) sections.push({ title: null, body: [blockHtml(block)] });
+    else sections[sections.length - 1].body.push(blockHtml(block));
+  }
+
+  let number = 0;
+  return sections
+    .map((section) => {
+      const heading = section.title === null
+        ? []
+        : [`    <h2><span class="number">${pad(++number)}</span> ${inlineHtml(section.title)}</h2>`];
+      return ['  <section>', ...heading, ...section.body, '  </section>'].join('\n');
+    })
+    .join('\n\n');
+}
+
+/** The number the References section gets after the pinned content sections. */
+function sectionNumber(blocks) {
+  return pad(blocks.filter((block) => block.h !== undefined).length + 1);
+}
+
+function pad(value) {
+  return String(value).padStart(2, '0');
+}
+
+function tableHtml(table) {
+  const head = table.columns.map((column) => `<th scope="col">${inlineHtml(column)}</th>`).join('');
+  const body = table.rows
+    .map((row) => `        <tr>${row.map((cell) => `<td>${inlineHtml(cell)}</td>`).join('')}</tr>`)
+    .join('\n');
+  return [
+    '    <table>',
+    `      <thead><tr>${head}</tr></thead>`,
+    '      <tbody>',
+    body,
+    '      </tbody>',
+    '    </table>',
+  ].join('\n');
+}
+
+/** Quoted frontmatter scalar; the reader trims the quotes back off. */
+function yamlScalar(value) {
+  if (value.includes('"') || value.includes('\n')) {
+    throw new Error(`Pinned frontmatter value must not contain a quote or newline: ${value}`);
+  }
+  return `"${value}"`;
+}
+
+function pageMarkdown(page) {
+  const frontmatter = [
+    '---',
+    `title: ${yamlScalar(page.title)}`,
+    `summary: ${yamlScalar(page.summary)}`,
+    `last-updated: ${iso(page.offsetMinutes).slice(0, 10)}`,
+    '---',
+  ].join('\n');
+  return `${frontmatter}\n\n# ${page.title}\n\n${blocksToMarkdown(page.blocks)}\n`;
+}
+
+/**
+ * Page-to-card companions, in the reduced shape the product's own cross-
+ * reference writer produces: a relatedTasks array and nothing else. The larger
+ * grading companion schema is deliberately not used, because its mandatory
+ * $schema constant is the one place a source-project string would reach the
+ * generated datastore.
+ */
+function pageCompanions(project) {
+  const companions = new Map();
+  for (const [taskKey, pages] of Object.entries(CARD_WIKI_PAGES)) {
+    const task = TASKS.find((candidate) => candidate.key === taskKey);
+    if (!task || task.project !== project) continue;
+    for (const relPath of pages) {
+      const page = wikiPage(project, relPath);
+      if (!companions.has(relPath)) companions.set(relPath, []);
+      companions.get(relPath).push({
+        key: task.key,
+        title: task.title,
+        linkedAt: iso(page.offsetMinutes),
+        source: 'manual',
+      });
+    }
+  }
+  return companions;
+}
+
+function writeWikiTrees(root) {
+  for (const tree of WIKI_TREES) {
+    const docs = join(root, 'projects', tree.project, 'docs');
+    const companions = pageCompanions(tree.project);
+    for (const page of tree.pages) {
+      writeText(join(docs, page.path), pageMarkdown(page));
+      const relatedTasks = companions.get(page.path);
+      if (relatedTasks) writeJson(join(docs, `${page.path}.meta.json`), { relatedTasks });
+    }
+    writeJson(join(docs, 'app', 'config', 'home.json'), tree.home);
+  }
+}
+
+function dossierHtml(item) {
+  const cards = [...item.sourceTaskKeys, ...item.relatedTaskKeys];
+  const references = [
+    ...cards.map((key) => {
+      const task = TASKS.find((candidate) => candidate.key === key);
+      return `      <li><code>${escapeHtml(key)}</code>: ${escapeHtml(task ? task.title : 'seeded card')}</li>`;
+    }),
+    ...item.links.map((link) =>
+      `      <li><a href="${escapeHtml(link.href)}">${escapeHtml(link.label)}</a></li>`),
+  ].join('\n');
+  const storedState = item.schemaVersion === 2 ? item.lifecycleState : item.status;
+
+  return `${articleHead(item)}
+<main class="article">
+  <header class="page">
+    <p class="kicker">Pinned demo data | ${escapeHtml(item.key)}</p>
+    <h1>${escapeHtml(item.title)}</h1>
+    <p class="lede">${escapeHtml(item.summary)}</p>
+    <div class="meta"><span><b>Stored state</b> ${escapeHtml(storedState)} / ${escapeHtml(item.phase)}</span><span><b>Shown as</b> ${escapeHtml(item.status)}</span><span><b>Edited by</b> ${escapeHtml(item.editedBy)}</span><span><b>Updated</b> ${isoSeconds(item.offsetMinutes)}</span></div>
+  </header>
+
+  <section>
+    <p>${inlineHtml(item.lead)}</p>
+  </section>
+
+${blocksToHtml(item.blocks)}
+
+  <section>
+    <h2><span class="number">${sectionNumber(item.blocks)}</span> References</h2>
+    <ul>
+${references}
+    </ul>
+    <p class="dim">Pinned demo data. This document, its cards, and its measurements are invented for the demo instance. Decision points are fixtures and start no operation.</p>
+  </section>
+</main>
+</body>
+</html>
+`;
+}
+
+/**
+ * Head of the canonical article document, so a demo Dossier renders in the same
+ * house style as a real one instead of inventing a second colour system.
+ */
+function articleHead(item) {
+  const head = ARTICLE_TEMPLATE.slice(0, ARTICLE_TEMPLATE.indexOf('<main class="article">'))
+    .replaceAll('{{title}}', escapeHtml(item.title))
+    .replaceAll('{{summary}}', escapeHtml(item.summary))
+    .replaceAll('{{pattern}}', 'concept')
+    .replaceAll('{{status}}', escapeHtml(item.status))
+    .replaceAll('{{phase}}', escapeHtml(item.phase))
+    // The scaffold titles itself "<title> | Article document"; a Dossier in the
+    // Wiki tree should read as its own title.
+    .replace(`<title>${escapeHtml(item.title)} | Article document</title>`,
+      `<title>${escapeHtml(item.title)}</title>`)
+    .trimEnd();
+  if (head.includes('{{')) throw new Error('The article template has an unfilled placeholder.');
+  return head;
+}
+
+/**
+ * Lifecycle-schema-aware descriptor. Schema 2 stores the lifecycle state, its
+ * history, and the decision receipt; the retention Dossier stays on schema 1
+ * because "decision-pending while an operator has not answered" has no receipt
+ * to record, and a public demo must not carry a half-executed operation.
+ */
+function dossierDescriptor(item) {
+  const common = {
+    id: item.id,
+    key: item.key,
+    title: item.title,
+    summary: item.summary,
+    entrypoint: 'index.html',
+    phase: item.phase,
+    editedBy: item.editedBy,
+  };
+  if (item.schemaVersion !== 2) {
+    return {
+      schemaVersion: 1,
+      ...common,
+      status: item.status,
+      updatedAt: isoSeconds(item.offsetMinutes),
+      sourceTaskKeys: item.sourceTaskKeys,
+      relatedTaskKeys: item.relatedTaskKeys,
+      decision: null,
+    };
+  }
+
+  const history = item.lifecycleHistory.map((entry) => ({
+    state: entry.state,
+    editedBy: entry.editedBy,
+    editedAt: isoSeconds(entry.offsetMinutes),
+    ...(entry.note ? { note: entry.note } : {}),
+  }));
+  const latest = history[history.length - 1];
+  if (latest.state !== item.lifecycleState
+    || latest.editedBy !== item.editedBy
+    || latest.editedAt !== isoSeconds(item.offsetMinutes)) {
+    throw new Error(`Pinned lifecycle history does not end at the current state: ${item.key}`);
+  }
+
+  return {
+    schemaVersion: 2,
+    pageKind: 'workbench',
+    ...common,
+    lifecycleState: item.lifecycleState,
+    editedAt: isoSeconds(item.offsetMinutes),
+    lifecycleHistory: history,
+    sourceTaskKeys: item.sourceTaskKeys,
+    relatedTaskKeys: item.relatedTaskKeys,
+    decision: item.decision ? decisionReceipt(item.decision) : null,
+  };
+}
+
+/** Pinned decision receipt: recorded provenance, never an in-flight operation. */
+function decisionReceipt(decision) {
+  const receipt = {
+    outcome: decision.outcome,
+    state: decision.state,
+    operationId: decision.operationId,
+    sourceRevision: decision.sourceRevision,
+    preparedAt: isoSeconds(decision.preparedAt),
+    preparedBy: decision.preparedBy,
+    confirmedAt: isoSeconds(decision.confirmedAt),
+    confirmedBy: decision.confirmedBy,
+    decidedAt: isoSeconds(decision.decidedAt),
+    spawnedTaskKeys: decision.spawnedTaskKeys,
+    responses: decision.responses,
+  };
+  if (decision.outcome === 'archive') return { ...receipt, reason: decision.reason };
+  return { ...receipt, taskDraft: decision.taskDraft };
+}
+
+function writeDossierGallery(root) {
+  const galleryRoot = join(root, 'projects', DOSSIERS.project, 'docs', DOSSIERS.root);
+  for (const item of DOSSIERS.items) {
+    const dir = join(galleryRoot, item.id);
+    writeText(join(dir, 'index.html'), dossierHtml(item));
+    writeJson(join(dir, 'workbench.json'), dossierDescriptor(item));
+  }
+}
+
 function writePresentationStory(root) {
   const demoApp = join(root, 'projects', 'demo-app');
   const demoPlatform = join(root, 'projects', 'demo-platform');
@@ -714,10 +1101,6 @@ function writePresentationStory(root) {
   writeText(
     join(demoApp, 'README.md'),
     '# Demo App\n\nA deterministic sample product used only for Agent Studio demonstrations.\n'
-  );
-  writeText(
-    join(demoApp, 'docs', 'architecture.md'),
-    '# Architecture\n\nThe demo has an Angular client, an API boundary, and a review pipeline. Agent Studio keeps tasks, execution evidence, and project knowledge in one operator workspace.\n'
   );
   writeJsonl(join(demoApp, '.orchestrator', 'orchestrator-chat.jsonl'), [
     { id: 'demo-chat-01', ts: iso(210), role: 'user', text: 'What should we show in the MVP walkthrough?' },
@@ -761,15 +1144,20 @@ function main() {
   TASKS.forEach((task, i) => writeTask(root, task, i));
   writeWorkspaceRootFiles(root);
   writePresentationStory(root);
+  writeWikiTrees(root);
+  writeDossierGallery(root);
   writeDecisionJournal(root);
   stampTree(root);
 
   const perLane = TASKS.reduce((acc, t) => ((acc[t.state] = (acc[t.state] || 0) + 1), acc), {});
+  const perStatus = DOSSIERS.items.reduce((acc, d) => ((acc[d.status] = (acc[d.status] || 0) + 1), acc), {});
   console.log(`Seeded demo store at: ${root}`);
   console.log(`  projects: ${PROJECTS.map((p) => p.name).join(', ')}`);
   console.log(`  tasks:    ${TASKS.length} (${TASKS.filter((t) => t.history).length} with run/token history)`);
   console.log(`  pinned:   ${DECISION.taskKey} carries review, diff, screenshot, evidence, and decision state`);
   console.log(`  lanes:    ${Object.keys(perLane).sort().join(', ')}`);
+  console.log(`  wiki:     ${WIKI_TREES.map((tree) => `${tree.project} (${tree.pages.length} pages)`).join(', ')}`);
+  console.log(`  dossiers: ${DOSSIERS.items.length} in ${DOSSIERS.project}/docs/${DOSSIERS.root} (${Object.keys(perStatus).sort().join(', ')})`);
   console.log('Registry (.metadata) is left to the backend to seed from WatchPaths on first boot (ADR-0042).');
 }
 
