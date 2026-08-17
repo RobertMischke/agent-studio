@@ -137,6 +137,35 @@ active tab with either its close button or a middle click returns to the most
 recently active tab that is still open. If no history entry survives, the
 previous last-tab fallback applies.
 
+## Pinned tabs
+
+A shell tab can be pinned. Pinning is a durable preference about the tab
+collection, not another route owner: it never appears in the URL, and it is
+persisted next to the open-tab collection in local storage.
+
+- **Order.** Every pinned tab sits left of every unpinned tab. Pinning moves
+  the tab to the end of the pinned block, unpinning moves it to the start of
+  the unpinned block, and a drag-reorder is clamped at that boundary. A drag
+  therefore never pins, unpins, or interleaves the two groups.
+- **Compact form.** A pinned tab renders the shortest label that still
+  identifies the target (project short code, task key, short commit sha) and
+  keeps its dot, num chip, and surface icon. The untruncated label stays
+  reachable through the tooltip and the accessible name.
+- **Close protection.** A pinned tab has no close glyph, ignores middle click,
+  and survives Close Others, Close to the Right, and Close to the Left. The
+  explicit Close and Close All still close it, and its pin glyph unpins in one
+  click. Protection is against casual closing, not against intent.
+- **Identity changes.** A pin follows its tab through a project rename and an
+  in-place retarget. When a retarget merges two tabs, the surviving tab keeps
+  its own pin state rather than inheriting the vanishing tab's.
+- **Restore.** Pins are stored as tab keys, so a key that no longer resolves
+  simply drops out. A snapshot without the field reads as "nothing pinned", and
+  an interleaved snapshot is re-partitioned on load.
+
+For unpinned tabs the close glyph is a hover affordance: it is hidden at rest,
+appears on hover and on the active tab, and reveals itself on keyboard focus so
+it stays reachable. The Explorer Open-tabs list follows the same two rules.
+
 ## Invalid and stale routes
 
 - An unknown project slug is left intact while the project registry is
@@ -194,3 +223,6 @@ review screenshots under the managed task's `results/` directory.
   Overview entry from an empty editor. Panel posture now persists independently
   of navigation; next-message context follows the route while in-flight turns
   stay bound to their captured context.
+- **2026-08-18:** Added shell tab pinning (leftmost block, compact label,
+  protection from casual closing, persisted with the tab session) and made the
+  close glyph a hover affordance on unpinned tabs. Neither is route state.
