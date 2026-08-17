@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { HostTelemetryPoint, RemoteHost } from '../../../remote-hosts';
-import { summarizeStatusBarHostLoad } from './status-bar-host-load';
+import { summarizeStatusBarHostLoad, summarizeStatusBarSlotsByRole } from './status-bar-host-load';
 
 function remoteHost(
   load1: number,
   cpuCores = 12,
   activeSlots = 0,
   timestamp = new Date().toISOString(),
+  options: { executorRole?: 'coding' | 'review'; maxParallelism?: number } = {},
 ): RemoteHost {
   const point: HostTelemetryPoint = {
     timestamp,
@@ -45,6 +46,34 @@ function remoteHost(
       diskFreeGb: 50,
     },
     telemetry: { clientId: 'remote-1', window: '14d', points: [point], findings: [] },
+    ...(options.executorRole === 'review'
+      ? {
+          capabilityHealth: [{
+            key: 'executor:review',
+            category: 'executor',
+            advertisedStatus: 'ready',
+            healthState: 'healthy' as const,
+            advertisedAt: timestamp,
+            freshUntil: timestamp,
+            isFresh: true,
+            consecutiveFailures: 0,
+            affectedClaims: [],
+            recoveryHistory: [],
+          }],
+        }
+      : {}),
+    ...(options.maxParallelism !== undefined
+      ? {
+          runtimeCapacity: {
+            hostId: 'remote-1',
+            maxParallelism: options.maxParallelism,
+            targetLoadPercent: 80,
+            rampStrategy: 'balanced' as const,
+            version: 1,
+            updatedAt: timestamp,
+          },
+        }
+      : {}),
   };
 }
 
@@ -98,6 +127,51 @@ describe('summarizeStatusBarHostLoad', () => {
       load1: 4,
       cpuCores: 12,
       activeSlots: 3,
+    });
+  });
+});
+
+describe('summarizeStatusBarSlotsByRole', () => {
+  it('splits active slots by executor plane so review load never inflates the coding figure', () => {
+    const coding = remoteHost(1, 8, 2, undefined, { maxParallelism: 8 });
+    const review = { ...remoteHost(1, 8, 3, undefined, { executorRole: 'review', maxParallelism: 6 }), id: 'remote-2', clientId: 'remote-2' };
+
+    expect(summarizeStatusBarSlotsByRole([coding, review])).toEqual({
+      coding: { active: 2, ceiling: 8 },
+      review: { active: 3, ceiling: 6 },
+    });
+  });
+
+  it('treats the local host as coding-plane since it never advertises an executor capability', () => {
+    const local = {
+      ...remoteHost(1, 4, 1),
+      id: 'local',
+      name: 'Local machine',
+      role: 'local' as const,
+      address: null,
+      clientId: 'local-default',
+    };
+
+    expect(summarizeStatusBarSlotsByRole([local])).toEqual({
+      coding: { active: 1, ceiling: null },
+      review: { active: 0, ceiling: null },
+    });
+  });
+
+  it('leaves ceiling null for a plane where no host reports a configured limit', () => {
+    const review = { ...remoteHost(1, 8, 1, undefined, { executorRole: 'review' }), id: 'remote-2', clientId: 'remote-2' };
+
+    expect(summarizeStatusBarSlotsByRole([review])).toMatchObject({
+      review: { active: 1, ceiling: null },
+    });
+  });
+
+  it('excludes offline and retired hosts from both active counts and ceilings', () => {
+    const offline = { ...remoteHost(1, 8, 5, undefined, { maxParallelism: 8 }), status: 'offline' as const };
+
+    expect(summarizeStatusBarSlotsByRole([offline])).toEqual({
+      coding: { active: 0, ceiling: null },
+      review: { active: 0, ceiling: null },
     });
   });
 });
