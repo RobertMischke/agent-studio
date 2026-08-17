@@ -44,6 +44,16 @@ runner-idle, merge-gate drain, update, logging, and verified-resume path. See th
 [promotion runbook](../../docs/operations/develop-main-promotion.md) for the
 complete command and cron entry.
 
+On Windows the watcher also treats the standalone Task Server as a required
+service. Every tick probes its direct `/readyz` endpoint. If the process is
+down, the watcher asks the S4U Scheduled Task service boundary to start it and
+does not consider a Stable deployment until readiness returns. The updater
+preserves an already-current Task Server. It drains durable attempt authority
+and verifies a backup before replacing the service when the candidate package
+differs. Task Server is ready before the Stable API starts in both paths. Set
+`ATP_TASK_SERVER_REQUIRED=0` only for a topology that deliberately has no
+standalone service.
+
 Trigger conditions (both must hold on a tick):
 
 - At least N (default 3) **new** job folders have appeared in the watched project's `4-review` lane since the last restart (or since the watcher first booted and took its baseline snapshot).
@@ -59,6 +69,13 @@ bytes without changing Vite's optimizer cache key. It then launches Stable
 detached and uses `playwright-core` to load the frontend. Any browser
 `pageerror` makes the update fail; an open port alone is not health evidence.
 The watcher does not call `git pull` or `git fetch` directly.
+
+The updater keeps the candidate checkout detached during verification. It
+probes direct Task Server readiness, Stable API health, the `/api/v1` proxy,
+the board projection, and the management proxy before the browser probe. It
+then returns Task Server to `Normal` mode and attaches Stable to local `main`
+tracking `origin/main`. A rollback pin therefore cannot be removed by a
+partially healthy update.
 
 Older devspaces may still have an unversioned root-level `update-stable.sh`.
 Replace that copy after updating the dev checkout, or point every caller at the

@@ -579,8 +579,10 @@ public sealed class TopologyTests
             "--version");
         await version.WaitForExitAsync(TimeSpan.FromSeconds(15));
         Assert.Equal(0, version.Process.ExitCode);
+        var repositoryVersion = (await File.ReadAllTextAsync(
+            Path.Combine(root, "VERSION"))).Trim();
         Assert.Matches(
-            @"task-server 1\.0\.0\+sha\.[0-9a-f]{40}",
+            $@"task-server {System.Text.RegularExpressions.Regex.Escape(repositoryVersion)}\+sha\.[0-9a-f]{{40}}",
             version.ToString());
 
         using (var first = StartBuilt(
