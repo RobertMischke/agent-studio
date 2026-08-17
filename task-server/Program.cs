@@ -1,5 +1,6 @@
 using AgentStudio.TaskServer;
 using AgentStudio.TaskServer.Contracts;
+using Microsoft.AspNetCore.Routing;
 using System.Text.Json;
 
 TaskServerCommandLine command;
@@ -22,6 +23,12 @@ if (command.Kind == TaskServerCommandKind.Version)
 var builder = WebApplication.CreateBuilder(command.HostArguments);
 if (string.Equals(Environment.GetEnvironmentVariable("TASK_SERVER_PROFILE"), "local-compatibility", StringComparison.OrdinalIgnoreCase))
     builder.Configuration.AddJsonFile("appsettings.LocalCompatibility.json", optional: false, reloadOnChange: false);
+var taskServerDeploymentProfile = Environment.GetEnvironmentVariable("TASK_SERVER_PROFILE")
+                                  ?? builder.Configuration[$"{TaskServerOptions.SectionName}:DeploymentProfile"]
+                                  ?? "task-server";
+taskServerDeploymentProfile = ValidateTaskServerDeploymentProfile(taskServerDeploymentProfile);
+var executionAdmissionPolicy = new ExecutionAdmissionPolicy(taskServerDeploymentProfile);
+builder.Services.AddSingleton(executionAdmissionPolicy);
 builder.Services.AddSingleton(serviceProvider =>
     TaskServerBootstrapOptions.Load(
         serviceProvider.GetRequiredService<IConfiguration>()));
@@ -42,7 +49,8 @@ builder.Services.AddSingleton<HostProjectPolicyService>();
 builder.Services.AddSingleton<LegacyMigrationService>();
 builder.Services.AddSingleton<IResultRefDeleter, GitResultRefDeleter>();
 builder.Services.AddHostedService<TaskServerInvariantReconciliationService>();
-builder.Services.AddHostedService<ResultRefGcHostedService>();
+if (!executionAdmissionPolicy.IsPublicDemoLocked)
+    builder.Services.AddHostedService<ResultRefGcHostedService>();
 
 var configuredUrl = builder.Configuration["LISTEN_URL"]
                     ?? builder.Configuration[$"{TaskServerOptions.SectionName}:ListenUrl"];
@@ -52,6 +60,28 @@ if (!string.IsNullOrWhiteSpace(configuredUrl)
     builder.WebHost.UseUrls(configuredUrl);
 
 var app = builder.Build();
+var effectiveTaskServerProfile = Environment.GetEnvironmentVariable("TASK_SERVER_PROFILE")
+                                 ?? app.Configuration[$"{TaskServerOptions.SectionName}:DeploymentProfile"]
+                                 ?? "task-server";
+effectiveTaskServerProfile = ValidateTaskServerDeploymentProfile(effectiveTaskServerProfile);
+if (!string.Equals(
+        executionAdmissionPolicy.DeploymentProfile,
+        new ExecutionAdmissionPolicy(effectiveTaskServerProfile).DeploymentProfile,
+        StringComparison.Ordinal))
+{
+    throw new InvalidOperationException(
+        "TaskServer:DeploymentProfile changed while the host was being constructed. " +
+        "The execution admission profile is startup-only, so startup was refused.");
+}
+app.UseRouting();
+app.UseMiddleware<PublicDemoExecutionAdmissionMiddleware>();
+app.UseMiddleware<TaskServerAuthenticationMiddleware>();
+app.UseMiddleware<TaskServerProtocolMiddleware>();
+app.MapTaskServerEndpoints();
+PublicDemoTaskServerRouteMatrix.ProveAtStartup(
+    executionAdmissionPolicy,
+    ((IEndpointRouteBuilder)app).DataSources);
+
 var store = app.Services.GetRequiredService<TaskServerStore>();
 if (command.Kind == TaskServerCommandKind.Backup)
 {
@@ -75,10 +105,18 @@ if (command.Kind == TaskServerCommandKind.Backup)
 }
 
 await store.InitializeAsync(app.Lifetime.ApplicationStopping);
-app.UseMiddleware<TaskServerAuthenticationMiddleware>();
-app.UseMiddleware<TaskServerProtocolMiddleware>();
-app.MapTaskServerEndpoints();
 await app.RunAsync();
 return 0;
+
+static string ValidateTaskServerDeploymentProfile(string profile)
+{
+    var normalized = profile.Trim().ToLowerInvariant();
+    return normalized switch
+    {
+        "task-server" or "local-compatibility" or DeploymentProfiles.PublicDemoReadonly => normalized,
+        _ => throw new InvalidOperationException(
+            $"Unknown Task Server deployment profile '{profile}'. Refusing to select an execution-enabled fallback."),
+    };
+}
 
 public partial class Program;

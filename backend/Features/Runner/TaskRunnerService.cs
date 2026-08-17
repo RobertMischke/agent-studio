@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Runner;
 
@@ -84,6 +85,7 @@ public class TaskRunnerService : BackgroundService
     private readonly RunnerIdentity? _runnerIdentity;
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly AgentStudio.Clients.ClientIdentityStore? _clients;
+    private readonly ExecutionAdmissionPolicy _executionAdmission;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -150,7 +152,8 @@ public class TaskRunnerService : BackgroundService
         AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
-        VisualQaService? visualQa = null)
+        VisualQaService? visualQa = null,
+        ExecutionAdmissionPolicy? executionAdmission = null)
     {
         _config = config;
         _logger = logger;
@@ -198,6 +201,7 @@ public class TaskRunnerService : BackgroundService
         _runnerIdentity = runnerIdentity;
         _clients = clients;
         _quotaWaitPolicy = quotaWaitPolicy;
+        _executionAdmission = executionAdmission ?? new ExecutionAdmissionPolicy("local");
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -322,6 +326,14 @@ public class TaskRunnerService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!_executionAdmission.Decide(ExecutionAdmissionPath.Start).Allowed)
+        {
+            _logger.LogInformation(
+                "Task runner execution loop is disabled by deployment profile {Profile}",
+                _executionAdmission.DeploymentProfile);
+            return;
+        }
+
         // Initialize runners for each watch path
         var entries = _scanner.GetWatchPaths();
         foreach (var rawEntry in entries)
@@ -604,6 +616,7 @@ public class TaskRunnerService : BackgroundService
 
     public async Task<ContinueJobResponse> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, string? thinkingLevelOverride = null, CancellationToken ct = default)
     {
+        ThrowIfExecutionDisabled(ExecutionAdmissionPath.Start);
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) throw new TaskOperationException("Job not found", 404);
 
@@ -648,6 +661,7 @@ public class TaskRunnerService : BackgroundService
     /// </summary>
     public async Task<ContinueJobResponse> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, string? thinkingLevelOverride = null, string? mode = null, CancellationToken ct = default)
     {
+        ThrowIfExecutionDisabled(ExecutionAdmissionPath.Continue);
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) throw new TaskOperationException("Job not found", 404);
 
@@ -708,6 +722,13 @@ public class TaskRunnerService : BackgroundService
 
         var outcome = await runner.ContinueJobAsync(jobId, followupPrompt, normalizedMode, ct);
         return ShapeOutcome(outcome, info, jobId, watchPath, normalizedMode, followupPrompt);
+    }
+
+    private void ThrowIfExecutionDisabled(ExecutionAdmissionPath path)
+    {
+        var decision = _executionAdmission.Decide(path);
+        if (!decision.Allowed)
+            throw new TaskOperationException(decision.Message!, StatusCodes.Status403Forbidden);
     }
 
     /// <summary>

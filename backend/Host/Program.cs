@@ -3,8 +3,10 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Routing;
 using Serilog;
 using Serilog.Events;
+using AgentStudio.TaskServer.Contracts;
 
 // Static Serilog logger so DI-less / static contexts (TryReadEnteredLaneAt,
 // path + parser helpers, the SilentCatch standard) have a real logger before -
@@ -87,6 +89,14 @@ if (underTestHost)
         builder.Configuration["TaskRepository"] = iso;
     }
 }
+
+// Capture execution authority once. The singleton policy is deliberately not
+// backed by reloadable configuration: public-demo-readonly is a process launch
+// identity and cannot be toggled through a project, browser, or management API.
+var executionAdmissionPolicy = new ExecutionAdmissionPolicy(
+    SecurityProfiles.ActiveProfile(builder.Configuration));
+var publicDemoExecutionLocked = executionAdmissionPolicy.IsPublicDemoLocked;
+builder.Services.AddSingleton(executionAdmissionPolicy);
 
 // Rolling backend file logger + crash marker (see Services/Diagnostics).
 // Built before WebApplication so the process-wide crash handlers below
@@ -427,7 +437,8 @@ builder.Services.AddSingleton<ReviewAttemptTaskLifecycleService>();
 builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
 builder.Services.AddSingleton<RemoteDispatchRejectionStore>();
 builder.Services.AddSingleton<RemoteQueueStarvationWatchdog>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteQueueStarvationWatchdog>());
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteQueueStarvationWatchdog>());
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
     sp.GetRequiredService<AttemptAuthorityService>()));
@@ -522,12 +533,15 @@ builder.Services.AddSingleton<AgentStudio.Tags.TagRegistryService>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<FilesystemLayerSnapshotService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
-builder.Services.AddHostedService<HardHealthCheckHostedService>();
-builder.Services.AddHostedService<SoftReasoningHostedService>();
-builder.Services.AddHostedService<AutoInterventionHostedService>();
-builder.Services.AddHostedService<MetaCycleHostedService>();
-builder.Services.AddHostedService<OrchestratorPrepHostedService>();
-builder.Services.AddHostedService<ChatNoteHostedService>();
+if (!publicDemoExecutionLocked)
+{
+    builder.Services.AddHostedService<HardHealthCheckHostedService>();
+    builder.Services.AddHostedService<SoftReasoningHostedService>();
+    builder.Services.AddHostedService<AutoInterventionHostedService>();
+    builder.Services.AddHostedService<MetaCycleHostedService>();
+    builder.Services.AddHostedService<OrchestratorPrepHostedService>();
+    builder.Services.AddHostedService<ChatNoteHostedService>();
+}
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineExecutionLog>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineHealthDetector>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineHealthService>();
@@ -581,7 +595,8 @@ builder.Services.AddSingleton<RemoteReviewPlanBuilder>();
 builder.Services.AddSingleton<RemotePipelineReviewEvidenceProjector>();
 builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>();
-builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactCommitService>();
 // Transition-Committer (WorkspaceEvidence): every successful lane transition
 // enqueues an evidence-commit wish (TaskStateMachine.EnqueueEvidence); the
@@ -597,7 +612,8 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceEvidenceBatcher>(sp 
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Pipeline.WorkspaceEvidence"),
         sp.GetService<TimeProvider>(),
         sp.GetService<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>()));
-builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();
@@ -605,19 +621,22 @@ builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddSingleton<ReviewDecisionOrchestrator>();
 // Transitional single-owner boundary. Engine mode deliberately registers none
 // of the legacy review/council/post-processing hosted loops.
-builder.Services.AddOrchestrationExecutionLoops(orchestrationExecutionMode);
+if (!publicDemoExecutionLocked)
+    builder.Services.AddOrchestrationExecutionLoops(orchestrationExecutionMode);
 // Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per
 // project; see ProjectSettings.IntakeEnabled. The hosted service is cheap
 // (heuristic only, no LLM) and skips projects that have not opted in.
 builder.Services.AddSingleton<IntakeRunner>();
-builder.Services.AddHostedService<IntakeHostedService>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<IntakeHostedService>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectIntegrationViewService>();
 builder.Services.AddSingleton<AgentStudio.Search.GlobalSearchService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<GitCleanupService>();
 builder.Services.AddSingleton<GitBranchRetentionService>();
-builder.Services.AddHostedService<GitBranchRetentionHostedService>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<GitBranchRetentionHostedService>();
 // Slice P (ASS-1663): build-profile onboarding validation dry-run.
 builder.Services.AddSingleton<IBuildCommandRunner, ProcessBuildCommandRunner>();
 builder.Services.AddSingleton<BuildProfileValidationService>();
@@ -626,8 +645,11 @@ builder.Services.AddSingleton<BuildProfileValidationService>();
 // drains and performs the git push, CompletedPushBackstopHostedService is the
 // periodic safety net for missed / shutdown-dropped pushes.
 builder.Services.AddSingleton<CompletedPushQueue>();
-builder.Services.AddHostedService<CompletedPushWorker>();
-builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
+if (!publicDemoExecutionLocked)
+{
+    builder.Services.AddHostedService<CompletedPushWorker>();
+    builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
+}
 // Accepted integration is a transactional two-stage background chain. Accept
 // keeps the card in Human Review with phase=integrating and enqueues merge +
 // gate here. Only successful integration moves it to Completed; failures return
@@ -637,37 +659,46 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
 builder.Services.AddSingleton<AcceptedIntegrationInventorySweep>();
 builder.Services.AddSingleton<HistoricalIntegrationVerificationSweep>();
-builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationAgentRoundService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteDeliveryIntegrationCoordinator>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
-builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
 // The channel is intentionally in-memory. Durable phase and pipeline facts
 // recover both an interrupted accept transaction and a successful merge whose
 // queued origin push was dropped by restart.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>();
-builder.Services.AddHostedService(sp =>
-    sp.GetRequiredService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>());
-builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
+if (!publicDemoExecutionLocked)
+{
+    builder.Services.AddHostedService(sp =>
+        sp.GetRequiredService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>());
+    builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
+}
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or
 // crashed run left behind. Closes the days-long accumulation gap the startup
 // reaper alone cannot: those survivors hold job-folder handles and wedge the
 // next lane move with "file in use by another process".
-builder.Services.AddHostedService<OrphanReaperHostedService>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<OrphanReaperHostedService>();
 builder.Services.AddHostedService<CleanContextRetentionHostedService>();
 // Runtime stale-progress sweep. The boot sweep handles already-stuck
 // 3-progress folders; this closes the gap where a folder crosses the resume
 // window while the backend stays up.
-builder.Services.AddHostedService<StaleProgressSweepHostedService>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<StaleProgressSweepHostedService>();
 // Runtime run-liveness sweep (Run-Liveness Slice A). Demotes a 3-progress card
 // within the 60s budget when its owning run dies while the backend stays up;
 // the boot adoption scan below handles zombies already present at startup.
-builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // Runtime steer-timeout sweep (Run-Liveness Slice B). Resolves an unanswered
 // steer / NeedsInput wait (auto-answer from the task context, else a blocked
 // escalation) within timeout + one interval, so a steered card never hangs for
 // hours the way 2062/2067/2068 did on 2026-07-10.
-builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 // AGT-2492 Wiedervorlage sweep. Parked cards carry a machine-readable blocker;
 // this re-checks those conditions so a card whose infrastructure precondition
 // was cleared is reported instead of sitting unnoticed (AGT-2220 lost four days
@@ -720,7 +751,8 @@ builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddSingleton<CliQuotaWaitPolicyService>();
 builder.Services.AddSingleton<CliQuotaFallbackService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 // F22: server-rendered conversation projection. The projector serves the
 // GET /api/tasks/{id}/conversation endpoint and (when the feature flag is
 // on) broadcasts deltas over TaskHub. Sources are registered so the
@@ -741,7 +773,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<SourceWatcher>());
 builder.Services.Configure<CompanionSyncOptions>(builder.Configuration.GetSection(CompanionSyncOptions.SectionName));
 builder.Services.AddSingleton<CompanionCommandDispatcher>();
 builder.Services.AddHttpClient("companion-relay");
-builder.Services.AddHostedService<CompanionSyncService>();
+if (!publicDemoExecutionLocked)
+    builder.Services.AddHostedService<CompanionSyncService>();
 // Serialise enums as camelCase strings so the frontend can use string-literal
 // unions (e.g. TaskSummaryStatus = 'none' | 'generating' | 'ready' | 'failed')
 // instead of numeric values.
@@ -771,6 +804,17 @@ if (!SecurityProfiles.IsNetworked(builder.Configuration))
 
 var app = builder.Build();
 var networkedSecurityProfile = SecurityProfiles.IsNetworked(app.Configuration);
+var effectiveExecutionProfile = SecurityProfiles.ActiveProfile(app.Configuration);
+var effectivePublicDemoLock = string.Equals(
+    effectiveExecutionProfile,
+    DeploymentProfiles.PublicDemoReadonly,
+    StringComparison.Ordinal);
+if (executionAdmissionPolicy.IsPublicDemoLocked != effectivePublicDemoLock)
+{
+    throw new InvalidOperationException(
+        "The public-demo execution lock changed while the host was being constructed. " +
+        "The lock is startup-only, so startup was refused.");
+}
 var includeExceptionDetails = !networkedSecurityProfile && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
 
 app.UseForwardedHeaders();
@@ -809,6 +853,12 @@ app.UseExceptionHandler(exceptionApp =>
 
 if (!networkedSecurityProfile) app.UseCors();
 
+// The public-demo execution boundary precedes authentication and model binding.
+// A forged Runner token therefore cannot make an execution endpoint behave
+// differently from an anonymous request.
+app.UseRouting();
+app.UsePublicDemoExecutionAdmission();
+
 // In the networked profile this is the authentication and authorization
 // boundary. X-Client-Id remains attribution only and is never consulted as a
 // credential. Local development retains the legacy attribution middleware.
@@ -823,6 +873,17 @@ if (!networkedSecurityProfile) app.UseClientIdentity();
 // Management intent is authoritative for admission. Reads, recovery controls,
 // and the bounded set of writes needed to drain an existing Runner remain live.
 app.UseManagementMode();
+
+// Register and prove the complete route expectation matrix before any startup
+// reconciliation, CLI reattachment, or hosted execution loop can run. A public
+// demo whose compiled inventory is stale never reaches a listening state.
+app.MapAllEndpoints();
+app.MapConversationEndpoints();
+app.MapHub<TaskHub>("/hubs/jobs");
+PublicDemoRouteMatrix.ProveAtStartup(
+    app.Services.GetRequiredService<ExecutionAdmissionPolicy>(),
+    ((IEndpointRouteBuilder)app).DataSources,
+    EndpointMapping.MapsLocalV1(app.Configuration));
 
 // Touch the identity store at boot so the bootstrap "local-default" identity
 // is created before any caller looks at it.
@@ -1001,43 +1062,46 @@ catch (Exception ex)
 // "No conversation found" launch-fail chain) but re-triggers post-processing for
 // a finished run instead of re-running the completed agent. Sync wait is
 // intentional: the runner must see the adopted state on its first scan.
-try
+if (!publicDemoExecutionLocked)
 {
-    app.Services.GetRequiredService<RunLivenessMonitor>().AdoptOnBootAsync().GetAwaiter().GetResult();
-}
-catch (Exception ex)
-{
-    crashRecorder.Record("RunLivenessMonitor.AdoptOnBoot", ex);
-}
+    try
+    {
+        app.Services.GetRequiredService<RunLivenessMonitor>().AdoptOnBootAsync().GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        crashRecorder.Record("RunLivenessMonitor.AdoptOnBoot", ex);
+    }
 
-try
-{
-    app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();
-}
-catch (Exception ex)
-{
-    // Recovery never blocks boot; a failure here is logged and surfaced
-    // through the crash recorder so the operator can find it.
-    crashRecorder.Record("CrashRecoveryService", ex);
-}
+    try
+    {
+        app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        // Recovery never blocks boot; a failure here is logged and surfaced
+        // through the crash recorder so the operator can find it.
+        crashRecorder.Record("CrashRecoveryService", ex);
+    }
 
-// After file-level crash recovery, sweep the 3-progress lane for folders that
-// have been wedged past the resume window. Pairs with crash recovery: that
-// rescues changes, this rescues the lane (one running job per project, ADR-0001).
-try
-{
-    var archiver = app.Services.GetRequiredService<StaleProgressArchiver>();
-    archiver.SweepAsync().GetAwaiter().GetResult();
-    // Failed-pickup-elimination (supersedes ADR-0028/0029): drain any folders
-    // that linger in the retired 3a-failed-pickup lane from before this change
-    // - real tasks back to 2-ready, debris to 7-archive - after the sweep so a
-    // folder requeued from 3-progress is never also drained. Idempotent once
-    // the lane is empty.
-    archiver.DrainFailedPickupLaneAsync().GetAwaiter().GetResult();
-}
-catch (Exception ex)
-{
-    crashRecorder.Record("StaleProgressArchiver", ex);
+    // After file-level crash recovery, sweep the 3-progress lane for folders that
+    // have been wedged past the resume window. Pairs with crash recovery: that
+    // rescues changes, this rescues the lane (one running job per project, ADR-0001).
+    try
+    {
+        var archiver = app.Services.GetRequiredService<StaleProgressArchiver>();
+        archiver.SweepAsync().GetAwaiter().GetResult();
+        // Failed-pickup-elimination (supersedes ADR-0028/0029): drain any folders
+        // that linger in the retired 3a-failed-pickup lane from before this change
+        // - real tasks back to 2-ready, debris to 7-archive - after the sweep so a
+        // folder requeued from 3-progress is never also drained. Idempotent once
+        // the lane is empty.
+        archiver.DrainFailedPickupLaneAsync().GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        crashRecorder.Record("StaleProgressArchiver", ex);
+    }
 }
 
 // Seed the Agent Message Bus participant registry. Workspace-scoped, idempotent
@@ -1249,6 +1313,7 @@ _ = app.Services.GetRequiredService<AgentStudio.TaskAccess.ITaskAccessHost>()
 // integration suite never spawns a real codex process.
 if (!app.Environment.IsEnvironment("Test")
     && !app.Environment.IsEnvironment("Testing")
+    && !publicDemoExecutionLocked
     && app.Configuration.GetValue("CodexModels:WarmupOnBoot", true))
 {
     _ = Task.Run(async () =>
@@ -1278,82 +1343,86 @@ if (!app.Environment.IsEnvironment("Test")
 // Without this, an external move (API or otherwise) leaves the runner pinned
 // to a slug whose folder has left the lane, every pickup tick short-circuits
 // on `active != null`, and the project wedges until backend restart.
-var transitionsForRunner = app.Services.GetRequiredService<TaskTransitionService>();
-var runnerForTransitions = app.Services.GetRequiredService<TaskRunnerService>();
-transitionsForRunner.OnJobMoved += (projectName, jobId, fromState, toState) =>
+if (!publicDemoExecutionLocked)
 {
-    if (fromState != TaskStates.Progress) return;
-    runnerForTransitions.ClearActiveJobForProject(
-        projectName, jobId,
-        $"job moved out of 3-progress externally ({fromState} -> {toState})");
-};
+    var transitionsForRunner = app.Services.GetRequiredService<TaskTransitionService>();
+    var runnerForTransitions = app.Services.GetRequiredService<TaskRunnerService>();
+    transitionsForRunner.OnJobMoved += (projectName, jobId, fromState, toState) =>
+    {
+        if (fromState != TaskStates.Progress) return;
+        runnerForTransitions.ClearActiveJobForProject(
+            projectName, jobId,
+            $"job moved out of 3-progress externally ({fromState} -> {toState})");
+    };
 
 // PUB-2 automation ladder. Package targets are clamped to suggest; only the
 // website auto rung subscribes to acceptance and waits for the asynchronous
 // integration merge before dispatching the existing deploy workflow.
-var publishActionsForTransitions = app.Services.GetRequiredService<PublishActionService>();
-transitionsForRunner.OnJobMoved += (projectName, jobId, _, toState) =>
-{
-    if (toState == TaskStates.Completed)
-        publishActionsForTransitions.HandleTaskAccepted(projectName, jobId);
-};
+    var publishActionsForTransitions = app.Services.GetRequiredService<PublishActionService>();
+    transitionsForRunner.OnJobMoved += (projectName, jobId, _, toState) =>
+    {
+        if (toState == TaskStates.Completed)
+            publishActionsForTransitions.HandleTaskAccepted(projectName, jobId);
+    };
 
 // Defensive: when a non-API task change touches the watch tree, reconcile only
 // the affected project's active runner against its captured task folder. This
 // deliberately avoids a global FindJob/index scan on the watcher callback.
-watcher.OnJobChanged += path => runnerForTransitions.ReconcileRunnerForPath(path);
+    watcher.OnJobChanged += path => runnerForTransitions.ReconcileRunnerForPath(path);
 
 // Wire up CLI events → SignalR push (across all CLI backends via the router)
-var cliRouter = app.Services.GetRequiredService<CliRouter>();
-var wikiAgentReads = app.Services.GetRequiredService<AgentStudio.Docs.WikiAgentReadService>();
-cliRouter.OnOutput += (cliType, jobId, line) =>
-{
-    try { wikiAgentReads.ProcessOutput(jobId, new[] { line }); }
-    catch (Exception ex) { SilentCatch.Note(ex, "WikiAgentReadService: live CLI output attribution failed."); }
-    _ = TaskEventClients(jobId).SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
-};
-cliRouter.OnStarted += (cliType, jobId, exec) =>
-    TaskEventClients(jobId).SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
-cliRouter.OnFinished += (cliType, jobId, exec) =>
-    TaskEventClients(jobId).SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
+    var cliRouter = app.Services.GetRequiredService<CliRouter>();
+    var wikiAgentReads = app.Services.GetRequiredService<AgentStudio.Docs.WikiAgentReadService>();
+    cliRouter.OnOutput += (cliType, jobId, line) =>
+    {
+        try { wikiAgentReads.ProcessOutput(jobId, new[] { line }); }
+        catch (Exception ex) { SilentCatch.Note(ex, "WikiAgentReadService: live CLI output attribution failed."); }
+        _ = TaskEventClients(jobId).SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
+    };
+    cliRouter.OnStarted += (cliType, jobId, exec) =>
+        TaskEventClients(jobId).SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
+    cliRouter.OnFinished += (cliType, jobId, exec) =>
+        TaskEventClients(jobId).SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
 // Plan strip live push: when the agent emits a TodoWrite / update_plan frame the
 // runner persists a snapshot; tell the open detail view to re-fetch /plan. Uses
 // the same job identifier as cliOutput so the frontend correlates identically.
-cliRouter.OnRunEvent += (cliType, jobId, evt) =>
-{
-    if (evt is CliRunEvent.PlanUpdated)
-        TaskEventClients(jobId).SendAsync("planUpdated", jobId, cliType);
-};
+    cliRouter.OnRunEvent += (cliType, jobId, evt) =>
+    {
+        if (evt is CliRunEvent.PlanUpdated)
+            TaskEventClients(jobId).SendAsync("planUpdated", jobId, cliType);
+    };
 
 // Per-CLI startup hook. Claude / Codex / Gemini reap orphans - see
 // GenericCliExecutionService.ReattachOnStartup. Must run before any new CLI run
 // is started so we never have two processes editing the same repo.
-cliRouter.ReattachAll();
+    cliRouter.ReattachAll();
 // A detached ng/esbuild helper is no longer reachable from its original CLI
 // PID and therefore has no useful active-jobs entry. At boot there are no live
 // runs yet, so reclaim helpers whose command line still points into an
 // ephemeral task worktree before pickup starts.
-var worktreeOrphanLogger = app.Services.GetRequiredService<ILoggerFactory>()
-    .CreateLogger("WorktreeOrphanBootSweep");
-if (Environment.GetEnvironmentVariable("ATP_DEV_BACKEND_FROM_FIXTURE") == "1")
-{
-    // The Playwright node process is the backend's launcher in this mode. A
-    // worktree-path sweep would classify and kill its own test harness.
-    worktreeOrphanLogger.LogInformation(
-        "worktree-orphan-boot-sweep-skipped reason=playwright-fixture");
+    var worktreeOrphanLogger = app.Services.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("WorktreeOrphanBootSweep");
+    if (Environment.GetEnvironmentVariable("ATP_DEV_BACKEND_FROM_FIXTURE") == "1")
+    {
+        // The Playwright node process is the backend's launcher in this mode. A
+        // worktree-path sweep would classify and kill its own test harness.
+        worktreeOrphanLogger.LogInformation(
+            "worktree-orphan-boot-sweep-skipped reason=playwright-fixture");
+    }
+    else
+    {
+        WindowsWorktreeOrphanSweeper.Sweep(worktreeOrphanLogger);
+    }
+
+// Wire up Runner status → SignalR push
+    var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();
+    taskRunner.OnRunnerStatusChanged += (projectName, status) =>
+        ProjectEventClients(projectName).SendAsync("runnerStatusChanged", projectName, status.Mode, status.ActiveJobId);
 }
 else
 {
-    WindowsWorktreeOrphanSweeper.Sweep(worktreeOrphanLogger);
+    app.Services.GetRequiredService<ILogger<Program>>().LogInformation(
+        "execution-runtime-wiring-skipped reason=public-demo-execution-disabled");
 }
-
-// Wire up Runner status → SignalR push
-var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();
-taskRunner.OnRunnerStatusChanged += (projectName, status) =>
-    ProjectEventClients(projectName).SendAsync("runnerStatusChanged", projectName, status.Mode, status.ActiveJobId);
-
-app.MapAllEndpoints();
-app.MapConversationEndpoints();
-app.MapHub<TaskHub>("/hubs/jobs");
 
 app.Run();

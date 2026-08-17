@@ -6,12 +6,26 @@ public static class SecurityProfiles
 {
     public const string Local = "local";
     public const string Networked = "networked";
+    public const string PublicDemoReadonly = AgentStudio.TaskServer.Contracts.DeploymentProfiles.PublicDemoReadonly;
 
     public static bool IsNetworked(IConfiguration configuration)
-        => string.Equals(configuration["Security:Profile"], Networked, StringComparison.OrdinalIgnoreCase);
+        => ActiveProfile(configuration) is Networked or PublicDemoReadonly;
+
+    public static bool IsPublicDemo(IConfiguration configuration)
+        => ActiveProfile(configuration) == PublicDemoReadonly;
 
     public static string ActiveProfile(IConfiguration configuration)
-        => IsNetworked(configuration) ? Networked : Local;
+    {
+        var configured = configuration["Security:Profile"]?.Trim().ToLowerInvariant();
+        return configured switch
+        {
+            null or "" or Local => Local,
+            Networked => Networked,
+            PublicDemoReadonly => PublicDemoReadonly,
+            _ => throw new InvalidOperationException(
+                $"Unknown Security:Profile '{configured}'. Refusing to select a less restrictive fallback profile."),
+        };
+    }
 }
 
 public static class StudioRoles

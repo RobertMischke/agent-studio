@@ -7,6 +7,7 @@ public sealed class TaskServerOptions
     public string DataDirectory { get; set; } = "data";
     public string? BackupDirectory { get; set; }
     public string ListenUrl { get; set; } = "http://127.0.0.1:5071";
+    public string DeploymentProfile { get; set; } = "task-server";
     public int MinimumLeaseSeconds { get; set; } = 30;
     public int MaximumLeaseSeconds { get; set; } = 900;
     public int ResultRetentionDays { get; set; } = 30;

@@ -128,10 +128,11 @@
   <p class="lede">A public Agent Studio scene with two credible mock projects, a real Task Server, live navigation and SignalR, a replay-only Runner, and Dossiers across their full lifecycle. The instance can show execution evidence, but it cannot claim, start, continue, or complete real work.</p>
   <div class="meta">
     <span><b>Date</b> 10 August 2026</span>
-    <span><b>Source</b> AGT-2582</span>
-    <span><b>Status</b> Decision pending</span>
-    <span><b>Phase</b> Decision ready</span>
-    <span><b>Scope</b> Analysis only, no implementation</span>
+    <span><b>Approved</b> 17 August 2026</span>
+    <span><b>Source</b> AGT-2582 · implementation AGT-2667</span>
+    <span><b>Status</b> Approved</span>
+    <span><b>Phase</b> Implementation</span>
+    <span><b>Scope</b> S2 delivered; remaining launch slices pending</span>
   </div>
 </header>
 
@@ -139,6 +140,7 @@
   <h4>Contents</h4>
   <ul class="toc">
     <li><a href="#decision">§1 Recommendation</a></li>
+    <li><a href="#implementation-state">Implementation state</a></li>
     <li><a href="#basis">§2 Existing basis</a></li>
     <li><a href="#content">§3 Demo content</a></li>
     <li><a href="#dossiers">§4 Dossier lifecycle gallery</a></li>
@@ -159,6 +161,19 @@
   <h4>Launch invariant</h4>
   <p>A browser control, a manual Runner mode, or a replay flag is not an execution boundary. The Task Server must deny claims and starts even if a caller bypasses Angular, forges a Runner request, moves a card, or compromises the replay process. If the server cannot prove that lock at startup and through its route matrix, the public demo does not start.</p>
 </div>
+
+<section id="implementation-state" class="box ok" data-concept-section="implementation-state">
+  <h4>W34 implementation state · 17 August 2026</h4>
+  <p><b>The operator approved the recommended defense-in-depth launch package. Slice S2 is delivered by AGT-2667 as the security-critical foundation.</b></p>
+  <ul>
+    <li>The Studio backend and standalone Task Server recognize the exact startup-only profile <code>public-demo-readonly</code>. The immutable shared policy returns the typed <code>execution-disabled</code> denial for every execution admission category.</li>
+    <li>The denial middleware runs before authentication, protocol checks, and request binding. Forged Runner credentials, anonymous direct API calls, and a bypassed UI receive the same HTTP 403 response.</li>
+    <li>Direct route tests cover current claim, start, continue, review, chat, preview, post-step, repository-tool, and diagnostic paths on both server planes. The complete inventories currently contain 490 local-backend, 478 proxied-backend, and 79 Task Server route expectations.</li>
+    <li>Both servers compare their mapped route inventories with pinned expectations before datastore reconciliation or listening. An unknown profile, a change to the public-demo lock during host construction, or an unreviewed route matrix refuses startup.</li>
+    <li>Execution-capable hosted loops, CLI reattachment, integration workers, and repository push workers are not registered under the locked profile. The internal task start and continue service boundary also applies the shared deny policy.</li>
+  </ul>
+  <p><b>Launch status:</b> S2 is complete, but the public URL is not launch-ready. S1 and S3 through S6, including the visitor allowlist, scrubbed bundle, replay service, and dedicated-VM rehearsal, remain required by this dossier.</p>
+</section>
 
 <h2 id="basis" data-concept-section="evidence"><span class="no">§2</span>Existing basis and boundaries</h2>
 <p>This proposal extends current product work instead of creating a second demo system.</p>
@@ -556,7 +571,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
     </tr>
     <tr>
       <td><b>S2 · Hard public-demo execution profile</b></td>
-      <td>Add the startup-only server profile and pure deny policy. Direct tests cover every current claim/start/continue/review/chat/preview/post-step path. An inventory guard fails when a new executable route has no public-demo expectation.</td>
+      <td><span class="pill ok">Delivered by AGT-2667</span><br>Add the startup-only server profile and pure deny policy. Direct tests cover every current claim/start/continue/review/chat/preview/post-step path. An inventory guard fails when a new executable route has no public-demo expectation.</td>
       <td>Security-critical launch gate. Can begin in parallel with S1.</td>
     </tr>
     <tr>
@@ -593,7 +608,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 </div>
 
 <h2 id="approval" data-concept-section="open-decisions"><span class="no">§9</span>Decision request</h2>
-<p>This dossier is decision-ready. Approval is requested for the following package:</p>
+<p>The operator approved this package on 17 August 2026. The following decisions are binding for implementation:</p>
 
 <ol>
   <li><b>Execution architecture:</b> hard server denial plus replay-only Runner.</li>
@@ -604,7 +619,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <li><b>Launch gate:</b> scrub attestation, execution-denial matrix, public endpoint inventory, external probes, and reset rehearsal must all pass before DNS is enabled.</li>
 </ol>
 
-<p class="dim">Evidence basis: ADR-0056; the pinned screenshot-system decision; the integrated AGT-2530 seed and repeatability artifacts; AGT-2558 human-review state; WEB-17 ready state; networked security profile; and the dedicated Task Server VM separation rationale. This dossier changes no runtime, seed, card, hosting, or security configuration.</p>
+<p class="dim">Evidence basis: ADR-0056; the pinned screenshot-system decision; the integrated AGT-2530 seed and repeatability artifacts; AGT-2558 human-review state; WEB-17 ready state; networked security profile; and the dedicated Task Server VM separation rationale. The original dossier was analysis-only. AGT-2667 now implements the S2 runtime security profile and records its delivery above; no seed, card, or hosting configuration is changed by S2.</p>
 
 <hr style="border:none;border-top:1px solid var(--line);margin:64px 0 0">
 
