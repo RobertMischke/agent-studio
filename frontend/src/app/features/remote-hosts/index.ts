@@ -32,6 +32,7 @@ export type {
   HostTelemetrySeries,
   HostStatusTone,
   MeterTone,
+  HostExecutorRole,
 } from './models/remote-host.model';
 export type { RunnerSetupConfig, RunnerSetupConnectionMode } from './models/runner-setup.model';
 export { buildRunnerSetupRequest, runnerSetupIssues } from './models/runner-setup.model';
@@ -46,4 +47,5 @@ export {
   ramUsedPct,
   diskUsedPct,
   relativeHeartbeat,
+  hostExecutorRole,
 } from './models/remote-host.model';
