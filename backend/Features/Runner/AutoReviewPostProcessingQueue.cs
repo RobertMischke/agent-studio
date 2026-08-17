@@ -4,6 +4,100 @@ using System.Threading.Channels;
 
 namespace AgentStudio.Runner;
 
+/// <summary>
+/// Point-in-time throughput read of the auto-review post-processing queue
+/// over a trailing window: how fast cards are actually leaving the queue
+/// (<see cref="DrainRatePerMinute"/>) and how long a review pass typically
+/// takes (<see cref="MedianDurationMs"/>). Computed by the pure
+/// <see cref="AutoReviewQueueTelemetry.Summarize"/> function so the windowing
+/// and median math have direct matrix test coverage.
+/// </summary>
+public sealed record AutoReviewQueueThroughput
+{
+    /// <summary>Completed review passes per minute over the trailing window (deferrals excluded - they re-enter the queue, they do not drain it).</summary>
+    public double DrainRatePerMinute { get; init; }
+
+    /// <summary>Median wall-clock duration of a review pass in the trailing window, in milliseconds. Null when no pass completed in-window.</summary>
+    public double? MedianDurationMs { get; init; }
+
+    /// <summary>Completed passes (drained or deferred) observed inside the trailing window.</summary>
+    public int SampleCount { get; init; }
+
+    public double WindowMinutes { get; init; }
+}
+
+/// <summary>
+/// Bounded rolling record of completed auto-review post-processing passes,
+/// used to derive drain rate and median duration without an external metrics
+/// store. Capacity bounds memory; the window bounds relevance (an old sample
+/// still inside the capacity but outside the window does not count).
+/// </summary>
+public sealed class AutoReviewQueueTelemetry
+{
+    public const int DefaultCapacity = 500;
+
+    private readonly int _capacity;
+    private readonly object _gate = new();
+    private readonly Queue<AutoReviewQueueTelemetrySample> _samples = new();
+
+    public AutoReviewQueueTelemetry(int capacity = DefaultCapacity)
+    {
+        _capacity = Math.Max(1, capacity);
+    }
+
+    public void RecordCompletion(DateTime completedAtUtc, TimeSpan elapsed, bool drained)
+    {
+        lock (_gate)
+        {
+            _samples.Enqueue(new AutoReviewQueueTelemetrySample(
+                completedAtUtc.ToUniversalTime(), elapsed.TotalMilliseconds, drained));
+            while (_samples.Count > _capacity) _samples.Dequeue();
+        }
+    }
+
+    public AutoReviewQueueThroughput Summarize(DateTime nowUtc, TimeSpan window)
+    {
+        List<AutoReviewQueueTelemetrySample> snapshot;
+        lock (_gate) snapshot = [.. _samples];
+        return Summarize(snapshot, nowUtc.ToUniversalTime(), window);
+    }
+
+    /// <summary>Pure projection: no I/O, no locking - takes a snapshot and a point in time so it is directly matrix-testable.</summary>
+    internal static AutoReviewQueueThroughput Summarize(
+        IReadOnlyList<AutoReviewQueueTelemetrySample> samples,
+        DateTime nowUtc,
+        TimeSpan window)
+    {
+        var cutoff = nowUtc - window;
+        var inWindow = samples.Where(s => s.CompletedAtUtc >= cutoff).ToList();
+        var windowMinutes = Math.Max(window.TotalMinutes, 1e-9);
+        var drainedCount = inWindow.Count(s => s.Drained);
+
+        double? median = null;
+        if (inWindow.Count > 0)
+        {
+            var durations = inWindow.Select(s => s.ElapsedMs).OrderBy(x => x).ToList();
+            var mid = durations.Count / 2;
+            median = durations.Count % 2 == 1
+                ? durations[mid]
+                : (durations[mid - 1] + durations[mid]) / 2.0;
+        }
+
+        return new AutoReviewQueueThroughput
+        {
+            DrainRatePerMinute = Math.Round(drainedCount / windowMinutes, 2),
+            MedianDurationMs = median.HasValue ? Math.Round(median.Value, 0) : null,
+            SampleCount = inWindow.Count,
+            WindowMinutes = window.TotalMinutes,
+        };
+    }
+}
+
+public readonly record struct AutoReviewQueueTelemetrySample(
+    DateTime CompletedAtUtc,
+    double ElapsedMs,
+    bool Drained);
+
 public sealed record AutoReviewPostProcessingRequest(
     string ProjectName,
     string JobId,
@@ -40,6 +134,8 @@ public sealed class AutoReviewPostProcessingQueue : IAutoReviewPostProcessingQue
             SingleWriter = false,
         });
     private DateTime _lastStartedAt = DateTime.MinValue;
+
+    public AutoReviewQueueTelemetry Telemetry { get; } = new();
 
     public ChannelReader<AutoReviewPostProcessingRequest> Reader => _channel.Reader;
 
@@ -301,6 +397,11 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
                 request.ProjectName, request.JobId, sw.ElapsedMilliseconds, queueWaitMs,
                 queueWaitMs + sw.ElapsedMilliseconds, outcome.Status, outcome.Reason);
 
+            // A deferred card re-enters the queue (ScheduleDeferralRetry below), so it has
+            // not drained; every other terminal status has left the queue for good.
+            _queue.Telemetry.RecordCompletion(
+                DateTime.UtcNow, sw.Elapsed, drained: outcome.Status != PostProcessingCardStatus.Deferred);
+
             ApplyOutcome(request, outcome, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -313,6 +414,7 @@ public sealed class AutoReviewPostProcessingWorker : BackgroundService
         catch (Exception ex)
         {
             sw.Stop();
+            _queue.Telemetry.RecordCompletion(DateTime.UtcNow, sw.Elapsed, drained: true);
             TerminalizeActiveLifecycle(
                 request,
                 "Post Processing failed before reaching a terminal decision: " + ex.GetType().Name + ".");
