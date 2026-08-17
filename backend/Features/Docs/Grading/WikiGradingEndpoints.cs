@@ -32,7 +32,7 @@ public static class WikiGradingEndpoints
             return result.Status != null
                 ? Results.Conflict(new { error = result.Error, status = result.Status })
                 : Results.BadRequest(new { error = result.Error });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
 
         // Poll the latest run status (running or finished). `status` is null until
         // the first run is started for this project.

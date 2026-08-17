@@ -88,11 +88,14 @@ public static class OrchestratorSessionEndpoints
         }
 
         group.MapPost("/global/turns", (OrchestratorTurnRequest request, OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
-            PostTurn("global", request, registry, turns));
+            PostTurn("global", request, registry, turns))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
         group.MapPost("/project:{projectId}/turns", (string projectId, OrchestratorTurnRequest request, OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
-            PostTurn($"project:{projectId}", request, registry, turns));
+            PostTurn($"project:{projectId}", request, registry, turns))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
         group.MapPost("/task:{projectId}/{taskKey}/turns", (string projectId, string taskKey, OrchestratorTurnRequest request, OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
-            PostTurn($"task:{projectId}/{taskKey}", request, registry, turns));
+            PostTurn($"task:{projectId}/{taskKey}", request, registry, turns))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
 
         group.MapPost("/global/park", (OrchestratorSessionRegistry registry, OrchestratorTurnService turns) =>
             Park("global", registry, turns));

@@ -88,7 +88,8 @@ public static class TaskServerEndpoints
             TaskServerStore store,
             CancellationToken ct)
             => await InvokeAsync(() => store.AppendOrchestratorContextTurnAsync(
-                projectIdentity, null, request, Actor(context), ct), StatusCodes.Status201Created));
+                projectIdentity, null, request, Actor(context), ct), StatusCodes.Status201Created))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
         orchestratorContexts.MapPost("/projects/{projectIdentity}/tasks/{taskIdentity}/turns", async (
             HttpContext context,
             string projectIdentity,
@@ -97,7 +98,8 @@ public static class TaskServerEndpoints
             TaskServerStore store,
             CancellationToken ct)
             => await InvokeAsync(() => store.AppendOrchestratorContextTurnAsync(
-                projectIdentity, taskIdentity, request, Actor(context), ct), StatusCodes.Status201Created));
+                projectIdentity, taskIdentity, request, Actor(context), ct), StatusCodes.Status201Created))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
         orchestratorContexts.MapPost("/projects/{projectIdentity}/legacy-import", async (
             HttpContext context,
             string projectIdentity,
@@ -203,7 +205,7 @@ public static class TaskServerEndpoints
             if (!string.Equals(runnerId, request.RunnerId, StringComparison.Ordinal))
                 return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and request runner ids differ."));
             return await InvokeAsync(() => store.ClaimAsync(request, Actor(context), ct));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
         runners.MapPut("/{runnerId}/outbox-status", async (
             HttpContext context,
             string runnerId,
@@ -218,7 +220,7 @@ public static class TaskServerEndpoints
             if (!string.Equals(runnerId, request.ExecutorId, StringComparison.Ordinal))
                 return Results.BadRequest(new ApiError("runner-id-mismatch", "Route and request review executor ids differ."));
             return await InvokeAsync(() => store.ClaimReviewAsync(request, Actor(context), ct));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
 
         var permits = api.MapGroup("/work-permits");
         permits.MapPost("/{permitId}/accept", async (
@@ -231,7 +233,8 @@ public static class TaskServerEndpoints
                 permitId,
                 request,
                 Actor(context),
-                ct)));
+                ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         var runs = api.MapGroup("/runs");
         runs.MapPost("/{runId}/reconcile", async (
@@ -244,7 +247,8 @@ public static class TaskServerEndpoints
                 runId,
                 request,
                 Actor(context),
-                ct)));
+                ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
         runs.MapPost("/{runId}/post-steps/{stepExecutionId}/claim", async (
             HttpContext context,
             string runId,
@@ -257,7 +261,8 @@ public static class TaskServerEndpoints
                 stepExecutionId,
                 request,
                 Actor(context),
-                ct)));
+                ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
         runs.MapPost("/{runId}/post-steps/{stepExecutionId}/complete", async (
             HttpContext context,
             string runId,
@@ -270,13 +275,16 @@ public static class TaskServerEndpoints
                 stepExecutionId,
                 request,
                 Actor(context),
-                ct)));
+                ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
         runs.MapPost("/{runId}/lease/renew", async (
             HttpContext context, string runId, LeaseRenewRequest request, TaskServerStore store, CancellationToken ct)
-            => await InvokeAsync(() => store.RenewLeaseAsync(runId, request, Actor(context), ct)));
+            => await InvokeAsync(() => store.RenewLeaseAsync(runId, request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
         runs.MapPost("/{runId}/lease/release", async (
             HttpContext context, string runId, LeaseReleaseRequest request, TaskServerStore store, CancellationToken ct)
-            => await InvokeAsync(() => store.ReleaseLeaseAsync(runId, request, Actor(context), ct)));
+            => await InvokeAsync(() => store.ReleaseLeaseAsync(runId, request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
         runs.MapPost("/{runId}/result-finalization", async (
             HttpContext context,
             string runId,
@@ -287,7 +295,8 @@ public static class TaskServerEndpoints
                 runId,
                 request,
                 Actor(context),
-                ct)));
+                ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
         runs.MapPost("/{runId}/completion", async (
             HttpContext context, string runId, CompleteRunRequest request, TaskServerStore store, CancellationToken ct) =>
         {
@@ -298,7 +307,7 @@ public static class TaskServerEndpoints
                         "Durable result handoff and idempotent completion require runner protocol 2."),
                     statusCode: StatusCodes.Status426UpgradeRequired);
             return await InvokeAsync(() => store.CompleteRunAsync(runId, request, Actor(context), ct));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
         runs.MapPut("/{runId}/result-handoff", async (
             HttpContext context,
             string runId,
@@ -314,7 +323,7 @@ public static class TaskServerEndpoints
                     statusCode: StatusCodes.Status426UpgradeRequired);
             return await InvokeAsync(() => store.AcknowledgeResultHandoffAsync(
                 runId, request, Actor(context), ct));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
         runs.MapGet("/{runId}/result-handoff", async (
             string runId,
             TaskServerStore store,
@@ -337,20 +346,24 @@ public static class TaskServerEndpoints
         var reviews = api.MapGroup("/reviews");
         reviews.MapPost("/subjects", async (
             HttpContext context, CreateReviewSubjectRequest request, TaskServerStore store, CancellationToken ct)
-            => await InvokeAsync(() => store.CreateReviewSubjectAsync(request, Actor(context), ct), StatusCodes.Status201Created));
+            => await InvokeAsync(() => store.CreateReviewSubjectAsync(request, Actor(context), ct), StatusCodes.Status201Created))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
         reviews.MapGet("/subjects/{subjectId}", async (string subjectId, TaskServerStore store, CancellationToken ct)
             => await InvokeNullableAsync(() => store.GetReviewSubjectAsync(subjectId, ct)));
         reviews.MapGet("/attempts/{attemptId}", async (string attemptId, TaskServerStore store, CancellationToken ct)
             => await InvokeNullableAsync(() => store.GetReviewAttemptAsync(attemptId, ct)));
         reviews.MapPost("/attempts/{attemptId}/lease/renew", async (
             HttpContext context, string attemptId, ReviewLeaseRenewRequest request, TaskServerStore store, CancellationToken ct)
-            => await InvokeAsync(() => store.RenewReviewLeaseAsync(attemptId, request, Actor(context), ct)));
+            => await InvokeAsync(() => store.RenewReviewLeaseAsync(attemptId, request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
         reviews.MapPost("/attempts/{attemptId}/report", async (
             HttpContext context, string attemptId, ReviewReportRequest request, TaskServerStore store, CancellationToken ct)
-            => await InvokeAsync(() => store.ReportReviewAsync(attemptId, request, Actor(context), ct)));
+            => await InvokeAsync(() => store.ReportReviewAsync(attemptId, request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
         reviews.MapPost("/attempts/{attemptId}/cleanup", async (
             HttpContext context, string attemptId, ReviewCleanupRequest request, TaskServerStore store, CancellationToken ct)
-            => await InvokeAsync(() => store.CleanupReviewAsync(attemptId, request, Actor(context), ct)));
+            => await InvokeAsync(() => store.CleanupReviewAsync(attemptId, request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         var orchestration = api.MapGroup("/orchestration");
         orchestration.MapGet("/projects/{projectId}/flow-definition", async (
@@ -384,14 +397,16 @@ public static class TaskServerEndpoints
             TaskServerStore store,
             CancellationToken ct)
             => await InvokeAsync(() => store.CreateOrchestrationRunAsync(
-                projectId, request, Actor(context), ct), StatusCodes.Status201Created));
+                projectId, request, Actor(context), ct), StatusCodes.Status201Created))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
         orchestration.MapPost("/claims", async (
             HttpContext context,
             OrchestrationClaimRequest request,
             TaskServerStore store,
             CancellationToken ct)
             => await InvokeAsync(() => store.ClaimOrchestrationAsync(
-                request, Actor(context), ct)));
+                request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
         orchestration.MapPost("/runs/{runId}/lease/renew", async (
             HttpContext context,
             string runId,
@@ -399,7 +414,8 @@ public static class TaskServerEndpoints
             TaskServerStore store,
             CancellationToken ct)
             => await InvokeAsync(() => store.RenewOrchestrationLeaseAsync(
-                runId, request, Actor(context), ct)));
+                runId, request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
         orchestration.MapPost("/runs/{runId}/lease/release", async (
             HttpContext context,
             string runId,
@@ -407,7 +423,8 @@ public static class TaskServerEndpoints
             TaskServerStore store,
             CancellationToken ct)
             => await InvokeAsync(() => store.ReleaseOrchestrationLeaseAsync(
-                runId, request, Actor(context), ct)));
+                runId, request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
         orchestration.MapPost("/runs/{runId}/stages/complete", async (
             HttpContext context,
             string runId,
@@ -415,7 +432,8 @@ public static class TaskServerEndpoints
             TaskServerStore store,
             CancellationToken ct)
             => await InvokeAsync(() => store.CompleteOrchestrationStageAsync(
-                runId, request, Actor(context), ct)));
+                runId, request, Actor(context), ct)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         var management = api.MapGroup("/management");
         management.MapGet("/status", (TaskServerStore store) => Results.Ok(store.Status()));

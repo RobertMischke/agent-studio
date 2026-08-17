@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Security;
 
@@ -6,12 +7,26 @@ public static class SecurityProfiles
 {
     public const string Local = "local";
     public const string Networked = "networked";
+    public const string PublicDemo = ExecutionAdmissionPolicy.PublicDemoProfile;
 
     public static bool IsNetworked(IConfiguration configuration)
-        => string.Equals(configuration["Security:Profile"], Networked, StringComparison.OrdinalIgnoreCase);
+        => string.Equals(ActiveProfile(configuration), Networked, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsPublicDemo(IConfiguration configuration)
+        => string.Equals(ActiveProfile(configuration), PublicDemo, StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsLocal(IConfiguration configuration)
+        => !IsNetworked(configuration) && !IsPublicDemo(configuration);
 
     public static string ActiveProfile(IConfiguration configuration)
-        => IsNetworked(configuration) ? Networked : Local;
+    {
+        var configured = configuration["Security:Profile"]?.Trim();
+        if (string.IsNullOrEmpty(configured)) return Local;
+        if (string.Equals(configured, Local, StringComparison.OrdinalIgnoreCase)) return Local;
+        if (string.Equals(configured, Networked, StringComparison.OrdinalIgnoreCase)) return Networked;
+        if (string.Equals(configured, PublicDemo, StringComparison.OrdinalIgnoreCase)) return PublicDemo;
+        throw new InvalidOperationException($"Unsupported Security:Profile '{configured}'.");
+    }
 }
 
 public static class StudioRoles

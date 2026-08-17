@@ -593,7 +593,7 @@ public static class TaskCrudEndpoints
                 jobId, req.TargetState, watchPath, ct, req.TargetIndex,
                 cause: OperatorActor(ctx), reason: req.Reason,
                 operatorOverride: req.OperatorOverride));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         group.MapPost("/{jobId}/move", async (string jobId, string? project, string? watchPath, MoveJobRequest req,
             HttpContext ctx,
@@ -611,7 +611,7 @@ public static class TaskCrudEndpoints
                 jobId, req.TargetState, watchPath, ct, req.TargetIndex,
                 cause: OperatorActor(ctx), reason: req.Reason,
                 operatorOverride: req.OperatorOverride));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         // Lift a folder out of 3a-failed-pickup back into 2-ready and
         // rename it to drop the -pickup-failed-<utc> suffix. Closes the
@@ -681,7 +681,7 @@ public static class TaskCrudEndpoints
                 default:
                     return Results.Problem(outcome.Message ?? "Restore failed");
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         group.MapDelete("/orphan-folder", ([Microsoft.AspNetCore.Mvc.FromBody] OrphanFolderDeleteRequest req, TaskStateMachine states) =>
         {

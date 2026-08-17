@@ -157,7 +157,7 @@ public static class TaskPipelineEndpoints
             var result = await onDemand.RunAsync(
                 info, context.Entry, context.Project.Id, stepId, body?.AddToCard ?? true, ct);
             return Results.Ok(result);
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         // Read-model for the raw step-call prompts captured at central
         // dispatch into .metadata/prompts.jsonl. The UI 'Prompt ansehen'

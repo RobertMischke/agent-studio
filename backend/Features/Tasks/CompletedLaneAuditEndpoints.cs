@@ -34,7 +34,7 @@ public static class CompletedLaneAuditEndpoints
                 AuditRunStartStatus.ProjectNotFound => Results.NotFound(new { error = outcome.Message }),
                 _ => Results.Problem(outcome.Message ?? "audit failed to start"),
             };
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
 
         app.MapGet("/api/projects/{projectId}/completed-lane/report",
             (string projectId, CompletedLaneAuditService audit) =>

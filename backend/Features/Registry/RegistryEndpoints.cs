@@ -511,7 +511,7 @@ public static class RegistryEndpoints
             var url = record.Urls.FirstOrDefault(u => string.Equals(u.Id, urlId, StringComparison.Ordinal));
             if (url == null) return Results.NotFound(new { error = $"Unknown url id '{urlId}'" });
             return Results.Ok(await procs.ProbeAsync(record, url, ct));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         // Repository identity for the Preview context header. This reads Git
         // at the command's effective working directory, which may differ from
@@ -540,7 +540,7 @@ public static class RegistryEndpoints
                 record.DisplayName,
                 cwd,
                 settings.Get(record.DisplayName).IntegrationBranch));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         // Start/restart, inspect, and stop the owned dev-server lifecycle. The
         // bounded snapshot output powers the embed's in-place live console.
@@ -575,7 +575,7 @@ public static class RegistryEndpoints
                     occupyingProcessName = diagnostic?.OccupyingProcessName,
                 });
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         app.MapGet(@"/api/projects/{projId:regex(^PROJ-\d{{3,}}$)}/urls/{urlId}/process",
             (string projId, string urlId, ProjectUrlProcessService procs) =>
@@ -630,7 +630,7 @@ public static class RegistryEndpoints
                 StartRule = body.StartRule,
             };
             return Results.Ok(await procs.TestAsync(record, candidate, ct));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
     }
 
     private static void CleanupFailedCreate(
