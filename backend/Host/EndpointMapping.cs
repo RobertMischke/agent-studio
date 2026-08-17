@@ -43,6 +43,8 @@ public static class EndpointMapping
         app.MapRunnerEndpoints();
         app.MapRemoteQueueStarvationEndpoints();
         app.MapAutoReviewQueueEndpoints();
+        app.MapAdaptiveReviewParallelismEndpoints();
+        app.MapCodingYieldEndpoints();
         app.MapAcceptedIntegrationBackstopEndpoints();
         app.MapOrchestratorSessionEndpoints();
         app.MapOrchestratorContextEndpoints();
