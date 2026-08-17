@@ -74,7 +74,7 @@ public static class TaskMergeEndpoints
                 ReEvaluateStatus.WrongLane => Results.BadRequest(new { error = outcome.Message }),
                 _ => Results.Problem(outcome.Message ?? "re-evaluate failed"),
             };
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
     }
 
     private static IResult MapMerge(MergeOutcome outcome) => outcome.Status switch

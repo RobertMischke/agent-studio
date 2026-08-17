@@ -291,7 +291,7 @@ public static class TaskCodeReviewEndpoints
                 StartedAt = report.StartedAt,
                 Grade = report.Grade is null ? null : CodeReviewGradeParsing.GradeToken(report.Grade.Value),
             });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
     }
 
     internal static ReviewUsage ResolveReviewUsage(

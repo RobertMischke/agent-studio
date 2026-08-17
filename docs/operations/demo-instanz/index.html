@@ -146,6 +146,7 @@
     <li><a href="#security">§6 Security and residual risk</a></li>
     <li><a href="#operations">§7 Reset and versioning</a></li>
     <li><a href="#slices">§8 Decision-ready slice plan</a></li>
+    <li><a href="#implementation-state">§8a Implementation state</a></li>
     <li><a href="#approval">§9 Decision request</a></li>
   </ul>
 </nav>
@@ -584,6 +585,20 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
       <td>Only after read-only operation is stable and there is evidence that visitor mutations add value. Use isolated expiring stores, quotas, moderation, and the unchanged hard execution lock.</td>
       <td>Separate later decision. Not part of launch.</td>
     </tr>
+  </tbody>
+</table>
+
+<h3 id="implementation-state">Implementation state · 17 August 2026</h3>
+<p>The operator approved the defense-in-depth recommendation on 17 August 2026 and cut S1 through S5 as AGT-2666 through AGT-2670. Live delivery state remains owned by those task cards. This table records only the durable slice mapping and implementation facts established in this dossier.</p>
+
+<table>
+  <thead><tr><th>Slice</th><th>Task</th><th>Current implementation fact</th></tr></thead>
+  <tbody>
+    <tr><td><b>S1 · Seed content and gallery</b></td><td><code>AGT-2666</code></td><td>Tracked by its implementation card.</td></tr>
+    <tr><td><b>S2 · Hard public-demo execution profile</b></td><td><code>AGT-2667</code></td><td>Implemented in the active delivery: the startup-only <code>public-demo-readonly</code> profile shares one pure deny policy across Studio and Task Server, disables local and background execution loops, validates its executable route inventory before serving, and returns the typed <code>execution-disabled</code> result across direct HTTP matrices. The launch remains blocked until the later public-demo slices and launch gate also pass.</td></tr>
+    <tr><td><b>S3 · Replay-only Runner</b></td><td><code>AGT-2668</code></td><td>Tracked by its implementation card and depends on the S2 denial contract.</td></tr>
+    <tr><td><b>S4 · Public read-only edge</b></td><td><code>AGT-2669</code></td><td>Tracked by its implementation card and consumes the S2 route inventory.</td></tr>
+    <tr><td><b>S5 · Scrub, bundle, and reset contract</b></td><td><code>AGT-2670</code></td><td>Tracked by its implementation card and remains part of the launch gate.</td></tr>
   </tbody>
 </table>
 

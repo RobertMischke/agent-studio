@@ -88,6 +88,13 @@ if (underTestHost)
     }
 }
 
+var startupSecurityProfile = SecurityProfiles.ActiveProfile(builder.Configuration);
+var publicDemoExecutionProfile = string.Equals(
+    startupSecurityProfile,
+    SecurityProfiles.PublicDemo,
+    StringComparison.OrdinalIgnoreCase);
+builder.Services.AddSingleton(new StartupExecutionAdmission(startupSecurityProfile));
+
 // Rolling backend file logger + crash marker (see Services/Diagnostics).
 // Built before WebApplication so the process-wide crash handlers below
 // can capture the very first throw, even if it lands during DI build.
@@ -315,7 +322,8 @@ builder.Services.AddSingleton<OrchestratorRunner>(sp => new OrchestratorRunner(
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
 builder.Services.AddSingleton<OrchestratorSessionRegistry>();
-builder.Services.AddHostedService<OrchestratorChatLegacyMigrationHostedService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<OrchestratorChatLegacyMigrationHostedService>();
 builder.Services.AddSingleton<OrchestratorTurnService>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
 builder.Services.AddSingleton<TokenSummaryCacheStore>();
@@ -352,7 +360,8 @@ builder.Services.AddSingleton<TestRunService>();
 builder.Services.AddSingleton<TaskTransitionService>();
 builder.Services.AddSingleton<IBatchMoveItemExecutor, BatchMoveItemExecutor>();
 builder.Services.AddSingleton<BatchMoveJobCoordinator>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchMoveJobCoordinator>());
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchMoveJobCoordinator>());
 // Out-of-band task completion (docs/concepts/out-of-band-task-completion.md §3):
 // reconciles a task finished outside the runner in one atomic call.
 builder.Services.AddSingleton<ExternalCompletionService>();
@@ -427,7 +436,8 @@ builder.Services.AddSingleton<ReviewAttemptTaskLifecycleService>();
 builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
 builder.Services.AddSingleton<RemoteDispatchRejectionStore>();
 builder.Services.AddSingleton<RemoteQueueStarvationWatchdog>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteQueueStarvationWatchdog>());
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteQueueStarvationWatchdog>());
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
     sp.GetRequiredService<AttemptAuthorityService>()));
@@ -522,12 +532,15 @@ builder.Services.AddSingleton<AgentStudio.Tags.TagRegistryService>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<FilesystemLayerSnapshotService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
-builder.Services.AddHostedService<HardHealthCheckHostedService>();
-builder.Services.AddHostedService<SoftReasoningHostedService>();
-builder.Services.AddHostedService<AutoInterventionHostedService>();
-builder.Services.AddHostedService<MetaCycleHostedService>();
-builder.Services.AddHostedService<OrchestratorPrepHostedService>();
-builder.Services.AddHostedService<ChatNoteHostedService>();
+if (!publicDemoExecutionProfile)
+{
+    builder.Services.AddHostedService<HardHealthCheckHostedService>();
+    builder.Services.AddHostedService<SoftReasoningHostedService>();
+    builder.Services.AddHostedService<AutoInterventionHostedService>();
+    builder.Services.AddHostedService<MetaCycleHostedService>();
+    builder.Services.AddHostedService<OrchestratorPrepHostedService>();
+    builder.Services.AddHostedService<ChatNoteHostedService>();
+}
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineExecutionLog>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineHealthDetector>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.PipelineHealthService>();
@@ -585,7 +598,8 @@ builder.Services.AddSingleton<RemoteReviewPlanBuilder>();
 builder.Services.AddSingleton<RemotePipelineReviewEvidenceProjector>();
 builder.Services.AddSingleton<AgentStudio.Review.CodeReviewStepService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>();
-builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceArtifactPushWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceArtifactCommitService>();
 // Transition-Committer (WorkspaceEvidence): every successful lane transition
 // enqueues an evidence-commit wish (TaskStateMachine.EnqueueEvidence); the
@@ -601,7 +615,8 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceEvidenceBatcher>(sp 
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Pipeline.WorkspaceEvidence"),
         sp.GetService<TimeProvider>(),
         sp.GetService<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>()));
-builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>();
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();
@@ -609,19 +624,22 @@ builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddSingleton<ReviewDecisionOrchestrator>();
 // Transitional single-owner boundary. Engine mode deliberately registers none
 // of the legacy review/council/post-processing hosted loops.
-builder.Services.AddOrchestrationExecutionLoops(orchestrationExecutionMode);
+if (!publicDemoExecutionProfile)
+    builder.Services.AddOrchestrationExecutionLoops(orchestrationExecutionMode);
 // Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per
 // project; see ProjectSettings.IntakeEnabled. The hosted service is cheap
 // (heuristic only, no LLM) and skips projects that have not opted in.
 builder.Services.AddSingleton<IntakeRunner>();
-builder.Services.AddHostedService<IntakeHostedService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<IntakeHostedService>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectIntegrationViewService>();
 builder.Services.AddSingleton<AgentStudio.Search.GlobalSearchService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<GitCleanupService>();
 builder.Services.AddSingleton<GitBranchRetentionService>();
-builder.Services.AddHostedService<GitBranchRetentionHostedService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<GitBranchRetentionHostedService>();
 // Slice P (ASS-1663): build-profile onboarding validation dry-run.
 builder.Services.AddSingleton<IBuildCommandRunner, ProcessBuildCommandRunner>();
 builder.Services.AddSingleton<BuildProfileValidationService>();
@@ -630,8 +648,11 @@ builder.Services.AddSingleton<BuildProfileValidationService>();
 // drains and performs the git push, CompletedPushBackstopHostedService is the
 // periodic safety net for missed / shutdown-dropped pushes.
 builder.Services.AddSingleton<CompletedPushQueue>();
-builder.Services.AddHostedService<CompletedPushWorker>();
-builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
+if (!publicDemoExecutionProfile)
+{
+    builder.Services.AddHostedService<CompletedPushWorker>();
+    builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
+}
 // Accepted integration is a transactional two-stage background chain. Accept
 // keeps the card in Human Review with phase=integrating and enqueues merge +
 // gate here. Only successful integration moves it to Completed; failures return
@@ -641,37 +662,48 @@ builder.Services.AddHostedService<CompletedPushBackstopHostedService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationQueue>();
 builder.Services.AddSingleton<AcceptedIntegrationInventorySweep>();
 builder.Services.AddSingleton<HistoricalIntegrationVerificationSweep>();
-builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<AgentStudio.Pipeline.AcceptedIntegrationWorker>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationAgentRoundService>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.RemoteDeliveryIntegrationCoordinator>();
 builder.Services.AddSingleton<AgentStudio.Pipeline.IntegrationPushQueue>();
-builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushWorker>();
 // The channel is intentionally in-memory. Durable phase and pipeline facts
 // recover both an interrupted accept transaction and a successful merge whose
 // queued origin push was dropped by restart.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>();
-builder.Services.AddHostedService(sp =>
-    sp.GetRequiredService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>());
-builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
+if (!publicDemoExecutionProfile)
+{
+    builder.Services.AddHostedService(sp =>
+        sp.GetRequiredService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>());
+    builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
+}
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or
 // crashed run left behind. Closes the days-long accumulation gap the startup
 // reaper alone cannot: those survivors hold job-folder handles and wedge the
 // next lane move with "file in use by another process".
-builder.Services.AddHostedService<OrphanReaperHostedService>();
-builder.Services.AddHostedService<CleanContextRetentionHostedService>();
+if (!publicDemoExecutionProfile)
+{
+    builder.Services.AddHostedService<OrphanReaperHostedService>();
+    builder.Services.AddHostedService<CleanContextRetentionHostedService>();
+}
 // Runtime stale-progress sweep. The boot sweep handles already-stuck
 // 3-progress folders; this closes the gap where a folder crosses the resume
 // window while the backend stays up.
-builder.Services.AddHostedService<StaleProgressSweepHostedService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<StaleProgressSweepHostedService>();
 // Runtime run-liveness sweep (Run-Liveness Slice A). Demotes a 3-progress card
 // within the 60s budget when its owning run dies while the backend stays up;
 // the boot adoption scan below handles zombies already present at startup.
-builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<RunLivenessMonitorHostedService>();
 // Runtime steer-timeout sweep (Run-Liveness Slice B). Resolves an unanswered
 // steer / NeedsInput wait (auto-answer from the task context, else a blocked
 // escalation) within timeout + one interval, so a steered card never hangs for
 // hours the way 2062/2067/2068 did on 2026-07-10.
-builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<SteerTimeoutMonitorHostedService>();
 // AGT-2492 Wiedervorlage sweep. Parked cards carry a machine-readable blocker;
 // this re-checks those conditions so a card whose infrastructure precondition
 // was cleared is reported instead of sitting unnoticed (AGT-2220 lost four days
@@ -724,7 +756,8 @@ builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddSingleton<CliQuotaWaitPolicyService>();
 builder.Services.AddSingleton<CliQuotaFallbackService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 // F22: server-rendered conversation projection. The projector serves the
 // GET /api/tasks/{id}/conversation endpoint and (when the feature flag is
 // on) broadcasts deltas over TaskHub. Sources are registered so the
@@ -745,7 +778,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<SourceWatcher>());
 builder.Services.Configure<CompanionSyncOptions>(builder.Configuration.GetSection(CompanionSyncOptions.SectionName));
 builder.Services.AddSingleton<CompanionCommandDispatcher>();
 builder.Services.AddHttpClient("companion-relay");
-builder.Services.AddHostedService<CompanionSyncService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<CompanionSyncService>();
 // Serialise enums as camelCase strings so the frontend can use string-literal
 // unions (e.g. TaskSummaryStatus = 'none' | 'generating' | 'ready' | 'failed')
 // instead of numeric values.
@@ -761,7 +795,7 @@ builder.Services.AddSignalR();
 // below so the notifier subscriptions are live before the first mutation.
 builder.Services.AddSingleton<AgentStudio.Host.TaskHubBroadcaster>();
 builder.Services.AddSingleton<AgentStudio.Host.WorkbenchHubBroadcaster>();
-if (!SecurityProfiles.IsNetworked(builder.Configuration))
+if (SecurityProfiles.IsLocal(builder.Configuration))
 {
     builder.Services.AddCors(options =>
     {
@@ -775,9 +809,12 @@ if (!SecurityProfiles.IsNetworked(builder.Configuration))
 
 var app = builder.Build();
 var networkedSecurityProfile = SecurityProfiles.IsNetworked(app.Configuration);
-var includeExceptionDetails = !networkedSecurityProfile && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
+var includeExceptionDetails = SecurityProfiles.IsLocal(app.Configuration)
+    && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
 
 app.UseForwardedHeaders();
+app.UseRouting();
+app.UsePublicDemoExecutionLock();
 if (networkedSecurityProfile) app.UseHsts();
 
 app.UseExceptionHandler(exceptionApp =>
@@ -811,7 +848,7 @@ app.UseExceptionHandler(exceptionApp =>
     });
 });
 
-if (!networkedSecurityProfile) app.UseCors();
+if (SecurityProfiles.IsLocal(app.Configuration)) app.UseCors();
 
 // In the networked profile this is the authentication and authorization
 // boundary. X-Client-Id remains attribution only and is never consulted as a
@@ -1005,7 +1042,7 @@ catch (Exception ex)
 // "No conversation found" launch-fail chain) but re-triggers post-processing for
 // a finished run instead of re-running the completed agent. Sync wait is
 // intentional: the runner must see the adopted state on its first scan.
-try
+if (!publicDemoExecutionProfile) try
 {
     app.Services.GetRequiredService<RunLivenessMonitor>().AdoptOnBootAsync().GetAwaiter().GetResult();
 }
@@ -1014,7 +1051,7 @@ catch (Exception ex)
     crashRecorder.Record("RunLivenessMonitor.AdoptOnBoot", ex);
 }
 
-try
+if (!publicDemoExecutionProfile) try
 {
     app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();
 }
@@ -1028,7 +1065,7 @@ catch (Exception ex)
 // After file-level crash recovery, sweep the 3-progress lane for folders that
 // have been wedged past the resume window. Pairs with crash recovery: that
 // rescues changes, this rescues the lane (one running job per project, ADR-0001).
-try
+if (!publicDemoExecutionProfile) try
 {
     var archiver = app.Services.GetRequiredService<StaleProgressArchiver>();
     archiver.SweepAsync().GetAwaiter().GetResult();
@@ -1253,6 +1290,7 @@ _ = app.Services.GetRequiredService<AgentStudio.TaskAccess.ITaskAccessHost>()
 // integration suite never spawns a real codex process.
 if (!app.Environment.IsEnvironment("Test")
     && !app.Environment.IsEnvironment("Testing")
+    && !publicDemoExecutionProfile
     && app.Configuration.GetValue("CodexModels:WarmupOnBoot", true))
 {
     _ = Task.Run(async () =>
@@ -1359,5 +1397,8 @@ taskRunner.OnRunnerStatusChanged += (projectName, status) =>
 app.MapAllEndpoints();
 app.MapConversationEndpoints();
 app.MapHub<TaskHub>("/hubs/jobs");
+PublicDemoExecutionRouteInventory.ValidateStartup(
+    app,
+    app.Services.GetRequiredService<StartupExecutionAdmission>());
 
 app.Run();
