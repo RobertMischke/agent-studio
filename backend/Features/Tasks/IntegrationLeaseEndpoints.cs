@@ -14,13 +14,16 @@ public static class IntegrationLeaseEndpoints
         var group = app.MapGroup("/api/runner/integration-lease");
 
         group.MapPost("/acquire", (IntegrationLeaseAcquireRequest req, IntegrationLeaseService leases) =>
-            Results.Ok(leases.TryAcquire(req)));
+            Results.Ok(leases.TryAcquire(req)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
 
         group.MapPost("/heartbeat", (IntegrationLeaseHeartbeatRequest req, IntegrationLeaseService leases) =>
-            Results.Ok(leases.Renew(req)));
+            Results.Ok(leases.Renew(req)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         group.MapPost("/release", (IntegrationLeaseReleaseRequest req, IntegrationLeaseService leases) =>
-            Results.Ok(leases.Release(req)));
+            Results.Ok(leases.Release(req)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         group.MapGet("/{projectName}/{integrationBranch}", (
             string projectName,

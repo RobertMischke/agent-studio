@@ -968,6 +968,15 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 <h2 id="implementation-state"><span class="no">§14</span>Implementation state</h2>
 <p>The operator approved the defense-in-depth recommendation on 17 August 2026 and cut S1 through S5 as AGT-2666 through AGT-2670. Delivery remains intentionally split at the dossier boundaries: content, execution denial, replay, edge, and release operations stay independently reviewable while consuming one seed family and one release contract.</p>
 
+<h3>S2 hard execution boundary</h3>
+<ul>
+  <li><b>Startup identity:</b> Studio and Task Server accept <code>public-demo-readonly</code> only as a process-start profile. Unknown profile values refuse startup, and there is no project setting, browser control, or management route that can change the resolved admission policy.</li>
+  <li><b>Pure denial:</b> one shared policy maps every claim, start, continue, review, chat, preview, and post-step admission class to the typed <code>execution-disabled</code> result.</li>
+  <li><b>Forged callers:</b> middleware enforces the denial before endpoint handlers, while direct runner and orchestrator service entry points demand the same policy. Public-demo startup omits Studio execution workers, suppresses Task Server reconciliation and result-ref Git cleanup, and denies unsafe standalone Task Server proxy requests before forwarding.</li>
+  <li><b>Inventory gate:</b> both server processes validate executable endpoint metadata before serving. Every registered execution route requires a matching public-demo expectation, direct HTTP matrix tests prove the route classes and denial body, and fixed admission-class counts pin the current 78-route Studio and 22-route Task Server inventories.</li>
+  <li><b>Launch status:</b> S2 establishes the security-critical execution gate. The public launch remains blocked until the rest of the approved package and external launch rehearsal pass.</li>
+</ul>
+
 <h3>S5 release boundary</h3>
 <ul>
   <li><b>Scrub proof:</b> the release builder now generates into two empty temporary roots, requires a clean recursive manifest diff, scans disclosure categories without persisting raw matches, proves generated PNG metadata and raster text-shape results, and emits <code>demo-seed-scrub-report.json</code>.</li>
@@ -980,6 +989,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 <h3>Delivered slices</h3>
 <ul>
 <!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2667" data-delivered-at="2026-08-18" data-slice="hard-public-demo-execution-profile"><b>S2 hard public-demo execution profile.</b> Added the startup-only profile, shared pure deny policy, forged-service admission checks, background execution suppression, unsafe standalone-proxy denial, startup route-inventory gates, and direct typed-denial matrices for Studio and Task Server execution routes.</li>
   <li data-implementation-entry="" data-task-key="AGT-2670" data-delivered-at="2026-08-17" data-slice="scrub-bundle-reset-contract"><b>S5 scrub, bundle, and reset contract.</b> Added content-bound scrub attestation, two-pass datastore proof, image OCR and metadata evidence, compatibility-checked immutable bundle construction, deployment verification, six-hour replacement units, failure-safe whole-runtime cutover, and rollback rehearsal. Host provisioning and launch remain outside this slice.</li>
 <!-- agent-studio:implementation-log:end -->
 </ul>

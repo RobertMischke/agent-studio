@@ -148,6 +148,6 @@ public static class TaskIntegrationRecoveryEndpoints
                 resultSha = subject.ResultSha,
                 integrationBranch,
             });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
     }
 }

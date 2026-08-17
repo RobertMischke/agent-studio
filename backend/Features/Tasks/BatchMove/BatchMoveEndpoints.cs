@@ -37,7 +37,7 @@ public static class BatchMoveEndpoints
                 projectNames,
                 TimelineActors.Human(clientId ?? string.Empty));
             return Results.Accepted($"/api/tasks/batch-move/{job.Id}", job);
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         group.MapGet("/batch-move/{batchId}", (
             string batchId,

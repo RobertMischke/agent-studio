@@ -461,6 +461,7 @@ public class OrchestratorChatService
     private readonly GitService? _git;
     private readonly OrchestratorTaskPromptContextComposer? _taskPromptContext;
     private readonly IOrchestratorChatPersistence? _persistence;
+    private readonly StartupExecutionAdmission? _executionAdmission;
 
     /// <summary>
     /// Serializes concurrent <see cref="SendAsync"/> calls so multiple Codex
@@ -492,7 +493,8 @@ public class OrchestratorChatService
         RemoteChatWorkBroker? remoteWork = null,
         GitService? git = null,
         OrchestratorTaskPromptContextComposer? taskPromptContext = null,
-        IOrchestratorChatPersistence? persistence = null)
+        IOrchestratorChatPersistence? persistence = null,
+        StartupExecutionAdmission? executionAdmission = null)
     {
         _chat = chat;
         _runner = runner;
@@ -508,6 +510,7 @@ public class OrchestratorChatService
         _git = git;
         _taskPromptContext = taskPromptContext;
         _persistence = persistence;
+        _executionAdmission = executionAdmission;
     }
 
     public List<OrchestratorChatTurn> Read(string watchPath) => _chat.Read(watchPath);
@@ -556,6 +559,7 @@ public class OrchestratorChatService
         OrchestratorContextKey? context,
         CancellationToken ct)
     {
+        _executionAdmission?.Demand(ExecutionAdmissionPath.Chat);
         var userTurn = new OrchestratorChatTurn
         {
             Role = OrchestratorChatRoles.User,

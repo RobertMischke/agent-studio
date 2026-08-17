@@ -321,7 +321,7 @@ public static class V1ReviewPlaneEndpoints
                 ToAttempt(review),
                 subject,
                 lease));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
 
         api.MapGet("/reviews/attempts/{attemptId}", (
             string attemptId,
@@ -361,7 +361,7 @@ public static class V1ReviewPlaneEndpoints
             return renewed.Accepted && renewed.ReviewAttempt is not null
                 ? Results.Ok(ToLease(renewed.ReviewAttempt))
                 : AttemptError(renewed);
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         api.MapPost("/reviews/attempts/{attemptId}/report", async (
             HttpContext context,
@@ -705,7 +705,7 @@ public static class V1ReviewPlaneEndpoints
                 receivedAt,
                 retry,
                 taskState));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
 
         api.MapPost("/reviews/attempts/{attemptId}/cleanup", (
             HttpContext context,
@@ -733,7 +733,7 @@ public static class V1ReviewPlaneEndpoints
                 DateTime.UtcNow,
                 !request.WorkspaceRemoved
                 && review!.Outcome == ReviewTerminalOutcome.InfrastructureFailure));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         api.MapGet("/runs/{runId}/result-handoff", (
             string runId,

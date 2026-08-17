@@ -44,6 +44,7 @@ public sealed class OrchestratorTurnService
     private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorTurnService> _logger;
     private readonly OrchestratorContextDigestService? _contextDigests;
+    private readonly StartupExecutionAdmission? _executionAdmission;
     private readonly object _gate = new();
     private readonly Queue<OrchestratorTurnWorkItem> _queued = new();
     private readonly Dictionary<string, CancellationTokenSource> _active = new(StringComparer.Ordinal);
@@ -54,17 +55,20 @@ public sealed class OrchestratorTurnService
         OrchestratorRunner runner,
         IConfiguration config,
         ILogger<OrchestratorTurnService> logger,
-        OrchestratorContextDigestService? contextDigests = null)
+        OrchestratorContextDigestService? contextDigests = null,
+        StartupExecutionAdmission? executionAdmission = null)
     {
         _registry = registry;
         _runner = runner;
         _config = config;
         _logger = logger;
         _contextDigests = contextDigests;
+        _executionAdmission = executionAdmission;
     }
 
     public OrchestratorTurnResponse Enqueue(string rawContextKey, OrchestratorTurnRequest request)
     {
+        _executionAdmission?.Demand(ExecutionAdmissionPath.Chat);
         if (!OrchestratorContextKey.TryParse(rawContextKey, out var key))
             throw new ArgumentException("Invalid orchestrator context key.", nameof(rawContextKey));
         if (string.IsNullOrWhiteSpace(request.Prompt))
