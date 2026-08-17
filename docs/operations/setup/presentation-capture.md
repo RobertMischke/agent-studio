@@ -29,6 +29,29 @@ backend configured for `C:\Projects\agent-taskboard-workspace-demo`, select
 `Demo App`, and verify the visible keys again. Do not point ScreenToGif or OBS
 at the stable or production browser window.
 
+Each demo `WatchPaths` entry needs a `RootPath` (or `RepositoryPath`) pointing
+at its project folder, not only a `Path`. The seeded Wiki tree and the Dossier
+gallery live in `<RootPath>/docs`, and without that entry no repository root
+resolves and both surfaces stay empty.
+
+## The two pinned inputs
+
+The seed reads two committed files and invents nothing at generation time:
+
+| Input | Owns | Origin |
+|---|---|---|
+| [pinned-seed.json](../../../scripts/presentation-capture/pinned-seed.json) | Projects, the task list per lane, and the escalated decision card. | Sanitizing export of a real board (see below). |
+| [pinned-demo-content.json](../../../scripts/presentation-capture/pinned-demo-content.json) | Both Wiki trees, the six-state Dossier gallery, and the card-to-document edges. | Authored. Knowledge content of a publicly browsable instance is never exported from a workspace. |
+
+Both are rendered by one generator, so a page and a Dossier stay in the same
+voice and a re-seed stays byte-identical. Acceptance coverage for the seed
+(byte-identical generation, all lanes, all Dossier lifecycle states, and the
+data boundary of the visitor surface) runs with:
+
+```sh
+node --test scripts/seed-demo-workspace.test.mjs
+```
+
 ## Updating the pinned snapshot from real data
 
 Pinned is the source rule for documentation and marketing captures. A real
