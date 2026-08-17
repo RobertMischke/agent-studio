@@ -438,10 +438,14 @@ builder.Services.AddSingleton<V1ReviewExecutorRegistry>();
 builder.Services.AddSingleton<RemoteDispatchRejectionStore>();
 builder.Services.AddSingleton<RemoteQueueStarvationWatchdog>();
 builder.Services.AddSingleton<AutoReviewQueueStagnationWatchdog>();
+builder.Services.AddSingleton<AdaptiveReviewParallelismAdvisor>();
+builder.Services.AddSingleton<CodingYieldAdvisor>();
 if (!publicDemoExecutionProfile)
 {
     builder.Services.AddHostedService(sp => sp.GetRequiredService<RemoteQueueStarvationWatchdog>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<AutoReviewQueueStagnationWatchdog>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<AdaptiveReviewParallelismAdvisor>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<CodingYieldAdvisor>());
 }
 builder.Services.AddSingleton(sp => new RunLeaseService(
     sp.GetRequiredService<ILogger<RunLeaseService>>(),
