@@ -32,6 +32,14 @@ public sealed record AutoReviewQueueSnapshot
 
     public int StagnantThresholdMinutes { get; init; }
 
+    /// <summary>Completed review passes per minute over the trailing <see cref="ThroughputWindowMinutes"/> window.</summary>
+    public double DrainRatePerMinute { get; init; }
+
+    /// <summary>Median review-pass duration in milliseconds over the trailing window. Null when no pass completed in-window.</summary>
+    public double? MedianReviewDurationMs { get; init; }
+
+    public double ThroughputWindowMinutes { get; init; }
+
     public DateTime ObservedAt { get; init; }
 }
 
@@ -48,6 +56,7 @@ public sealed class AutoReviewQueueStagnationWatchdog : BackgroundService
 {
     public const int DefaultStagnantThresholdMinutes = 20;
     public const int DefaultIntervalSeconds = 30;
+    public const int DefaultThroughputWindowMinutes = 30;
 
     private readonly AutoReviewPostProcessingQueue _queue;
     private readonly AutoReviewStatusSnapshot _status;
@@ -91,6 +100,12 @@ public sealed class AutoReviewQueueStagnationWatchdog : BackgroundService
         var activeJobs = _status.Read().ActiveJobs.Count;
         var threshold = TimeSpan.FromMinutes(thresholdMinutes);
 
+        var throughputWindowMinutes = Math.Clamp(
+            _configuration.GetValue<int?>("AutoReviewQueueStagnation:ThroughputWindowMinutes")
+            ?? DefaultThroughputWindowMinutes,
+            1, 24 * 60);
+        var throughput = _queue.Telemetry.Summarize(now, TimeSpan.FromMinutes(throughputWindowMinutes));
+
         lock (_gate)
         {
             if (pendingCount == 0)
@@ -127,6 +142,9 @@ public sealed class AutoReviewQueueStagnationWatchdog : BackgroundService
                 IsStagnant = isStagnant,
                 StagnantSince = stagnantSince,
                 StagnantThresholdMinutes = thresholdMinutes,
+                DrainRatePerMinute = throughput.DrainRatePerMinute,
+                MedianReviewDurationMs = throughput.MedianDurationMs,
+                ThroughputWindowMinutes = throughput.WindowMinutes,
                 ObservedAt = now,
             };
 
