@@ -116,7 +116,7 @@ public static class SecurityReviewEndpoints
             if (jobId is null)
                 return Results.Conflict(new { error = "create-failed", message = "Job already exists or invalid input." });
             return Results.Ok(new { jobId, state = TaskStates.Ready, title = req.Title });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
     }
 
     private static string BuildAuditPromptMarkdown(string projectName) =>

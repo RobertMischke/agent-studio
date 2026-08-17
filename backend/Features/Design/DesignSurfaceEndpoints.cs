@@ -108,7 +108,8 @@ public static class DesignSurfaceEndpoints
             TaskMutationService mutations,
             DesignEvidenceService design) =>
             QueueDesignActionJob(projectName, ctx, scanner, mutations, design,
-                ScreenshotCritiqueTitlePrefix, BuildScreenshotCritiquePrompt));
+                ScreenshotCritiqueTitlePrefix, BuildScreenshotCritiquePrompt))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         app.MapPost("/api/projects/{projectName}/design/actions/council-review", (
             string projectName,
@@ -117,7 +118,8 @@ public static class DesignSurfaceEndpoints
             TaskMutationService mutations,
             DesignEvidenceService design) =>
             QueueDesignActionJob(projectName, ctx, scanner, mutations, design,
-                CouncilReviewTitlePrefix, BuildCouncilReviewPrompt));
+                CouncilReviewTitlePrefix, BuildCouncilReviewPrompt))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         app.MapPost("/api/projects/{projectName}/design/actions/request-next-version", (
             string projectName,
@@ -126,7 +128,8 @@ public static class DesignSurfaceEndpoints
             TaskMutationService mutations,
             DesignEvidenceService design) =>
             QueueDesignActionJob(projectName, ctx, scanner, mutations, design,
-                NextVersionTitlePrefix, BuildNextVersionPrompt));
+                NextVersionTitlePrefix, BuildNextVersionPrompt))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
     }
 
     /// <summary>

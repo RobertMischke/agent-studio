@@ -76,7 +76,7 @@ public static class LeaseEndpoints
             {
                 ClaimGate.Release();
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
 
         group.MapPost("/renew", (RunLeaseHeartbeatRequest req, HttpContext context, RunLeaseService leases) =>
             !RunnerMatches(context, req.RunnerId)
@@ -85,7 +85,8 @@ public static class LeaseEndpoints
                     ? Results.Ok(leases.Renew(req))
                     : Results.Conflict(new RunLeaseResponse(
                         "Invalid", false, null,
-                        "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease renewal.")));
+                        "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease renewal.")))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         group.MapPost("/release", (RunLeaseReleaseRequest req, HttpContext context, RunLeaseService leases) =>
             !RunnerMatches(context, req.RunnerId)
@@ -94,7 +95,8 @@ public static class LeaseEndpoints
                     ? Results.Ok(leases.Release(req))
                     : Results.Conflict(new RunLeaseResponse(
                         "Invalid", false, null,
-                        "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease release.")));
+                        "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease release.")))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         group.MapGet("/{taskKey}", (string taskKey, RunLeaseService leases) =>
             Results.Ok(leases.Peek(taskKey)));
@@ -109,7 +111,7 @@ public static class LeaseEndpoints
                 if (!RunnerMatches(context, req.RunnerId, req.RunnerName))
                     return Results.Unauthorized();
                 return Results.Ok(broker.TryClaim(req));
-            });
+            }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
 
         app.MapPost("/api/runner/project-chat/renew",
             (RemoteChatWorkRenewRequest req, HttpContext context, RemoteChatWorkBroker broker) =>
@@ -119,7 +121,7 @@ public static class LeaseEndpoints
                 return broker.Renew(req)
                     ? Results.Ok(new { renewed = true })
                     : Results.Conflict(new { renewed = false, error = "stale project-chat claim" });
-            });
+            }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         app.MapPost("/api/runner/project-chat/complete",
             (RemoteChatWorkCompletionRequest req, HttpContext context, RemoteChatWorkBroker broker) =>
@@ -129,7 +131,7 @@ public static class LeaseEndpoints
                 return broker.Complete(req)
                     ? Results.Ok(new { accepted = true })
                     : Results.Conflict(new { accepted = false, error = "stale project-chat claim" });
-            });
+            }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Chat);
 
         // Daemon pickup is selected server-side from the project record. The
         // gate makes scan + fenced lease + ready-to-progress move one claim
@@ -928,7 +930,7 @@ public static class LeaseEndpoints
             {
                 ClaimGate.Release();
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
 
         app.MapPost("/api/runner/epic-planning-prompt", (
             RemoteEpicPlanningPromptRequest req,
@@ -1832,7 +1834,7 @@ public static class LeaseEndpoints
             {
                 ClaimGate.Release();
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
     }
 
     private static string? WriteGateItems(string folderPath, IReadOnlyList<string>? gateItems)

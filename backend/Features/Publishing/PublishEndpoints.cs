@@ -13,11 +13,13 @@ public static class PublishEndpoints
     public static void MapPublishEndpoints(this WebApplication app)
     {
         app.MapGet("/api/projects/{project}/publish-status", (string project, PublishTargetService publish) =>
-            Results.Ok(publish.GetProjectPublishStatus(project)));
+            Results.Ok(publish.GetProjectPublishStatus(project)))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         app.MapGet("/api/projects/{project}/publish/{targetId}/panel", (
             string project, string targetId, PublishActionService actions) =>
-            ActionResult(() => Results.Ok(actions.GetPanel(project, targetId))));
+            ActionResult(() => Results.Ok(actions.GetPanel(project, targetId))))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         app.MapPut("/api/projects/{project}/publish/automation", (
             string project,
@@ -33,7 +35,7 @@ public static class PublishEndpoints
             settings.SetPublishAutomation(project, target.Id, request.Mode);
             var resolved = PublishAutomationModes.Normalize(target.Id, request.Mode);
             return Results.Ok(new { targetId = target.Id, mode = resolved });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         app.MapPost("/api/projects/{project}/publish/package", (
             string project,
@@ -44,17 +46,20 @@ public static class PublishEndpoints
                 project,
                 request.TargetId,
                 request.Version,
-                cancellationToken))));
+                cancellationToken))))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         app.MapPost("/api/projects/{project}/publish/website", (
             string project, DeployWebsiteRequest request, PublishActionService actions) =>
-            ActionResult(() => Results.Ok(actions.DeployWebsite(project))));
+            ActionResult(() => Results.Ok(actions.DeployWebsite(project))))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
 
         app.MapGet("/api/projects/{project}/publish/{targetId}/run", (
             string project, string targetId, PublishActionService actions) =>
             ActionResult(() => actions.RefreshRun(project, targetId) is { } run
                 ? Results.Ok(run)
-                : Results.NotFound(new { error = "No publish workflow has been triggered for this target." })));
+                : Results.NotFound(new { error = "No publish workflow has been triggered for this target." })))
+            .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
     }
 
     private static IResult ActionResult(Func<IResult> action)

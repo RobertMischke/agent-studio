@@ -29,7 +29,7 @@ public static class ProjectProposalEndpoints
             try { return Results.Ok(new { proposal = await proposals.GenerateAsync(projectName, body.Topic, body.Guidance ?? "", ct) }); }
             catch (KeyNotFoundException) { return Results.NotFound(new { error = "Project not found" }); }
             catch (InvalidOperationException ex) { return Results.Problem(ex.Message, statusCode: 502); }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         app.MapPost("/api/projects/{projectName}/proposals/refine-feedback", async (
             ProposalFeedbackRequest body, ProjectProposalService proposals, CancellationToken ct) =>
@@ -37,7 +37,7 @@ public static class ProjectProposalEndpoints
             if (string.IsNullOrWhiteSpace(body.Feedback)) return Results.BadRequest(new { error = "feedback is required" });
             try { return Results.Ok(new { refinedFeedback = await proposals.RefineFeedbackAsync(body.Feedback, ct) }); }
             catch (InvalidOperationException ex) { return Results.Problem(ex.Message, statusCode: 502); }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         app.MapPost("/api/projects/{projectName}/proposals/{id}/decision", (string projectName, string id,
             ProposalDecisionRequest body, ProjectProposalService proposals) =>
