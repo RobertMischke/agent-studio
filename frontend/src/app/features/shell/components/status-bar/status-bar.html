@@ -11,6 +11,14 @@
       testid="status-bar-running"
       (activated)="navigateToExecutionHosts()" />
     <app-statusbar-item
+      bullet="◎"
+      [pulsing]="reviewActiveJobs() > 0"
+      [signalTone]="reviewAttention() ? 'mismatch' : (reviewActiveJobs() > 0 ? 'working' : null)"
+      [label]="reviewLabel()"
+      [tooltip]="reviewTooltip()"
+      [button]="false"
+      testid="status-bar-review" />
+    <app-statusbar-item
       [button]="false"
       icon="refresh"
       [iconSize]="11"
