@@ -33,6 +33,37 @@
     <span class="rh__count"><strong>{{ remoteCount() }}</strong> remote</span>
   </div>
 
+  @if (reviewQueueSnapshot(); as review) {
+    <section class="rh__review"
+             data-testid="auto-review-queue-summary"
+             [class.rh__review--attention]="review.isStagnant">
+      <h3 class="rh__review-title">Auto-review queue</h3>
+      <div class="rh__review-metrics">
+        <div class="rh__review-metric" data-testid="auto-review-queue-depth">
+          <span class="rh__review-metric-label">Waiting</span>
+          <span class="rh__review-metric-value">{{ review.queueDepth }}</span>
+        </div>
+        <div class="rh__review-metric" data-testid="auto-review-queue-active">
+          <span class="rh__review-metric-label">Processing</span>
+          <span class="rh__review-metric-value">{{ review.activeJobs }}</span>
+        </div>
+        <div class="rh__review-metric" data-testid="auto-review-queue-drain-rate">
+          <span class="rh__review-metric-label">Drain rate</span>
+          <span class="rh__review-metric-value">{{ reviewDrainRateLabel() }}</span>
+        </div>
+        <div class="rh__review-metric" data-testid="auto-review-queue-duration">
+          <span class="rh__review-metric-label">Median duration</span>
+          <span class="rh__review-metric-value">{{ reviewDurationLabel() }}</span>
+        </div>
+      </div>
+      @if (review.isStagnant) {
+        <p class="rh__review-attention" data-testid="auto-review-queue-attention">
+          ATTENTION - queue has not drained for over {{ review.stagnantThresholdMinutes }} minutes.
+        </p>
+      }
+    </section>
+  }
+
   @if (error(); as err) {
     <div class="rh__error" data-testid="remote-hosts-error">{{ err }}</div>
   }
