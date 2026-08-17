@@ -44,8 +44,12 @@ export function summarizeStatusBarHostLoad(
   const cpuCores = points.reduce((sum, point) => sum + point.cpuCores, 0);
   const activeSlots = points.reduce((sum, point) => sum + point.activeSlots, 0);
   const ratio = load1 / cpuCores;
+  // `activeSlots` covers both coding and review workers reported by all daemons.
+  // Only flag `load-without-runs` when no plane has any active work at all;
+  // review workers showing up in `activeSlots` but absent from the coding
+  // board lane must not trigger a false consistency hint.
   const correlation: StatusBarLoadCorrelation =
-    runningCount === 0 && ratio >= 0.5
+    runningCount === 0 && activeSlots === 0 && ratio >= 0.5
       ? 'load-without-runs'
       : runningCount >= 2 && ratio <= 0.1
         ? 'runs-without-load'
