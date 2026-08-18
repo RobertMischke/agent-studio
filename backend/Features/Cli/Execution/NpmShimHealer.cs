@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace AgentStudio.Cli;
 
@@ -34,10 +35,65 @@ namespace AgentStudio.Cli;
 public sealed record HealOutcome(
     bool Available,
     IReadOnlyList<string> Actions,
-    string? Error);
+    string? Error,
+    /// <summary>
+    /// False only when the npm package itself
+    /// (<c>node_modules/@anthropic-ai/claude-code</c>) is absent - a
+    /// first-time install, not a repair candidate. True in every other
+    /// case, including a successful or failed repair, so existing 3-arg
+    /// call sites keep compiling and reporting "repair attempted" verdicts.
+    /// </summary>
+    bool PackagePresent = true);
+
+/// <summary>
+/// The shape of a broken <c>claude</c> npm-shim install, used to pick the
+/// right repair action. Pure classification over booleans the caller has
+/// already observed on disk - no I/O here, so
+/// <see cref="NpmShimHealer.ClassifyShimState"/> is directly unit-testable
+/// on any OS without touching a real npm bin directory.
+/// </summary>
+internal enum ClaudeShimRepairShape
+{
+    /// <summary>The top-level launcher (<c>claude.cmd</c> et al.) is present. Nothing to do.</summary>
+    Healthy,
+    /// <summary>
+    /// Launcher still missing after steps 1-3 ran, while the package
+    /// payload under <c>node_modules/@anthropic-ai/claude-code</c> is
+    /// intact - either because npm's global bin link vanished outright
+    /// (no orphan, no <c>.old.*</c> sibling) or because the orphan/stub
+    /// restore itself failed. The 2026-08-18 recurrence (AGT-W39, second
+    /// sighting) was the no-orphan case: only a full <c>npm install -g</c>
+    /// re-link fixes this shape.
+    /// </summary>
+    MissingLauncherPackagePresent,
+    /// <summary>No package directory at all. First-time install, not a repair.</summary>
+    Uninstalled,
+}
 
 public static class NpmShimHealer
 {
+    private const string ReinstallPackageSpec = "@anthropic-ai/claude-code";
+
+    // Guards the cooldown-check-then-reinstall-then-journal sequence so
+    // concurrent task spawns within this process can't all race past
+    // NpmReinstallJournal.IsInCooldown before any of them appends.
+    private static readonly SemaphoreSlim ReinstallGate = new(1, 1);
+
+    /// <summary>
+    /// Pure decision: given what the caller observed on disk after steps
+    /// 1-3 already ran, which repair shape applies.
+    /// <paramref name="launcherPresent"/> is the top-level
+    /// <c>npmBin/claude.cmd</c> (or platform equivalent) existing;
+    /// <paramref name="packageDirPresent"/> is
+    /// <c>npmBin/node_modules/@anthropic-ai/claude-code</c> existing.
+    /// </summary>
+    internal static ClaudeShimRepairShape ClassifyShimState(bool launcherPresent, bool packageDirPresent)
+    {
+        if (launcherPresent) return ClaudeShimRepairShape.Healthy;
+        if (!packageDirPresent) return ClaudeShimRepairShape.Uninstalled;
+        return ClaudeShimRepairShape.MissingLauncherPackagePresent;
+    }
+
     /// <summary>
     /// Repair the <c>claude</c> npm-shim install on Windows and smoke-test
     /// the resulting <c>claude.cmd</c>. No-op on non-Windows hosts (the
@@ -229,9 +285,82 @@ public static class NpmShimHealer
             }
         }
 
+        // 4.5. Full npm reinstall when the top-level launcher (claude.cmd)
+        //    is STILL missing after steps 1-3 found nothing to rename or
+        //    restore. Observed shape (AGT-W39, 2nd sighting 2026-08-18):
+        //    npm's global bin links vanish outright - no orphan, no
+        //    .old.* sibling - most likely the CLI's own auto-update racing
+        //    itself. The package payload survives, so `npm install -g`
+        //    re-links the launcher from package.json's `bin` map without
+        //    re-fetching the ~254 MB platform binary. Bounded to one
+        //    attempt per rolling hour (NpmReinstallJournal) so a
+        //    persistently broken installer cannot spin npm in a retry
+        //    storm; every attempt is journaled with the CLI version
+        //    before/after so the auto-update trigger stays provable.
+        //    A missing package directory is a different, non-repairable
+        //    shape (first-time install) and is reported as such via
+        //    HealOutcome.PackagePresent rather than attempted.
+        var shim = Path.Combine(npmBin, "claude.cmd");
+        var shape = ClassifyShimState(
+            launcherPresent: File.Exists(shim),
+            packageDirPresent: Directory.Exists(wrapDir));
+
+        if (shape == ClaudeShimRepairShape.Uninstalled)
+        {
+            return new HealOutcome(false, actions,
+                $"claude-code is not installed under '{npmBin}' (no {wrapDir}); this is a first-time install, not a repair",
+                PackagePresent: false);
+        }
+
+        if (shape == ClaudeShimRepairShape.MissingLauncherPackagePresent)
+        {
+            // Serializes the cooldown check + reinstall + journal append
+            // within this process: EnsureCliHealthyAsync runs once per task
+            // spawn, so several spawns hitting a broken shim at once would
+            // otherwise all observe "not in cooldown" before any of them
+            // appends, each firing its own concurrent `npm install -g` -
+            // defeating the one-attempt-per-hour bound. Does not cover the
+            // separate boot-time shell preflight (a different process), but
+            // that runs once at boot, not concurrently with itself.
+            await ReinstallGate.WaitAsync(ct);
+            try
+            {
+                if (NpmReinstallJournal.IsInCooldown(npmBin, out var remaining))
+                {
+                    actions.Add(
+                        $"launcher '{Path.GetFileName(shim)}' missing with package present; " +
+                        $"reinstall skipped, cooldown active ({remaining.TotalMinutes:F0}m remaining)");
+                }
+                else
+                {
+                    // The launcher (shim) is by definition missing in this
+                    // branch, so it cannot report its own "before" version.
+                    // The package directory survives, so its package.json
+                    // is the only source for the pre-repair version.
+                    var versionBefore = TryReadPackageVersion(wrapDir);
+                    var reinstallOk = await TryRunGlobalReinstallAsync(logger, npmBin, ct);
+                    var versionAfter = await ProbeVersionAsync(shim, ct);
+                    actions.Add(reinstallOk
+                        ? $"launcher missing, package present; ran 'npm install -g {ReinstallPackageSpec}' " +
+                          $"(version {versionBefore ?? "none"} -> {versionAfter ?? "unknown"})"
+                        : $"launcher missing, package present; 'npm install -g {ReinstallPackageSpec}' failed " +
+                          $"(version before: {versionBefore ?? "none"})");
+                    NpmReinstallJournal.Append(npmBin, new NpmReinstallJournalEntry(
+                        DateTime.UtcNow,
+                        Trigger: "missing-launcher-package-present",
+                        VersionBefore: versionBefore,
+                        VersionAfter: versionAfter,
+                        Outcome: reinstallOk ? "repaired" : "failed"));
+                }
+            }
+            finally
+            {
+                ReinstallGate.Release();
+            }
+        }
+
         // 5. Smoke test. The shim is what the OS actually invokes via PATH;
         //    call it directly so we don't depend on PATH ordering.
-        var shim = Path.Combine(npmBin, "claude.cmd");
         if (!File.Exists(shim))
         {
             return new HealOutcome(false, actions, $"shim '{shim}' still missing after repair pass");
@@ -330,6 +459,274 @@ public static class NpmShimHealer
         {
             logger.LogWarning(ex, "postinstall (node install.cjs) failed to start");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort read of the <c>version</c> field from the package's own
+    /// <c>package.json</c>. Used for the reinstall journal's "before"
+    /// version: at the point this fires the launcher is by definition
+    /// missing (that's why we're here), so it cannot be asked for its own
+    /// version via <c>--version</c> the way <see cref="ProbeVersionAsync"/>
+    /// does for the "after" reading - the package directory is the only
+    /// surviving source. Returns null on any failure (missing file,
+    /// malformed JSON, missing field).
+    /// </summary>
+    internal static string? TryReadPackageVersion(string wrapDir)
+    {
+        var packageJsonPath = Path.Combine(wrapDir, "package.json");
+        if (!File.Exists(packageJsonPath)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(packageJsonPath));
+            return doc.RootElement.TryGetProperty("version", out var version) && version.ValueKind == JsonValueKind.String
+                ? version.GetString()
+                : null;
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "NpmShimHealer: package.json version read is diagnostic-only");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort <c>&lt;shim&gt; --version</c> probe used only to record the
+    /// before/after version for the reinstall journal. Returns null on any
+    /// failure (missing file, non-zero exit, timeout) - the journal entry is
+    /// still written with a null version rather than blocking the repair.
+    /// </summary>
+    private static async Task<string?> ProbeVersionAsync(string shimPath, CancellationToken ct)
+    {
+        if (!File.Exists(shimPath)) return null;
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo
+            {
+                FileName = shimPath,
+                Arguments = "--version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            if (p is null) return null;
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(8));
+            var stdout = await p.StandardOutput.ReadToEndAsync(cts.Token);
+            try { await p.WaitForExitAsync(cts.Token); }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: best effort"); /* best effort */ }
+                return null;
+            }
+            if (p.ExitCode != 0) return null;
+            return stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "NpmShimHealer: version probe is diagnostic-only");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Full <c>npm install -g @anthropic-ai/claude-code</c> reinstall. Unlike
+    /// <see cref="TryRunPostInstallAsync"/> (re-runs the wrapper's own
+    /// postinstall in place) this re-links the global bin launchers via npm
+    /// itself, which is the only thing that recreates a launcher npm deleted
+    /// outright. Generous timeout: npm may need to resolve the registry even
+    /// when no new bytes are downloaded.
+    /// </summary>
+    private static async Task<bool> TryRunGlobalReinstallAsync(ILogger logger, string npmBin, CancellationToken ct)
+    {
+        var npmExe = GenericCliExecutionService.ResolveExecutable(
+            OperatingSystem.IsWindows() ? "npm.cmd" : "npm");
+        var psi = new ProcessStartInfo
+        {
+            FileName = npmExe,
+            WorkingDirectory = npmBin,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("install");
+        psi.ArgumentList.Add("-g");
+        psi.ArgumentList.Add(ReinstallPackageSpec);
+
+        try
+        {
+            using var p = Process.Start(psi);
+            if (p is null) return false;
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            // npm resolves the registry even when no new bytes are needed;
+            // generous budget so a slow network doesn't read as "failed".
+            cts.CancelAfter(TimeSpan.FromMinutes(3));
+            // Drain both streams concurrently with the wait, not after it.
+            // `npm install -g` routinely writes enough to stdout (package
+            // tree, deprecation/funding notices) to fill the OS pipe buffer;
+            // reading only stderr-on-failure (as originally written) left
+            // stdout undrained, so npm would block writing to a full pipe
+            // and the process would never exit on its own - every failure
+            // would misreport as "timed out" after burning the full 3-minute
+            // budget instead of the real, usually much faster, outcome.
+            var stdoutTask = p.StandardOutput.ReadToEndAsync(cts.Token);
+            var stderrTask = p.StandardError.ReadToEndAsync(cts.Token);
+            try
+            {
+                await p.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: best effort"); /* best effort */ }
+                logger.LogWarning("npm install -g {Package} timed out", ReinstallPackageSpec);
+                return false;
+            }
+
+            if (p.ExitCode != 0)
+            {
+                var stderr = await stderrTask;
+                try { await stdoutTask; } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: stdout drain is diagnostic-only"); }
+                logger.LogWarning("npm install -g {Package} exited {ExitCode}: {Stderr}",
+                    ReinstallPackageSpec, p.ExitCode, stderr.Trim());
+                return false;
+            }
+            try { await stdoutTask; } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: stdout drain is diagnostic-only"); }
+            try { await stderrTask; } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: stderr drain is diagnostic-only"); }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "npm install -g {Package} failed to start", ReinstallPackageSpec);
+            return false;
+        }
+    }
+}
+
+/// <summary>
+/// One entry in the reinstall root-cause journal
+/// (<c>&lt;npmBin&gt;/.atp-npm-reinstall-journal.jsonl</c>): what triggered a
+/// full <c>npm install -g</c> repair, the CLI version immediately before and
+/// after, and the outcome. Shared file, append-only, so both
+/// <c>tools/check-cli-shims.sh</c> (boot-time preflight) and this in-process
+/// healer observe and respect the same cooldown.
+/// </summary>
+internal sealed record NpmReinstallJournalEntry(
+    DateTime Ts,
+    string Trigger,
+    string? VersionBefore,
+    string? VersionAfter,
+    string Outcome);
+
+/// <summary>
+/// Bounds the full <c>npm install -g</c> reinstall to one attempt per
+/// rolling hour and records each attempt for root-cause analysis. A
+/// persistently broken installer (e.g. a locked file, a dead registry) must
+/// not turn every pre-spawn health check into a fresh multi-minute npm
+/// invocation.
+/// </summary>
+internal static class NpmReinstallJournal
+{
+    private static readonly TimeSpan Cooldown = TimeSpan.FromHours(1);
+
+    // camelCase to match the sibling shell implementation in
+    // tools/check-cli-shims.sh (which writes plain "ts"/"trigger"/...
+    // keys by hand) - both tools append to and read the same file, so a
+    // casing mismatch would silently break the shared cooldown rather than
+    // throw. PropertyNameCaseInsensitive on read is defense in depth.
+    private static readonly JsonSerializerOptions WriteOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    private static readonly JsonSerializerOptions ReadOpts = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    private static string JournalPath(string npmBin) =>
+        Path.Combine(npmBin, ".atp-npm-reinstall-journal.jsonl");
+
+    /// <summary>
+    /// True when the last journaled attempt is still within the cooldown
+    /// window. <paramref name="remaining"/> is the time left in that window
+    /// (zero when not in cooldown). Best-effort: a corrupt or unreadable
+    /// journal is treated as "not in cooldown" so a bad journal file cannot
+    /// permanently block repair. Thin I/O coordinator over the pure
+    /// <see cref="IsInCooldown(DateTime?, DateTime, out TimeSpan)"/> decision
+    /// (dotnet-backend style guide: "pure policy first" - filesystem read
+    /// and clock access stay here, the branching stays testable without
+    /// either).
+    /// </summary>
+    public static bool IsInCooldown(string npmBin, out TimeSpan remaining) =>
+        IsInCooldown(TryReadLast(npmBin)?.Ts, DateTime.UtcNow, out remaining);
+
+    /// <summary>
+    /// Pure decision: given the last attempt's timestamp (or null for no
+    /// history) and the current time, is a new attempt still in cooldown.
+    /// No I/O, no clock read - directly unit-testable with fixed inputs.
+    /// </summary>
+    internal static bool IsInCooldown(DateTime? lastAttemptUtc, DateTime nowUtc, out TimeSpan remaining)
+    {
+        remaining = TimeSpan.Zero;
+        if (lastAttemptUtc is null) return false;
+
+        var elapsed = nowUtc - lastAttemptUtc.Value;
+        if (elapsed >= Cooldown) return false;
+
+        remaining = Cooldown - elapsed;
+        return true;
+    }
+
+    /// <summary>
+    /// Append one entry. Best-effort: a write failure is swallowed so a
+    /// read-only or missing directory never blocks the repair pass itself.
+    /// </summary>
+    public static void Append(string npmBin, NpmReinstallJournalEntry entry)
+    {
+        try
+        {
+            var path = JournalPath(npmBin);
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
+            var line = JsonSerializer.Serialize(entry, WriteOpts) + Environment.NewLine;
+            File.AppendAllText(path, line);
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "NpmReinstallJournal: best-effort append; cooldown degrades gracefully");
+        }
+    }
+
+    private static NpmReinstallJournalEntry? TryReadLast(string npmBin)
+    {
+        var path = JournalPath(npmBin);
+        if (!File.Exists(path)) return null;
+        try
+        {
+            NpmReinstallJournalEntry? last = null;
+            foreach (var line in File.ReadLines(path))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<NpmReinstallJournalEntry>(line, ReadOpts);
+                    if (parsed is not null) last = parsed;
+                }
+                catch (JsonException __ex)
+                {
+                    SilentCatch.Note(__ex, "NpmReinstallJournal: skip torn/malformed line");
+                }
+            }
+            return last;
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "NpmReinstallJournal: unreadable journal treated as no-history");
+            return null;
         }
     }
 }

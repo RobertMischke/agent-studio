@@ -142,7 +142,7 @@ Three rules apply to every decider:
 
 | Command id | Effect |
 |---|---|
-| `check-cli-shims` | Run [`tools/check-cli-shims.sh`](../../../tools/check-cli-shims.sh) to repair half-installed npm shims and orphaned postinstall stubs. Idempotent. |
+| `check-cli-shims` | Run [`tools/check-cli-shims.sh`](../../../tools/check-cli-shims.sh) to repair half-installed npm shims and orphaned postinstall stubs, including a bounded (1/hour, journaled) `npm install -g` reinstall when the launcher is missing outright but the package is present (AGT-2673). Idempotent. |
 | `git-fetch-and-prune` | `git fetch --prune` against `origin` in the workspace root. No working-tree mutation. |
 | `restart-cli-quota-probe` | Bounce the in-process `QuotaService` so a failing-then-fixed CLI is observed sooner. |
 

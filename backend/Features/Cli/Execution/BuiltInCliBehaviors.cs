@@ -221,6 +221,14 @@ internal static class BuiltInCliBehaviors
         }
         if (!outcome.Available)
         {
+            // PackagePresent=false means a first-time install, not a broken
+            // one - log it as a distinct, structured field (not just buried
+            // in Error's free text) so an operator scanning logs can tell
+            // "never installed" from "repair attempted and failed" at a
+            // glance (AGT-2673).
+            ctx.Logger.LogWarning(
+                "Rollback NpmShimHealer could not make claude available (packagePresent={PackagePresent}): {Error}",
+                outcome.PackagePresent, outcome.Error);
             return (false,
                 outcome.Error ?? "Rollback NpmShimHealer reported claude as unavailable after repair pass");
         }

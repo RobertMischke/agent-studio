@@ -77,6 +77,15 @@ public sealed class ClaudeOneShot : ICliOneShot
                     "Rollback NpmShimHealer (one-shot) actions for claude: {Actions}",
                     string.Join("; ", outcome.Actions));
             }
+            if (!outcome.Available)
+            {
+                // packagePresent=false means a first-time install, not a
+                // broken one - structured so it's distinguishable from a
+                // failed repair without parsing Error's free text (AGT-2673).
+                _logger.LogWarning(
+                    "Rollback NpmShimHealer (one-shot) could not make claude available (packagePresent={PackagePresent}): {Error}",
+                    outcome.PackagePresent, outcome.Error);
+            }
             // Preserve the established one-shot contract: a failed repair does
             // not abort here. The spawn below returns the existing SpawnFailure
             // result and its callers apply their own fallback policy.
