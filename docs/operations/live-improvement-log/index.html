@@ -86,6 +86,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v covered">covered-by (shapes decision)</td>
   <td>Feeds the AGT-2648 batch-gate decision as an operator modification; recorded as operator note in that dossier. No separate card - this is decision-shaping, not new work.</td>
 </tr>
+<tr>
+  <td class="meta">08-18 13:3x</td>
+  <td>Hands-on QS session (2h, outside the pipeline): ALL claude review runs return 0 operations/0 tokens - reviewer CLI never attaches, cancelled runs wedge the single-reader queue (no watchdog, no reclaim). Also: claude-opus-5 unsupported / sonnet-5 fallbackOnly in the QS catalog; boundary sensor times out on 1269-file repos; rule library empty (0/4 guidelines installed). Deterministic layer trustworthy (boundary findings independently confirm QS-58 R-01 lines; gitleaks clean). Two dossiers pushed: security-concept (f902acd), quality-concept (e31089c).</td>
+  <td class="v candidate">new-candidates &rarr; 3 cards</td>
+  <td>QS-93 (watchdog + queue reclaim, opus-5), QS-94 (Claude-5 catalog support, coordinates with TE-44), QS-95 (boundary sensor scaling). Rule-library gap: covered-by QS-90 (in flight). TE-42 model-comparison: blocked until QS-93/94 land (noted in quality-concept).</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
