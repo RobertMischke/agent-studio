@@ -1,0 +1,73 @@
+:host { display: contents; }
+
+.tunnel {
+  display: grid;
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border-top: 1px solid var(--studio-border);
+  font-size: 12px;
+}
+.tunnel[data-state='warn'] { background: var(--notify-warning-icon-bg); }
+.tunnel[data-state='error'] { background: var(--notify-error-icon-bg); }
+
+.tunnel > header {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  color: var(--studio-fg-strong);
+}
+.tunnel__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--studio-fg-dim);
+}
+.tunnel[data-state='ok'] .tunnel__dot { background: var(--notify-success-icon-fg); }
+.tunnel[data-state='warn'] .tunnel__dot { background: var(--notify-warning-icon-fg); }
+.tunnel[data-state='error'] .tunnel__dot { background: var(--notify-error-icon-fg); }
+.tunnel__state {
+  color: var(--studio-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.tunnel__muted { margin: 0; color: var(--studio-fg-dim); }
+
+.tunnel__facts {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  margin: 0;
+}
+.tunnel__facts > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--studio-spacing-2);
+}
+.tunnel__facts dt { color: var(--studio-fg-muted); }
+.tunnel__facts dd { margin: 0; color: var(--studio-fg); overflow-wrap: anywhere; }
+.tunnel__alarm dd { color: var(--notify-error-icon-fg); font-weight: 600; }
+
+.tunnel__actions {
+  display: grid;
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-1);
+}
+.tunnel__consent {
+  margin: 0;
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+}
+.tunnel__register {
+  justify-self: start;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-selected);
+  padding: var(--studio-spacing-1) var(--studio-spacing-3);
+  color: var(--studio-fg);
+  font: inherit;
+  cursor: pointer;
+}
+.tunnel__register:disabled { cursor: default; opacity: 0.7; }
+.tunnel__result { margin: 0; }
+.tunnel__result[data-ok='true'] { color: var(--notify-success-icon-fg); }
+.tunnel__result[data-ok='false'] { color: var(--notify-error-icon-fg); }

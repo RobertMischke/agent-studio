@@ -74,6 +74,19 @@
 .setup__reachability,
 .setup__blocked { margin-top: var(--studio-spacing-4); padding: var(--studio-spacing-3); border: 1px solid var(--notify-warning-border); border-radius: 7px; background: var(--notify-warning-tint); color: var(--notify-warning-icon-fg); font-size: 11px; }
 .setup__reachability { display: grid; gap: var(--studio-spacing-1); }
+.setup__prerequisite {
+  display: grid;
+  gap: var(--studio-spacing-2);
+  margin-top: var(--studio-spacing-4);
+  padding: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 7px;
+  background: var(--studio-surface-muted);
+  color: var(--studio-fg);
+  font-size: 11px;
+}
+.setup__prerequisite strong { color: var(--studio-fg-strong); }
+.setup__prerequisite > span { color: var(--studio-fg-dim); }
 .setup__blocked strong { color: var(--studio-fg-strong); }
 .setup__blocked ul { margin: var(--studio-spacing-2) 0 0; padding-left: var(--studio-spacing-5); }
 .setup__blocked li + li { margin-top: var(--studio-spacing-1); }

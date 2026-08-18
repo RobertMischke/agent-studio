@@ -123,20 +123,15 @@ The tunnel procedure and health gate are documented in
 ### Own the Task Server route
 
 Do not run the tunnel as an unattended bare `ssh -N` process. For the current
-Windows-to-Linux reverse route, register the repository-owned functional keeper
-from the Studio checkout:
-
-```powershell
-.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
-    -SshTarget agent-runner `
-    -RemotePort 15031 `
-    -TaskServerPort 5031 `
-    -IntervalMinutes 5
-```
-
-The keeper probes `/healthz` from the Linux host, removes only the matching dead
-forward, and recreates it with SSH keepalives and `ExitOnForwardFailure`. If the
-host can initiate the SSH connection, prefer the host-owned `autossh` plus
+Windows-to-Linux reverse route, register the tunnel keeper and watchdog from
+**Workspace Settings -> Execution Hosts** on the Windows control-plane host
+(the local host card's Connection section, or inline when choosing
+**Reverse tunnel** in **Set up agent host**). The guided flow self-elevates
+with one explicit Windows consent prompt and then registers both Scheduled
+Tasks; see
+[windows-control-plane-host.md](./windows-control-plane-host.md) for the full
+registration, status, and manual-fallback reference. If the Linux host can
+instead initiate the SSH connection, prefer the host-owned `autossh` plus
 systemd form in the linked tunnel runbook because it starts before an
 interactive Windows logon.
 

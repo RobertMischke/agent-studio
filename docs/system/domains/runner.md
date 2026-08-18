@@ -52,7 +52,10 @@ state.
   operator alarm after two failed heals. TunnelKeeper preserves OpenSSH output
   and eventual exit codes under its local state directory for incident root
   cause analysis. It has no automatic Scheduled Task retry, so it cannot race
-  the watchdog recovery policy.
+  the watchdog recovery policy. `backend/Features/Management/WindowsTunnelProvisioning.cs`
+  and the Execution Hosts "Windows tunnel keeper" panel (AGT-2664) wrap the
+  keeper/watchdog registration and read-only status scripts; see
+  [windows-control-plane-host.md](../../operations/setup/windows-control-plane-host.md).
 - `backend/Services/Runner/ProjectRunner.cs`: per-project pickup tick, active
   job latch, progress-first resume, dead-letter handling, and CLI spawn path.
 - `cli-hosting/TaskCleanContextStore.cs`,

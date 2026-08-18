@@ -1,0 +1,63 @@
+@if (applicable()) {
+  <section class="tunnel" [attr.data-state]="state()" data-testid="windows-tunnel-setup">
+    <header>
+      <span class="tunnel__dot" aria-hidden="true"></span>
+      <strong>Windows tunnel keeper</strong>
+      <span class="tunnel__state">{{ stateLabel() }}</span>
+    </header>
+
+    @if (loading() && !status()) {
+      <p class="tunnel__muted">Checking the AgentRunner-TunnelKeeper and AgentRunner-TunnelWatchdog scheduled tasks…</p>
+    } @else if (statusError() && !status()) {
+      <p class="tunnel__muted">{{ statusError() }}</p>
+    } @else if (status(); as s) {
+      <dl class="tunnel__facts">
+        <div>
+          <dt>Keeper</dt>
+          <dd data-testid="windows-tunnel-keeper-state">
+            {{ s.keeperTask?.registered ? (s.keeperTask?.state ?? 'registered') : 'not registered' }}
+          </dd>
+        </div>
+        <div>
+          <dt>Watchdog</dt>
+          <dd data-testid="windows-tunnel-watchdog-state">
+            {{ s.watchdogTask?.registered ? (s.watchdogTask?.state ?? 'registered') : 'not registered' }}
+          </dd>
+        </div>
+        <div>
+          <dt>Last heal</dt>
+          <dd data-testid="windows-tunnel-last-heal">{{ lastHealLabel() }}</dd>
+        </div>
+        @if (s.alarmActive) {
+          <div class="tunnel__alarm">
+            <dt>Alarm</dt>
+            <dd>Two consecutive heal attempts failed. Check the tunnel and the Linux runner host.</dd>
+          </div>
+        }
+      </dl>
+    }
+
+    <div class="tunnel__actions">
+      <p class="tunnel__consent">
+        Registering needs administrator rights once, to create two AtStartup Scheduled Tasks. Windows shows a
+        "User Account Control" consent prompt — approve it to continue. The tasks themselves then run under your
+        own account with limited rights, not as administrator.
+      </p>
+      <button
+        type="button"
+        class="tunnel__register"
+        data-testid="windows-tunnel-register"
+        [disabled]="registering()"
+        (click)="register()">
+        {{ registering() ? 'Waiting for Windows consent…' : 'Register tunnel keeper' }}
+      </button>
+      @if (registrationDetail(); as detail) {
+        <p class="tunnel__result" [attr.data-ok]="registrationOk()" data-testid="windows-tunnel-register-result">
+          {{ detail }}
+        </p>
+      }
+    </div>
+  </section>
+} @else if (status(); as s) {
+  <p class="tunnel__muted" data-testid="windows-tunnel-unsupported">{{ s.detail || 'Not applicable on this platform.' }}</p>
+}

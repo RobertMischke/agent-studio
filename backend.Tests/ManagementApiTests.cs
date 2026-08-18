@@ -195,6 +195,49 @@ public sealed class ManagementApiTests : IDisposable
     }
 
     [Fact]
+    public async Task WindowsTunnelStatus_RequiresOperator_AndReturnsTheProvisionerSnapshot()
+    {
+        var provisioner = new RecordingWindowsTunnelProvisioner();
+        await using var factory = BuildFactory(windowsTunnelProvisioner: provisioner);
+        using var client = factory.CreateClient();
+
+        var denied = await client.GetAsync("/api/v1/management/windows-tunnel/status");
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+        var response = await client.GetAsync("/api/v1/management/windows-tunnel/status");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? "");
+        var body = await response.Content.ReadFromJsonAsync<WindowsTunnelStatusResponse>();
+        Assert.Equal("windows", body!.Platform);
+        Assert.True(body.KeeperTask!.Registered);
+    }
+
+    [Fact]
+    public async Task WindowsTunnelRegister_RequiresOperator_AndRejectsOutOfBoundsInput()
+    {
+        var provisioner = new RecordingWindowsTunnelProvisioner();
+        await using var factory = BuildFactory(windowsTunnelProvisioner: provisioner);
+        using var client = factory.CreateClient();
+        var request = new WindowsTunnelRegisterRequest("agent-runner", 15031, 5031, 5, 60, 2);
+
+        var denied = await client.PostAsJsonAsync("/api/v1/management/windows-tunnel/register", request);
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+        Assert.Null(provisioner.LastRequest);
+
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+        var accepted = await client.PostAsJsonAsync("/api/v1/management/windows-tunnel/register", request);
+        accepted.EnsureSuccessStatusCode();
+        Assert.Equal(request, provisioner.LastRequest);
+
+        var invalid = await client.PostAsJsonAsync(
+            "/api/v1/management/windows-tunnel/register",
+            request with { RemotePort = 0 });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+    }
+
+    [Fact]
     public async Task BackupCreate_VerifiesRealArchive_OutsideDataDirectory()
     {
         await using var factory = BuildFactory(Environments.Production);
@@ -381,7 +424,8 @@ public sealed class ManagementApiTests : IDisposable
 
     private WebApplicationFactory<Program> BuildFactory(
         string environment = "Test",
-        IProviderAuthProvisioner? provisioner = null) =>
+        IProviderAuthProvisioner? provisioner = null,
+        IWindowsTunnelProvisioner? windowsTunnelProvisioner = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment(environment);
@@ -404,6 +448,11 @@ public sealed class ManagementApiTests : IDisposable
                 services.RemoveAll<IProviderAuthProvisioner>();
                 services.AddSingleton(provisioner);
             }
+            if (windowsTunnelProvisioner is not null)
+            {
+                services.RemoveAll<IWindowsTunnelProvisioner>();
+                services.AddSingleton(windowsTunnelProvisioner);
+            }
         });
     });
 
@@ -425,6 +474,31 @@ public sealed class ManagementApiTests : IDisposable
                 DateTime.UtcNow,
                 ["agent-runner.service"],
                 true));
+        }
+    }
+
+    private sealed class RecordingWindowsTunnelProvisioner : IWindowsTunnelProvisioner
+    {
+        public WindowsTunnelRegisterRequest? LastRequest { get; private set; }
+
+        public Task<WindowsTunnelStatusResponse> GetStatusAsync(CancellationToken cancellationToken)
+            => Task.FromResult(new WindowsTunnelStatusResponse(
+                "windows",
+                DateTime.UtcNow,
+                new WindowsTunnelTaskStatus("AgentRunner-TunnelKeeper", true, "Ready", DateTime.UtcNow, 0, DateTime.UtcNow),
+                new WindowsTunnelKeeperHealth("healthy", "Replacement forward passed the remote functional probe.", DateTime.UtcNow, 0),
+                new WindowsTunnelTaskStatus("AgentRunner-TunnelWatchdog", true, "Running", DateTime.UtcNow, null, null),
+                new WindowsTunnelWatchdogHealth(DateTime.UtcNow, null, null, "heal_succeeded", DateTime.UtcNow),
+                false,
+                null));
+
+        public Task<WindowsTunnelRegistrationResponse> RegisterAsync(
+            WindowsTunnelRegisterRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(new WindowsTunnelRegistrationResponse(
+                "windows", true, true, "Scheduled tasks registered: keeper registered, watchdog registered.", DateTime.UtcNow));
         }
     }
 

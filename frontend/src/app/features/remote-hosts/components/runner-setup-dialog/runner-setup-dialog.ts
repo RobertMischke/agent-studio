@@ -14,6 +14,7 @@ import {
   type RunnerSetupConnectionMode,
 } from '../../models/runner-setup.model';
 import { ProviderAuthStatusService } from '../../services/provider-auth-status.service';
+import { WindowsTunnelSetupComponent } from '../windows-tunnel-setup/windows-tunnel-setup';
 
 type ProviderAuthEnvironmentVariable = 'CLAUDE_CODE_OAUTH_TOKEN' | 'ANTHROPIC_API_KEY';
 type ProvisioningPhase = 'idle' | 'provisioning' | 'waiting' | 'ok' | 'unavailable' | 'error';
@@ -21,7 +22,7 @@ type ProvisioningPhase = 'idle' | 'provisioning' | 'waiting' | 'ok' | 'unavailab
 @Component({
   selector: 'app-runner-setup-dialog',
   standalone: true,
-  imports: [FormsModule, VisibleCliTaskCardComponent],
+  imports: [FormsModule, VisibleCliTaskCardComponent, WindowsTunnelSetupComponent],
   templateUrl: './runner-setup-dialog.html',
   styleUrl: './runner-setup-dialog.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

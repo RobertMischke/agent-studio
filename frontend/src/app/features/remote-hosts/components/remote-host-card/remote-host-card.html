@@ -112,6 +112,9 @@
               </button>
             }
           </div>
+          @if (h.role === 'local') {
+            <app-windows-tunnel-setup />
+          }
         </section>
 
         <section class="detail detail--wide" aria-labelledby="capabilities-title-{{ h.id }}">

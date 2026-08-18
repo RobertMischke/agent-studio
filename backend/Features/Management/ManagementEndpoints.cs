@@ -56,6 +56,45 @@ public static class ManagementEndpoints
                     statusCode: 502);
             }
         });
+        group.MapGet("/windows-tunnel/status", async (
+            HttpContext context,
+            IWindowsTunnelProvisioner provisioner,
+            IConfiguration configuration,
+            CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
+            return Results.Ok(await provisioner.GetStatusAsync(ct));
+        });
+        group.MapPost("/windows-tunnel/register", async (
+            HttpContext context,
+            WindowsTunnelRegisterRequest request,
+            IWindowsTunnelProvisioner provisioner,
+            IConfiguration configuration,
+            CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
+            var validation = WindowsTunnelProvisioningPolicy.Validate(request);
+            if (validation is not null)
+                return Results.Json(new { error = "invalid-windows-tunnel-request", message = validation }, statusCode: 400);
+            try
+            {
+                return Results.Ok(await provisioner.RegisterAsync(request, ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Json(
+                    new { error = "invalid-windows-tunnel-request", message = ex.Message },
+                    statusCode: 400);
+            }
+            catch (WindowsTunnelProvisioningException ex)
+            {
+                return Results.Json(
+                    new { error = "windows-tunnel-registration-failed", message = ex.Message },
+                    statusCode: 502);
+            }
+        });
         group.MapPost("/commands", (HttpContext context, ManagementCommandRequest request, ManagementService service, IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";
