@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "traceId": "demo-scene-reports-export-v1",
+  "sceneKey": "reports-export",
+  "taskKeys": ["DEMO-12", "DEMO-5"],
+  "frames": [
+    { "sequence": 1, "offsetSeconds": 0, "taskKey": "DEMO-12", "kind": "session.started", "message": "Simulated session opened for the export progress stream", "sessionId": "demo-session-12", "runIndex": 1, "cli": "claude", "model": "claude-opus-4-8", "thinkingLevel": "medium" },
+    { "sequence": 2, "offsetSeconds": 12, "taskKey": "DEMO-12", "kind": "turn.started", "message": "Reading the activity feed contract", "sessionId": "demo-session-12", "turnId": "demo-turn-12-1", "runIndex": 1 },
+    { "sequence": 3, "offsetSeconds": 96, "taskKey": "DEMO-12", "kind": "turn.completed", "message": "Mapped the progress events onto the feed projection", "sessionId": "demo-session-12", "turnId": "demo-turn-12-1", "runIndex": 1, "durationMs": 84000, "inputTokens": 41200, "outputTokens": 5300, "reasoningTokens": 1800 },
+    { "sequence": 4, "offsetSeconds": 108, "taskKey": "DEMO-12", "kind": "turn.started", "message": "Wiring the streaming endpoint", "sessionId": "demo-session-12", "turnId": "demo-turn-12-2", "runIndex": 1 },
+    { "sequence": 5, "offsetSeconds": 232, "taskKey": "DEMO-12", "kind": "turn.completed", "message": "Endpoint and projection updated", "sessionId": "demo-session-12", "turnId": "demo-turn-12-2", "runIndex": 1, "durationMs": 124000, "inputTokens": 52800, "outputTokens": 7100, "reasoningTokens": 2400 },
+    { "sequence": 6, "offsetSeconds": 244, "taskKey": "DEMO-12", "kind": "diagnostic", "message": "Fixture note: this scene is replayed, no code was executed", "sessionId": "demo-session-12", "runIndex": 1 },
+    { "sequence": 7, "offsetSeconds": 250, "taskKey": "DEMO-12", "kind": "turn.started", "message": "Adding coverage for the streamed progress", "sessionId": "demo-session-12", "turnId": "demo-turn-12-3", "runIndex": 1 },
+    { "sequence": 8, "offsetSeconds": 366, "taskKey": "DEMO-12", "kind": "turn.completed", "message": "Coverage added and green", "sessionId": "demo-session-12", "turnId": "demo-turn-12-3", "runIndex": 1, "durationMs": 116000, "inputTokens": 48100, "outputTokens": 6400, "reasoningTokens": 2100 },
+    { "sequence": 9, "offsetSeconds": 378, "taskKey": "DEMO-12", "kind": "session.completed", "message": "Simulated session closed", "sessionId": "demo-session-12", "runIndex": 1, "durationMs": 378000, "inputTokens": 142100, "outputTokens": 18800, "reasoningTokens": 6300 },
+    { "sequence": 10, "offsetSeconds": 402, "taskKey": "DEMO-5", "kind": "session.started", "message": "Simulated review session opened for the CSV export", "sessionId": "demo-session-5", "runIndex": 2, "cli": "claude", "model": "claude-opus-4-8", "thinkingLevel": "high" },
+    { "sequence": 11, "offsetSeconds": 414, "taskKey": "DEMO-5", "kind": "turn.started", "message": "Re-reading the review findings", "sessionId": "demo-session-5", "turnId": "demo-turn-5-1", "runIndex": 2 },
+    { "sequence": 12, "offsetSeconds": 552, "taskKey": "DEMO-5", "kind": "turn.completed", "message": "Findings addressed and evidence refreshed", "sessionId": "demo-session-5", "turnId": "demo-turn-5-1", "runIndex": 2, "durationMs": 138000, "inputTokens": 61400, "outputTokens": 8900, "reasoningTokens": 3100 },
+    { "sequence": 13, "offsetSeconds": 564, "taskKey": "DEMO-5", "kind": "turn.started", "message": "Preparing the export release summary", "sessionId": "demo-session-5", "turnId": "demo-turn-5-2", "runIndex": 2 },
+    { "sequence": 14, "offsetSeconds": 688, "taskKey": "DEMO-5", "kind": "turn.completed", "message": "Release summary written", "sessionId": "demo-session-5", "turnId": "demo-turn-5-2", "runIndex": 2, "durationMs": 124000, "inputTokens": 55700, "outputTokens": 7600, "reasoningTokens": 2600 },
+    { "sequence": 15, "offsetSeconds": 700, "taskKey": "DEMO-5", "kind": "session.completed", "message": "Simulated review session closed", "sessionId": "demo-session-5", "runIndex": 2, "durationMs": 298000, "inputTokens": 117100, "outputTokens": 16500, "reasoningTokens": 5700 },
+    { "sequence": 16, "offsetSeconds": 720, "taskKey": "DEMO-5", "kind": "diagnostic", "message": "Scene complete. The next cycle replays the same trace under a new epoch", "sessionId": "demo-session-5", "runIndex": 2 }
+  ]
+}

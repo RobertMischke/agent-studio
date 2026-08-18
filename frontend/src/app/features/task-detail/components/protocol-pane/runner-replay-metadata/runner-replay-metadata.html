@@ -2,7 +2,14 @@
   <section class="replay" aria-label="Recorded runner replay" data-testid="runner-replay-metadata">
     <header class="replay__header">
       <h4>Recorded turns</h4>
-      <span>{{ completions().length }} typed {{ completions().length === 1 ? 'event' : 'events' }}</span>
+      <span class="replay__summary">
+        @if (simulated()) {
+          <span class="replay__origin"
+                data-testid="runner-replay-simulated"
+                title="Replayed from a signed fixed trace. No work was executed.">Simulated</span>
+        }
+        {{ completions().length }} typed {{ completions().length === 1 ? 'event' : 'events' }}
+      </span>
     </header>
 
     <ol class="replay__events">
@@ -11,7 +18,13 @@
             [attr.data-kind]="event.kind"
             [attr.data-testid]="'runner-replay-' + event.id">
           <div class="replay__event-head">
-            <strong>{{ label(event) }}</strong>
+            <strong>
+              {{ label(event) }}
+              @if (isSimulated(event)) {
+                <span class="replay__origin"
+                      [attr.data-testid]="'runner-replay-simulated-' + event.id">Simulated</span>
+              }
+            </strong>
             <time [attr.datetime]="event.timestamp">{{ formatTime(event.timestamp) }}</time>
           </div>
           <dl class="replay__metadata">

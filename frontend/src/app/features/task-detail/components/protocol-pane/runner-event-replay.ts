@@ -13,6 +13,18 @@ export interface RunnerReplayProjection {
   diagnosticLines: CliOutputLine[];
 }
 
+/** Origin marker the server assigns to public-demo replay events. */
+export const SIMULATED_ORIGIN = 'simulated';
+
+/**
+ * True when the event was replayed into a demo instance from a signed fixed
+ * trace rather than produced by a real run. Every surface that renders a runner
+ * event has to say so, so the check lives here instead of per component.
+ */
+export function isSimulated(record: Pick<RunnerRecordedEvent, 'origin'>): boolean {
+  return record.origin?.trim().toLowerCase() === SIMULATED_ORIGIN;
+}
+
 /**
  * Adapt the released runner wire events to CAC's published event model.
  * Lifecycle labels remain structured events; warnings are deliberately kept
@@ -86,9 +98,14 @@ function completionStatus(record: RunnerRecordedEvent, rawRange: RawLineRange): 
     model: record.model,
     thinkingLevel: record.thinkingLevel,
     category: 'result',
-    label: record.kind === 'turn.completed' ? 'Turn completed' : 'Session completed',
+    label: completionLabel(record),
     explanation: '',
   };
+}
+
+function completionLabel(record: RunnerRecordedEvent): string {
+  const label = record.kind === 'turn.completed' ? 'Turn completed' : 'Session completed';
+  return isSimulated(record) ? `Simulated ${label.toLowerCase()}` : label;
 }
 
 function tokenMetric(record: RunnerRecordedEvent, rawRange: RawLineRange): MetricTokenEvent {
@@ -112,6 +129,7 @@ function hasUsage(record: RunnerRecordedEvent): boolean {
 }
 
 function diagnosticText(record: RunnerRecordedEvent): string {
+  const origin = isSimulated(record) ? '[simulated] ' : '';
   const prefix = record.code?.trim() ? `[${record.code.trim()}] ` : '';
-  return `${prefix}${record.message?.trim() || 'Runner diagnostic'}`;
+  return `${origin}${prefix}${record.message?.trim() || 'Runner diagnostic'}`;
 }

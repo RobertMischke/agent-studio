@@ -11,6 +11,15 @@ public sealed record RunnerRecordedEvent
     public string Id { get; init; } = "";
     public string Kind { get; init; } = "";
     public DateTime Timestamp { get; init; }
+
+    /// <summary>
+    /// Server-assigned provenance. Null or <c>live</c> means a real runner
+    /// produced the event; <c>simulated</c> means it came from the public-demo
+    /// replay scope and never represents work that happened. A runner cannot set
+    /// this itself on either ingest route.
+    /// </summary>
+    public string? Origin { get; init; }
+
     public string? SessionId { get; init; }
     public string? TurnId { get; init; }
     public int? RunIndex { get; init; }
