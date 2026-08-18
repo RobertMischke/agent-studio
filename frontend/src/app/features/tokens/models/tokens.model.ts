@@ -45,6 +45,9 @@ export interface TokenSummaryByModel {
   modelPriced: boolean;
   /** False only when the model id is absent from the pinned price catalog. */
   modelInCatalog?: boolean;
+  /** Oldest / most recent recorded call for this model, or null when unavailable. */
+  earliestTs?: string | null;
+  latestTs?: string | null;
 }
 
 export interface TokenSummaryByProject {
@@ -150,6 +153,9 @@ export interface AdHocUsageByModel {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  /** Oldest / most recent recorded call for this model, or null when unavailable. */
+  earliestTs?: string | null;
+  latestTs?: string | null;
 }
 
 /**

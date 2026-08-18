@@ -20,6 +20,16 @@ interface ModelUsageRow {
   cacheCreationTokens: number;
   estimatedApiCostUsd: number;
   modelPriced: boolean;
+  earliestTs?: string | null;
+  latestTs?: string | null;
+}
+
+/** Oldest / most recent recorded call across the shown model rows, or all
+ *  null when no row carries a usable timestamp. */
+interface DataRange {
+  sinceLabel: string | null;
+  asOfIso: string | null;
+  asOfLabel: string | null;
 }
 
 type WindowTone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -151,6 +161,37 @@ export class CliUsageModalComponent {
     return rows.sort((a, b) => this.totalTokens(b) - this.totalTokens(a)).slice(0, 5);
   });
 
+  /** Oldest / most recent recorded call across every shown model row
+   *  (not just the top 5), so "since / as of" reflects the full lifetime
+   *  telemetry the totals above are summed from, not the truncated table. */
+  readonly dataRange = computed<DataRange>(() => {
+    const cli = this.cliType();
+    let earliest: Date | null = null;
+    let latest: Date | null = null;
+    const scan = (rows: { model: string; earliestTs?: string | null; latestTs?: string | null }[]) => {
+      for (const row of rows) {
+        if (!this.modelBelongsToCli(row.model, cli)) continue;
+        if (row.earliestTs) {
+          const d = new Date(row.earliestTs);
+          if (!isNaN(d.getTime()) && (!earliest || d < earliest)) earliest = d;
+        }
+        if (row.latestTs) {
+          const d = new Date(row.latestTs);
+          if (!isNaN(d.getTime()) && (!latest || d > latest)) latest = d;
+        }
+      }
+    };
+    scan(this.tokens()?.byModel ?? []);
+    scan(this.adhoc()?.byModel ?? []);
+    if (!earliest || !latest) return { sinceLabel: null, asOfIso: null, asOfLabel: null };
+    const asOfIso = (latest as Date).toISOString();
+    return {
+      sinceLabel: this.formatDate(earliest as Date),
+      asOfIso,
+      asOfLabel: this.formatTs(asOfIso),
+    };
+  });
+
   limitText(window: QuotaWindow): string {
     if (window.used !== null && window.limit !== null) {
       return `${window.used} / ${window.limit}${window.unit ? ' ' + window.unit : ''}`;
@@ -220,6 +261,21 @@ export class CliUsageModalComponent {
     if (n < 0.1) return '$' + n.toFixed(4);
     if (n < 1) return '$' + n.toFixed(3);
     return '$' + n.toFixed(2);
+  }
+
+  private formatDate(d: Date): string {
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  private formatTs(iso: string): string {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const mi = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${this.formatDate(d)} ${hh}:${mi}`;
   }
 
   private modelBelongsToCli(model: string, cliType: CliType): boolean {

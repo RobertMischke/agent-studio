@@ -114,4 +114,7 @@ public sealed record AdHocUsageByModel(
     long CacheReadTokens,
     long CacheCreationTokens,
     decimal EstimatedApiCostUsd,
-    bool ModelPriced);
+    bool ModelPriced,
+    // Oldest / most recent recorded call for this model, or null when unavailable.
+    DateTime? EarliestTs = null,
+    DateTime? LatestTs = null);

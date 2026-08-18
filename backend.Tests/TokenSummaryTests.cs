@@ -106,6 +106,54 @@ public class TokenSummaryTests
     }
 
     [Fact]
+    public void Summarize_ByModel_TracksEarliestAndLatestTimestamp()
+    {
+        var early = new DateTime(2026, 3, 2, 8, 0, 0, DateTimeKind.Utc);
+        var mid = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        var late = new DateTime(2026, 8, 18, 14, 32, 0, DateTimeKind.Utc);
+        var entries = new[]
+        {
+            JobEntry("claude-opus-4-7", 100, 10, mid),
+            JobEntry("claude-opus-4-7", 100, 10, early),
+            JobEntry("claude-opus-4-7", 100, 10, late),
+        };
+
+        var s = TokenSummaryService.Summarize("Demo", entries);
+        var opus = s.ByModel.Single(m => m.Model == "Claude Opus 4.7");
+
+        Assert.Equal(early, opus.EarliestTs);
+        Assert.Equal(late, opus.LatestTs);
+    }
+
+    [Fact]
+    public void AggregateSummaries_ByModel_MergesEarliestAndLatestAcrossProjects()
+    {
+        var projectAEarly = new DateTime(2026, 3, 2, 8, 0, 0, DateTimeKind.Utc);
+        var projectALate = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        var projectBLate = new DateTime(2026, 8, 18, 14, 32, 0, DateTimeKind.Utc);
+
+        var summaryA = TokenSummaryService.Summarize("A", new[]
+        {
+            JobEntry("claude-opus-4-7", 100, 10, projectAEarly),
+            JobEntry("claude-opus-4-7", 100, 10, projectALate),
+        });
+        var summaryB = TokenSummaryService.Summarize("B", new[]
+        {
+            JobEntry("claude-opus-4-7", 100, 10, projectBLate),
+        });
+
+        var aggregate = TokenSummaryService.AggregateSummaries(new[]
+        {
+            ("A", summaryA),
+            ("B", summaryB),
+        });
+
+        var opus = aggregate.ByModel.Single(m => m.Model == "Claude Opus 4.7");
+        Assert.Equal(projectAEarly, opus.EarliestTs);
+        Assert.Equal(projectBLate, opus.LatestTs);
+    }
+
+    [Fact]
     public void Summarize_HistoricalGpt56SolUsage_IsPriced()
     {
         var entry = Entry("gpt-5.6-sol", 1_000_000, 100_000) with

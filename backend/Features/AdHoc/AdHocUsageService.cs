@@ -129,7 +129,9 @@ public sealed class AdHocUsageService
                     CacheReadTokens: kv.Value.CacheRead,
                     CacheCreationTokens: kv.Value.CacheCreate,
                     EstimatedApiCostUsd: kv.Value.Cost,
-                    ModelPriced: priced);
+                    ModelPriced: priced,
+                    EarliestTs: kv.Value.EarliestTs,
+                    LatestTs: kv.Value.LatestTs);
             })
             .ToList();
 
@@ -164,6 +166,8 @@ public sealed class AdHocUsageService
         b.CacheRead += r.CacheReadTokens;
         b.CacheCreate += r.CacheCreationTokens;
         b.Cost += cost.Total;
+        if (b.EarliestTs is null || r.Ts < b.EarliestTs) b.EarliestTs = r.Ts;
+        if (b.LatestTs is null || r.Ts > b.LatestTs) b.LatestTs = r.Ts;
     }
 
     private sealed class Bucket
@@ -175,5 +179,7 @@ public sealed class AdHocUsageService
         public long CacheRead;
         public long CacheCreate;
         public decimal Cost;
+        public DateTime? EarliestTs;
+        public DateTime? LatestTs;
     }
 }

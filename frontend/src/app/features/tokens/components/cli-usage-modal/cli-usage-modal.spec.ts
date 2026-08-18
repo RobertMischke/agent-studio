@@ -199,6 +199,42 @@ describe('CliUsageModalComponent', () => {
     expect(component.totals().tokens).toBe(50_592_284);
   });
 
+  it('derives since / as-of from the oldest and newest recorded model timestamps', async () => {
+    const tokens: TokenSummaryAggregate = {
+      projects: 1, orchestratorEntries: 2, orchestratorLlmCalls: 2,
+      totalInputTokens: 100, totalOutputTokens: 50,
+      totalCacheReadTokens: 0, totalCacheCreationTokens: 0,
+      estimatedApiCostUsd: 0, allModelsPriced: true,
+      byModel: [
+        {
+          model: 'claude-sonnet-5', calls: 2,
+          inputTokens: 100, outputTokens: 50, cacheReadTokens: 0, cacheCreationTokens: 0,
+          estimatedApiCostUsd: 0, modelPriced: true,
+          earliestTs: '2026-03-02T08:00:00Z', latestTs: '2026-08-18T14:32:00Z',
+        },
+      ],
+      byProject: [], fetchedAt: new Date().toISOString(), disclaimer: '',
+    };
+    const adhoc: AdHocUsageAggregate = {
+      calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0,
+      estimatedApiCostUsd: 0, allModelsPriced: true,
+      bySource: [], byDay: [], byModel: [],
+      logPath: '(bus)', logSizeBytes: 0, logModifiedAt: null, disclaimer: '',
+    };
+
+    const fixture = await build(row, 'claude', tokens, adhoc);
+    const range = fixture.componentInstance.dataRange();
+
+    expect(range.sinceLabel).toBe('2026-03-02');
+    expect(range.asOfLabel).toBe('2026-08-18 14:32');
+    expect(range.asOfIso).toBe('2026-08-18T14:32:00.000Z');
+  });
+
+  it('reports no range when no model row carries a timestamp', async () => {
+    const fixture = await build(row);
+    expect(fixture.componentInstance.dataRange()).toEqual({ sinceLabel: null, asOfIso: null, asOfLabel: null });
+  });
+
   it('still returns "n/a" when a window carries no usable number at all', async () => {
     const fixture = await build(codexRow);
     const c = fixture.componentInstance;

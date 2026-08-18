@@ -83,6 +83,26 @@ public class AdHocUsageTests
     }
 
     [Fact]
+    public void Aggregate_ByModel_TracksEarliestAndLatestTimestamp()
+    {
+        var early = new DateTime(2026, 3, 2, 8, 0, 0, DateTimeKind.Utc);
+        var mid = new DateTime(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        var late = new DateTime(2026, 8, 18, 14, 32, 0, DateTimeKind.Utc);
+        var records = new[]
+        {
+            Rec("title-generation", "claude-haiku-4-5", 100, 20, mid),
+            Rec("summary-generation", "claude-haiku-4-5", 100, 20, early),
+            Rec("commit-message", "claude-haiku-4-5", 100, 20, late),
+        };
+
+        var agg = AdHocUsageService.Aggregate(records, "/log", 0, null);
+        var haiku = agg.ByModel.Single(m => m.Model == "claude-haiku-4-5");
+
+        Assert.Equal(early, haiku.EarliestTs);
+        Assert.Equal(late, haiku.LatestTs);
+    }
+
+    [Fact]
     public void Aggregate_PricesHaikuSpend()
     {
         // Haiku 4.5: $1/M input, $5/M output. 1_000_000 input + 200_000 output -> $1.00 + $1.00 = $2.00

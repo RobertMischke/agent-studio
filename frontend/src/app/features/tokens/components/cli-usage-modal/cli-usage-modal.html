@@ -69,7 +69,15 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
+      <p class="cum__scope-note" data-testid="cli-usage-modal-range">
+        @if (dataRange().asOfIso; as asOf) {
+          Lifetime telemetry by model, since {{ dataRange().sinceLabel }} · data as of
+          <time [attr.datetime]="asOf">{{ dataRange().asOfLabel }} UTC</time>.
+        } @else {
+          Lifetime telemetry by model.
+        }
+        Independent of the active quota windows above.
+      </p>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {

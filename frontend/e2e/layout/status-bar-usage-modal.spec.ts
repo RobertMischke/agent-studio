@@ -157,12 +157,14 @@ test.describe('Status bar usage modal', () => {
             inputTokens: 39_646_031, outputTokens: 97_412,
             cacheReadTokens: 38_481_408, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            earliestTs: '2026-03-02T08:00:00Z', latestTs: '2026-08-11T20:49:00Z',
           },
           {
             model: 'GPT-5.5', calls: 8,
             inputTokens: 10_782_081, outputTokens: 66_760,
             cacheReadTokens: 10_022_528, cacheCreationTokens: 0,
             estimatedApiCostUsd: 0, modelPriced: false,
+            earliestTs: '2026-04-15T00:00:00Z', latestTs: '2026-08-10T09:00:00Z',
           },
         ],
         byProject: [],
@@ -207,7 +209,13 @@ test.describe('Status bar usage modal', () => {
     await expect(modal).toBeVisible();
     await expect(modal.getByText('3% used')).toBeVisible();
     await expect(modal.getByText('97% left')).toBeVisible();
-    await expect(modal.getByText('Lifetime telemetry by model. Independent of the active quota windows above.')).toBeVisible();
+    // AGT-2604: the honesty line now derives its "since / as of" range from
+    // the oldest and newest recorded model timestamps instead of only
+    // claiming "lifetime" without saying since when.
+    const range = modal.getByTestId('cli-usage-modal-range');
+    await expect(range).toContainText('since 2026-03-02');
+    await expect(range).toContainText('2026-08-11 20:49 UTC');
+    await expect(range).toContainText('Independent of the active quota windows above.');
     await expect(modal.getByTestId('cli-usage-modal-models').locator('tbody tr')).toHaveCount(2);
     await expect(modal.getByText('PROJECT RUNTIME')).toHaveCount(2);
     await expect(modal.getByText('AD-HOC')).toHaveCount(0);
