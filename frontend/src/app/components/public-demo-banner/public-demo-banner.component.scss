@@ -1,0 +1,29 @@
+.demo-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3900;
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-3, 12px);
+  padding: var(--studio-spacing-2, 8px) var(--studio-spacing-4, 16px);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--studio-text, inherit);
+  background: var(--notify-info-tint, rgba(129, 140, 248, 0.10));
+  border-bottom: 1px solid var(--notify-info-border, rgba(129, 140, 248, 0.32));
+  backdrop-filter: blur(4px);
+}
+
+.demo-banner__text strong {
+  color: var(--notify-info-icon-fg, rgb(129, 140, 248));
+}
+
+.demo-banner__dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--notify-info-icon-fg, rgb(129, 140, 248));
+}

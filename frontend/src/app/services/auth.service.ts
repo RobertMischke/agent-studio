@@ -12,8 +12,10 @@ export interface AuthUser {
   mustChangePassword: boolean;
 }
 
+export type SecurityProfile = 'local' | 'networked' | 'public-demo';
+
 export interface AuthStatus {
-  profile: 'local' | 'networked';
+  profile: SecurityProfile;
   bootstrapRequired: boolean;
   authenticated: boolean;
   user?: AuthUser | null;
@@ -24,9 +26,18 @@ export interface AuthStatus {
 export class AuthSessionState {
   readonly status = signal<AuthStatus | null>(null);
   readonly loading = signal(true);
+
+  /**
+   * The public read-only demo (AGT-W34). The server edge is the boundary that
+   * actually denies every mutation; this signal exists so the UI explains that
+   * instead of offering controls whose requests come back as typed denials.
+   */
+  readonly publicDemo = computed(() => this.status()?.profile === 'public-demo');
+
   readonly studioAllowed = computed(() => {
     const status = this.status();
     return status?.profile === 'local'
+      || status?.profile === 'public-demo'
       || (status?.authenticated === true && !status.user?.mustChangePassword);
   });
   readonly networkedAuthenticated = computed(() => {
@@ -54,6 +65,7 @@ export class AuthService {
   readonly loading = this.session.loading;
   readonly studioAllowed = this.session.studioAllowed;
   readonly networkedAuthenticated = this.session.networkedAuthenticated;
+  readonly publicDemo = this.session.publicDemo;
 
   initialize(): void {
     this.loading.set(true);

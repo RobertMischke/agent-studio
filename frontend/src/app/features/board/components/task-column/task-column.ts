@@ -63,6 +63,12 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   readonly jobs = input.required<TaskInfo[]>();
   readonly allBoardJobs = input<readonly TaskInfo[]>([]);
   readonly reorderDisabled = input<boolean>(false);
+  /**
+   * Blocks the lane's own mutation affordances (currently the inline
+   * "Add task" button). Set while an update runs and in the public read-only
+   * demo, where the server denies the create outright.
+   */
+  readonly mutationsBlocked = input<boolean>(false);
   /** Resolved lane sort strategy; `mixed` means visible projects disagree. */
   readonly sortStrategy = input<string>('');
   readonly collapsed = input<boolean>(false);
@@ -359,6 +365,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   private readonly onAutoScrollEnd = () => { this.stopAutoScroll(); this.boardDrag.end(); };
 
   canAddTask(): boolean {
+    if (this.mutationsBlocked()) return false;
     const s = this.state();
     return s === TaskState.Preparation || s === TaskState.Ready;
   }

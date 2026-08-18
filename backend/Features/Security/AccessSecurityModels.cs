@@ -7,11 +7,32 @@ public static class SecurityProfiles
     public const string Local = "local";
     public const string Networked = "networked";
 
+    /// <summary>
+    /// The public read-only demo (dossier AGT-W34). Authority comes from the
+    /// deny-by-default edge in <c>AgentStudio.PublicDemo</c>, not from a Studio
+    /// account, so it is a profile of its own rather than a networked variant.
+    /// </summary>
+    public const string PublicDemo = "public-demo";
+
     public static bool IsNetworked(IConfiguration configuration)
         => string.Equals(configuration["Security:Profile"], Networked, StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsPublicDemo(IConfiguration configuration)
+        => string.Equals(configuration["Security:Profile"], PublicDemo, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True for every profile that faces a hostile network. Gates the hardening
+    /// that must never depend on which of the two exposed profiles is active:
+    /// HSTS, no cross-origin allowance, no exception detail, and no local-only
+    /// diagnostic, dev-tool, probe, or filesystem route.
+    /// </summary>
+    public static bool IsInternetFacing(IConfiguration configuration)
+        => IsNetworked(configuration) || IsPublicDemo(configuration);
+
     public static string ActiveProfile(IConfiguration configuration)
-        => IsNetworked(configuration) ? Networked : Local;
+        => IsPublicDemo(configuration) ? PublicDemo
+            : IsNetworked(configuration) ? Networked
+            : Local;
 }
 
 public static class StudioRoles

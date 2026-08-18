@@ -7,10 +7,10 @@
   },
   "components": {
     "src/app/app.ts": {
-      "typeScript": 2567,
-      "template": 902,
+      "typeScript": 2651,
+      "template": 927,
       "styles": 2008,
-      "total": 5477
+      "total": 5555
     },
     "src/app/components/markdown-rich-editor/markdown-rich-editor.ts": {
       "typeScript": 466,
@@ -31,7 +31,7 @@
       "total": 2782
     },
     "src/app/features/board/components/task-column/task-column.ts": {
-      "typeScript": 839,
+      "typeScript": 844,
       "template": 243,
       "styles": 738,
       "total": 1820

@@ -621,6 +621,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
     <li><a href="#benchmark-framework">§11 Benchmark framework and Result Dossier</a></li>
     <li><a href="#cost-model">§12 Cost model and hard caps</a></li>
     <li><a href="#overlaps">§13 Product and marketing overlaps</a></li>
+    <li><a href="#implementation-state">§14 Implementation state</a></li>
   </ul>
 </nav>
 
@@ -968,6 +969,31 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 <h2 id="implementation-state"><span class="no">§14</span>Implementation state</h2>
 <p>The operator approved the defense-in-depth recommendation on 17 August 2026 and cut S1 through S5 as AGT-2666 through AGT-2670. Delivery remains intentionally split at the dossier boundaries: content, execution denial, replay, edge, and release operations stay independently reviewable while consuming one seed family and one release contract.</p>
 
+<h3>S4 public read-only edge</h3>
+<p>The edge is one middleware placed ahead of authentication, routing, and every handler. Its admission decision is a pure function, so the matrix is proved without a host: same-origin, TLS, safe method, body ceiling, allowlist. Everything else is a typed denial carrying a stable machine code, the answering profile, and the read-only fact.</p>
+
+<table>
+  <thead><tr><th>Required measure</th><th>How S4 meets it</th><th>Denial code</th></tr></thead>
+  <tbody>
+    <tr><td>Same-origin TLS</td><td>Plain HTTP is refused before any other rule; a request carrying a foreign <code>Origin</code> is refused on HTTP and on the WebSocket upgrade alike. HSTS is on for every internet-facing profile.</td><td><code>public-demo-https-required</code>, <code>public-demo-cross-origin-denied</code></td></tr>
+    <tr><td>Ephemeral viewer boundary</td><td>Opaque HttpOnly, Secure, SameSite=Strict session cookie with no Expires, a sliding lifetime, and a hard ceiling on tracked viewers. Public authority by design, never persisted, gone on reset.</td><td>-</td></tr>
+    <tr><td>Explicit endpoint allowlist</td><td>One reviewed inventory of GET-reachable routes grouped by the visitor story each serves. Anything absent is unreachable, so a newly mapped route arrives denied.</td><td><code>public-demo-endpoint-denied</code></td></tr>
+    <tr><td>Project-filtered SignalR</td><td>A visitor joins only the announced demo project groups, never the unscoped group, and conversation subscriptions are refused outside those projects. REST fan-out uses the same groups, and <code>/api/projects</code> and <code>/api/search</code> apply the same filter so a drifted or mis-seeded store cannot announce or surface a project the demo never claimed.</td><td>-</td></tr>
+    <tr><td>Content minimization</td><td><code>/api/projects</code> returns the unchanged wire shape with storage locations, repository paths, roots, remotes, watched URLs, and ownership mappings cleared. Those describe the machine the demo runs on, not the demo content, and the scrub contract names absolute paths and repository remotes explicitly. <code>/api/watch-paths</code> stays denied outright.</td><td>-</td></tr>
+    <tr><td>CSP and sandboxing</td><td>A self-only policy for the shell and API; a second <code>sandbox</code> policy with <code>default-src 'none'</code> for seeded document content, so a script fragment surviving the scrub gate still has no origin authority. No remote embeds, no framing, no form posts.</td><td>-</td></tr>
+    <tr><td>Rate and body limits</td><td>Per-viewer rolling-minute budget with a bounded, self-sweeping store; declared and chunked bodies both capped.</td><td><code>public-demo-rate-limited</code>, <code>public-demo-body-too-large</code></td></tr>
+    <tr><td>Safe error surfaces</td><td>No exception detail, type, or path in any internet-facing profile. Denials say only that the request was denied.</td><td>-</td></tr>
+    <tr><td>Disabled UI controls</td><td>The profile reaches Angular as one signal that feeds the existing <code>mutationsBlocked</code> gate, so create, drag-reorder, triage, and decision controls disable together, a banner explains why, and a client guard turns a stray write into a readable message.</td><td><code>public-demo-read-only</code></td></tr>
+    <tr><td>Raw unsafe request returns a typed denial</td><td>The read-only verdict is evaluated before the allowlist, so any POST, PUT, PATCH, or DELETE - known route, unknown route, or forged - lands on the one denial that names the launch invariant. The SignalR negotiate POST is the single, path-exact exception.</td><td><code>public-demo-read-only</code></td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>Dependency note and residual risk</h4>
+  <p>S4 was built while the S2 route inventory was still open. The edge therefore carries its own inventory and two guard tests: one walks every route the host maps and fails when a mutating verb is reachable, the other fails when an allowlist entry no longer matches a mapped route. That is a reachability guard, not an execution-admission guard. It does not replace S2: a caller reaching the Task Server without passing this edge is exactly the case S2 owns, and the launch invariant still requires the server-side denial matrix before the demo starts.</p>
+  <p>Two known follow-ups for the S6 rehearsal. First, <code>/api/watch-paths</code> stays denied because it discloses host filesystem paths; the shell must resolve projects from <code>/api/projects</code> alone in the demo build. Second, the allowlist admits the seeded evidence and Dossier routes, so the S5 scrub gate remains the primary confidentiality control for that content, with the sandbox policy as the second layer.</p>
+</div>
+
 <h3>S5 release boundary</h3>
 <ul>
   <li><b>Scrub proof:</b> the release builder now generates into two empty temporary roots, requires a clean recursive manifest diff, scans disclosure categories without persisting raw matches, proves generated PNG metadata and raster text-shape results, and emits <code>demo-seed-scrub-report.json</code>.</li>
@@ -980,6 +1006,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 <h3>Delivered slices</h3>
 <ul>
 <!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2669" data-delivered-at="2026-08-18" data-slice="public-read-only-edge"><b>S4 public read-only edge.</b> One middleware sits ahead of authentication, routing, and every handler and evaluates a pure admission policy: same-origin HTTPS, safe HTTP method, body ceiling, then an explicit reviewed GET-allowlist. Every other request receives a typed denial (<code>public-demo-read-only</code>, <code>public-demo-endpoint-denied</code>, <code>public-demo-https-required</code>, <code>public-demo-cross-origin-denied</code>, <code>public-demo-rate-limited</code>, <code>public-demo-body-too-large</code>) with no exception detail. An ephemeral HttpOnly/Secure/SameSite=Strict viewer session bounds visitor identity without persistence; SignalR group membership, <code>/api/projects</code>, and <code>/api/search</code> are all filtered to the announced demo projects through the same scope check; a self-only CSP for the shell and API is paired with a second <code>default-src 'none'</code> sandbox policy for seeded document content; and the Angular shell disables its mutation controls from one server-driven signal, with a client interceptor turning a stray write into a readable message. S4 was built while the S2 route inventory was still open, so the edge carries its own route-reachability guard tests (every mapped route is either allowlisted-safe or denied); it complements but does not replace the still-pending S2 execution-admission matrix.</li>
   <li data-implementation-entry="" data-task-key="AGT-2670" data-delivered-at="2026-08-17" data-slice="scrub-bundle-reset-contract"><b>S5 scrub, bundle, and reset contract.</b> Added content-bound scrub attestation, two-pass datastore proof, image OCR and metadata evidence, compatibility-checked immutable bundle construction, deployment verification, six-hour replacement units, failure-safe whole-runtime cutover, and rollback rehearsal. Host provisioning and launch remain outside this slice.</li>
   <li data-implementation-entry="" data-task-key="AGT-2666" data-delivered-at="2026-08-17" data-slice="seed-content-and-gallery"><b>S1 seed content and gallery.</b> One seed now writes both invented Wiki trees (13 pages), the six-document Dossier gallery, and the canonical <code>references.workbenches</code> card edges, all rendered from a second committed input so the family regenerates byte-identically. Coverage is proven by an executable test: 22 cards span all nine board lanes, and the gallery exercises the whole lifecycle vocabulary in both projections, five documents storing the v2 states and one deliberate v1 document supplying <code>review-requested</code>. Decision points are fixtures that start no operation, and no source-repository identity reaches the visitor surface. The optional AGT-2558 artifact scene is deliberately not seeded: that card is still in human review, and the slice plan admits it only after acceptance. Verification also produced a finding owned by S2: on an unlocked backend the seeded lanes drift within seconds, so the fixed lane story of the demo is a property of the execution profile and not of the data.</li>
 <!-- agent-studio:implementation-log:end -->

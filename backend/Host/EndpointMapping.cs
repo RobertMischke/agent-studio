@@ -74,14 +74,14 @@ public static class EndpointMapping
         app.MapTestRunEndpoints();
         app.MapProjectGraphEndpoints();
         app.MapPublishEndpoints();
-        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapFilesystemLayerEndpoints();
+        if (!SecurityProfiles.IsInternetFacing(app.Configuration)) app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
-        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapDevToolsEndpoints();
+        if (!SecurityProfiles.IsInternetFacing(app.Configuration)) app.MapDevToolsEndpoints();
         app.MapAdminConfigEndpoints();
         app.MapSupervisorEndpoints();
-        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapDiagnosticsEndpoints();
-        if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapInternalProbeEndpoints();
+        if (!SecurityProfiles.IsInternetFacing(app.Configuration)) app.MapDiagnosticsEndpoints();
+        if (!SecurityProfiles.IsInternetFacing(app.Configuration)) app.MapInternalProbeEndpoints();
         app.MapTitleGenerationEndpoints();
         app.MapPromptEnhancementEndpoints();
         app.MapAdHocUsageEndpoints();

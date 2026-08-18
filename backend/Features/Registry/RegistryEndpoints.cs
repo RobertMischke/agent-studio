@@ -69,12 +69,28 @@ public static class RegistryEndpoints
                 projectAllowed));
         });
 
-        app.MapGet("/api/projects", (HttpContext context, ProjectRegistry projects, bool? includeArchived) =>
+        app.MapGet("/api/projects", (
+            HttpContext context,
+            ProjectRegistry projects,
+            IConfiguration configuration,
+            Microsoft.Extensions.Options.IOptions<PublicDemoOptions> publicDemo,
+            bool? includeArchived) =>
         {
             var all = projects.List();
             if (includeArchived != true) all = [.. all.Where(p => !p.Archived)];
             if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
                 all = [.. all.Where(project => ProjectAccessAuthorization.Allows(human.User, project.Id, projects))];
+            // Public demo: the same project filter the hub applies, plus removal
+            // of the host-revealing fields. A mis-seeded store must not be able
+            // to announce a project the demo never claimed.
+            if (SecurityProfiles.IsPublicDemo(configuration))
+            {
+                var announced = publicDemo.Value.Projects;
+                return Results.Ok(all
+                    .Where(project => PublicDemoProjectScope.Allows(announced, project.Id))
+                    .Select(project => ProjectSummary.From(project).WithoutHostDetail())
+                    .ToList());
+            }
             return Results.Ok(all.Select(ProjectSummary.From).ToList());
         });
 
@@ -852,5 +868,23 @@ public sealed record ProjectSummary
         WikiSourceBranch = p.WikiSourceBranch,
         Archived = p.Archived,
         CreatedAt = p.CreatedAt,
+    };
+
+    /// <summary>
+    /// The same wire shape with every host-revealing field cleared, for the
+    /// public read-only demo (AGT-W34 slice S4). Storage locations, repository
+    /// paths, roots, remotes, and watched URLs describe the machine the demo
+    /// happens to run on, not the demo content, and the dossier's scrub contract
+    /// names absolute paths and repository remotes explicitly. The route and the
+    /// property names stay identical so no client has to know about the profile.
+    /// </summary>
+    public ProjectSummary WithoutHostDetail() => this with
+    {
+        StorageLocation = string.Empty,
+        RepositoryPath = null,
+        RootPath = null,
+        RepositoryUrl = null,
+        Urls = [],
+        OwnershipMappings = [],
     };
 }
