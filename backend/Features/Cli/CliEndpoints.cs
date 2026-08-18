@@ -72,7 +72,7 @@ public static class CliEndpoints
                     new { error = ex.Message, cliType },
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         cliGroup.MapGet("/model-routing/policy", (
             ModelRoutingPolicyRegistry registry,
@@ -117,7 +117,7 @@ public static class CliEndpoints
                     new { error = ex.Message, cliType, taskType },
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions, TaskRunnerService runners) =>
         {
@@ -168,12 +168,12 @@ public static class CliEndpoints
         cliGroup.MapGet("/quota", (QuotaService quota, CancellationToken ct) =>
         {
             return Results.Ok(quota.GetWithBackgroundRefresh(ct));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         cliGroup.MapPost("/quota/refresh", async (QuotaService quota, CancellationToken ct) =>
         {
             return Results.Ok(await quota.RefreshAllAsync(ct));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         cliGroup.MapPost("/quota/refresh/{cliType}", async (string cliType, QuotaService quota, CancellationToken ct) =>
         {
@@ -181,7 +181,7 @@ public static class CliEndpoints
                 return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
             var snap = await quota.RefreshAsync(cliType, ct);
             return snap == null ? Results.NotFound() : Results.Ok(snap);
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         // ── Quota caps: per-CLI per-window usage ceilings ──
         // The user uses Claude Code (and others) outside the orchestrator too;
@@ -312,7 +312,7 @@ public static class CliEndpoints
             {
                 return Results.Problem(detail: ex.Message, title: "Probe failed");
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
     }
 }
 

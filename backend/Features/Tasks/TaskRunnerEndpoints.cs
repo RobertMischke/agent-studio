@@ -37,7 +37,7 @@ public static class TaskRunnerEndpoints
             {
                 return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         group.MapPost("/{jobId}/stop", (string jobId, string? project, string? watchPath, string? reason, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
@@ -76,7 +76,7 @@ public static class TaskRunnerEndpoints
             {
                 return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         group.MapGet("/{jobId}/output", (string jobId, string? project, string? watchPath, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects) =>
         {
@@ -362,7 +362,7 @@ public static class TaskRunnerEndpoints
             // out of "generating", same path the post-run summary uses.
             _ = summaries.GenerateAsync(info);
             return Results.Accepted();
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Review);
 
         // Synchronous "interim status" peek while a run is in flight. Runs a
         // one-shot Haiku call against the live cli-output.log and returns the
@@ -382,7 +382,7 @@ public static class TaskRunnerEndpoints
                 return Results.BadRequest(new { error = result.Error ?? "Interim summary failed" });
 
             return Results.Ok(new { markdown = result.Markdown, durationMs = result.DurationMs });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         group.MapPost("/{jobId}/context-usage/refresh", async (string jobId, string? project, string? watchPath, TaskRunnerService runner, AgentStudio.Registry.ProjectRegistry projects, CancellationToken ct) =>
         {
@@ -391,6 +391,6 @@ public static class TaskRunnerEndpoints
             return snapshot is not null
                 ? Results.Ok(snapshot)
                 : Results.BadRequest(new { error = error ?? "Cannot refresh context usage" });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
     }
 }

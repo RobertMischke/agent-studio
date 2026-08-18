@@ -70,7 +70,7 @@ public static class SupervisorEndpoints
             if (string.IsNullOrWhiteSpace(body.Reason)) return Results.BadRequest(new { error = "reason required" });
             await svc.ResumeAsync(project, body.Reason!, SupervisorSource.User, ct);
             return Results.Ok(new { ok = true });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
         group.MapGet("/{project}/meta-cycle", (
             string project,

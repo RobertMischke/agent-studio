@@ -460,10 +460,15 @@ public sealed partial class TaskServerStore
 public sealed class TaskServerInvariantReconciliationService(
     TaskServerStore store,
     Microsoft.Extensions.Options.IOptions<TaskServerOptions> options,
+    TaskServerStartupExecutionAdmission executionAdmission,
     ILogger<TaskServerInvariantReconciliationService> logger) : BackgroundService
 {
+    public bool ExecutionSuppressed => executionAdmission.IsPublicDemo;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (ExecutionSuppressed) return;
+
         var interval = TimeSpan.FromSeconds(
             Math.Clamp(options.Value.InvariantReconciliationSeconds, 30, 60));
         using var timer = new PeriodicTimer(interval);

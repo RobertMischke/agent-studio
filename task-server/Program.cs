@@ -25,6 +25,7 @@ if (string.Equals(Environment.GetEnvironmentVariable("TASK_SERVER_PROFILE"), "lo
 builder.Services.AddSingleton(serviceProvider =>
     TaskServerBootstrapOptions.Load(
         serviceProvider.GetRequiredService<IConfiguration>()));
+builder.Services.AddSingleton<TaskServerStartupExecutionAdmission>();
 builder.Services
     .AddOptions<TaskServerOptions>()
     .Bind(builder.Configuration.GetSection(TaskServerOptions.SectionName))
@@ -75,9 +76,14 @@ if (command.Kind == TaskServerCommandKind.Backup)
 }
 
 await store.InitializeAsync(app.Lifetime.ApplicationStopping);
+app.UseRouting();
+app.UsePublicDemoExecutionLock();
 app.UseMiddleware<TaskServerAuthenticationMiddleware>();
 app.UseMiddleware<TaskServerProtocolMiddleware>();
 app.MapTaskServerEndpoints();
+TaskServerPublicDemoExecutionRouteInventory.ValidateStartup(
+    app,
+    app.Services.GetRequiredService<TaskServerStartupExecutionAdmission>());
 await app.RunAsync();
 return 0;
 

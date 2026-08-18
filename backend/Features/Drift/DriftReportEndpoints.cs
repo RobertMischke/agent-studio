@@ -652,7 +652,7 @@ public static class DriftReportEndpoints
 
             var markdown = action.RenderMarkdown(report);
             return Results.Ok(new CodePatternDriftResponse(report, markdown));
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         group.MapGet("/actions/code-pattern-drift/rules", (
             CodePatternDriftAnalysisService action) =>

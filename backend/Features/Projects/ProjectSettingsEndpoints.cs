@@ -295,7 +295,7 @@ public static class ProjectSettingsEndpoints
 
             var result = await probes.RunAsync(projectName, repositoryPath, step, context.RequestAborted);
             return Results.Ok(result);
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         // Per-project pipeline-step override. Sets enabled / mode / model for
         // one step; an all-null body clears the override (revert to default).
@@ -715,7 +715,7 @@ public static class ProjectSettingsEndpoints
             {
                 return Results.Problem(ex.Message, statusCode: StatusCodes.Status500InternalServerError);
             }
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Start);
 
         // ADR-0052: integration branch parallel task worktrees branch off and
         // merge back into. Blank reverts to repository origin/HEAD.
@@ -854,7 +854,7 @@ public static class ProjectSettingsEndpoints
                 profile,
                 pickupAllowed = BuildProfileGate.AllowsAutoPickup(profile),
             });
-        });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         // The orchestrator's model can be tuned per project. Defaults to
         // Opus when null. This is the only knob today; per-call overrides
