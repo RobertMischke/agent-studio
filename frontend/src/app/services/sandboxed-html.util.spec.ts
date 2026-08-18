@@ -55,6 +55,31 @@ describe('sandboxed HTML navigation', () => {
     expect(fallback.documentElement.dataset['documentPattern']).toBe('concept');
   });
 
+  it('rewrites relative <img> sources via resolveAssetSrc and widens the CSP to the host origin', () => {
+    const html = '<img src="assets/foo.png" alt="Foo"><img src="https://cdn.example/bar.png" alt="Bar">';
+    const srcdoc = buildIsolatedHtmlSrcdoc(html, {
+      resolveAssetSrc: (src) =>
+        src.startsWith('assets/')
+          ? `/api/projects/Demo/wiki/assets/operations/timeline-redesign/${src}`
+          : src,
+    });
+
+    const expectedSrc = new URL(
+      '/api/projects/Demo/wiki/assets/operations/timeline-redesign/assets/foo.png',
+      window.location.origin,
+    ).href;
+    expect(srcdoc).toContain(`src="${expectedSrc}"`);
+    expect(srcdoc).toContain('src="https://cdn.example/bar.png"');
+    expect(srcdoc).toContain(`img-src data: ${window.location.origin};`);
+  });
+
+  it('leaves <img> sources and the CSP unchanged when no asset resolver is supplied', () => {
+    const srcdoc = buildIsolatedHtmlSrcdoc('<img src="assets/foo.png" alt="Foo">');
+
+    expect(srcdoc).toContain('src="assets/foo.png"');
+    expect(srcdoc).toContain('img-src data:;');
+  });
+
   it('resolves docs-relative targets and rejects paths that escape docs', () => {
     expect(resolveIsolatedHtmlNavigation(
       'docs/operations/nordstern/index.html',

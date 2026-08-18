@@ -49,7 +49,7 @@ import {
   derivePageType,
   pageTypeIcon,
 } from '../../../../models/page-context.model';
-import { resolveWikiImageSrc } from './wiki-image-resolver';
+import { resolveWikiImageSrc } from '../../../../services/wiki-image-resolver';
 import { WikiDashboardComponent } from './wiki-dashboard/wiki-dashboard.component';
 import { WikiAgentReadsComponent } from './wiki-agent-reads/wiki-agent-reads.component';
 import { WikiDocHistoryComponent } from './wiki-doc-history/wiki-doc-history.component';
@@ -448,10 +448,18 @@ export class ProjectWikiSectionComponent implements OnDestroy {
     ];
   });
 
-  /** Image resolver bound to the currently opened doc's folder (markdown only). */
+  /** Image resolver bound to the currently opened doc's folder (markdown editor and HTML iframe). */
   readonly imageResolver = computed<(src: string) => string>(() => {
     const project = this.projectName();
     const rel = this.openedRel();
+    if (!rel) return (s: string) => s;
+    return (s: string) => resolveWikiImageSrc(s, rel, a => this.docs.wikiAssetUrl(project, a));
+  });
+
+  /** Image resolver bound to the opened report doc's own folder, e.g. `assets/` siblings. */
+  readonly reportImageResolver = computed<(src: string) => string>(() => {
+    const project = this.projectName();
+    const rel = this.reportPath();
     if (!rel) return (s: string) => s;
     return (s: string) => resolveWikiImageSrc(s, rel, a => this.docs.wikiAssetUrl(project, a));
   });
@@ -462,11 +470,12 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   /** `allow-scripts` enables interaction; omitted same-origin isolates Studio state and APIs. */
   readonly trustedHtml = computed<SafeHtml>(() =>
-    this.sanitizer.bypassSecurityTrustHtml(buildIsolatedHtmlSrcdoc(this.displayContent())));
+    this.sanitizer.bypassSecurityTrustHtml(
+      buildIsolatedHtmlSrcdoc(this.displayContent(), { resolveAssetSrc: this.imageResolver() })));
 
   readonly trustedReportHtml = computed<SafeHtml>(() =>
     this.sanitizer.bypassSecurityTrustHtml(this.reportHtmlForAnchor(
-      buildIsolatedHtmlSrcdoc(this.reportContent()),
+      buildIsolatedHtmlSrcdoc(this.reportContent(), { resolveAssetSrc: this.reportImageResolver() }),
       this.reportAnchor())));
 
   /** Pretty JSON preview for metadata files; invalid JSON falls back to source. */
