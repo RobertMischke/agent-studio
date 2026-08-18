@@ -45,6 +45,11 @@ CLI execution tests.
   central one-prompt adapters used by model-backed pipeline steps. Codex uses
   stdin plus the JSONL protocol, read-only sandboxing, final-agent-message
   extraction, and `turn.completed` usage parsing.
+- `backend/Features/HostHealth/`: local CLI install health (AGT-2673). Probes
+  the npm global install on a loop, classifies it (`LocalCliInstallDiagnosis`),
+  repairs the missing-bin-shim shape with one rate-limited `npm install
+  --global`, and journals every repair to `<workspace>/logs/cli-repairs.jsonl`.
+  Runbook: [local CLI self-heal](../../operations/setup/local-cli-self-heal.md).
 - `prompts/runtime/`: prompt templates handed to the CLIs.
 - `frontend/src/app/features/cli/`, `frontend/src/app/features/tokens/`, and
   `frontend/src/app/components/cli-model-selector/`: CLI status, usage, quota,
@@ -62,6 +67,12 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- Local CLI install repair never installs a CLI the operator did not install.
+  Only `ShimMissingPackagePresent` - package on disk, bin shims gone - licenses
+  an automatic `npm install --global`; `NotInstalled` and `Unknown` escalate to
+  the operator. Automatic repair stays rate-limited to one attempt per CLI per
+  hour, and a repair is never silent: one journal row, one status-bar note, and
+  an alarm only when the repair failed.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

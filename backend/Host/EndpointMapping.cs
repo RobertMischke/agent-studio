@@ -77,6 +77,7 @@ public static class EndpointMapping
         if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
+        app.MapHostHealthEndpoints();
         if (!SecurityProfiles.IsNetworked(app.Configuration)) app.MapDevToolsEndpoints();
         app.MapAdminConfigEndpoints();
         app.MapSupervisorEndpoints();

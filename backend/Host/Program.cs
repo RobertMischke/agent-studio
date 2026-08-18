@@ -404,6 +404,16 @@ builder.Services.AddSingleton<CliRouter>(sp => new CliRouter(
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude),
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Codex),
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Gemini)));
+// AGT-2673: local CLI install health. The npm bin shims for a globally
+// installed CLI can vanish while the package stays on disk (observed twice on
+// the Windows control plane, auto-update suspected). Diagnose it, repair that
+// one shape automatically at most once an hour, and surface every repair.
+builder.Services.AddSingleton<ILocalCliVersionProbe, CliRouterVersionProbe>();
+builder.Services.AddSingleton<LocalCliInstallInspector>();
+builder.Services.AddSingleton<IGlobalNpmPackageInstaller, GlobalNpmPackageInstaller>();
+builder.Services.AddSingleton<LocalCliRepairJournal>();
+builder.Services.AddSingleton<LocalCliHealthService>();
+builder.Services.AddHostedService<LocalCliHealthHostedService>();
 builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();

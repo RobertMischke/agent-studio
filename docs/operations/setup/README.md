@@ -17,6 +17,7 @@ an agent CLI, first tasks, and troubleshooting.
 | [onboard-an-agent-cli.md](./onboard-an-agent-cli.md) | A new CLI (Claude, Codex, Copilot, Gemini) needs to be installed and made auto-runnable on this machine. Includes the load-bearing **Codex on Windows sandbox quirk**. |
 | [your-first-task.md](./your-first-task.md) | First time using the board on a new project: what to queue, how to watch it run, what counts as a good first task vs. an anti-pattern. |
 | [troubleshooting.md](./troubleshooting.md) | FAQ-style: "agent only shows sandbox errors", "auto-mode flipped to manual", "two jobs in 3-progress", "header counters look wrong". |
+| [local-cli-self-heal.md](./local-cli-self-heal.md) | The local `claude` or `codex` command disappeared while its npm package is still installed: what the backend diagnoses, what it repairs by itself, where the repair is recorded, and how to rehearse the break-and-heal on the host. |
 | [linux-runner-host.md](./linux-runner-host.md) | Running a task on a remote Linux host with the standalone `agent-runner` (RM-5): provision, configure, and drive one task end-to-end via the Task Server API. |
 | [multi-machine.md](./multi-machine.md) | Guided Linux setup across a Control Plane machine and one or more Agent Hosts, including the join-token flow, topology diagram, and verification. |
 | [website-onboarding-template.md](./website-onboarding-template.md) | Source copy for the marketing website download page: Demo, Single Machine, and Multi Machine paths. Website integration remains owned by MKT/AOW. |

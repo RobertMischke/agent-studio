@@ -101,6 +101,7 @@
     <Using Include="AgentStudio.GeneratedFiles" />
     <Using Include="AgentStudio.Git" />
     <Using Include="AgentStudio.Host" />
+    <Using Include="AgentStudio.HostHealth" />
     <Using Include="AgentStudio.Management" />
     <Using Include="AgentStudio.Orchestrator" />
     <Using Include="AgentStudio.Persistence" />

@@ -29,12 +29,16 @@ import {
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { summarizeStatusBarHostLoad } from './status-bar-host-load';
+import { summarizeCliRepairNote } from './cli-repair-note';
+import { HostCliHealthService } from './host-cli-health.service';
 import { withRouteSegment } from '../../../../services/url-hash.util';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 const HOST_LOAD_REFRESH_MS = 30_000;
+/** The backend probes local CLI health every five minutes; polling faster would only add noise. */
+const CLI_HEALTH_REFRESH_MS = 120_000;
 
 export function formatRunningLabel(local: number, remote: number): string {
   if (local > 0 && remote > 0) return `${local} local · ${remote} remote`;
@@ -56,7 +60,11 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   private readonly jobService = inject(TaskService);
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
+  private readonly cliHealth = inject(HostCliHealthService);
   private hostLoadRefreshHandle: VisibleIntervalHandle | null = null;
+  private cliHealthRefreshHandle: VisibleIntervalHandle | null = null;
+  /** Re-evaluated on every poll so a repaired note fades out on its own. */
+  private readonly cliHealthTick = signal(0);
 
   readonly projectNames = input<string[]>([]);
 
@@ -131,11 +139,26 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     return null;
   });
 
+  /**
+   * AGT-2673: the backend can repair a locally broken CLI by itself. This is
+   * the note that keeps the fix from being silent - and the only acute signal
+   * here is a repair that failed.
+   */
+  readonly cliRepairNote = computed(() => {
+    this.cliHealthTick();
+    return summarizeCliRepairNote(this.cliHealth.snapshot(), new Date());
+  });
+
   ngOnInit(): void {
     this.remoteHosts.refresh();
     this.hostLoadRefreshHandle = setVisibleInterval(
       () => this.remoteHosts.refresh(),
       HOST_LOAD_REFRESH_MS,
+    );
+    this.cliHealth.refresh();
+    this.cliHealthRefreshHandle = setVisibleInterval(
+      () => { this.cliHealth.refresh(); this.cliHealthTick.update(tick => tick + 1); },
+      CLI_HEALTH_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {
       const cli = this.readDefaultCli();
@@ -147,6 +170,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearVisibleInterval(this.hostLoadRefreshHandle);
+    clearVisibleInterval(this.cliHealthRefreshHandle);
   }
 
   runningTooltip(): string {

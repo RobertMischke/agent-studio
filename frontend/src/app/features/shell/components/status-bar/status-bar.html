@@ -22,6 +22,16 @@
     <div class="statusbar__quota">
       <app-usage-hover-panel (openCliAdmin)="openCliAdmin.emit()" />
     </div>
+    @if (cliRepairNote(); as repair) {
+      <app-statusbar-item
+        [button]="false"
+        [icon]="repair.warning ? 'warn' : 'refresh'"
+        [label]="repair.label"
+        [tooltip]="repair.tooltip"
+        [warning]="repair.warning"
+        warningLabel="Local CLI repair failed"
+        testid="status-bar-cli-repair" />
+    }
     @if (activeFallback(); as fallback) {
       <app-statusbar-item
         [button]="false"
