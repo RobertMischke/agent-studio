@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "admin-design-guideline",
   "title": "Admin Surface Design Guideline",
-  "summary": "Binding admin-surface standard: flat full-bleed composition, compact disclosure-first headers, one grid for stream entries, non-redundant sober copy, project identity, operator-grade density, bounded prose width, theme tokens, and locally hosted fonts. Includes a fully specified Activity reference, a screenshot-backed violation audit, an incremental adoption contract, an explicit prohibition on nested outcome-summary boxes, the details-panel addendum, the append-only Navigation citizenship chapter with three light/dark Tree variants, a neutral waiting-decision counter recommendation, state rules, a follow-up slice boundary, visual Dos and Don'ts pairs, and an append-only Applied surfaces register.",
+  "summary": "Binding admin-surface standard: flat full-bleed composition, compact disclosure-first headers, one grid for stream entries, non-redundant sober copy, project identity, operator-grade density, bounded prose width, theme tokens, and locally hosted fonts. Includes a fully specified Activity reference, a screenshot-backed violation audit, an incremental adoption contract, an explicit prohibition on nested outcome-summary boxes, the details-panel addendum, the append-only Navigation citizenship chapter with three light/dark Tree variants, a neutral waiting-decision counter recommendation, state rules, a follow-up slice boundary, visual Dos and Don'ts pairs, and an append-only Applied surfaces register. [Curation 2026-08-17: stays current as a binding living standard. AGENTS.md makes it mandatory reading for admin surface work, and AGT-2579 and AGT-2617 are still in lane 5-human-review, so it is not closable. The former status \"living-standard\" and phase \"accepted\" are outside the descriptor vocabulary and made this Dossier render as \"Descriptor needs repair\"; they are corrected to active/informational, meaning a standing reference with no operator decision pending.]",
   "entrypoint": "index.html",
-  "status": "living-standard",
-  "phase": "accepted",
-  "updatedAt": "2026-08-16T00:00:00Z",
+  "status": "active",
+  "phase": "informational",
+  "updatedAt": "2026-08-17T00:00:00Z",
   "pages": [
     { "title": "Visual dos and don'ts", "path": "pages/dos-and-donts.html" },
     { "title": "Applied surfaces", "path": "pages/applied-surfaces.html" }
