@@ -30,6 +30,7 @@ import {
   buildIsolatedHtmlSrcdoc,
   resolveIsolatedHtmlNavigation,
 } from '../../../../services/sandboxed-html.util';
+import { resolveWikiImageSrc } from '../../../../services/wiki-image-resolver';
 import {
   discoverWorkbenchDecisionMarkup,
   normalizeWorkbenchDecisionResponses,
@@ -77,9 +78,14 @@ export class WorkbenchViewerComponent {
 
   readonly srcdoc = computed(() => {
     const document = this.document();
+    const project = this.projectName();
+    const docRelPath = workbenchDocRelPath(document?.workbench.entryPath);
     return buildIsolatedHtmlSrcdoc(document?.html ?? '', {
       workbenchDecisions: true,
       documentPattern: document?.workbench.pattern === 'ui' ? 'ui' : 'concept',
+      resolveAssetSrc: docRelPath
+        ? (src) => resolveWikiImageSrc(src, docRelPath, (rel) => this.docs.wikiAssetUrl(project, rel))
+        : undefined,
     });
   });
   readonly decisionMarkup = computed(() =>
@@ -250,6 +256,12 @@ export class WorkbenchViewerComponent {
       },
     });
   }
+}
+
+/** `entryPath` is repo-root relative (`docs/...`); the asset resolver wants it docs-root relative. */
+function workbenchDocRelPath(entryPath: string | undefined): string | null {
+  if (!entryPath?.startsWith('docs/')) return null;
+  return entryPath.slice('docs/'.length);
 }
 
 function workbenchLoadError(response: unknown): string {
