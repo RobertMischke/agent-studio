@@ -605,6 +605,10 @@
 </ul>
 
 <p class="small">Layout and theme tokens follow the calm documentation style of <a href="../haertung-verteilte-ausfuehrung/index.html">Distributed Execution</a>. All diagrams are inline SVG and require no external runtime.</p>
+<section id="operator-note-20260818">
+  <h2>Operator note (2026-08-18)</h2>
+  <p><strong>Sequencing modification under consideration:</strong> the full suite should not run per round at all. Model review and cheap deterministic checks run first on every delivery; the full suite runs only as the FINAL gate once a card appears done (no further round expected) - and there it runs once per batch, not once per card. This composes Option A (batch gate) with the review-first ordering: roughly half of today's suite runs are spent on rounds that die at review or on conflicts and would be eliminated outright.</p>
+</section>
 </main>
 </body>
 </html>

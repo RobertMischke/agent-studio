@@ -80,6 +80,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v candidate">new-candidate &rarr; card cut</td>
   <td>Second sighting per log discipline: card AGT-2673 (local CLI self-heal: shim detection + bounded auto-repair + visibility). Related: half-installed-stub class in CrossSlugInfraCircuitBreaker docs.</td>
 </tr>
+<tr>
+  <td class="meta">08-18 11:0x</td>
+  <td>Operator insight: the full test suite runs at the WRONG pipeline position - it burns on every round while ~40% of rounds die at review/conflict anyway. Correct order: model review + cheap checks first; full suite only as the FINAL gate when no further round is expected - composing with batch-gate into one package (review-first per card, one suite per batch at the end).</td>
+  <td class="v covered">covered-by (shapes decision)</td>
+  <td>Feeds the AGT-2648 batch-gate decision as an operator modification; recorded as operator note in that dossier. No separate card - this is decision-shaping, not new work.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
