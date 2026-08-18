@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live improvement log</title>
+<style>
+  :root { --ink:#1d1d1f; --muted:#6e6e73; --line:#e5e5e7; --accent:#8a3ffc; --bg:#ffffff; --soft:#f7f7f8; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 60rem; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  h1 { font-size:1.9rem; font-weight:600; letter-spacing:-.01em; margin:0 0 .3rem; }
+  .sub { color:var(--muted); margin-bottom:2.2rem; }
+  h2 { font-size:1.2rem; font-weight:600; margin:2.4rem 0 .8rem; }
+  table { border-collapse: collapse; width:100%; font-size:.95rem; }
+  th { text-align:left; color:var(--muted); font-weight:600; padding:.5rem .8rem; border-bottom:1px solid var(--line); }
+  td { padding:.6rem .8rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  .v { font-weight:600; white-space:nowrap; }
+  .covered { color:#0f62fe; } .action { color:#b26b00; } .candidate { color:var(--accent); }
+  .meta { color:var(--muted); font-size:.85rem; }
+  footer { margin-top:3rem; color:var(--muted); font-size:.85rem; border-top:1px solid var(--line); padding-top:1rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>Live improvement log</h1>
+<p class="sub">Rolling supervision log, started 2026-08-18 on operator order. Every observation is reconciled
+against in-flight cards and existing dossiers before it may become new work. Verdicts:
+<strong class="covered">covered-by</strong> (an open card owns it),
+<strong class="action">operator-action</strong> (a hand must move, no ticket),
+<strong class="candidate">new-candidate</strong> (card cut only after a second sighting or operator nod).</p>
+
+<h2>Entries</h2>
+<table>
+<tr><th>When</th><th>Observation</th><th>Verdict</th><th>Reconciliation</th></tr>
+<tr>
+  <td class="meta">08-18 09:05</td>
+  <td>Reverse tunnel died a 4th time; each death silently stalls both planes until a manual heal. Keeper exit cause still undiagnosed.</td>
+  <td class="v covered">covered-by</td>
+  <td>AGT-2658 (watchdog, delivered - registration pending) + AGT-2664 (productize). <span class="action">Operator-action:</span> run register-tunnel-watchdog.ps1 once in an admin shell.</td>
+</tr>
+<tr>
+  <td class="meta">08-18 09:10</td>
+  <td>Integrate-on-delivery does not retry after a connectivity outage: AGT-2672's delivery ref sits at integration 'pending' indefinitely after the tunnel came back; acceptance 409s until someone intervenes.</td>
+  <td class="v candidate">new-candidate</td>
+  <td>Not covered: AGT-2544 auto-requeues failed deliveries, AGT-2646 re-adopts attempts - neither re-triggers a pending integration after reconnect. Candidate: integration worker retry-on-reconnect. Watching for a second case before cutting a card.</td>
+</tr>
+<tr>
+  <td class="meta">08-18 09:15</td>
+  <td>Post-processing inflow is structurally 2x outflow whenever the coding fleet runs hot (16 starts vs 8 reviews in 3h measured 08-16).</td>
+  <td class="v covered">covered-by</td>
+  <td>AGT-2648 batch-gate dossier, decision-pending with the operator. No new card.</td>
+</tr>
+<tr>
+  <td class="meta">08-18 09:15</td>
+  <td>Orchestrator loop (accept/requeue/train) dies with the Claude session; twice the lanes piled up overnight (17 cards on 08-13, 16 on 08-15).</td>
+  <td class="v covered">covered-by</td>
+  <td>AGT-2662 dossier scenario 2 (platform-side auto-requeue rail) - decision-pending. Implementation card only after operator picks a scenario.</td>
+</tr>
+<tr>
+  <td class="meta">08-18 09:20</td>
+  <td>Missing Claude 5 family prices degrade the usage panel total to 'Unknown'; display names mix raw ids and pretty names; time-range control unclear.</td>
+  <td class="v covered">covered-by</td>
+  <td>TE-44 (open, in progress since 09:2x). Explicitly NOT considered covered by the archived TE-41 (GPT prices only).</td>
+</tr>
+<tr>
+  <td class="meta">08-18 09:20</td>
+  <td>AGT-2655 (QS pipeline-standard) stuck for days on a partial-integration 409 (missing attributed commit).</td>
+  <td class="v action">operator-action</td>
+  <td>Orchestrator task (mine): card-scoped salvage of the missing fence commit, then accept - same recipe as AGT-2612. Scheduled this morning; no ticket needed.</td>
+</tr>
+<tr>
+  <td class="meta">08-18 09:25</td>
+  <td>Stable is pinned to release 091737Z (detached) while develop carries the task-server decoupling; every rollout before the cutover would re-break claims.</td>
+  <td class="v covered">covered-by</td>
+  <td>AGT-2663 (cutover, in progress). Standing rule logged: absolute rollout hold until 2663 proves the migration.</td>
+</tr>
+</table>
+
+<footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
+</main>
+</body>
+</html>
