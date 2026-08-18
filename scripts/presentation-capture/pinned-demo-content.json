@@ -1,0 +1,1946 @@
+{
+  "schemaVersion": 1,
+  "contentVersion": "2026.08.1",
+  "source": {
+    "kind": "authored-synthetic-fixture",
+    "note": "Invented Wiki and Dossier content for the public demo instance. Organizations, actors, paths, metrics, commits, and dates are fictional; no source repository identity is reconstructed here. Unlike the task snapshot beside it, this file is authored, never exported from a workspace.",
+    "boundary": "No real infrastructure names, hostnames, IP addresses, alerts, owners, provider identifiers, or source project names."
+  },
+  "wiki": [
+    {
+      "project": "demo-app",
+      "owner": "demo-app",
+      "home": {
+        "sections": [
+          {
+            "title": "Start here",
+            "links": [
+              {
+                "relPath": "README.md",
+                "label": "Product overview",
+                "note": "What the demo product is and where the evidence lives."
+              },
+              {
+                "relPath": "dossiers/README.md",
+                "label": "Dossier index",
+                "note": "Six documents across the full lifecycle."
+              }
+            ]
+          },
+          {
+            "title": "Delivery context",
+            "links": [
+              {
+                "relPath": "operations/10-release-checklist.md",
+                "label": "Release checklist",
+                "note": "The gate the reports export had to pass."
+              },
+              {
+                "relPath": "operations/20-export-retention-policy.md",
+                "label": "Export retention policy",
+                "note": "Open policy question behind the retention Dossier."
+              },
+              {
+                "relPath": "quality/10-accessibility-baseline.md",
+                "label": "Accessibility baseline",
+                "note": "The checks every board surface is measured against."
+              }
+            ]
+          }
+        ]
+      },
+      "pages": [
+        {
+          "path": "README.md",
+          "title": "Demo App product overview",
+          "offsetMinutes": 300,
+          "summary": "Customer-facing reporting application used as the pinned demo product.",
+          "blocks": [
+            {
+              "p": "Demo App is a reporting application for a fictional customer, the Lakeside Retail Cooperative. It renders saved report views, exports them, and keeps the export history auditable. Everything on this page is pinned demo data: the product, its customer, its numbers, and its history are invented for the demonstration."
+            },
+            {
+              "h": "What the product does"
+            },
+            {
+              "table": {
+                "columns": [
+                  "Surface",
+                  "Purpose",
+                  "Evidence in this demo"
+                ],
+                "rows": [
+                  [
+                    "Report board",
+                    "Saved views, filters, and column layout for recurring reports.",
+                    "[DEMO-1](task:DEMO-1), [DEMO-11](task:DEMO-11)"
+                  ],
+                  [
+                    "Export",
+                    "CSV export with deterministic escaping and timezone handling.",
+                    "[DEMO-5](task:DEMO-5), [DEMO-16](task:DEMO-16)"
+                  ],
+                  [
+                    "Export history",
+                    "Retention window, download receipts, and deletion proof.",
+                    "[DEMO-17](task:DEMO-17)"
+                  ],
+                  [
+                    "Accessibility",
+                    "Keyboard-first board operation and a contrast baseline.",
+                    "[DEMO-3](task:DEMO-3), [DEMO-7](task:DEMO-7)"
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "How to read this workspace"
+            },
+            {
+              "ul": [
+                "The board carries one delivery thread: plan the reports export, build it, review it, decide it, and document the outcome.",
+                "The [Dossier index](dossiers/README.md) holds the six documents that explain why the work looks the way it does.",
+                "The [reporting domain](product/10-reporting-domain.md) explains the four concepts every card and document refers to.",
+                "The [system map](system/10-system-map.md) shows which parts belong to Demo App and which belong to Demo Platform.",
+                "Recorded runs, tokens, and diffs are replayed fixtures. No agent is editing a repository while you browse."
+              ]
+            },
+            {
+              "note": "Pinned demo data. The cooperative, the report fixtures, and the metrics on this page are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "product/10-reporting-domain.md",
+          "title": "Reporting domain",
+          "offsetMinutes": 303,
+          "summary": "The four concepts every Demo App card and Dossier refers to.",
+          "blocks": [
+            {
+              "p": "A report is a named selection over the cooperative's sales fixtures. A preset freezes a filter set for a team, an export job renders one preset into a file, and a retention window decides how long that file stays downloadable. Four concepts are enough to read every card on the board."
+            },
+            {
+              "table": {
+                "columns": [
+                  "Concept",
+                  "Owns",
+                  "Invariant"
+                ],
+                "rows": [
+                  [
+                    "Report",
+                    "Columns, sort order, and the active filter set.",
+                    "A report always resolves to a deterministic row order."
+                  ],
+                  [
+                    "Preset",
+                    "A named filter set shared inside one team.",
+                    "A preset never changes an existing export."
+                  ],
+                  [
+                    "Export job",
+                    "One rendered file plus its receipt.",
+                    "A finished job is immutable; a repeat is a new job."
+                  ],
+                  [
+                    "Retention window",
+                    "How long a rendered file stays downloadable.",
+                    "Expiry deletes the file and keeps the receipt."
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "Why the split matters"
+            },
+            {
+              "ul": [
+                "A preset can be renamed without rewriting history, because an export keeps its own resolved filter set.",
+                "A retention change never edits a receipt, so the export history stays complete ([DEMO-17](task:DEMO-17)).",
+                "Team presets are the reason export presets are a card of their own ([DEMO-16](task:DEMO-16))."
+              ]
+            },
+            {
+              "h": "Vocabulary"
+            },
+            {
+              "table": {
+                "columns": [
+                  "Term",
+                  "Means",
+                  "Does not mean"
+                ],
+                "rows": [
+                  [
+                    "Saved view",
+                    "A personal report with its filters.",
+                    "A shared team preset."
+                  ],
+                  [
+                    "Preset",
+                    "A named filter set for a team.",
+                    "A scheduled export."
+                  ],
+                  [
+                    "Receipt",
+                    "The immutable record of one export job.",
+                    "The exported file itself."
+                  ]
+                ]
+              }
+            },
+            {
+              "note": "Pinned demo data. The domain, its terms, and its invariants are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "system/10-system-map.md",
+          "title": "System map",
+          "offsetMinutes": 306,
+          "summary": "Which component owns which part of the reporting flow, and where Demo Platform begins.",
+          "blocks": [
+            {
+              "p": "Demo App is a small client, a report API, and an export worker. Demo Platform sits behind it as a supporting service. The split exists so cross-project navigation in this demo shows real structure instead of two unrelated card lists."
+            },
+            {
+              "h": "Components"
+            },
+            {
+              "table": {
+                "columns": [
+                  "Component",
+                  "Belongs to",
+                  "Responsibility",
+                  "Talks to"
+                ],
+                "rows": [
+                  [
+                    "Report client",
+                    "Demo App",
+                    "Board, filters, export dialog, and download list.",
+                    "Report API"
+                  ],
+                  [
+                    "Report API",
+                    "Demo App",
+                    "Report resolution, preset storage, export job intake.",
+                    "Export worker, catalog service"
+                  ],
+                  [
+                    "Export worker",
+                    "Demo App",
+                    "Renders a job into a file and writes the receipt.",
+                    "File store"
+                  ],
+                  [
+                    "Catalog service",
+                    "Demo Platform",
+                    "Product and store catalog reads for report labels.",
+                    "Report API"
+                  ],
+                  [
+                    "Health and logging",
+                    "Demo Platform",
+                    "Health endpoint and structured request logging.",
+                    "Both projects"
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "Request path for one export"
+            },
+            {
+              "ol": [
+                "The client submits a preset and a date range to the report API.",
+                "The report API resolves labels through the Demo Platform catalog service.",
+                "An export job is queued; the client subscribes to its progress.",
+                "The export worker renders the file, writes the receipt, and marks the job complete.",
+                "The retention window starts when the receipt is written."
+              ]
+            },
+            {
+              "h": "Boundaries"
+            },
+            {
+              "ul": [
+                "Demo App never reads the catalog store directly; it goes through the catalog service.",
+                "Demo Platform never renders a report file. It only answers catalog, health, and logging calls.",
+                "The catalog cache policy belongs to Demo Platform, not to the report API. It is documented in the Demo Platform Wiki, which the project switcher reaches in one step."
+              ]
+            },
+            {
+              "note": "Pinned demo data. Component names, boundaries, and the request path are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "quality/10-accessibility-baseline.md",
+          "title": "Accessibility baseline",
+          "offsetMinutes": 312,
+          "summary": "The checks every Demo App surface is measured against before a release decision.",
+          "blocks": [
+            {
+              "p": "The baseline is the shared definition of done for interactive surfaces. It is short on purpose: a check that nobody can run before a release is not a baseline."
+            },
+            {
+              "table": {
+                "columns": [
+                  "Check",
+                  "Rule",
+                  "State in this demo"
+                ],
+                "rows": [
+                  [
+                    "Keyboard reach",
+                    "Every board action is reachable without a pointer.",
+                    "Met, proven by [DEMO-7](task:DEMO-7)"
+                  ],
+                  [
+                    "Focus visibility",
+                    "Focus stays visible on every interactive element in both themes.",
+                    "Met"
+                  ],
+                  [
+                    "Contrast",
+                    "Body text and status pills hold contrast in light and dark.",
+                    "Met"
+                  ],
+                  [
+                    "Table semantics",
+                    "Report tables expose row and column headers.",
+                    "Partial, tracked by [DEMO-18](task:DEMO-18)"
+                  ],
+                  [
+                    "Empty states",
+                    "Empty results explain the next action instead of showing a blank panel.",
+                    "Open, tracked by [DEMO-14](task:DEMO-14)"
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "How the baseline is proven"
+            },
+            {
+              "ul": [
+                "Each release candidate captures the board, export dialog, and report table in light and dark.",
+                "A failed check is recorded as a finding on the delivering card, not as a separate quality backlog.",
+                "The [board keyboard shortcuts Dossier](../dossiers/board-keyboard-shortcuts/index.html) documents the measured outcome of the keyboard work."
+              ]
+            },
+            {
+              "note": "Pinned demo data. The check list and its states are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "operations/10-release-checklist.md",
+          "title": "Release checklist",
+          "offsetMinutes": 318,
+          "summary": "The bounded gate a reporting change passes before an operator decides the release.",
+          "blocks": [
+            {
+              "p": "The checklist is what an operator walks through before answering a release decision. It is deliberately short so the decision stays about the delivery, not about the process."
+            },
+            {
+              "ol": [
+                "Focused tests for the changed behavior pass and are attached to the card.",
+                "The delivery diff is attached and readable without leaving the task.",
+                "Both themes are captured for every changed surface.",
+                "Dependency license notices are current ([DEMO-13](task:DEMO-13)).",
+                "Open review findings are either closed or recorded as accepted risk.",
+                "The release decision is answered by an operator, never by the review loop."
+              ]
+            },
+            {
+              "h": "What blocks a release"
+            },
+            {
+              "table": {
+                "columns": [
+                  "Signal",
+                  "Blocks?",
+                  "Why"
+                ],
+                "rows": [
+                  [
+                    "Failing focused test",
+                    "Yes",
+                    "The delivery is not reviewable while its own behavior is unproven."
+                  ],
+                  [
+                    "Missing evidence file",
+                    "Yes",
+                    "A decision without attached proof cannot be audited later."
+                  ],
+                  [
+                    "Open low-severity finding",
+                    "No",
+                    "It can be recorded as accepted risk in the release decision."
+                  ],
+                  [
+                    "Missing empty-state assertion",
+                    "Operator decides",
+                    "The open question behind [DEMO-9](task:DEMO-9)."
+                  ]
+                ]
+              }
+            },
+            {
+              "p": "The chosen release direction and its slice boundaries live in the [reports export release Dossier](../dossiers/reports-export-release/index.html)."
+            },
+            {
+              "note": "Pinned demo data. The checklist, signals, and thresholds are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "operations/20-export-retention-policy.md",
+          "title": "Export retention policy",
+          "offsetMinutes": 324,
+          "summary": "Current retention behavior and the open policy question behind the retention Dossier.",
+          "blocks": [
+            {
+              "p": "A rendered export stays downloadable for a retention window. The window is currently a build-time default; the durable policy is still open and is being decided in the [export retention and privacy Dossier](../dossiers/export-retention/index.html)."
+            },
+            {
+              "h": "Current behavior"
+            },
+            {
+              "ul": [
+                "A finished export job writes a file plus a receipt.",
+                "The default window is 30 days from the receipt timestamp.",
+                "Expiry deletes the file and keeps the receipt, so history stays complete.",
+                "There is no deletion proof a customer can request today."
+              ]
+            },
+            {
+              "h": "Consequences per window"
+            },
+            {
+              "table": {
+                "columns": [
+                  "Window",
+                  "Storage",
+                  "Recovery",
+                  "Privacy exposure"
+                ],
+                "rows": [
+                  [
+                    "7 days",
+                    "Lowest",
+                    "A missed download means a rerun.",
+                    "Smallest"
+                  ],
+                  [
+                    "30 days",
+                    "Moderate",
+                    "Covers a monthly reporting cycle.",
+                    "Moderate"
+                  ],
+                  [
+                    "90 days",
+                    "Highest",
+                    "Covers a quarter without reruns.",
+                    "Largest"
+                  ]
+                ]
+              }
+            },
+            {
+              "p": "The refinement card for this policy is [DEMO-17](task:DEMO-17)."
+            },
+            {
+              "note": "Pinned demo data. Windows, storage figures, and the customer expectation are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "dossiers/README.md",
+          "title": "Dossier index",
+          "offsetMinutes": 330,
+          "summary": "The six pinned Dossiers of Demo App and the lifecycle state each one demonstrates.",
+          "blocks": [
+            {
+              "p": "Each Dossier below is a folder with a self-contained document and a descriptor. Together they cover every state a Dossier can hold, including the projection the product shows for decided work that is still being delivered."
+            },
+            {
+              "table": {
+                "columns": [
+                  "Key",
+                  "Dossier",
+                  "Stored state",
+                  "What it demonstrates"
+                ],
+                "rows": [
+                  [
+                    "DEMO-W1",
+                    "[Reusable dashboard filters](dashboard-filters/index.html)",
+                    "active / shaping",
+                    "Open shaping work with no option chosen yet."
+                  ],
+                  [
+                    "DEMO-W2",
+                    "[Export retention and privacy](export-retention/index.html)",
+                    "decision-pending / decision-ready",
+                    "Two open decision points with a recommendation."
+                  ],
+                  [
+                    "DEMO-W3",
+                    "[Onboarding checklist scope](onboarding-checklist/index.html)",
+                    "decided / decision-ready",
+                    "A recorded decision that has not spawned cards yet."
+                  ],
+                  [
+                    "DEMO-W4",
+                    "[Reports export release](reports-export-release/index.html)",
+                    "decided / decision-ready",
+                    "A decided direction with live delivery cards."
+                  ],
+                  [
+                    "DEMO-W5",
+                    "[Board keyboard shortcuts](board-keyboard-shortcuts/index.html)",
+                    "documented / decision-ready",
+                    "Durable documentation after terminal delivery."
+                  ],
+                  [
+                    "DEMO-W6",
+                    "[Legacy notification banner experiment](legacy-notification-banner/index.html)",
+                    "archived / decision-ready",
+                    "A discarded proposal with an archive receipt."
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "How to read a Dossier"
+            },
+            {
+              "ul": [
+                "The stored state is the descriptor. The card points beside it are projected live from the seeded cards.",
+                "\"In implementation\" is not a stored state: it is decided plus non-terminal referenced cards, visible on DEMO-W4.",
+                "Decision points are part of the document. In this demo they are pinned fixtures and cannot be answered."
+              ]
+            },
+            {
+              "note": "Pinned demo data. Every Dossier in this folder is invented for the demo instance."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "project": "demo-platform",
+      "owner": "demo-platform",
+      "home": {
+        "sections": [
+          {
+            "title": "Start here",
+            "links": [
+              {
+                "relPath": "README.md",
+                "label": "Service overview",
+                "note": "What the supporting service does for Demo App."
+              },
+              {
+                "relPath": "security/10-demo-security-boundary.md",
+                "label": "Demo security boundary",
+                "note": "Why this instance cannot execute anything."
+              }
+            ]
+          },
+          {
+            "title": "Operations",
+            "links": [
+              {
+                "relPath": "operations/10-observability-guide.md",
+                "label": "Observability guide",
+                "note": "Which signals exist and what they are named."
+              },
+              {
+                "relPath": "operations/30-incident-checklist.md",
+                "label": "Incident checklist",
+                "note": "The bounded response path."
+              }
+            ]
+          }
+        ]
+      },
+      "pages": [
+        {
+          "path": "README.md",
+          "title": "Demo Platform service overview",
+          "offsetMinutes": 336,
+          "summary": "The supporting service behind Demo App: catalog reads, health, and request logging.",
+          "blocks": [
+            {
+              "p": "Demo Platform is a small service that Demo App depends on. It exists in this demo so cross-project navigation, platform work, operations, and archived history are credible instead of decorative."
+            },
+            {
+              "h": "Responsibilities"
+            },
+            {
+              "table": {
+                "columns": [
+                  "Capability",
+                  "Consumer",
+                  "Card"
+                ],
+                "rows": [
+                  [
+                    "Catalog reads for report labels",
+                    "Report API",
+                    "[PLAT-3](task:PLAT-3)"
+                  ],
+                  [
+                    "Health endpoint",
+                    "Operations",
+                    "[PLAT-1](task:PLAT-1)"
+                  ],
+                  [
+                    "Structured request logging",
+                    "Both projects",
+                    "[PLAT-2](task:PLAT-2)"
+                  ],
+                  [
+                    "Task retry metrics",
+                    "Operations",
+                    "[PLAT-4](task:PLAT-4)"
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "Non-goals"
+            },
+            {
+              "ul": [
+                "Rendering, exporting, or storing report files.",
+                "Owning the reporting domain model or its retention policy.",
+                "Any execution authority in this demo instance."
+              ]
+            },
+            {
+              "note": "Pinned demo data. Capabilities, consumers, and history are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "system/10-request-lifecycle.md",
+          "title": "Request lifecycle",
+          "offsetMinutes": 342,
+          "summary": "The stages one catalog request passes and the budget for each stage.",
+          "blocks": [
+            {
+              "p": "Every catalog request passes the same five stages. The budgets below are the invented service targets used throughout this demo."
+            },
+            {
+              "table": {
+                "columns": [
+                  "Stage",
+                  "Does",
+                  "Budget",
+                  "On failure"
+                ],
+                "rows": [
+                  [
+                    "Accept",
+                    "Validates the request shape and size.",
+                    "2 ms",
+                    "Rejects with a typed error"
+                  ],
+                  [
+                    "Authorize",
+                    "Checks the calling service identity.",
+                    "3 ms",
+                    "Rejects without detail"
+                  ],
+                  [
+                    "Resolve",
+                    "Reads the catalog entry, cache first.",
+                    "20 ms",
+                    "Falls back to the store once"
+                  ],
+                  [
+                    "Compose",
+                    "Builds the response projection.",
+                    "5 ms",
+                    "Returns a partial projection"
+                  ],
+                  [
+                    "Log",
+                    "Writes the structured request record.",
+                    "1 ms",
+                    "Drops the record, never the response"
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "Rules"
+            },
+            {
+              "ul": [
+                "A stage never retries a previous stage. Retries are the caller's decision.",
+                "A request that exceeds its total budget is logged as slow, not cancelled.",
+                "Cache behavior is defined in the [cache policy](../operations/20-cache-policy.md)."
+              ]
+            },
+            {
+              "note": "Pinned demo data. Stages, budgets, and failure behavior are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "operations/10-observability-guide.md",
+          "title": "Observability guide",
+          "offsetMinutes": 348,
+          "summary": "The three signals this service emits and the names they use.",
+          "blocks": [
+            {
+              "p": "The service emits three signals and nothing else. Adding a fourth is a decision, not a code change."
+            },
+            {
+              "table": {
+                "columns": [
+                  "Signal",
+                  "Name",
+                  "Cardinality",
+                  "Used for"
+                ],
+                "rows": [
+                  [
+                    "Counter",
+                    "catalog.requests.total",
+                    "route, outcome",
+                    "Traffic shape and error ratio"
+                  ],
+                  [
+                    "Histogram",
+                    "catalog.request.duration",
+                    "route",
+                    "Budget compliance per stage"
+                  ],
+                  [
+                    "Counter",
+                    "catalog.cache.events",
+                    "kind",
+                    "Hit, miss, and eviction balance"
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "Conventions"
+            },
+            {
+              "ul": [
+                "Names are lowercase and dot-separated. A label is only added when someone can act on it.",
+                "Request logs carry a correlation id, never a payload body.",
+                "Retry counting is defined once, in [PLAT-4](task:PLAT-4), so a retried task is not counted twice."
+              ]
+            },
+            {
+              "h": "What is deliberately absent"
+            },
+            {
+              "ul": [
+                "Per-customer labels, which would turn a metric into a privacy surface.",
+                "Free-form log fields, which make retention and scrubbing unprovable.",
+                "Alert routing, which belongs to the operator of a real deployment and not to this demo."
+              ]
+            },
+            {
+              "note": "Pinned demo data. Signal names, labels, and conventions are invented for the demo instance. No real infrastructure, host, or provider is described."
+            }
+          ]
+        },
+        {
+          "path": "operations/20-cache-policy.md",
+          "title": "Cache policy",
+          "offsetMinutes": 354,
+          "summary": "Catalog cache windows, invalidation, and the one guarantee callers may rely on.",
+          "blocks": [
+            {
+              "p": "Catalog reads dominate the traffic, so they are cached. The policy is small enough that a caller can reason about staleness without reading the implementation."
+            },
+            {
+              "table": {
+                "columns": [
+                  "Entry",
+                  "Window",
+                  "Invalidated by",
+                  "Stale reads allowed"
+                ],
+                "rows": [
+                  [
+                    "Product label",
+                    "10 minutes",
+                    "Catalog write",
+                    "Yes, up to the window"
+                  ],
+                  [
+                    "Store label",
+                    "60 minutes",
+                    "Catalog write",
+                    "Yes, up to the window"
+                  ],
+                  [
+                    "Catalog index",
+                    "5 minutes",
+                    "Any catalog write",
+                    "No"
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "Guarantee"
+            },
+            {
+              "p": "A caller that reads twice within one request sees the same value. Nothing else is promised: a cache is a latency tool here, not a consistency mechanism. The delivery for this behavior is [PLAT-3](task:PLAT-3)."
+            },
+            {
+              "note": "Pinned demo data. Windows, entries, and guarantees are invented for the demo instance."
+            }
+          ]
+        },
+        {
+          "path": "operations/30-incident-checklist.md",
+          "title": "Incident checklist",
+          "offsetMinutes": 360,
+          "summary": "The bounded response path for a catalog or logging incident in this demo product.",
+          "blocks": [
+            {
+              "p": "The checklist covers the demo product's own incidents. It is written as a sequence because the first three steps are what an operator actually does under pressure."
+            },
+            {
+              "ol": [
+                "Confirm the health endpoint answer and record the time ([PLAT-1](task:PLAT-1)).",
+                "Decide one of: degraded reads, stale reads, or full stop. Write the choice down before acting.",
+                "If reads are degraded, widen the cache window before touching the store.",
+                "Capture the request log correlation ids for the affected window.",
+                "Close with a short note: what failed, what was decided, what the next check is."
+              ]
+            },
+            {
+              "h": "Severity"
+            },
+            {
+              "table": {
+                "columns": [
+                  "Level",
+                  "Meaning",
+                  "Response"
+                ],
+                "rows": [
+                  [
+                    "S3",
+                    "One route degraded, reports still render.",
+                    "Note and observe."
+                  ],
+                  [
+                    "S2",
+                    "Catalog labels stale beyond the window.",
+                    "Widen window, then investigate."
+                  ],
+                  [
+                    "S1",
+                    "Catalog unavailable, exports blocked.",
+                    "Full stop, operator decision required."
+                  ]
+                ]
+              }
+            },
+            {
+              "note": "Pinned demo data. Severities, steps, and thresholds are invented for the demo instance. No real on-call rotation, alert, or owner is named."
+            }
+          ]
+        },
+        {
+          "path": "security/10-demo-security-boundary.md",
+          "title": "Demo security boundary",
+          "offsetMinutes": 366,
+          "summary": "What this browsable instance can and cannot do, stated for the visitor.",
+          "blocks": [
+            {
+              "p": "This instance shows execution evidence. It cannot claim, start, continue, or complete work. The boundary is enforced by the server, not by hidden buttons in the browser."
+            },
+            {
+              "table": {
+                "columns": [
+                  "Surface",
+                  "Visitor can",
+                  "Visitor cannot"
+                ],
+                "rows": [
+                  [
+                    "Board and cards",
+                    "Open every lane and inspect card detail.",
+                    "Move, create, edit, or reissue a card."
+                  ],
+                  [
+                    "Run evidence",
+                    "Read recorded timelines, tokens, diffs, and screenshots.",
+                    "Start, continue, or steer a run."
+                  ],
+                  [
+                    "Wiki and Dossiers",
+                    "Read every seeded page and document.",
+                    "Write a page or answer a decision point."
+                  ],
+                  [
+                    "Search and events",
+                    "Search the seeded content and watch replayed events.",
+                    "Reach any endpoint that would invoke a tool."
+                  ]
+                ]
+              }
+            },
+            {
+              "h": "Why the data is safe to publish"
+            },
+            {
+              "ul": [
+                "Both projects are generated from committed pinned inputs, not imported from a live workspace.",
+                "Every organization, actor, path, metric, commit, and date in this demo is invented.",
+                "A reset replaces the whole runtime from the same inputs, so a visitor cannot leave anything behind."
+              ]
+            },
+            {
+              "h": "What a decision point means here"
+            },
+            {
+              "p": "The Dossier index of Demo App contains decision points. In this instance they are pinned fixtures: they show how an operator would decide, and they never start an operation."
+            },
+            {
+              "note": "Pinned demo data. This page describes the demo instance itself and names no real infrastructure."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "dossiers": {
+    "project": "demo-app",
+    "root": "dossiers",
+    "items": [
+      {
+        "id": "dashboard-filters",
+        "key": "DEMO-W1",
+        "title": "Reusable dashboard filters",
+        "summary": "Shape the filter reuse problem before proposing a solution: friction, goals, constraints, and the next evidence step.",
+        "status": "active",
+        "phase": "shaping",
+        "editedBy": "Demo Product Lead",
+        "offsetMinutes": 372,
+        "sourceTaskKeys": [
+          "DEMO-10"
+        ],
+        "relatedTaskKeys": [],
+        "lead": "People rebuild the same filter set several times a day. This document collects what we observed, what a good outcome would be, and what we still need to find out. No option is chosen yet.",
+        "blocks": [
+          {
+            "h": "Observed friction"
+          },
+          {
+            "ul": [
+              "A weekly review rebuilds the same four filters on three different reports.",
+              "Filters are lost when the report is reopened from a link, so the link is not shareable in practice.",
+              "Two teams use different names for the same filter set, which makes a handover a translation exercise."
+            ]
+          },
+          {
+            "h": "User goals"
+          },
+          {
+            "table": {
+              "columns": [
+                "Goal",
+                "Signal that it is met"
+              ],
+              "rows": [
+                [
+                  "Reopen yesterday's view without rebuilding it.",
+                  "A returning user reaches the same rows in one action."
+                ],
+                [
+                  "Share a view with a colleague.",
+                  "A shared link resolves to the same rows for both people."
+                ],
+                [
+                  "Keep a team's vocabulary stable.",
+                  "A filter set has one name that survives a handover."
+                ]
+              ]
+            }
+          },
+          {
+            "h": "Known constraints"
+          },
+          {
+            "ul": [
+              "A saved filter must not change the result of an export that already exists.",
+              "The board must stay usable without saved filters; this is an accelerator, not a prerequisite.",
+              "Nothing here may widen what a report can read."
+            ]
+          },
+          {
+            "h": "Open research questions"
+          },
+          {
+            "ol": [
+              "Do people want a personal saved view, a team-shared preset, or both? The two imply different ownership and deletion rules.",
+              "Is the filter set or the column layout the thing people actually want back?"
+            ]
+          },
+          {
+            "h": "Next evidence step"
+          },
+          {
+            "p": "Watch one weekly review end to end and record how many filter rebuilds happen, which of them are identical, and where the reviewer looks first. That measurement decides whether this becomes a preset feature, a link-state fix, or nothing."
+          },
+          {
+            "note": "No option is presented as chosen. This document stays in shaping until the observation above exists."
+          }
+        ],
+        "links": [
+          {
+            "label": "Product overview",
+            "href": "../../README.md"
+          },
+          {
+            "label": "Dossier index",
+            "href": "../README.md"
+          }
+        ],
+        "schemaVersion": 2,
+        "lifecycleState": "in-progress",
+        "lifecycleHistory": [
+          {
+            "state": "in-progress",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 372,
+            "note": "Opened after the third repeated filter rebuild in one weekly review."
+          }
+        ]
+      },
+      {
+        "id": "export-retention",
+        "key": "DEMO-W2",
+        "title": "Export retention and privacy",
+        "summary": "Compare 7, 30, and 90-day retention for rendered exports and leave the policy and deletion-proof questions open for an operator.",
+        "status": "decision-pending",
+        "phase": "decision-ready",
+        "editedBy": "Demo Operator",
+        "offsetMinutes": 378,
+        "sourceTaskKeys": [
+          "DEMO-17"
+        ],
+        "relatedTaskKeys": [],
+        "lead": "A rendered export is a copy of customer data with a lifetime. This document compares three windows, records what each one costs, recommends 30 days, and leaves both open decisions to the operator.",
+        "blocks": [
+          {
+            "h": "What we are deciding"
+          },
+          {
+            "p": "Two questions are open. The first sets the default retention window. The second decides whether a customer can request proof that an expired export was deleted. They are separable: a short window without deletion proof is a defensible position, and so is a longer window with proof."
+          },
+          {
+            "h": "Comparison"
+          },
+          {
+            "table": {
+              "columns": [
+                "Window",
+                "Storage per month",
+                "Recovery",
+                "Privacy consequence"
+              ],
+              "rows": [
+                [
+                  "7 days",
+                  "Around 40 GB",
+                  "A missed download costs a rerun.",
+                  "Smallest copy surface; least to explain to a customer."
+                ],
+                [
+                  "30 days",
+                  "Around 170 GB",
+                  "Covers a full monthly reporting cycle.",
+                  "Moderate copy surface; matches the current default."
+                ],
+                [
+                  "90 days",
+                  "Around 510 GB",
+                  "Covers a quarter with no reruns.",
+                  "Largest copy surface; the hardest to justify without proof of deletion."
+                ]
+              ]
+            }
+          },
+          {
+            "h": "Recommendation"
+          },
+          {
+            "p": "Keep 30 days. It matches the reporting cycle people actually work in, and the storage cost is not the binding constraint. The stronger argument for 7 days is privacy, and deletion proof addresses that concern more directly than a shorter window does."
+          },
+          {
+            "decision": {
+              "id": "retention-window",
+              "kind": "single",
+              "question": "Which retention window becomes the durable default?",
+              "options": [
+                {
+                  "id": "window-7",
+                  "label": "7 days",
+                  "summary": "Smallest copy surface, reruns become normal."
+                },
+                {
+                  "id": "window-30",
+                  "label": "30 days (recommended)",
+                  "summary": "Matches the monthly reporting cycle."
+                },
+                {
+                  "id": "window-90",
+                  "label": "90 days",
+                  "summary": "Quarter coverage, largest exposure."
+                }
+              ],
+              "comment": "Optional note for the retention decision"
+            }
+          },
+          {
+            "decision": {
+              "id": "deletion-proof",
+              "kind": "single",
+              "question": "Do we owe a customer proof that an expired export was deleted?",
+              "options": [
+                {
+                  "id": "proof-receipt",
+                  "label": "Deletion receipt",
+                  "summary": "Keep a signed receipt per expired export."
+                },
+                {
+                  "id": "proof-report",
+                  "label": "Periodic report",
+                  "summary": "One report per period instead of per export."
+                },
+                {
+                  "id": "proof-none",
+                  "label": "No proof",
+                  "summary": "State the window and keep no deletion evidence."
+                }
+              ],
+              "comment": "Optional note for the deletion-proof decision"
+            }
+          },
+          {
+            "h": "Residual risk"
+          },
+          {
+            "table": {
+              "columns": [
+                "Risk",
+                "If we choose the recommendation",
+                "Mitigation"
+              ],
+              "rows": [
+                [
+                  "A customer asks for deletion evidence we do not have.",
+                  "Open until the second decision is answered.",
+                  "Answer the deletion-proof decision in the same round."
+                ],
+                [
+                  "An export outlives its usefulness.",
+                  "Bounded by the 30-day window.",
+                  "Expiry deletes the file and keeps the receipt."
+                ],
+                [
+                  "Storage grows faster than the fixture suggests.",
+                  "Possible if exports become larger.",
+                  "Revisit the window when storage doubles, not on a calendar."
+                ]
+              ]
+            }
+          },
+          {
+            "note": "In this demo the decision points are pinned fixtures. They show the surface an operator would use and cannot start an operation."
+          }
+        ],
+        "links": [
+          {
+            "label": "Export retention policy",
+            "href": "../../operations/20-export-retention-policy.md"
+          },
+          {
+            "label": "Dossier index",
+            "href": "../README.md"
+          }
+        ],
+        "schemaVersion": 1
+      },
+      {
+        "id": "onboarding-checklist",
+        "key": "DEMO-W3",
+        "title": "Onboarding checklist scope",
+        "summary": "Record the chosen three-step onboarding checklist, the rejected wizard alternative, and the acceptance boundary.",
+        "status": "decided",
+        "phase": "decision-ready",
+        "editedBy": "Demo Product Lead",
+        "offsetMinutes": 384,
+        "sourceTaskKeys": [
+          "DEMO-2"
+        ],
+        "relatedTaskKeys": [],
+        "lead": "A new user needs three things before Demo App is useful: one connected data source, one saved report, and one successful export. This document records that scope as decided, and why the larger guided wizard was rejected.",
+        "blocks": [
+          {
+            "h": "Decision"
+          },
+          {
+            "table": {
+              "columns": [
+                "Field",
+                "Value"
+              ],
+              "rows": [
+                [
+                  "Chosen option",
+                  "Three-step checklist shown on the empty board"
+                ],
+                [
+                  "Rejected option",
+                  "Guided multi-screen wizard"
+                ],
+                [
+                  "Decision owner",
+                  "Demo Product Lead"
+                ],
+                [
+                  "Decided at",
+                  "2026-08-09, fixed in this pinned document"
+                ],
+                [
+                  "Delivery",
+                  "Not started; no implementation cards exist yet"
+                ]
+              ]
+            }
+          },
+          {
+            "decision": {
+              "id": "checklist-scope",
+              "kind": "single",
+              "question": "Which onboarding shape do we build?",
+              "options": [
+                {
+                  "id": "three-step-checklist",
+                  "label": "Three-step checklist (chosen)",
+                  "summary": "Dismissible checklist on the empty board, product stays visible."
+                },
+                {
+                  "id": "guided-wizard",
+                  "label": "Guided wizard",
+                  "summary": "Multi-screen flow that hides the board while it explains it."
+                }
+              ],
+              "comment": "Optional note for the onboarding decision"
+            }
+          },
+          {
+            "h": "The three steps"
+          },
+          {
+            "ol": [
+              "Connect one data source.",
+              "Save one report view.",
+              "Export it once and open the file."
+            ]
+          },
+          {
+            "h": "Why not the wizard"
+          },
+          {
+            "ul": [
+              "A wizard hides the product while it explains the product. The checklist leaves the board visible.",
+              "A wizard has to be maintained as a second navigation path with its own states.",
+              "The checklist is dismissible and repeatable; a wizard is neither without extra work."
+            ]
+          },
+          {
+            "h": "Acceptance boundary"
+          },
+          {
+            "ul": [
+              "The checklist appears only while at least one step is open, and never blocks the board.",
+              "Completing the third step dismisses it permanently for that user.",
+              "No step depends on data that a new user cannot produce in the first session.",
+              "Anything beyond these three steps is out of scope for this decision."
+            ]
+          },
+          {
+            "note": "This decision is recorded, not delivered. The Dossier deliberately carries no implementation cards yet."
+          }
+        ],
+        "links": [
+          {
+            "label": "Product overview",
+            "href": "../../README.md"
+          },
+          {
+            "label": "Dossier index",
+            "href": "../README.md"
+          }
+        ],
+        "schemaVersion": 2,
+        "lifecycleState": "decided",
+        "lifecycleHistory": [
+          {
+            "state": "in-progress",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 366,
+            "note": "Collected the three things a new user needs before the product is useful."
+          },
+          {
+            "state": "review-requested",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 378,
+            "note": "Checklist and wizard compared side by side."
+          },
+          {
+            "state": "decided",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 384,
+            "note": "Three-step checklist chosen; delivery not started."
+          }
+        ],
+        "decision": {
+          "outcome": "feature-spawn",
+          "state": "succeeded",
+          "operationId": "demo-onboarding-checklist-0001",
+          "sourceRevision": "d3e0c9f84a1b7e62551a7a51c3b84cf6d2a09871",
+          "preparedAt": 380,
+          "preparedBy": "Demo Product Lead",
+          "confirmedAt": 382,
+          "confirmedBy": "Demo Operator",
+          "decidedAt": 384,
+          "spawnedTaskKeys": [],
+          "responses": [
+            {
+              "decisionId": "checklist-scope",
+              "kind": "single",
+              "selectedOptionIds": [
+                "three-step-checklist"
+              ],
+              "comment": "Keep the board visible while a new user completes the three steps."
+            }
+          ],
+          "taskDraft": {
+            "title": "Add the three-step onboarding checklist",
+            "goal": "Show a dismissible three-step checklist on the empty board so a new user reaches a first export without leaving the product.",
+            "acceptanceCriteria": [
+              "The checklist appears only while at least one step is open and never blocks the board.",
+              "Completing the third step dismisses it permanently for that user.",
+              "No step depends on data a new user cannot produce in the first session."
+            ],
+            "evidenceLinks": [],
+            "chosenOption": "Three-step checklist",
+            "relatedTaskKeys": [
+              "DEMO-2"
+            ],
+            "initialLane": "1-preparation",
+            "mode": "coding",
+            "taskType": "feature"
+          }
+        }
+      },
+      {
+        "id": "reports-export-release",
+        "key": "DEMO-W4",
+        "title": "Reports export release",
+        "summary": "The chosen implementation direction for the CSV export, its slice boundaries, review criteria, and the current delivery state.",
+        "status": "decided",
+        "phase": "decision-ready",
+        "editedBy": "Demo Operator",
+        "offsetMinutes": 390,
+        "sourceTaskKeys": [],
+        "relatedTaskKeys": [
+          "DEMO-12",
+          "DEMO-13",
+          "DEMO-14",
+          "DEMO-15"
+        ],
+        "lead": "The reports export ships as four bounded slices with one operator decision at the end. This document holds the direction; the card points beside it are projected live from the board and are not copied into this text.",
+        "blocks": [
+          {
+            "h": "Chosen direction"
+          },
+          {
+            "p": "Render exports server-side from the same report resolution the board uses, stream progress into the activity feed, and keep the file immutable once its receipt is written. The alternative, rendering in the client, was rejected because a large export would then depend on one browser session staying open. Deterministic cell escaping and timezone handling were already delivered and reviewed before this decision; they are the reason the release question is now about the remaining four slices only."
+          },
+          {
+            "decision": {
+              "id": "export-render-location",
+              "kind": "single",
+              "question": "Where is an export rendered?",
+              "options": [
+                {
+                  "id": "render-server-side",
+                  "label": "Server side (chosen)",
+                  "summary": "The export worker renders the file and writes the receipt."
+                },
+                {
+                  "id": "render-in-client",
+                  "label": "In the client",
+                  "summary": "The browser renders the file, so a large export depends on one open session."
+                }
+              ],
+              "comment": "Optional note for the export release decision"
+            }
+          },
+          {
+            "h": "Slice boundaries"
+          },
+          {
+            "table": {
+              "columns": [
+                "Slice",
+                "Delivery card",
+                "Done when"
+              ],
+              "rows": [
+                [
+                  "Progress stream",
+                  "[DEMO-12](task:DEMO-12)",
+                  "The activity feed shows start, progress, and completion of one export job."
+                ],
+                [
+                  "License notices",
+                  "[DEMO-13](task:DEMO-13)",
+                  "The automated review reports no missing dependency notice."
+                ],
+                [
+                  "Empty-state copy",
+                  "[DEMO-14](task:DEMO-14)",
+                  "An empty result explains the next action in both themes."
+                ],
+                [
+                  "Report sorting",
+                  "[DEMO-15](task:DEMO-15)",
+                  "A refreshed report keeps the sort order the export used."
+                ]
+              ]
+            }
+          },
+          {
+            "h": "Review criteria"
+          },
+          {
+            "ul": [
+              "Exported values stay RFC 4180 compatible.",
+              "Every evidence file stays attached to the delivering card.",
+              "The release itself is an explicit operator decision, never an automatic promotion."
+            ]
+          },
+          {
+            "h": "Current state, as written"
+          },
+          {
+            "p": "At the time this document was pinned, the progress stream was in delivery, license notices were in automated review, the empty-state copy was waiting for a human, and report sorting was complete. The live card points above are the authority; this paragraph is deliberately kept as the author's note so the difference between a document and a projection stays visible."
+          },
+          {
+            "note": "Pinned demo data. Slice boundaries and criteria are invented for the demo instance."
+          }
+        ],
+        "links": [
+          {
+            "label": "Release checklist",
+            "href": "../../operations/10-release-checklist.md"
+          },
+          {
+            "label": "Dossier index",
+            "href": "../README.md"
+          }
+        ],
+        "schemaVersion": 2,
+        "lifecycleState": "decided",
+        "lifecycleHistory": [
+          {
+            "state": "in-progress",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 372,
+            "note": "Export direction drafted from the reviewed escaping work."
+          },
+          {
+            "state": "review-requested",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 384,
+            "note": "Slice boundaries and review criteria ready for the operator."
+          },
+          {
+            "state": "decided",
+            "editedBy": "Demo Operator",
+            "offsetMinutes": 390,
+            "note": "Server-side rendering chosen; four delivery cards recorded."
+          }
+        ],
+        "decision": {
+          "outcome": "feature-spawn",
+          "state": "succeeded",
+          "operationId": "demo-reports-export-release-0001",
+          "sourceRevision": "d3e0c9f84a1b7e62551a7a51c3b84cf6d2a09871",
+          "preparedAt": 386,
+          "preparedBy": "Demo Product Lead",
+          "confirmedAt": 388,
+          "confirmedBy": "Demo Operator",
+          "decidedAt": 390,
+          "spawnedTaskKeys": [
+            "DEMO-12",
+            "DEMO-13",
+            "DEMO-14",
+            "DEMO-15"
+          ],
+          "responses": [
+            {
+              "decisionId": "export-render-location",
+              "kind": "single",
+              "selectedOptionIds": [
+                "render-server-side"
+              ],
+              "comment": "A large export must survive a closed browser tab."
+            }
+          ],
+          "taskDraft": {
+            "title": "Deliver the reports export in four bounded slices",
+            "goal": "Render exports server side, stream job progress into the activity feed, and keep every finished file immutable behind its receipt.",
+            "acceptanceCriteria": [
+              "Exported values stay RFC 4180 compatible.",
+              "Every evidence file stays attached to the delivering card.",
+              "The release itself is an explicit operator decision, never an automatic promotion."
+            ],
+            "evidenceLinks": [],
+            "chosenOption": "Server side",
+            "relatedTaskKeys": [
+              "DEMO-12",
+              "DEMO-13",
+              "DEMO-14",
+              "DEMO-15"
+            ],
+            "initialLane": "1-preparation",
+            "mode": "coding",
+            "taskType": "feature"
+          }
+        }
+      },
+      {
+        "id": "board-keyboard-shortcuts",
+        "key": "DEMO-W5",
+        "title": "Board keyboard shortcuts",
+        "summary": "The original decision, the delivered shortcut map, the accessibility proof, and the measured outcome, kept as durable documentation.",
+        "status": "documented",
+        "phase": "decision-ready",
+        "editedBy": "Demo Reviewer",
+        "offsetMinutes": 396,
+        "sourceTaskKeys": [],
+        "relatedTaskKeys": [
+          "DEMO-7"
+        ],
+        "lead": "Board navigation had to work without a pointer. The work is finished and its references are terminal, so this Dossier is no longer a decision surface: it is the page someone reads when they ask why the shortcuts are what they are.",
+        "blocks": [
+          {
+            "h": "Original decision"
+          },
+          {
+            "p": "Use single-key shortcuts scoped to the focused lane instead of a global chord scheme. Chords were rejected because they collide with browser and assistive-technology bindings, and because a single key is discoverable from a visible hint row."
+          },
+          {
+            "decision": {
+              "id": "shortcut-scheme",
+              "kind": "single",
+              "question": "Which shortcut scheme does the board use?",
+              "options": [
+                {
+                  "id": "single-key",
+                  "label": "Single keys scoped to the focused lane (chosen)",
+                  "summary": "Discoverable from a visible hint row, no collisions with assistive technology."
+                },
+                {
+                  "id": "chord-scheme",
+                  "label": "Global chords",
+                  "summary": "Larger key space, but it collides with browser and screen-reader bindings."
+                }
+              ],
+              "comment": "Optional note for the shortcut decision"
+            }
+          },
+          {
+            "h": "Delivered shortcut map"
+          },
+          {
+            "table": {
+              "columns": [
+                "Key",
+                "Action",
+                "Scope"
+              ],
+              "rows": [
+                [
+                  "j / k",
+                  "Move focus down or up inside a lane.",
+                  "Focused lane"
+                ],
+                [
+                  "h / l",
+                  "Move focus to the previous or next lane.",
+                  "Board"
+                ],
+                [
+                  "o",
+                  "Open the focused card.",
+                  "Focused card"
+                ],
+                [
+                  "/",
+                  "Focus the search field.",
+                  "Board"
+                ],
+                [
+                  "?",
+                  "Show the shortcut hint row.",
+                  "Board"
+                ]
+              ]
+            }
+          },
+          {
+            "h": "Accessibility proof"
+          },
+          {
+            "ul": [
+              "Every action above is also reachable through visible controls; no shortcut is the only path.",
+              "The hint row is reachable from the keyboard and readable in both themes.",
+              "Focus never leaves the board silently: an action that changes lane announces the new lane."
+            ]
+          },
+          {
+            "h": "Measured outcome"
+          },
+          {
+            "table": {
+              "columns": [
+                "Measurement",
+                "Before",
+                "After"
+              ],
+              "rows": [
+                [
+                  "Actions to open the third card of a lane",
+                  "4 pointer actions",
+                  "2 key presses"
+                ],
+                [
+                  "Pointer-free board walkthrough",
+                  "Not possible",
+                  "Complete"
+                ],
+                [
+                  "Reported focus-loss issues",
+                  "3 open",
+                  "0 open"
+                ]
+              ]
+            }
+          },
+          {
+            "h": "Why this became documentation"
+          },
+          {
+            "p": "The delivering card reached a terminal state and no follow-up work is open. Keeping the Dossier as a decision surface would suggest a choice that no longer exists, so it was moved to documented and stays as the durable explanation."
+          },
+          {
+            "note": "Pinned demo data. Shortcut map and measurements are invented for the demo instance."
+          }
+        ],
+        "links": [
+          {
+            "label": "Accessibility baseline",
+            "href": "../../quality/10-accessibility-baseline.md"
+          },
+          {
+            "label": "Dossier index",
+            "href": "../README.md"
+          }
+        ],
+        "schemaVersion": 2,
+        "lifecycleState": "documented",
+        "lifecycleHistory": [
+          {
+            "state": "in-progress",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 360,
+            "note": "Pointer-free board operation identified as a gap."
+          },
+          {
+            "state": "review-requested",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 372,
+            "note": "Single-key scheme compared against a chord scheme."
+          },
+          {
+            "state": "decided",
+            "editedBy": "Demo Operator",
+            "offsetMinutes": 384,
+            "note": "Single-key scheme chosen and handed to delivery."
+          },
+          {
+            "state": "documented",
+            "editedBy": "Demo Reviewer",
+            "offsetMinutes": 396,
+            "note": "Delivery terminal; the document became the durable explanation."
+          }
+        ],
+        "decision": {
+          "outcome": "feature-spawn",
+          "state": "succeeded",
+          "operationId": "demo-board-shortcuts-0001",
+          "sourceRevision": "d3e0c9f84a1b7e62551a7a51c3b84cf6d2a09871",
+          "preparedAt": 378,
+          "preparedBy": "Demo Product Lead",
+          "confirmedAt": 380,
+          "confirmedBy": "Demo Operator",
+          "decidedAt": 384,
+          "spawnedTaskKeys": [
+            "DEMO-7"
+          ],
+          "responses": [
+            {
+              "decisionId": "shortcut-scheme",
+              "kind": "single",
+              "selectedOptionIds": [
+                "single-key"
+              ],
+              "comment": "No shortcut may be the only path to an action."
+            }
+          ],
+          "taskDraft": {
+            "title": "Introduce board keyboard shortcuts",
+            "goal": "Make every board action reachable without a pointer using single keys scoped to the focused lane.",
+            "acceptanceCriteria": [
+              "Every shortcut action is also reachable through a visible control.",
+              "The hint row is reachable from the keyboard and readable in both themes.",
+              "A lane change announces the new lane instead of moving focus silently."
+            ],
+            "evidenceLinks": [],
+            "chosenOption": "Single keys",
+            "relatedTaskKeys": [
+              "DEMO-7"
+            ],
+            "initialLane": "1-preparation",
+            "mode": "coding",
+            "taskType": "feature"
+          }
+        }
+      },
+      {
+        "id": "legacy-notification-banner",
+        "key": "DEMO-W6",
+        "title": "Legacy notification banner experiment",
+        "summary": "Why the persistent notification banner was discarded and what replaced it, with the archive receipt that closed the proposal.",
+        "status": "archived",
+        "phase": "decision-ready",
+        "editedBy": "Demo Operator",
+        "offsetMinutes": 402,
+        "sourceTaskKeys": [
+          "DEMO-8"
+        ],
+        "relatedTaskKeys": [],
+        "lead": "A persistent banner was proposed to surface product notices at the top of the board. It was built as an experiment, measured, and discarded. This document exists so the idea is not proposed again without new evidence.",
+        "blocks": [
+          {
+            "h": "Why it was discarded"
+          },
+          {
+            "ul": [
+              "It duplicated the activity feed: every notice it showed was already one scroll away, in context.",
+              "It performed poorly in the accessibility review: it took focus on mount and pushed the board down on every notice.",
+              "It was superseded by an inline status pattern that puts the notice next to the thing it is about."
+            ]
+          },
+          {
+            "decision": {
+              "id": "banner-disposition",
+              "kind": "single",
+              "question": "Does the notification banner become a product feature?",
+              "options": [
+                {
+                  "id": "discard-banner",
+                  "label": "Discard the banner (chosen)",
+                  "summary": "Duplicated the activity feed and failed the accessibility review."
+                },
+                {
+                  "id": "keep-banner",
+                  "label": "Keep and harden it",
+                  "summary": "Would need focus and layout work with no evidence that anyone needs it."
+                }
+              ],
+              "comment": "Optional note for the banner decision"
+            }
+          },
+          {
+            "h": "What replaced it"
+          },
+          {
+            "p": "Notices now render inline on the affected surface, with the activity feed as the complete history. The replacement carries no global layout shift and no focus capture, which were the two concrete failures of the banner."
+          },
+          {
+            "h": "Archive receipt"
+          },
+          {
+            "table": {
+              "columns": [
+                "Field",
+                "Value"
+              ],
+              "rows": [
+                [
+                  "Actor",
+                  "Demo Operator"
+                ],
+                [
+                  "Recorded at",
+                  "2026-08-09, fixed in this pinned document"
+                ],
+                [
+                  "Reason",
+                  "Duplicated the activity feed and failed the accessibility review; superseded by the inline status pattern."
+                ],
+                [
+                  "Retired card",
+                  "[DEMO-8](task:DEMO-8)"
+                ]
+              ]
+            }
+          },
+          {
+            "h": "What would reopen this"
+          },
+          {
+            "p": "Evidence that a notice must be seen without any board interaction at all, for example a service interruption that makes the board itself misleading. Nothing in the current product produces that case."
+          },
+          {
+            "note": "Pinned demo data. The experiment, its measurements, and the receipt are invented for the demo instance."
+          }
+        ],
+        "links": [
+          {
+            "label": "Dossier index",
+            "href": "../README.md"
+          }
+        ],
+        "schemaVersion": 2,
+        "lifecycleState": "done",
+        "lifecycleHistory": [
+          {
+            "state": "in-progress",
+            "editedBy": "Demo Product Lead",
+            "offsetMinutes": 354,
+            "note": "Banner proposed to surface product notices above the board."
+          },
+          {
+            "state": "review-requested",
+            "editedBy": "Demo Reviewer",
+            "offsetMinutes": 390,
+            "note": "Experiment measured against the activity feed and the accessibility baseline."
+          },
+          {
+            "state": "done",
+            "editedBy": "Demo Operator",
+            "offsetMinutes": 402,
+            "note": "Discarded; superseded by the inline status pattern."
+          }
+        ],
+        "decision": {
+          "outcome": "archive",
+          "state": "succeeded",
+          "operationId": "demo-legacy-banner-0001",
+          "sourceRevision": "d3e0c9f84a1b7e62551a7a51c3b84cf6d2a09871",
+          "preparedAt": 398,
+          "preparedBy": "Demo Reviewer",
+          "confirmedAt": 400,
+          "confirmedBy": "Demo Operator",
+          "decidedAt": 402,
+          "reason": "Duplicated the activity feed, failed the accessibility review, and was superseded by the inline status pattern.",
+          "spawnedTaskKeys": [],
+          "responses": [
+            {
+              "decisionId": "banner-disposition",
+              "kind": "single",
+              "selectedOptionIds": [
+                "discard-banner"
+              ],
+              "comment": "Reopen only with evidence that a notice must be seen without any board interaction."
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "cardWorkbenchReferences": {
+    "DEMO-2": [
+      "DEMO-W3"
+    ],
+    "DEMO-7": [
+      "DEMO-W5"
+    ],
+    "DEMO-8": [
+      "DEMO-W6"
+    ],
+    "DEMO-10": [
+      "DEMO-W1"
+    ],
+    "DEMO-12": [
+      "DEMO-W4"
+    ],
+    "DEMO-13": [
+      "DEMO-W4"
+    ],
+    "DEMO-14": [
+      "DEMO-W4"
+    ],
+    "DEMO-15": [
+      "DEMO-W4"
+    ],
+    "DEMO-17": [
+      "DEMO-W2"
+    ]
+  },
+  "cardWikiPages": {
+    "DEMO-3": [
+      "quality/10-accessibility-baseline.md"
+    ],
+    "DEMO-5": [
+      "operations/10-release-checklist.md"
+    ],
+    "DEMO-9": [
+      "operations/10-release-checklist.md"
+    ],
+    "DEMO-17": [
+      "operations/20-export-retention-policy.md"
+    ],
+    "DEMO-18": [
+      "quality/10-accessibility-baseline.md"
+    ],
+    "PLAT-2": [
+      "operations/10-observability-guide.md"
+    ],
+    "PLAT-3": [
+      "operations/20-cache-policy.md"
+    ],
+    "PLAT-4": [
+      "operations/30-incident-checklist.md"
+    ]
+  }
+}
