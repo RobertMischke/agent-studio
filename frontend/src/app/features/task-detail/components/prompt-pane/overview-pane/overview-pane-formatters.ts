@@ -13,6 +13,7 @@ export function stepKindIcon(kind: StepKind): StudioIconName {
     case 'aspect':       return 'eye';
     case 'orchestrator': return 'branch';
     case 'tool':         return 'cli';
+    case 'analysis':     return 'search';
     case 'drift':        return 'diff';
     default:             return 'dot';
   }

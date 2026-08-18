@@ -57,6 +57,11 @@ public record ReviewEvidenceEntry
     /// <summary>One of <see cref="ReviewEvidenceSeverities"/>. Unknown values are normalized to <c>info</c>.</summary>
     public string Severity { get; init; } = ReviewEvidenceSeverities.Info;
     public string Title { get; init; } = "";
+    /// <summary>
+    /// Stable producer-owned rule id, for example <c>QS-NG-002</c>. Null for
+    /// narrative evidence that is not tied to a named rule.
+    /// </summary>
+    public string? RuleId { get; init; }
     public string? Body { get; init; }
     public DateTime CreatedAt { get; init; }
     /// <summary>1-based run index this finding belongs to (matches <c>RunRecord.Index</c>). Null when not tied to a specific run.</summary>

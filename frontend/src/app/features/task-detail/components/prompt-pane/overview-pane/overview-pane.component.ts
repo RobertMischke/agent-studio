@@ -184,7 +184,7 @@ interface PipelineRowVm {
   costTooltip: StructuredTooltip | null;
 }
 
-type PipelinePhaseKey = 'pre' | 'core' | 'aspect' | 'tool' | 'decision' | 'drift';
+type PipelinePhaseKey = 'pre' | 'core' | 'aspect' | 'tool' | 'analysis' | 'decision' | 'drift';
 
 interface PipelinePhaseVm {
   key: PipelinePhaseKey;
@@ -420,6 +420,7 @@ const PIPELINE_KIND_EXPLANATIONS: Record<StepKind, string> = {
   aspect:       'A read-only review aspect that runs in parallel after the agent finishes.',
   orchestrator: 'An orchestrator decision step that aggregates verdicts and chooses the next move.',
   tool:         'A deterministic tooling step that runs after the agent finishes.',
+  analysis:     'A named Quality Studio analysis that returns canonical findings and provenance in process.',
   drift:        'An opt-in drift-analysis pass that runs after auto-review.',
 };
 
@@ -452,6 +453,11 @@ const PIPELINE_PHASES: Record<PipelinePhaseKey, PipelinePhaseVm> = {
     label: 'TOOL',
     description: 'Deterministic post-run tooling and evidence steps.',
   },
+  analysis: {
+    key: 'analysis',
+    label: 'ANALYSIS',
+    description: 'Named Quality Studio quality analyses over the completed change.',
+  },
   decision: {
     key: 'decision',
     label: 'DECISION',
@@ -470,6 +476,7 @@ function pipelinePhaseForKind(kind: StepKind): PipelinePhaseVm {
     case 'core':         return PIPELINE_PHASES.core;
     case 'aspect':       return PIPELINE_PHASES.aspect;
     case 'tool':         return PIPELINE_PHASES.tool;
+    case 'analysis':     return PIPELINE_PHASES.analysis;
     case 'orchestrator': return PIPELINE_PHASES.decision;
     case 'drift':        return PIPELINE_PHASES.drift;
     default:             return PIPELINE_PHASES.tool;

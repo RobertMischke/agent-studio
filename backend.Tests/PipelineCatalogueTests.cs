@@ -15,6 +15,43 @@ namespace AgentStudio.Tests;
 /// </summary>
 public class PipelineCatalogueTests
 {
+    [Fact]
+    public void StandardPipeline_exposes_named_Quality_Studio_analysis_axes()
+    {
+        var steps = PipelineCatalogue.Standard.Post
+            .Where(step => step.Kind == StepKind.Analysis)
+            .ToArray();
+
+        Assert.Equal(PipelineCatalogue.QualityAnalysisStepIds, steps.Select(step => step.Id));
+        Assert.All(steps, step =>
+        {
+            Assert.True(step.Idempotent);
+            Assert.Contains(PipelineCatalogue.BuildTestGateStepId, step.DependsOn);
+        });
+        Assert.False(steps.Single(step =>
+            step.Id == PipelineCatalogue.QualityAngularRulesStepId).Stub);
+        Assert.All(steps.Where(step =>
+            step.Id != PipelineCatalogue.QualityAngularRulesStepId), step => Assert.True(step.Stub));
+        Assert.All(steps, step => Assert.False(PipelineStepConfigResolver.CanDisable(step)));
+    }
+
+    [Fact]
+    public void Central_project_settings_cannot_override_repository_owned_analysis_steps()
+    {
+        var settings = new ProjectSettings
+        {
+            PipelineSteps = new Dictionary<string, PipelineStepSetting>(StringComparer.OrdinalIgnoreCase)
+            {
+                [PipelineCatalogue.QualityAngularRulesStepId] = new() { Enabled = false },
+            },
+        };
+        var step = Assert.Single(PipelineCatalogue.Standard.Post, candidate =>
+            candidate.Id == PipelineCatalogue.QualityAngularRulesStepId);
+
+        Assert.Null(PipelineStepConfigResolver.Lookup(settings, step.Id));
+        Assert.True(PipelineStepConfigResolver.IsEnabled(settings, step));
+    }
+
     [Theory]
     [InlineData(PipelineCatalogue.UiHumanReviewGateStepId)]
     [InlineData(PipelineCatalogue.ConceptPromotionStepId)]
@@ -48,13 +85,14 @@ public class PipelineCatalogueTests
         Assert.Equal(StepKind.Core, p.Core[0].Kind);
         Assert.False(p.Core[0].Idempotent); // Core agent runs are not safe to re-run blindly.
 
-        // Post includes the deterministic review/build gates, four aspects,
+        // Post includes the deterministic review/build gates, seven named
+        // Quality Studio analyses, four aspects,
         // implemented tool steps (incl. the opt-in wiki-maintenance, wiki-learnings
         // distillation, and agents/wiki-sync steps), the deferred operator-triggered
         // "Merge into Develop" step and its integration-branch push twin, the
         // automatic code-review quality-grade step, the opt-in task-spawner step,
         // final orchestrator decision, and opt-in drift dimensions.
-        Assert.Equal(26, p.Post.Count);
+        Assert.Equal(33, p.Post.Count);
     }
 
     [Fact]

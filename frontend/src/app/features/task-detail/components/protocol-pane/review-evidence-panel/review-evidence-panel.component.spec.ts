@@ -125,5 +125,16 @@ describe('ReviewEvidencePanelComponent', () => {
       const fileref = el.querySelector('[data-testid="review-evidence-fileref-row-1"]');
       expect(fileref?.textContent).toContain('backend/Auth.cs:142');
     });
+
+    it('renders the Quality Studio rule id as named review evidence', () => {
+      const fixture = TestBed.createComponent(ReviewEvidencePanelComponent);
+      fixture.componentRef.setInput('job', JOB);
+      fixture.componentRef.setInput('entries', [entry({ ruleId: 'QS-NG-002' })]);
+
+      fixture.detectChanges();
+
+      const rule = fixture.nativeElement.querySelector('[data-testid="review-evidence-rule-e1"]');
+      expect(rule?.textContent).toBe('QS-NG-002');
+    });
   });
 });

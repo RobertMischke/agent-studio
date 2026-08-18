@@ -10,6 +10,7 @@ export function stepKindLabel(kind: StepKind): string {
     case 'aspect':       return 'Aspect';
     case 'orchestrator': return 'Decision';
     case 'tool':         return 'Tool';
+    case 'analysis':     return 'Analysis';
     case 'drift':        return 'Drift';
     default:             return kind;
   }

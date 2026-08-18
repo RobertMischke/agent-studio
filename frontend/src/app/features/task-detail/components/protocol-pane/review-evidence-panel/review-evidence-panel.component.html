@@ -33,6 +33,9 @@
               {{ severityLabel(e.severity) }}
             </span>
             <span class="evidence-row__source">{{ sourceLabel(e.source) }}</span>
+            @if (e.ruleId) {
+              <code class="evidence-row__rule-id" [attr.data-testid]="'review-evidence-rule-' + e.id">{{ e.ruleId }}</code>
+            }
             <span class="evidence-row__ts" [cacTooltip]="e.createdAt">{{ formatTime(e.createdAt) }}</span>
             @if (e.runIndex !== null) {
               <span class="evidence-row__run">run #{{ e.runIndex }}</span>

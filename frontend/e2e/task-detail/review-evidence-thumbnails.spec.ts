@@ -110,14 +110,15 @@ const DETAIL = {
     },
     {
       id: 'audit-token',
-      source: 'security-audit',
+      source: 'code-review',
+      ruleId: 'QS-NG-002',
       severity: 'high',
-      title: 'Bearer token logged in plaintext',
-      body: 'AuthService.LogIn writes the bearer token to logs/cli-output.log.',
+      title: 'Angular quality rule matched',
+      body: 'The named Quality Studio rule matched this source location.',
       createdAt: '2026-07-09T09:40:00Z',
       runIndex: 1,
       artifacts: ['results/dashboard-populated--mocked.png'],
-      fileRefs: ['backend/Services/AuthService.cs:142', 'results/audit-notes.md'],
+      fileRefs: ['frontend/src/app/example.component.scss:42', 'results/quality-analysis.json'],
       acknowledged: false,
       followupJobId: null,
     },
@@ -128,9 +129,34 @@ const DETAIL = {
 async function installRoutes(page: Page): Promise<void> {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+  await page.route('**/hubs/jobs/negotiate**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        connectionId: 'review-evidence-e2e',
+        connectionToken: 'review-evidence-e2e',
+        negotiateVersion: 1,
+        availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
+      }),
+    }),
+  );
+  await page.routeWebSocket('**/hubs/jobs**', (socket) => {
+    socket.onMessage((message) => {
+      if (message.toString().includes('"protocol":"json"')) socket.send('{}\u001e');
+    });
+  });
+
   // Broad catch-all first; specific routes registered afterwards win (LIFO).
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined),
+  );
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }),
   );
   await page.route('**/api/tasks/grouped**', (route) =>
     route.fulfill({
@@ -203,13 +229,13 @@ test.describe('AGT-1992: review-evidence image thumbnails', () => {
   test('renders image refs as thumbnails, non-image refs as typed rows, opens the shared lightbox', async ({ page }) => {
     test.setTimeout(60_000);
     await installRoutes(page);
-    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await page.goto(`/#/tasks/${encodeURIComponent(JOB_ID)}?view=evidence%3Aprotocol`);
     await dismissDevErrorDialog(page);
 
-    // Ensure the Evidence tab is active (click is a no-op if already selected).
+    // The canonical route selects Evidence before the detail surface paints.
     const evidenceTab = page.getByTestId('prompt-tab-evidence');
     await expect(evidenceTab).toBeVisible({ timeout: 15_000 });
-    await evidenceTab.click();
+    await expect(evidenceTab).toHaveAttribute('aria-selected', 'true');
     await dismissDevErrorDialog(page);
 
     const panel = page.getByTestId('review-evidence-panel');
@@ -224,7 +250,8 @@ test.describe('AGT-1992: review-evidence image thumbnails', () => {
 
     // Non-image references stay as labelled text rows (code + markdown).
     await expect(page.getByTestId('review-evidence-fileref-audit-token').first())
-      .toContainText('AuthService.cs:142');
+      .toContainText('example.component.scss:42');
+    await expect(page.getByTestId('review-evidence-rule-audit-token')).toHaveText('QS-NG-002');
 
     fs.mkdirSync(RESULTS_DIR, { recursive: true });
 

@@ -242,6 +242,33 @@ public static class PipelineCatalogue
     /// </summary>
     public const string RegressionRadarStepId = "post-regression-radar";
 
+    public const string QualityAngularRulesStepId = "post-analysis-angular-rules";
+    public const string QualityDotNetRulesStepId = "post-analysis-dotnet-rules";
+    public const string QualityModelReviewStepId = "post-analysis-model-review";
+    public const string QualityVisualStepId = "post-analysis-visual-quality";
+    public const string QualitySecurityStepId = "post-analysis-security";
+    public const string QualityRedundancyStepId = "post-analysis-redundancy";
+    public const string QualityConsistencyStepId = "post-analysis-consistency";
+
+    /// <summary>
+    /// Stable Quality Studio analysis catalogue. The Angular rule pass is the
+    /// first executable slice; the remaining named axes reserve their package
+    /// boundary without embedding Quality Studio rule content in Agent Studio.
+    /// Card-class defaults are resolved from repository changes and the
+    /// repository-owned quality policy, never from per-card or environment
+    /// configuration.
+    /// </summary>
+    public static readonly string[] QualityAnalysisStepIds =
+    {
+        QualityAngularRulesStepId,
+        QualityDotNetRulesStepId,
+        QualityModelReviewStepId,
+        QualityVisualStepId,
+        QualitySecurityStepId,
+        QualityRedundancyStepId,
+        QualityConsistencyStepId,
+    };
+
     /// <summary>
     /// Opt-in deterministic post-step that keeps a watched project's local
     /// <c>docs/common-problems</c> library current from task outcome
@@ -632,6 +659,78 @@ public static class PipelineCatalogue
                     RunMode = StepRunMode.Sequential,
                     DependsOn = [CoreAgentRunStepId, DossierMaintenanceStepId],
                     Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityAngularRulesStepId,
+                    DisplayName = "Quality Studio Angular rules",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.Angular,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityDotNetRulesStepId,
+                    DisplayName = "Quality Studio C# rules",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.DotNet,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityModelReviewStepId,
+                    DisplayName = "Quality Studio model review",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityVisualStepId,
+                    DisplayName = "Quality Studio visual quality",
+                    Kind = StepKind.Analysis,
+                    AppliesTo = PipelineStepStacks.Angular,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualitySecurityStepId,
+                    DisplayName = "Quality Studio security",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityRedundancyStepId,
+                    DisplayName = "Quality Studio redundancy",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
+                },
+                new PipelineStep
+                {
+                    Id = QualityConsistencyStepId,
+                    DisplayName = "Quality Studio consistency",
+                    Kind = StepKind.Analysis,
+                    RunMode = StepRunMode.Sequential,
+                    DependsOn = [BuildTestGateStepId],
+                    Idempotent = true,
+                    Stub = true,
                 },
                 .. aspects,
                 new PipelineStep

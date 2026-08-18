@@ -157,6 +157,7 @@ public class ReviewEvidenceLogTests : IDisposable
             Source = ReviewEvidenceSources.HumanNote,
             Severity = ReviewEvidenceSeverities.Warn,
             Title = "appended",
+            RuleId = "QS-NG-002",
             CreatedAt = DateTime.UtcNow
         };
 
@@ -166,6 +167,7 @@ public class ReviewEvidenceLogTests : IDisposable
         var roundTrip = Assert.Single(ReviewEvidenceLog.ReadLatestPerId(_jobFolder));
         Assert.Equal("e1", roundTrip.Id);
         Assert.Equal("appended", roundTrip.Title);
+        Assert.Equal("QS-NG-002", roundTrip.RuleId);
     }
 }
 

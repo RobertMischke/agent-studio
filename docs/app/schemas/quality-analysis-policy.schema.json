@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent.studio/schemas/quality-analysis-policy.v1.schema.json",
+  "title": "Agent Studio Quality Studio analysis policy v1",
+  "description": "Repository-owned overrides for Quality Studio pipeline-step activation. The file lives at .quality/agent-studio.json; environment and central project overrides are not inputs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "steps"],
+  "properties": {
+    "$schema": {
+      "const": "https://agent.studio/schemas/quality-analysis-policy.v1.schema.json",
+      "description": "Stable schema identity consumed by the Agent Studio pipeline."
+    },
+    "schemaVersion": {
+      "const": 1,
+      "description": "Policy format version."
+    },
+    "steps": {
+      "type": "object",
+      "description": "Optional activation overrides keyed by a named Quality Studio pipeline-step id.",
+      "propertyNames": {
+        "enum": [
+          "post-analysis-angular-rules",
+          "post-analysis-dotnet-rules",
+          "post-analysis-model-review",
+          "post-analysis-visual-quality",
+          "post-analysis-security",
+          "post-analysis-redundancy",
+          "post-analysis-consistency"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["enabled"],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable or disable this named analysis for applicable cards in this repository."
+          }
+        }
+      }
+    }
+  }
+}

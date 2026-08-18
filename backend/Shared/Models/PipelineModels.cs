@@ -147,6 +147,12 @@ public enum StepKind
     /// </summary>
     Tool,
     /// <summary>
+    /// A named Quality Studio analysis executed against the checked-out
+    /// repository through the in-process analysis-core package. Analysis steps
+    /// emit canonical findings and provenance; they are not generic shell tools.
+    /// </summary>
+    Analysis,
+    /// <summary>
     /// One drift-analysis dimension run as an opt-in post-step (ADR / Code,
     /// Software / Architecture, Docs / Marketing, Spec / Task / Job, and the
     /// rule-based Code-Pattern check). Reuses the existing
@@ -260,6 +266,8 @@ public sealed record PipelineStepExecution
     public string? TokenUsageSource { get; init; }
     /// <summary>Short reason on failure / skip; null on success.</summary>
     public string? Reason { get; init; }
+    /// <summary>Task-folder-relative artifact containing the step's detailed evidence.</summary>
+    public string? EvidenceRef { get; init; }
     /// <summary>
     /// Stable machine-readable classification for a failed step. The reason
     /// remains human evidence; consumers use this code for card state and

@@ -5,7 +5,7 @@
  * enums as camelCase strings via the global `JsonStringEnumConverter`).
  */
 
-export type StepKind = 'module' | 'core' | 'aspect' | 'orchestrator' | 'tool' | 'drift';
+export type StepKind = 'module' | 'core' | 'aspect' | 'orchestrator' | 'tool' | 'analysis' | 'drift';
 export type StepRunMode = 'sequential' | 'parallel';
 export type PipelineStepStatus =
   | 'pending'
@@ -69,6 +69,8 @@ export interface PipelineStepExecution {
   cacheCreationTokens: number;
   tokenUsageSource?: string | null;
   reason?: string | null;
+  /** Task-folder-relative detailed evidence artifact for this step. */
+  evidenceRef?: string | null;
   verdict?: string | null;
   /**
    * Human-readable concern detail for aspect steps with a non-pass
