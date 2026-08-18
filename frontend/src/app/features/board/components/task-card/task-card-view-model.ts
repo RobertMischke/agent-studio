@@ -9,13 +9,22 @@ import { shouldShowFailureToast } from '../../../task-detail/services/run-outcom
 import { buildThinkingLevelIndicator, type ThinkingLevelIndicator } from '../../../../services/thinking-level.util';
 import { phaseStaticLabel } from '../../../../services/lifecycle-phase.util';
 import { isTaskRunActive } from '../../../../services/run-activity.util';
-import { buildTokenCostTooltip } from '../../../tokens';
+import { buildTokenCostTooltip, formatTokenCostDisplay } from '../../../tokens';
 
 export interface TaskTypeChip {
   kind: string;
   label: string;
   icon: string;
   tooltip: string;
+}
+
+export interface TaskTokenBubbleEntry {
+  ts: string;
+  tsLabel: string;
+  model: string | null;
+  total: number;
+  /** Cost estimate priced at this entry's own timestamp, not today's rate. */
+  costLabel: string;
 }
 
 export interface TaskTokenBubble {
@@ -25,11 +34,14 @@ export interface TaskTokenBubble {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  /** Short single-line honest total, e.g. "$1.25" or "incomplete (1 run without price)". */
+  costLine: string;
+  /** Full estimate caveat + pricing-gap detail; rendered in a hover tooltip, not inline. */
   costTooltip: string;
   model: string | null;
   lastUpdate: string | null;
   tier: 'neutral' | 'blue' | 'mauve' | 'peach';
-  entries: { ts: string; tsLabel: string; model: string | null; total: number }[];
+  entries: TaskTokenBubbleEntry[];
 }
 
 const FILE_LIST_MAX = 12;
@@ -242,12 +254,26 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     : total >= 500_000 ? 'mauve'
       : total >= 50_000 ? 'blue'
         : 'neutral';
-  const entries = (tokenSummary.entries ?? []).map((entry) => ({
-    ts: entry.ts,
-    tsLabel: formatShortTime(entry.ts),
-    model: entry.model,
-    total: (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0) + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0),
-  }));
+  const entries = (tokenSummary.entries ?? []).map((entry) => {
+    const entryTotal = (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0) + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0);
+    return {
+      ts: entry.ts,
+      tsLabel: formatShortTime(entry.ts),
+      model: entry.model,
+      total: entryTotal,
+      // Each run is priced with the rate valid on its own timestamp
+      // (entry.estimatedApiCostUsd), never today's rate.
+      costLabel: formatTokenCostDisplay({
+        costUsd: entry.estimatedApiCostUsd,
+        totalTokens: entryTotal,
+        unpricedRuns: entry.modelPriced ? 0 : 1,
+      }),
+    };
+  });
+  const unpricedRuns = (tokenSummary.entries ?? [])
+    .filter((entry) => !entry.modelPriced
+      && (entry.inputTokens ?? 0) + (entry.outputTokens ?? 0) + (entry.cacheReadTokens ?? 0) + (entry.cacheCreationTokens ?? 0) > 0)
+    .length;
   return {
     label: formatTokens(total),
     total,
@@ -255,7 +281,13 @@ export function buildTokenBubble(tokenSummary: TaskInfo['tokenSummary']): TaskTo
     output,
     cacheRead,
     cacheWrite,
-    costTooltip: buildTokenCostTooltip({ costUsd: tokenSummary.estimatedApiCostUsd, priceKnown: tokenSummary.allModelsPriced === true }),
+    costLine: formatTokenCostDisplay({ costUsd: tokenSummary.estimatedApiCostUsd, totalTokens: total, unpricedRuns }),
+    costTooltip: buildTokenCostTooltip({
+      costUsd: tokenSummary.estimatedApiCostUsd,
+      priceKnown: tokenSummary.allModelsPriced === true,
+      totalTokens: total,
+      unpricedRuns,
+    }),
     model: tokenSummary.lastModel ?? null,
     lastUpdate: tokenSummary.lastUpdate ? formatShortTime(tokenSummary.lastUpdate) : null,
     tier,

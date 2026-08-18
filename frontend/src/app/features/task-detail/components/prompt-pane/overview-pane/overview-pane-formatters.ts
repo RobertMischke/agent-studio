@@ -2,19 +2,9 @@ import { TaskState } from '../../../../../models/task.model';
 import type { StudioIconName } from '../../../../../components/studio-icon/studio-icon.component';
 import type { PipelineStepStatus, StepKind } from '../../../../task-pipeline';
 
-type PipelineDisplayStatus = PipelineStepStatus | 'disabled' | 'not-run';
+export { stepKindLabel } from '../../../../task-pipeline';
 
-export function stepKindLabel(kind: StepKind): string {
-  switch (kind) {
-    case 'module':       return 'Pre steps';
-    case 'core':         return 'Core agent work';
-    case 'aspect':       return 'Aspect';
-    case 'orchestrator': return 'Decision';
-    case 'tool':         return 'Tool';
-    case 'drift':        return 'Drift';
-    default:             return kind;
-  }
-}
+type PipelineDisplayStatus = PipelineStepStatus | 'disabled' | 'not-run';
 
 export function stepKindIcon(kind: StepKind): StudioIconName {
   switch (kind) {
