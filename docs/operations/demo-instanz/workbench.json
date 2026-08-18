@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "demo-instanz",
   "title": "Public demo instance with no execution authority",
-  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670.]",
+  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670.] [Curation 2026-08-18: stays in progress, not closable. Two of five slices are delivered and merged (S1/AGT-2666 seed content and gallery; S5/AGT-2670 scrub/bundle/reset contract, per index.html §14). S2/AGT-2667 (execution-denial profile) has no merged code. S3/AGT-2668 was reported \"Delivered\" by its own run but that work was never committed to develop - no DemoReplayTraceSignature/DemoReplayAdmissionPolicy code exists in this checkout, so it counts as not delivered. S4/AGT-2669 was not started. The former status \"accepted\" and phase \"in-progress\" are not part of the descriptor vocabulary and made this Dossier render as \"Descriptor needs repair\"; corrected to decided/testing, the closest valid pair for a decided-and-partially-delivered item.]",
   "entrypoint": "index.html",
-  "status": "accepted",
-  "phase": "in-progress",
-  "updatedAt": "2026-08-17T18:30:00Z",
+  "status": "decided",
+  "phase": "testing",
+  "updatedAt": "2026-08-18T00:00:00Z",
   "sourceTaskKeys": [
     "AGT-2582"
   ],
