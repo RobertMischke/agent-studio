@@ -2,6 +2,33 @@
 
 Newest first. Every entry: date · decision · reasoning · card/commit reference.
 
+## 2026-08-18 — Review-plane restart is loss-free; adaptive parallelism and plane priority ship as recommendations, not auto-executors
+The critical unknown blocking AGT-2645's auto-scaling proposal — whether
+`sudo agent-runner-deploy config review RUNNER_MAX_PARALLELISM <n>` (the
+AGT-2628 sanctioned mechanism) loses running review workers on its
+`agent-runner-review.service` restart — is resolved: it does not.
+`KillMode=process` on the unit (with an explicit hardening-drop-in comment)
+keeps the restart's kill set to the daemon's own main PID; `ReviewSlotReconciler`
+re-adopts every detached `DurableReviewProcess` worker by PID-liveness/workspace
+match at daemon startup. Confirmed by a controlled test
+(`Agent_runner_config_restart_uses_new_main_pid_and_role_environment_file_precedence`)
+run against a fixture that simulates the restart race with a real detached
+background PID. Decision: `AutoReviewQueueTelemetry` adds drain rate and
+median duration to the existing queue-depth snapshot
+(`GET /api/runner/auto-review-queue`); `AutoReviewQueueStagnationWatchdog`
+alarms (rate-limited LogWarning, same shape as the AGT-2627 starvation
+watchdog) when depth stays positive with no card started for 20+ minutes;
+`AdaptiveReviewParallelismPolicy` and `CodingYieldPolicy` are pure two-sided-
+hysteresis raise/lower and yield/restore decisions exposed as recommendation
+endpoints only (`/api/runner/auto-review-parallelism-recommendation`,
+`/api/runner/coding-yield-recommendation`) — deliberately not wired to an
+executor, since no reliable signal exists for the live per-host
+`RUNNER_MAX_PARALLELISM` in effect, and auto-running a production service
+restart from a background heuristic is a hard-to-reverse, shared-
+infrastructure action left as an explicit opt-in follow-up. Plane priority
+(review over coding under sustained backlog) stays FIFO within each plane —
+only the coding-plane ceiling ever moves. → AGT-2645, results dossier.
+
 ## 2026-07-24: Persisted attempts are the distributed write authority
 Run leases, review work, and lane-affecting Remote completion previously used
 overlapping task, lease, session, and local-checkout identities. Decision: the
