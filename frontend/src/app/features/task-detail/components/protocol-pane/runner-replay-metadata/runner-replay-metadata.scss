@@ -93,6 +93,7 @@ dt {
 .replay__metadata dd {
   margin: 0;
   font-size: var(--studio-font-size-xs, 11px);
+  font-variant-numeric: tabular-nums;
 }
 
 .replay__metadata code {
