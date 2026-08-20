@@ -180,7 +180,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly AgentStudio.Cli.CliOneShotRegistry? _oneShotRegistry;
     private readonly PipelineExecutionLog? _pipelineLog;
     private readonly ILintScssRunner? _lintScssRunner;
-    private readonly AgentStudio.Pipeline.QualityAnalysis.IQualityAnalysisStepRunner? _qualityAnalysisRunner;
+    private readonly AgentStudio.Pipeline.IQualityAnalysisStepRunner? _qualityAnalysisRunner;
     private readonly IBuildTestGateRunner? _buildTestGateRunner;
     private readonly WikiMaintenancePostStepRunner? _wikiMaintenance;
     private readonly WikiLearningsPostStepRunner? _wikiLearnings;
@@ -266,7 +266,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PipelineStepEconomyAdvisor? pipelineStepEconomy = null,
         AttemptAuthorityService? attemptAuthority = null,
         DossierMaintenanceService? dossierMaintenance = null,
-        AgentStudio.Pipeline.QualityAnalysis.IQualityAnalysisStepRunner? qualityAnalysisRunner = null)
+        AgentStudio.Pipeline.IQualityAnalysisStepRunner? qualityAnalysisRunner = null)
     {
         _scanner = scanner;
         _taskAccess = taskAccess;
@@ -3306,7 +3306,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             moved.FolderPath);
     }
 
-    private async Task<AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepResult?>
+    private async Task<AgentStudio.Pipeline.QualityAnalysisStepResult?>
         RunQualityAngularRulesPostStepAsync(
             WatchPathEntry entry,
             TaskInfo current,
@@ -3317,7 +3317,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var repositoryPath = string.IsNullOrWhiteSpace(entry.RepositoryPath)
             ? entry.RootPath
             : entry.RepositoryPath;
-        AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepResult result;
+        AgentStudio.Pipeline.QualityAnalysisStepResult result;
         try
         {
             result = await _qualityAnalysisRunner.RunAngularRulesAsync(
@@ -3332,9 +3332,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _logger.LogWarning(ex,
                 "Quality Studio Angular analysis failed for {Project}/{JobId}",
                 entry.Name, current.Id);
-            result = new AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepResult(
+            result = new AgentStudio.Pipeline.QualityAnalysisStepResult(
                 PipelineCatalogue.QualityAngularRulesStepId,
-                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.Unavailable,
+                AgentStudio.Pipeline.QualityAnalysisStepVerdict.Unavailable,
                 0,
                 ex.Message,
                 null,
@@ -3346,11 +3346,11 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             var status = result.Verdict switch
             {
-                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.Passed => PipelineStepStatus.Passed,
-                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.Findings
+                AgentStudio.Pipeline.QualityAnalysisStepVerdict.Passed => PipelineStepStatus.Passed,
+                AgentStudio.Pipeline.QualityAnalysisStepVerdict.Findings
                     when result.BlockingFindings.Count > 0 => PipelineStepStatus.Failed,
-                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.Findings => PipelineStepStatus.Passed,
-                AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepVerdict.NotApplicable => PipelineStepStatus.NotApplicable,
+                AgentStudio.Pipeline.QualityAnalysisStepVerdict.Findings => PipelineStepStatus.Passed,
+                AgentStudio.Pipeline.QualityAnalysisStepVerdict.NotApplicable => PipelineStepStatus.NotApplicable,
                 _ => PipelineStepStatus.Skipped,
             };
             var now = DateTime.UtcNow;
@@ -3371,7 +3371,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     }
 
     internal static CompletionGate.Decision? BuildQualityAnalysisGateDecision(
-        AgentStudio.Pipeline.QualityAnalysis.QualityAnalysisStepResult result,
+        AgentStudio.Pipeline.QualityAnalysisStepResult result,
         int priorReissues,
         int maxReissues)
     {

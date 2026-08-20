@@ -4,7 +4,7 @@ using System.Text.Json;
 using AgentStudio.Shared;
 using AgentStudio.Tasks;
 
-namespace AgentStudio.Pipeline.QualityAnalysis;
+namespace AgentStudio.Pipeline;
 
 public static class QualityAnalysisPolicyFiles
 {
