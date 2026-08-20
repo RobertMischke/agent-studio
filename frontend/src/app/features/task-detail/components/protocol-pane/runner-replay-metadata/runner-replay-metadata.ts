@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import type { RunnerRecordedEvent } from '../../../../run-timeline';
+import { isSimulated } from '../runner-event-replay';
 
 @Component({
   selector: 'app-runner-replay-metadata',
@@ -14,8 +15,15 @@ export class RunnerReplayMetadataComponent {
     event => event.kind === 'turn.completed' || event.kind === 'session.completed',
   ));
 
+  /** True when any rendered turn came from a replayed trace rather than a run. */
+  readonly simulated = computed(() => this.completions().some(isSimulated));
+
   label(event: RunnerRecordedEvent): string {
     return event.kind === 'turn.completed' ? 'Turn completed' : 'Session completed';
+  }
+
+  isSimulated(event: RunnerRecordedEvent): boolean {
+    return isSimulated(event);
   }
 
   formatDuration(durationMs: number | null | undefined): string {

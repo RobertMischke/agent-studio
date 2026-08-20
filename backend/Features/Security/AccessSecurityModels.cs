@@ -47,8 +47,19 @@ public static class RunnerScopes
     public const string Artifacts = "runner.artifacts";
     public const string Completion = "runner.completion";
 
+    /// <summary>
+    /// The public-demo replay scope. It admits nothing but pre-signed simulated
+    /// events on fixture tasks and is deliberately absent from
+    /// <see cref="Minimum"/>: a credential only carries it when an operator asks
+    /// for it explicitly, and then it may carry nothing else.
+    /// </summary>
+    public const string DemoReplay = "demo.replay";
+
     public static readonly string[] Minimum = [Claim, Lease, Logs, Events, Artifacts, Completion];
-    public static readonly HashSet<string> All = new(Minimum, StringComparer.Ordinal);
+    public static readonly HashSet<string> All = new([.. Minimum, DemoReplay], StringComparer.Ordinal);
+
+    /// <summary>A replay credential is never also an execution credential.</summary>
+    public static bool IsExclusive(string scope) => scope == DemoReplay;
 }
 
 public sealed record StudioUser

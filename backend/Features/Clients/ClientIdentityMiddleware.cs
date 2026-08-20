@@ -65,7 +65,7 @@ public class ClientIdentityMiddleware
         // Skip the boundary for non-/api traffic, registration, hubs, health.
         if (!path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
             || OpenPathPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase))
-            || IsExternallyOwnedV1(path))
+            || OwnsFencedAttribution(path))
         {
             await _next(context);
             return;
@@ -113,8 +113,15 @@ public class ClientIdentityMiddleware
         await _next(context);
     }
 
-    private bool IsExternallyOwnedV1(string path)
+    private bool OwnsFencedAttribution(string path)
     {
+        // The public-demo replay ingest carries its own proof: a pre-signed
+        // frame, a pinned trace digest, a monotonic epoch, and, in the networked
+        // profile, an exclusive credential scope. A Studio client identity would
+        // add nothing and cannot be registered from the replay image anyway.
+        if (path.StartsWith("/api/runner/replay", StringComparison.OrdinalIgnoreCase))
+            return true;
+
         if (TaskServerPlaneProxy.IsConfigured(_configuration))
             return path.StartsWith("/api/v1/", StringComparison.OrdinalIgnoreCase);
 
