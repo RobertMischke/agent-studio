@@ -92,6 +92,8 @@ export interface TokenSummaryAggregate {
   byModel: TokenSummaryByModel[];
   byProject: TokenSummaryByProject[];
   fetchedAt: string;
+  firstActivity?: string;
+  lastActivity?: string;
   disclaimer: string;
 }
 

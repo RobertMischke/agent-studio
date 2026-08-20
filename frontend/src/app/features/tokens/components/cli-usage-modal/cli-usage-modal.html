@@ -69,7 +69,7 @@
           </button>
         </div>
       </div>
-      <p class="cum__scope-note">Lifetime telemetry by model. Independent of the active quota windows above.</p>
+      <p class="cum__scope-note">Lifetime telemetry by model.@if (telemetryRange(); as range) { <span class="cum__scope-range">{{ range }}</span>} Independent of the active quota windows above.</p>
       @if (modelRows().length === 0) {
         <p class="cum__empty">No model usage attributed.</p>
       } @else {
