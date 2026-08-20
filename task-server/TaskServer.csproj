@@ -44,7 +44,7 @@
   <Target
     Name="RemoveSingleFilePublishSidecars"
     AfterTargets="Publish"
-    Condition="'$(PublishSingleFile)' == 'true' and '$(RuntimeIdentifier)' == 'linux-x64'">
+    Condition="'$(PublishSingleFile)' == 'true' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'win-x64')">
     <Delete Files="$(PublishDir)TaskServer.Contracts.pdb" />
     <Delete Files="$(PublishDir)libe_sqlite3.a" />
     <Delete Files="$(PublishDir)$(AssemblyName).staticwebassets.endpoints.json" />

@@ -6,8 +6,13 @@ param(
     [ValidateRange(1, 65535)]
     [int] $RemotePort = 15031,
 
+    # Local OrchestratorApi port this reverse tunnel forwards to. It is the
+    # monolith, not the standalone task-server component, which defaults to
+    # 5071. The former TaskServerPort name stays bound as an alias so an
+    # already-registered scheduled task keeps working.
     [ValidateRange(1, 65535)]
-    [int] $TaskServerPort = 5031,
+    [Alias('TaskServerPort')]
+    [int] $OrchestratorPort = 5031,
 
     [string] $SshExecutable = 'ssh.exe',
 
@@ -20,7 +25,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $sentinel = 'AGENT_TASK_SERVER_ROUTE_OK'
 $healthUrl = "http://127.0.0.1:$RemotePort/healthz"
-$forward = "${RemotePort}:127.0.0.1:${TaskServerPort}"
+$forward = "${RemotePort}:127.0.0.1:${OrchestratorPort}"
 $statePath = Join-Path $StateDirectory 'state.json'
 $logPath = Join-Path $StateDirectory 'events.log'
 $sshAttemptLogPath = Join-Path $StateDirectory 'ssh-attempts.log'
