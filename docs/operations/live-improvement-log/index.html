@@ -104,6 +104,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done)</td>
   <td>Lesson recorded: a probe result (404) matched the expected failure signature of a wrong theory; the tree-hash comparison would have falsified it in one command. Future stalls: compare release trees BEFORE topology theories.</td>
 </tr>
+<tr>
+  <td class="meta">08-21 00:1x</td>
+  <td><strong>Rollout hold LIFTED under supervision:</strong> train 31 green (27 commits incl. namespace fix), stable unpinned and rolled out to release/20260820-204352Z, boot probe clean. The feared 08-16 stall signature did NOT reproduce as a version defect: local and tunnel probes both fast (GET 0.5s, 1MB POST 0.14s). Two real findings instead: (1) a trio of report-pendings had aged 4.7h through the evening outage - the startup reconciliation purged all 3 cleanly; (2) the orchestrator's own 30s measurement windows + eager restarts CAUSED apparent silence and killed in-flight AGT-2674 (quarantine salvage caught it - auto-requeue path). New self-rule: no plane restart without 15 minutes of proven silence (no claims AND no live workers AND aged pendings).</td>
+  <td class="v action">operator-action (done)</td>
+  <td>UI-fix backlog is now LIVE for the operator (footer/status visibility 2645/2656, tab pinning, popover, demo slices). Real 08-16 root cause remains open - evidence points at auth/session freshness after backend restarts; watching with longer windows tonight instead of theorizing.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
