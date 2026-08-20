@@ -621,6 +621,7 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
     <li><a href="#benchmark-framework">§11 Benchmark framework and Result Dossier</a></li>
     <li><a href="#cost-model">§12 Cost model and hard caps</a></li>
     <li><a href="#overlaps">§13 Product and marketing overlaps</a></li>
+    <li><a href="#implementation-state">§14 Implementation state</a></li>
   </ul>
 </nav>
 
@@ -966,9 +967,26 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
 
 <!-- agent-studio:implementation-section:start -->
 <h2 id="implementation-state"><span class="no">§14</span>Implementation state</h2>
-<p>The operator approved the defense-in-depth recommendation on 17 August 2026 and cut S1 through S5 as AGT-2666 through AGT-2670. Delivery remains intentionally split at the dossier boundaries: content, execution denial, replay, edge, and release operations stay independently reviewable while consuming one seed family and one release contract.</p>
+<p>The operator approved the defense-in-depth recommendation on 17 August 2026 and cut S1 through S5 as AGT-2666 through AGT-2670. Delivery remains intentionally split at the dossier boundaries: content, execution denial, replay, edge, and release operations stay independently reviewable while consuming one seed family and one release contract. This section tracks what is actually in the product, so the dossier stays a living record rather than a frozen proposal.</p>
 
-<h3>S2 hard execution boundary</h3>
+<table>
+  <thead><tr><th>Slice</th><th>State</th><th>What exists in the product</th></tr></thead>
+  <tbody>
+    <tr><td><b>S1</b> Seed content and gallery</td><td><b>Delivered</b></td><td>Wiki trees, the six-document Dossier gallery, and the canonical <code>references.workbenches</code> card edges regenerate byte-identically from the pinned seed. See <a href="#delivered-slices">below</a>.</td></tr>
+    <tr><td><b>S2</b> Hard public-demo execution profile</td><td><b>Delivered</b></td><td>Startup-only <code>public-demo-readonly</code> profile, shared pure deny policy, forged-caller admission checks, and a route-inventory gate. See <a href="#s2-hard-execution-boundary">below</a>.</td></tr>
+    <tr><td><b>S3</b> Replay-only Runner</td><td><b>Delivered</b></td><td>Signed trace schema with per-frame seals, the narrow <code>demo.replay</code> server scope and its typed denial matrix, a claim-free replay service image, Simulated labelling end to end, and compromise tests. See the <a href="replay-only-runner.md">operator contract</a> and <a href="#s3-replay-only-runner">below</a>.</td></tr>
+    <tr><td><b>S4</b> Public read-only edge</td><td>Not started</td><td>No TLS edge, viewer boundary, endpoint allowlist, or rate limiting has been added.</td></tr>
+    <tr><td><b>S5</b> Scrub, bundle, and reset contract</td><td><b>Delivered</b></td><td>Content-bound scrub attestation, immutable release manifest, compatibility gate, and the six-hour replacement and rollback job. Accepts the S3 replay trace as a release input. See <a href="#s5-release-boundary">below</a>.</td></tr>
+    <tr><td><b>S6</b> Dedicated-VM launch rehearsal</td><td>Not started</td><td>No hosting, DNS, or infrastructure change has been made by any delivered slice.</td></tr>
+  </tbody>
+</table>
+
+<div class="box warn">
+  <h4>The launch invariant is not met yet</h4>
+  <p>S1, S2, S3, and S5 are delivered, but S4 is not: the server itself now refuses execution and a replay credential cannot claim or mutate tasks, yet there is still no TLS edge, viewer boundary, endpoint allowlist, or rate limiting in front of it. The public demo does not start until S4 closes the edge and S6's launch rehearsal passes.</p>
+</div>
+
+<h3 id="s2-hard-execution-boundary">S2 hard execution boundary</h3>
 <ul>
   <li><b>Startup identity:</b> Studio and Task Server accept <code>public-demo-readonly</code> only as a process-start profile. Unknown profile values refuse startup, and there is no project setting, browser control, or management route that can change the resolved admission policy.</li>
   <li><b>Pure denial:</b> one shared policy maps every claim, start, continue, review, chat, preview, and post-step admission class to the typed <code>execution-disabled</code> result.</li>
@@ -977,7 +995,16 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <li><b>Launch status:</b> S2 establishes the security-critical execution gate. The public launch remains blocked until the rest of the approved package and external launch rehearsal pass.</li>
 </ul>
 
-<h3>S5 release boundary</h3>
+<h3 id="s3-replay-only-runner">S3 replay-only Runner</h3>
+<ul>
+  <li><b>Signed trace:</b> a content-addressed replay trace contract carries per-frame ECDSA seals, a scene namespace, event kind, epoch, and monotonic sequence. A release-side sealing tool (<code>scripts/demo-replay/seal-trace.mjs</code>) produces the signed fixture and prints its digest.</li>
+  <li><b>Narrow admission:</b> a pure policy admits a replay frame only when trace, digest, seal, scene namespace, event kind, epoch, and sequence all match the pinned expectation. Every other shape returns the same typed denial.</li>
+  <li><b>Incapable credential:</b> the <code>demo.replay</code> scope is exclusive and carries no claim, lease, task-mutation, log, artifact, or completion authority. The replay service image contains no CLI, Git, repository, secret mount, or broad egress.</li>
+  <li><b>Simulated labelling:</b> replay-admitted events carry a server-assigned <code>simulated</code> origin, surfaced as a Simulated marker in the Activity transcript and the replay metadata panel. The UI never implies a live agent is editing a repository.</li>
+  <li><b>Compromise tests:</b> direct tests prove the replay credential is refused by claim, lease, logs, events, artifacts, completion, and every task mutation route, and that a tampered or foreign-signed frame is rejected. See the <a href="replay-only-runner.md">operator contract</a> for the full scope and denial matrix.</li>
+</ul>
+
+<h3 id="s5-release-boundary">S5 release boundary</h3>
 <ul>
   <li><b>Scrub proof:</b> the release builder now generates into two empty temporary roots, requires a clean recursive manifest diff, scans disclosure categories without persisting raw matches, proves generated PNG metadata and raster text-shape results, and emits <code>demo-seed-scrub-report.json</code>.</li>
   <li><b>Approval binding:</b> a machine-clean candidate is not deployable. Human review names the reviewer and time and binds to the generated content and manifest digests. Any changed datastore byte invalidates that approval.</li>
@@ -986,9 +1013,10 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
   <li><b>Cadence and rollback:</b> the service is callable on deploy and operator demand; its timer runs after boot and every six hours. Rollback verifies, starts, probes, and atomically restores the complete previous unit. Cleanup retains current and previous only, not backups of older writable drift.</li>
 </ul>
 
-<h3>Delivered slices</h3>
+<h3 id="delivered-slices">Delivered slices</h3>
 <ul>
 <!-- agent-studio:implementation-log:start -->
+  <li data-implementation-entry="" data-task-key="AGT-2668" data-delivered-at="2026-08-20" data-slice="replay-only-runner"><b>Replay-only Runner (S3).</b> Added a content-addressed replay trace contract with per-frame ECDSA seals, a release-side sealing tool, a pure admission policy pinning trace, digest, seal, scene namespace, event kind, epoch, and monotonic sequence, an exclusive <code>demo.replay</code> credential scope, a server-assigned <code>simulated</code> origin surfaced as a Simulated marker in the Activity transcript and the replay metadata, and a separate service image with no CLI, Git, repository, secret, or broad egress. Compromise tests prove the replay credential is refused by claim, lease, logs, events, artifacts, completion, and every task mutation, and that a tampered or foreign-signed frame is rejected.</li>
   <li data-implementation-entry="" data-task-key="AGT-2667" data-delivered-at="2026-08-18" data-slice="hard-public-demo-execution-profile"><b>S2 hard public-demo execution profile.</b> Added the startup-only profile, shared pure deny policy, forged-service admission checks, background execution suppression, unsafe standalone-proxy denial, startup route-inventory gates, and direct typed-denial matrices for Studio and Task Server execution routes.</li>
   <li data-implementation-entry="" data-task-key="AGT-2670" data-delivered-at="2026-08-17" data-slice="scrub-bundle-reset-contract"><b>S5 scrub, bundle, and reset contract.</b> Added content-bound scrub attestation, two-pass datastore proof, image OCR and metadata evidence, compatibility-checked immutable bundle construction, deployment verification, six-hour replacement units, failure-safe whole-runtime cutover, and rollback rehearsal. Host provisioning and launch remain outside this slice.</li>
   <li data-implementation-entry="" data-task-key="AGT-2666" data-delivered-at="2026-08-17" data-slice="seed-content-and-gallery"><b>S1 seed content and gallery.</b> One seed now writes both invented Wiki trees (13 pages), the six-document Dossier gallery, and the canonical <code>references.workbenches</code> card edges, all rendered from a second committed input so the family regenerates byte-identically. Coverage is proven by an executable test: 22 cards span all nine board lanes, and the gallery exercises the whole lifecycle vocabulary in both projections, five documents storing the v2 states and one deliberate v1 document supplying <code>review-requested</code>. Decision points are fixtures that start no operation, and no source-repository identity reaches the visitor surface. The optional AGT-2558 artifact scene is deliberately not seeded: that card is still in human review, and the slice plan admits it only after acceptance. Verification also produced a finding owned by S2: on an unlocked backend the seeded lanes drift within seconds, so the fixed lane story of the demo is a property of the execution profile and not of the data.</li>
