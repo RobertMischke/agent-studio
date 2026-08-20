@@ -49,7 +49,8 @@ and [`timer`](../../../deploy/systemd/agent-task-server-backup.timer) to
 `/etc/systemd/system/`. Create `/etc/agent-orchestrator/server.env` from
 [`agent-task-server.env.example`](../../../deploy/systemd/agent-task-server.env.example).
 The data directory must be owned by the dedicated service account and backed up
-independently of the installation directory.
+independently of the installation directory. Windows hosts follow
+[Windows install and supervision](#windows-install-and-supervision) instead.
 
 Create the bootstrap bearer file without putting the secret in shell history:
 
@@ -78,6 +79,136 @@ Before an upgrade, put the server in `Draining`, wait for active attempts to
 finish, create a backup, switch to `Maintenance`, stop the unit, replace the
 published package, and start it again. Startup applies additive schema
 migrations before `/readyz` reports that lease and fence authority is restored.
+
+## Windows install and supervision
+
+Windows hosts have no systemd. The Task Server runs there as a
+session-independent Scheduled Task with an S4U principal, never as a logon or
+session task. The assets in
+[`deploy/windows/task-server/`](../../../deploy/windows/task-server/) are the
+twin of the systemd units above:
+
+| Linux unit | Windows asset |
+|---|---|
+| `agent-task-server.service` | `register-task-server.ps1` plus `start-task-server.ps1` |
+| `agent-task-server-backup.service` | `backup-task-server.ps1` |
+| `agent-task-server-backup.timer` | `register-task-server-backup.ps1` |
+| `agent-task-server.env.example` | `server.env.example` |
+
+Publish the same project with the Windows profile:
+
+```powershell
+dotnet publish task-server\TaskServer.csproj -p:PublishProfile=win-x64 -o out\task-server
+```
+
+The profile emits one self-contained `win-x64` `task-server.exe` with the SQLite
+native runtime embedded and no sidecar files. It needs neither a repository
+checkout nor a .NET installation and reads host-specific bootstrap values only
+from `server.env`.
+
+Install the release under a versioned directory and point a `current` junction
+at it, mirroring `/opt/agent-orchestrator/current`:
+
+```powershell
+$root = 'C:\ProgramData\AgentOrchestrator'
+New-Item -ItemType Directory -Force -Path "$root\<version>", "$root\data", "$root\state\task-server"
+Copy-Item out\task-server\task-server.exe "$root\<version>\"
+New-Item -ItemType Junction -Force -Path "$root\current" -Target "$root\<version>"
+Copy-Item deploy\windows\task-server\server.env.example "$root\server.env"
+```
+
+Edit `$root\server.env` for this host. It is the same bootstrap contract the
+systemd `EnvironmentFile` carries. `start-task-server.ps1` imports it into the
+service process only and never into the machine environment. The data directory
+must be owned by the service identity and backed up independently of the
+installation directory.
+
+Create the bootstrap bearer file without putting the secret in the console
+history, then restrict it explicitly. The `AUTH_TOKEN_FILE` permission check in
+the server is Unix-only, so on Windows the ACL is the only protection:
+
+```powershell
+$secret = Read-Host -AsSecureString 'Task Server bearer'
+[IO.File]::WriteAllText(
+    "$root\task-server.token",
+    [Net.NetworkCredential]::new('', $secret).Password)
+icacls "$root\task-server.token" /inheritance:r `
+    /grant:r "$env:USERNAME:(R)" "SYSTEM:(F)" "Administrators:(F)"
+```
+
+Register both tasks from an elevated PowerShell session, because an at-startup
+task can require that authority:
+
+```powershell
+.\deploy\windows\task-server\register-task-server.ps1 `
+    -InstallRoot C:\ProgramData\AgentOrchestrator\current `
+    -EnvironmentFile C:\ProgramData\AgentOrchestrator\server.env `
+    -StateDirectory C:\ProgramData\AgentOrchestrator\state\task-server
+
+.\deploy\windows\task-server\register-task-server-backup.ps1 `
+    -InstallRoot C:\ProgramData\AgentOrchestrator\current `
+    -EnvironmentFile C:\ProgramData\AgentOrchestrator\server.env `
+    -StateDirectory C:\ProgramData\AgentOrchestrator\state\task-server
+```
+
+Both registrations are idempotent and use `IgnoreNew`.
+`AgentOrchestrator-TaskServer` starts at boot and immediately on registration,
+carries no execution time limit, and owns its `task-server.exe` child until that
+process exits. Task Scheduler restarts a failed run three times at one-minute
+spacing, and the five-minute fallback trigger takes over afterwards. That pair
+is the closest available equivalent of systemd `Restart=always`.
+`AgentOrchestrator-TaskServerBackup` runs daily with a randomized delay, the
+twin of `RandomizedDelaySec` plus `Persistent=true`.
+
+The start script holds one named mutex per instance, so an overlapping trigger
+exits without starting a second server. It launches the executable detached from
+any interactive session, with a hidden window and redirected output streams. The
+service manager owns start, stop, restart, and upgrade:
+
+```powershell
+Get-ScheduledTask -TaskName AgentOrchestrator-TaskServer
+Get-ScheduledTaskInfo -TaskName AgentOrchestrator-TaskServer
+Get-Content C:\ProgramData\AgentOrchestrator\state\task-server\state.json
+Get-Content C:\ProgramData\AgentOrchestrator\state\task-server\events.log -Tail 20
+Start-ScheduledTask -TaskName AgentOrchestrator-TaskServer
+Stop-ScheduledTask -TaskName AgentOrchestrator-TaskServer
+```
+
+`state.json` reports the current status, process ID, listen URL, and the
+captured stdout and stderr log paths of the running attempt. Stopping the task
+terminates its process tree without a graceful signal; there is no
+`TimeoutStopSec` equivalent here. Treat every stop as a restart that turns
+active coding leases into `process-unknown`, exactly as described in
+[Modes and durable authority](#modes-and-durable-authority).
+
+Upgrade in the same order as the systemd path: put the server in `Draining`,
+wait for active attempts to finish, create a backup, switch to `Maintenance`,
+stop the task, repoint `current` at the new version directory, and start the
+task again. Startup applies additive schema migrations before `/readyz` reports
+that lease and fence authority is restored.
+
+```powershell
+$root = 'C:\ProgramData\AgentOrchestrator'
+Stop-ScheduledTask -TaskName AgentOrchestrator-TaskServer
+New-Item -ItemType Junction -Force -Path "$root\current" -Target "$root\<next-version>"
+Start-ScheduledTask -TaskName AgentOrchestrator-TaskServer
+```
+
+For an out-of-band backup, call the same implementation through the binary:
+
+```powershell
+.\deploy\windows\task-server\backup-task-server.ps1 -Name manual
+```
+
+It imports `server.env`, runs `task-server.exe backup --name <name>`, writes the
+returned JSON to `last-backup.json` in the state directory, and exits. Like the
+Linux timer it does not restart the server, so it never turns live leases into
+`process-unknown`.
+
+`scripts/test-task-server-windows-assets.sh` is the dry run for these assets. It
+checks the publish profile, parses every script, proves that each registration
+forwards only parameters its target declares, and exercises the `server.env`
+import and the state writer against a temporary directory.
 
 ## Configuration and health
 

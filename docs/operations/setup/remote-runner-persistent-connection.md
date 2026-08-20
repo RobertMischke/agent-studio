@@ -70,7 +70,7 @@ Set-Location C:\Projects\agent-studio
 .\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
     -SshTarget agent-runner `
     -RemotePort 15031 `
-    -TaskServerPort 5031 `
+    -OrchestratorPort 5031 `
     -IntervalMinutes 5
 
 .\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
@@ -91,6 +91,13 @@ an interactive logon session. The selected identity must own a local protected
 SSH key and a non-interactive `agent-runner` alias. Run the registration from
 an elevated PowerShell session because an at-startup task can require that
 authority.
+
+`-OrchestratorPort` names the local Windows port the forward terminates on. It
+is the OrchestratorApi monolith on `5031`, not the standalone Task Server
+component, which listens on `5071` per
+[task-server.md](./task-server.md). The parameter was called `TaskServerPort`
+until AGT-2674 and still binds under that alias, so an already registered
+scheduled task keeps working until it is re-registered.
 
 The keeper task has no execution time limit and remains the owner of its
 `ssh.exe` child until SSH exits. It deliberately has no Task Scheduler retry:

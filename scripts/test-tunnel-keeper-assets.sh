@@ -37,6 +37,14 @@ if grep -Fq -- "-RestartCount" "$registration"; then
   exit 1
 fi
 grep -Fq "Register-ScheduledTask" "$registration"
+for script in "$keeper" "$registration"; do
+  grep -Fq "[Alias('TaskServerPort')]" "$script"
+  grep -Fq "\$OrchestratorPort = 5031" "$script"
+  if grep -Fq "\$TaskServerPort" "$script"; then
+    printf 'The forward terminates on the OrchestratorApi monolith, so the parameter must not read as a task-server port.\n' >&2
+    exit 1
+  fi
+done
 grep -Fq "curl -sf --max-time 6" "$watchdog"
 grep -Fq "Stop-ScheduledTask" "$watchdog"
 grep -Fq "Start-ScheduledTask" "$watchdog"
