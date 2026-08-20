@@ -135,6 +135,42 @@ export class CliUsageModalComponent {
     return { costUsd, tokens, models: rows.length, anyPriced, allPriced: rows.length > 0 && rows.every(r => r.modelPriced) };
   });
 
+  /** Date range of the recorded telemetry, derived from data — not config.
+   *  Returns a compact "since <date> · as of <date>" string, or null when
+   *  neither tokens nor adhoc carry any activity timestamps. */
+  readonly telemetryRange = computed<string | null>(() => {
+    const tokens = this.tokens();
+    const adhoc = this.adhoc();
+
+    let firstIso: string | null = tokens?.firstActivity ?? null;
+    let lastIso: string | null = tokens?.lastActivity ?? null;
+
+    if (adhoc?.byDay?.length) {
+      const sorted = [...adhoc.byDay].sort((a, b) => a.date.localeCompare(b.date));
+      const adhocFirst = sorted[0].date;
+      const adhocLast = sorted[sorted.length - 1].date;
+      if (!firstIso || adhocFirst < firstIso) firstIso = adhocFirst;
+      if (!lastIso || adhocLast > lastIso.slice(0, 10)) lastIso = adhoc.logModifiedAt ?? adhocLast;
+    }
+
+    const firstLabel = firstIso ? this.formatDateLabel(firstIso) : null;
+    const lastLabel = lastIso ? this.formatDateLabel(lastIso) : null;
+    if (!firstLabel && !lastLabel) return null;
+    if (firstLabel && lastLabel && firstLabel !== lastLabel) return `since ${firstLabel} · as of ${lastLabel}`;
+    if (lastLabel) return `as of ${lastLabel}`;
+    return null;
+  });
+
+  private formatDateLabel(iso: string): string {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso.slice(0, 10);
+      return d.toISOString().slice(0, 10);
+    } catch {
+      return iso.slice(0, 10);
+    }
+  }
+
   readonly modelRows = computed<ModelUsageRow[]>(() => {
     const cli = this.cliType();
     const rows: ModelUsageRow[] = [];
