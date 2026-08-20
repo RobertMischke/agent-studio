@@ -256,6 +256,25 @@ These are Phase B work, not assumptions that operations can work around:
    `/hubs` forwarding, secret-file or Credential Manager integration, strict
    Origin checks, CSRF, protocol negotiation, health reporting, and an atomic
    remote/local upstream switch.
+6. **Claim-plane switch forks authority.** Setting `TaskServer:BaseUrl` is a
+   single switch (`backend/Host/EndpointMapping.cs`). It proxies `/api/v1` to
+   Task Server, which advertises `coding-plane`, so runners negotiate
+   `_useV1 = true` and claim from the Task Server store. The board surface
+   under `/api/tasks` stays unconditional and file-backed, so task state would
+   live in two divergent stores at once. The same switch also unmaps the local
+   review plane that the fleet uses today. OrchestratorApi has no local v1
+   coding-claims route and never had one; coding runners work only because the
+   monolith omits `coding-plane` from its advertised capabilities. Flipping the
+   switch before gaps 1 and 2 are closed points the fleet at an unpopulated
+   store.
+7. **Attempt authority is not migrated.** `LegacyMigrationService` imports
+   workspaces, projects, tasks, events, and artifacts only, writing every
+   imported event and artifact with `run_id = ''` and `fence = 0`. The `leases`,
+   `fence_counters`, `runs`, and `runners` tables are untouched, and
+   `.metadata/attempt-authority.json` is never read. Either the migration must
+   carry lease and fence authority, or the cutover needs a documented
+   quiesce-to-zero-authority procedure. Importing `fence = 0` beside a live
+   fence counter forks attempt authority.
 
 No API listener may open on `wg0` until gaps 3 and 5 pass their negative
 authentication tests.
