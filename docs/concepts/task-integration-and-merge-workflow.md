@@ -52,13 +52,32 @@ Local worktree runs and fenced Remote deliveries now share the same policy: a gr
 - Restart recovery: `AcceptedIntegrationBackstopHostedService` is a safety net, not the normal Remote path. It resumes cards in `5-human-review` with phase `integrating` from their phase, marker, and pipeline facts. This includes a human acceptance that retried a failed immediate merge but lost its volatile queue item. The backstop consumes the same `TaskIntegrationStatusService` recovery decision as the board status projection, so a stale Passed step cannot overrule missing target-branch membership. It processes accepted deliveries by project and original delivery time, moves cards to Completed only after successful integration, and returns decided failures to ordinary Human Review instead of replaying them in a loop. Legacy Completed and archived recovery remains supported when the card carries live recovery facts. Historical verification runs first, and its bookkeeping records never authorize a merge or lane move. The 15-minute sweep logs `attempted`, `merged`, `alreadyMerged`, and `failed` independently; `Merged` and `MergedAfterRebase` contribute to `merged` and `integrated`. The acute 30-minute alert evaluates only non-archived current cards that carry a native integration record or an operator-facing historical verification record. Its project-filtered banner shows at most ten task keys and links to the complete `integration:stalled` Board filter.
 - Read model, attribution, and conflict honesty: `TaskIntegrationStatusService` recomputes `integration.status` from the attributed `commits[]` membership in the configured target branch and projects `integration.deliveryRef` through the same `DeliveryRefResolver` used by both triggers. A mechanical replay retains every historical commit entry, marks it with `supersededBySha`, and appends the replacement SHA with the original producer attribution. Entries superseded by SHA or by a later attempt do not participate in integration completeness, so rewritten objects do not create false `partial` status. Remote `runner/<host>/<KEY>` refs and evidenced local `task/<slug>` refs therefore use one card field; `no-branch` is valid only when neither a delivery ref nor an attributed commit exists. A terminal failed attempt sets typed `integration.failure` state so the chip names the concrete class, including `no-task-branch`, and states whether rebase recovery applies. The service uses a target-HEAD-fingerprinted ancestor set, accepts valid abbreviated SHAs, and invalidates immediately when the target HEAD moves. Lane, provenance merge records, pipeline success, and curated merge subjects cannot force `integrated`. A failed immediate merge still proceeds to Human Review and remains visibly `conflict-skipped` or failed on that card, with the actual conflicted files in the durable verdict. An out-of-band merge self-heals the card on the next read. Card integration badges, delivery-ref wording, the develop segment, Git-state wording, and acceptance wording consume this computed field; `integrationpending` is not rendered as a second status chip. At startup, `HistoricalIntegrationVerificationSweep` classifies missing legacy records through Git ancestry, no-code artifact evidence, and surviving result or salvage refs. It appends a stable record to each classified task in bounded batches. The following `AcceptedIntegrationInventorySweep` emits rows only for the two actionable historical classes plus current recorded `Error` or `NoTaskBranch` outcomes.
 - Merge-queue terminal history: the Project Hub keeps historical archive outcomes visible without counting them as actionable conflicts. An archived `conflict-skipped` record with a pre-authority review subject that has no `RunAttemptId` is `legacy-unverifiable`; another archived conflict is `superseded` as an in-place merge subject and must be recovered through a new card if its behavior is still required. Both states retain the original integration outcome in their reason. The queue counters are filters for all outcomes, while `conflict` is reserved for work that can still be resolved on its current card.
-- Conflict recovery: only a delivery that remains textually conflicted after the
-  mechanical replay renders **Rebase & retry** next to its red
-  integration badge. The action calls
+- Conflict recovery (operator-triggered): only a delivery that remains textually
+  conflicted after the mechanical replay renders **Rebase & retry** next to its
+  red integration badge. The action calls
   `POST /api/tasks/{id}/integration/rebase`, appends a focused steer prompt,
   moves the card to the top of Ready, and lets the assigned remote runner
   resume its existing delivery ref, rebase it onto the current integration
   branch, resolve conflicts, and return a new fenced result for acceptance.
+- Conflict recovery (automatic, attribution-ambiguous): a distinct, narrower
+  path from the one above. When `MergeIntoDevelopRunner` cannot preserve
+  unambiguous one-to-one delivery-commit attribution across direct merge,
+  mechanical three-way/rerere merge, and mechanical rebase, it returns
+  `MergeIntoIntegrationOutcome.AgentRoundRequired` instead of parking the card
+  as a plain conflict. `RemoteIntegrationContinuationPolicy.Decide`
+  (`backend/Features/Pipeline/IntegrationAgentRoundService.cs`) allows exactly
+  one automatic steer round per operator review epoch
+  (`MaxAutomaticAgentRounds = 1`, counted from `IntegrationRecoveryQueued`
+  timeline entries carrying `automatic=true` for that epoch). On the first
+  ambiguous result, `IntegrationAgentRoundService.TryStartAsync` persists a
+  pending Steer intent, marks the superseded delivery's commits
+  (`SupersedeCurrentDeliveryOnFolder`), and promotes the card to the top of
+  Ready so the assigned runner continues from the existing delivery ref,
+  preserving the commit history (no squash/split/drop/combine) instead of
+  starting over. A second ambiguous result in the same review epoch is left
+  for Human Review instead of looping. This only fires for the
+  attribution-ambiguous case (reason `delivery-attribution-ambiguous`); a plain
+  textual conflict still uses the operator-triggered path above.
 - Push durability: `IntegrationPushQueue` remains in memory to keep network work off the request path. `IntegrationPushBackstopHostedService` re-drives any passed merge with a non-terminal push step after restart, so queue loss cannot leave the integration branch local-only.
 - Shutdown drain: once the accepted worker enters merge + build gate + possible rollback, it ignores host cancellation until that consistency boundary reaches a terminal result. `/healthz/drain` returns `gate-busy` during that window. The external stable restart watcher waits up to `ATP_GATE_DRAIN_TIMEOUT_SECONDS` before it invokes the hard update/restart path.
 
@@ -227,4 +246,6 @@ It is separate from the Project Hub Git tree, which is strictly read-only.
 
 - `docs/concepts/parallel-task-execution.md` - parallel execution model, integration strategies, merge-queue.
 - `docs/concepts/release-semantics.md` - the decided integration and release model (supersedes the retired `git-branching-integration-zielbild.md` draft). The target three-tier branching model (`task/<id>` -> `develop-local` -> `develop`) described in that draft was not carried forward; the `develop-local` tier remains a target, not yet implemented.
+- `docs/operations/rebase-merge-and-steering/index.html` (AGT-W37, decision pending) - proposes extending the manual and automatic recovery paths above into one attribution-lens policy (deterministic bounce steering as the default rail, a strong-guardian escalation tier for repeated or complex conflicts, bounded automatic rounds). Not yet approved; this page documents current implemented behavior only.
+- `docs/operations/batch-gate-concept/index.html` (AGT-W36, decision pending) - proposes a separate batch mechanism (one temporary integration branch and one full-suite run per delivery wave) that would sit alongside, not replace, the per-task integration described here.
 - ADR-0052 in `docs/system/architecture/decisions/adr-archive.md` - the parallel-execution decision and the "run agent does no git" contract.

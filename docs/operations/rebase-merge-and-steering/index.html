@@ -161,6 +161,11 @@
   </div>
 </header>
 
+<div class="box">
+  <h4>Architecture documentation pointer</h4>
+  <p>The current, already-implemented integration/merge/rebase-replay behavior this dossier analyzes is documented at <a href="../../concepts/task-integration-and-merge-workflow.md">docs/concepts/task-integration-and-merge-workflow.md</a>, including the automatic bounded steer round (<code>IntegrationAgentRoundService</code>) added there during this curation pass. That page links back here for the proposed extensions (attribution-lens framing, bounce steering as the default rail, strong-guardian escalation) which remain pending, not built.</p>
+</div>
+
 <div class="box accent" data-document-section="recommendation">
   <h4>Recommendation</h4>
   <p><b>Keep the hybrid and make its boundary explicit.</b> A fresh agent recovery round rebases its delivery onto current <code>origin/&lt;integration-branch&gt;</code>, records a new fenced result and reruns review. Canonical integration tries SHA-preserving merge first. Promotion advances <code>main</code> only to the exact tested candidate SHA. Move routine conflict bounces from session labor into one deterministic backend round; invoke a strong guardian only after repetition, contradictory evidence, or a genuinely semantic conflict.</p>

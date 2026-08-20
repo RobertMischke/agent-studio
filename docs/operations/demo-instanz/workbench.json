@@ -4,9 +4,11 @@
   "title": "Public demo instance with no execution authority",
   "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670.]",
   "entrypoint": "index.html",
-  "status": "accepted",
-  "phase": "in-progress",
-  "updatedAt": "2026-08-18T11:15:00Z",
+  "status": "decided",
+  "phase": "testing",
+  "updatedAt": "2026-08-20T00:00:00Z",
+  "editedBy": "Operator bookkeeping via AGT-2671",
+  "statusReason": "Normalized non-conforming status/phase values (\"accepted\"/\"in-progress\" are not in the platform's allowed set) to the equivalent canonical values: decided (\"Accepted / In progress\" in the UI) and testing. Of the five implementation slices, S1 (AGT-2666), S2 (AGT-2667), and S5 (AGT-2670) are archived and delivered; S3 (AGT-2668) and S4 (AGT-2669) are still in 3-progress. This Dossier stays decided, not documented, until S3 and S4 land.",
   "sourceTaskKeys": [
     "AGT-2582"
   ],

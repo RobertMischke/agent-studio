@@ -1419,6 +1419,17 @@ Verträge aus §4 noch die bestehenden Historienanker. Anlass war der reale Stan
 alter Runner nach dem Aufwachen noch schreiben kann, obwohl ein neuer Runner die Aufgabe übernommen
 hat.</p>
 
+<p class="stx stx-ok"><b>Architecture documentation pointer (2026-08-20):</b> the lease/fence/epoch
+mechanism itself is durable, implemented, and already documented outside this dossier: see
+<a href="../../system/domains/runner.md">docs/system/domains/runner.md</a> (AttemptAuthorityService /
+RunLeaseService, including the soft-drain epoch-rotation behavior),
+<a href="../../concepts/decoupled-lifecycles.md">docs/concepts/decoupled-lifecycles.md</a>, and
+<a href="../../concepts/parallel-task-execution.md">docs/concepts/parallel-task-execution.md</a> §8.2C
+(full lease contract: <code>AcquireRunLease</code>, <code>Heartbeat</code>, monotonic fencing token,
+stale-writer rejection). §9 below stays the pedagogical walkthrough (the standby zombie-writer story,
+the "soft-drain generation" framing, the comparison table, and the sequence diagrams) rather than a
+duplicate contract.</p>
+
 <p><b>Die Kurzlesart:</b> Eine Lease sagt, <i>wie lange</i> ein Executor schreiben darf. Der Fence sagt,
 <i>welche von mehreren Lease-Generationen</i> die neueste ist. Die Authority Epoch sagt,
 <i>unter welcher Generation des gesamten Authority Store</i> eine Lease ausgestellt wurde. Der

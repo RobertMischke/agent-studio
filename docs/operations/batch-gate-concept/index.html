@@ -160,6 +160,11 @@
   </div>
 </header>
 
+<div class="box">
+  <h4>Architecture documentation pointer</h4>
+  <p>The durable mechanism described in this dossier (batch construction, lifecycle, red-path halving, authority/promotion-train interplay) is mirrored as a standing architecture reference at <a href="../../concepts/batch-gate-concept.md">docs/concepts/batch-gate-concept.md</a>, kept in sync with this dossier's decision state. That page is the citable link for readers outside this dossier; it is not itself an approval record.</p>
+</div>
+
 <div class="box accent">
   <h4>Recommendation</h4>
   <p><b>Choose Option A, Batch Gate, as the primary throughput control and pilot it with docs-only deliveries.</b> Keep per-card model review and immutable delivery validation. Move the full build and test suite into one single-flight batch run. Option C, a separate gate host, composes with A when one serialized suite no longer provides enough capacity. Do not use risk classification as the only guard for code-bearing changes.</p>
