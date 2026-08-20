@@ -7,6 +7,7 @@ import { CapabilityHealthComponent } from '../capability-health/capability-healt
 import { GitTokenCapabilityComponent } from '../git-token-capability/git-token-capability';
 import { HostWorkloadSummaryComponent } from '../host-workload-summary/host-workload-summary';
 import { HostTelemetryHistoryComponent } from '../host-telemetry-history/host-telemetry-history';
+import { WindowsTunnelSetupComponent } from '../windows-tunnel-setup/windows-tunnel-setup';
 import {
   RuntimeCapacityEditorComponent,
   type HostProjectPolicyChange,
@@ -63,6 +64,7 @@ interface Meter {
     HostWorkloadSummaryComponent,
     HostTelemetryHistoryComponent,
     RuntimeCapacityEditorComponent,
+    WindowsTunnelSetupComponent,
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',

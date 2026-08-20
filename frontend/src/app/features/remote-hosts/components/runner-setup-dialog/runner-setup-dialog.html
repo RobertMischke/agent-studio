@@ -92,6 +92,14 @@
             <span>Choose Reverse tunnel, or enter a central or LAN URL the host can curl directly.</span>
           </div>
         }
+
+        @if (connectionMode() === 'tunnel') {
+          <div class="setup__prerequisite" data-testid="runner-setup-tunnel-prerequisite">
+            <strong>Local prerequisite: this runs on the Windows control-plane host, not over SSH to {{ host().name }}.</strong>
+            <span>Reverse tunnel mode needs the tunnel keeper and watchdog registered here, on this Studio machine.</span>
+            <app-windows-tunnel-setup [sshTarget]="sshTarget()" />
+          </div>
+        }
       </section>
 
       <section class="setup__authentication" aria-labelledby="runner-setup-auth-title">

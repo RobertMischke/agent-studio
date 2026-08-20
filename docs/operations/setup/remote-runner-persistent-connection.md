@@ -49,7 +49,7 @@ below the tunnel line changes.
 ## Option A - Windows scheduled task (studio dials out, `-R`)
 
 Matches the current Hetzner test host: the studio initiates an outbound reverse
-tunnel and a Windows Scheduled Task keeps it alive.
+tunnel and two independent Windows Scheduled Tasks keep it alive and healed.
 
 `agent-runner` is an SSH alias defined in the studio user's `~/.ssh/config`:
 
@@ -63,92 +63,26 @@ Host agent-runner
     ExitOnForwardFailure yes
 ```
 
-Use the repository-owned functional keeper instead of a bare `ssh -N` loop:
+Registering the two Scheduled Tasks (`AgentRunner-TunnelKeeper` and
+`AgentRunner-TunnelWatchdog`), their exact parameters, the keeper's functional
+probe, the watchdog's two-probe heal sequence, and the live status surface are
+all documented on the Windows control-plane runbook, this page's own sibling:
+[windows-control-plane-host.md](./windows-control-plane-host.md). That page is
+canonical; this page only covers why a supervised tunnel exists and the
+alternative host-dials-in topology below (Option B). Do not register these
+tasks with a bare `ssh -N` loop or a hand-rolled Scheduled Task; use the
+guided **Register tunnel keeper** flow in Execution Hosts, or the manual
+`register-tunnel-keeper.ps1` / `register-tunnel-watchdog.ps1` fallback
+documented there.
 
-```powershell
-Set-Location C:\Projects\agent-studio
-.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
-    -SshTarget agent-runner `
-    -RemotePort 15031 `
-    -TaskServerPort 5031 `
-    -IntervalMinutes 5
-
-.\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
-    -DevspacePath C:\Projects\agent-taskboard-devspace `
-    -SshTarget agent-runner `
-    -RemotePort 15031 `
-    -KeeperTaskName AgentRunner-TunnelKeeper `
-    -ProbeIntervalSeconds 60 `
-    -FailureThreshold 2 `
-    -OperatorAlarmPath C:\Projects\agent-taskboard-devspace\.operator-alarm.log
-```
-
-Both registrations are idempotent and use `IgnoreNew`. The keeper starts at
-boot, starts immediately when registered, and retains its five-minute fallback
-trigger. The independent `AgentRunner-TunnelWatchdog` starts at boot and owns a
-60-second probe loop. Both tasks use an S4U principal, so they do not depend on
-an interactive logon session. The selected identity must own a local protected
-SSH key and a non-interactive `agent-runner` alias. Run the registration from
-an elevated PowerShell session because an at-startup task can require that
-authority.
-
-The keeper task has no execution time limit and remains the owner of its
-`ssh.exe` child until SSH exits. It deliberately has no Task Scheduler retry:
-the watchdog owns the two-probe recovery sequence, while the keeper's periodic
-trigger remains a slower fallback if the watchdog task itself is unavailable.
-On the first run after upgrading, the keeper replaces a matching pre-existing
-Windows forward once so the long-lived SSH process moves under this ownership
-and logging contract.
-
-The keeper in
-[`deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1`](../../../deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1)
-does not equate a local `ssh.exe` process with a working route. It asks the
-Linux host to request `http://127.0.0.1:15031/healthz` and accepts the probe only
-when SSH returns the exact `AGENT_TASK_SERVER_ROUTE_OK` sentinel. If that
-functional probe fails, the keeper stops only `ssh.exe` processes matching the
-configured target and exact reverse-forward tuple, waits for the old listener
-to clear, then starts:
-
-```powershell
-ssh.exe -N -T `
-  -o BatchMode=yes `
-  -o ExitOnForwardFailure=yes `
-  -o ServerAliveInterval=30 `
-  -o ServerAliveCountMax=3 `
-  -R 15031:127.0.0.1:5031 agent-runner
-```
-
-State and bounded transition logs live under
-`%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\`. Healthy scheduled runs stay
-quiet. An ongoing failure is logged on transition and at most hourly, not on
-every five-minute invocation. `ExitOnForwardFailure=yes` matters: if the host's
-`15031` is still held by a half-dead previous session, SSH fails fast instead
-of connecting without the forward.
-
-The watchdog in
-[`deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh`](../../../deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh)
-runs the functional probe every 60 seconds. After two consecutive failures it
-uses the operator recovery sequence in this order:
-
-1. Through the agent SSH account, find and stop a process listening specifically
-   on `127.0.0.1:15031`. A missing listener is a successful no-op.
-2. Call `Stop-ScheduledTask` and `Start-ScheduledTask` for
-   `AgentRunner-TunnelKeeper`.
-3. Retry the runner-side health request for up to 30 seconds and journal the
-   outcome.
-
-The append-only journal is `<devspace>/.tunnel-watchdog.log`. A second
-consecutive failed heal appends one `severity=alarm` line to the configured
-operator-alarm channel. The default channel is
-`<devspace>/.operator-alarm.log`; pass the path already consumed by the stable
-operator watcher when a devspace uses a different path.
-
-Each keeper replacement now writes its stdout and stderr to timestamped files
-under `%LOCALAPPDATA%\AgentTaskboard\tunnel-keeper\` and records the paths in
-`ssh-attempts.log`. The keeper waits for the SSH process and always records its
-eventual exit code. The stderr file includes verbose OpenSSH disconnect and
-forwarding diagnostics, so a later incident can distinguish keepalive death,
-connection reset, authentication failure, and remote bind refusal.
+In short: the keeper
+([`tunnel-keeper.ps1`](../../../deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1))
+owns the `ssh -R` forward and asks the Linux host to prove the route is
+functional, not just that a local `ssh.exe` process exists. The watchdog
+([`tunnel-watchdog.sh`](../../../deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh))
+probes every 60 seconds and, after two consecutive failures, clears the stale
+remote listener and restarts the keeper task; a second consecutive failed heal
+raises one `severity=alarm` line on the operator-alarm channel.
 
 ## Option B - autossh + systemd on the host (host dials in, `-L`)
 
