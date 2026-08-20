@@ -98,6 +98,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done)</td>
   <td>Recurring root causes unchanged: tunnel watchdog registration still pending (admin one-liner), AGT-2664 productization queued, AGT-2662 scenario decision open. Session-cron mortality now bit three times - argument for 2662 scenario 2 strengthened.</td>
 </tr>
+<tr>
+  <td class="meta">08-20 23:0x</td>
+  <td><strong>Orchestrator misdiagnosis corrected by AGT-2663 investigation:</strong> the 08-16 stall was NOT a removed claims route - the pinned and blamed releases are byte-identical in backend/task-server/contracts (tree-hash proof). The v1-claims 404 probed that night is the NORMAL monolith answer (capability negotiation keeps coding runners on /api/runner/claim). The rollback healed via RESTART, not version. Real cause unidentified; hottest lead per report: auth/tunnel state (Finding 7). Actions tonight: 2663 accepted as investigation deliverable; prerequisite card AGT-2674 cut (win-x64 profile + Windows wrapper + runbook section + TaskServerPort rename); gate-blocking namespace violation fixed (train 31 running); rollout-hold RE-DERIVED: after train 31 goes green the pin is lifted under active supervision - the hold no longer has an evidentiary basis.</td>
+  <td class="v action">operator-action (done)</td>
+  <td>Lesson recorded: a probe result (404) matched the expected failure signature of a wrong theory; the tree-hash comparison would have falsified it in one command. Future stalls: compare release trees BEFORE topology theories.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
