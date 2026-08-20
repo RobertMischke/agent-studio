@@ -10,23 +10,38 @@ public class TaskHub : Hub
     private readonly AccessSecurityStore _security;
     private readonly TaskScannerService _scanner;
     private readonly AgentStudio.Registry.ProjectRegistry _projects;
+    private readonly PublicDemoViewerSessionStore _viewerSessions;
 
     public TaskHub(
         IConfiguration configuration,
         AccessSecurityStore security,
         TaskScannerService scanner,
-        AgentStudio.Registry.ProjectRegistry projects)
+        AgentStudio.Registry.ProjectRegistry projects,
+        PublicDemoViewerSessionStore viewerSessions)
     {
         _configuration = configuration;
         _security = security;
         _scanner = scanner;
         _projects = projects;
+        _viewerSessions = viewerSessions;
     }
 
     public override async Task OnConnectedAsync()
     {
+        var isPublicDemo = SecurityProfiles.IsPublicDemo(_configuration);
+        if (isPublicDemo && !HasLiveDemoViewerSession())
+        {
+            Context.Abort();
+            throw new HubException("A public demo viewer session (issued by the edge) is required.");
+        }
+
         var principal = LivePrincipal();
-        if (principal is null || principal.User.Role == StudioRoles.Owner || principal.User.Projects.Count == 0)
+        // The public demo has no unscoped catch-all group: every visible
+        // project is already enumerated and allowlist-checked below, and the
+        // demo has no non-public project whose broadcasts an unscoped
+        // connection could otherwise pick up.
+        if (!isPublicDemo
+            && (principal is null || principal.User.Role == StudioRoles.Owner || principal.User.Projects.Count == 0))
             await Groups.AddToGroupAsync(Context.ConnectionId, UnscopedSecurityGroup);
         foreach (var project in _projects.List())
         {
@@ -34,6 +49,12 @@ public class TaskHub : Hub
                 await Groups.AddToGroupAsync(Context.ConnectionId, ProjectGroup(project.Id, _projects));
         }
         await base.OnConnectedAsync();
+    }
+
+    private bool HasLiveDemoViewerSession()
+    {
+        var cookie = Context.GetHttpContext()?.Request.Cookies[PublicDemoViewerSessionStore.CookieName];
+        return _viewerSessions.Touch(cookie);
     }
 
     // Client methods:

@@ -1,0 +1,27 @@
+{
+  "Urls": "http://127.0.0.1:5030",
+  "Security": {
+    "Profile": "public-demo-readonly",
+    "MaxRequestBodyBytes": 26214400,
+    "PublicDemoMaxRequestBodyBytes": 16384,
+    "PublicDemoEdge": {
+      "RateLimit": {
+        "PermitLimit": 120,
+        "WindowSeconds": 60
+      }
+    },
+    "Session": {
+      "IdleMinutes": 480,
+      "AbsoluteMinutes": 10080
+    },
+    "LoginThrottle": {
+      "MaxFailures": 5,
+      "WindowMinutes": 15,
+      "LockoutMinutes": 15
+    }
+  },
+  "ErrorHandling": {
+    "IncludeExceptionDetails": false
+  },
+  "AllowedHosts": "demo.example.com"
+}
