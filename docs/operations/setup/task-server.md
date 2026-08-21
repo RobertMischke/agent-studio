@@ -79,6 +79,79 @@ finish, create a backup, switch to `Maintenance`, stop the unit, replace the
 published package, and start it again. Startup applies additive schema
 migrations before `/readyz` reports that lease and fence authority is restored.
 
+## Windows install and supervision
+
+There is no systemd on Windows, so the Task Server runs as a non-interactive
+Scheduled Task instead of an interactive session process. Publish with the
+`win-x64` profile:
+
+```powershell
+dotnet publish task-server\TaskServer.csproj -p:PublishProfile=win-x64 -o out\task-server
+```
+
+This emits the same kind of self-contained single executable
+(`task-server.exe`) as the Linux profile, with the SQLite native runtime
+embedded. It needs neither a repository checkout nor a .NET installation on
+the target host and reads its bootstrap values only from `server.env`.
+
+Install the release under a versioned `C:\AgentOrchestrator\<version>\`
+directory and point `C:\AgentOrchestrator\current` at it (a directory junction
+via `mklink /J` is the closest analog to the Linux `current` symlink). Create
+the host-owned bootstrap file at `C:\ProgramData\AgentOrchestrator\server.env`
+using the same `KEY=VALUE` contract as
+[`agent-task-server.env.example`](../../../deploy/systemd/agent-task-server.env.example),
+including `LISTEN_URL`, `STORE_PATH`, `BACKUP_PATH`, `AUTH`, and
+`AUTH_TOKEN_FILE`. Restrict it to the service account with `icacls`, and
+generate the bearer token the same way as Linux: a randomly generated value of
+at least 32 characters, transferred through the host administration channel
+and never put in a command line, task, log, or committed file.
+
+Register and supervise the process with the scripts in
+[`deploy/windows/task-server/`](../../../deploy/windows/task-server/), run
+from the Studio checkout:
+
+```powershell
+.\deploy\windows\task-server\register-task-server.ps1 `
+    -InstallRoot C:\AgentOrchestrator\current `
+    -EnvFile C:\ProgramData\AgentOrchestrator\server.env
+```
+
+`register-task-server.ps1` registers `AgentOrchestrator-TaskServer` as an
+`AtStartup`-triggered Scheduled Task under an `S4U` principal - services never
+run as session tasks bound to an interactive logon. Its action is
+`start-task-server.ps1`, a detached supervisor that reads `server.env` into
+the child process environment, launches `task-server.exe`, redirects its
+stdout/stderr to timestamped files under
+`%ProgramData%\AgentOrchestrator\task-server\`, and restarts it after
+`RestartDelaySeconds` (default 5, the Windows analog of the unit's
+`Restart=always` / `RestartSec=5s`) whenever it exits. The Scheduled Task's
+own `RestartCount`/`RestartInterval` settings add a second layer of recovery
+if the supervisor process itself is lost.
+
+The Scheduled Task owns process start, stop, restart, and upgrade:
+
+```powershell
+Start-ScheduledTask -TaskName AgentOrchestrator-TaskServer
+Get-ScheduledTask -TaskName AgentOrchestrator-TaskServer | Get-ScheduledTaskInfo
+Stop-ScheduledTask -TaskName AgentOrchestrator-TaskServer
+```
+
+`Stop-ScheduledTask` terminates the process tree without a graceful drain
+signal, so before an upgrade or a planned stop, put the server in `Draining`
+through the management API, wait for active attempts to finish, create a
+backup, switch to `Maintenance`, then stop the task, replace the published
+package under the versioned directory, repoint `current`, and start the task
+again - the same sequence as the systemd upgrade path above.
+
+No packaged Windows backup timer ships yet. Invoke the same backup subcommand
+manually or from an operator-created Scheduled Task with a `Daily` trigger
+targeting the installed executable, mirroring
+[`agent-task-server-backup.timer`](../../../deploy/systemd/agent-task-server-backup.timer):
+
+```powershell
+C:\AgentOrchestrator\current\task-server.exe backup --name manual
+```
+
 ## Configuration and health
 
 The production binary consumes one host-owned `server.env` bootstrap contract.
