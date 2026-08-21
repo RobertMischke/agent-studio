@@ -94,9 +94,53 @@
         }
       </section>
 
+      @if (connectionMode() === 'tunnel') {
+        <section class="setup__tunnel" aria-labelledby="runner-setup-tunnel-title" data-testid="runner-setup-tunnel">
+          <div class="setup__section-head">
+            <span class="setup__step">2</span>
+            <div>
+              <h3 id="runner-setup-tunnel-title">Register Windows tunnel supervision</h3>
+              <p>Install the product-owned keeper and watchdog on this Windows control-plane host before provisioning the remote daemon.</p>
+            </div>
+          </div>
+
+          <div class="setup__fields">
+            <label class="setup__field--wide">
+              <span>Windows devspace path</span>
+              <input data-testid="runner-setup-tunnel-devspace"
+                     autocomplete="off"
+                     placeholder="C:\Projects\agent-taskboard-devspace"
+                     [ngModel]="tunnelDevspacePath()"
+                     (ngModelChange)="tunnelDevspacePath.set($event)" />
+              <small>The directory containing the dev and stable checkouts. The watchdog keeps its journal and state here.</small>
+            </label>
+          </div>
+
+          <div class="setup__consent">
+            <strong>One-time administrator consent</strong>
+            <p>The script first explains why Scheduled Task registration needs administrator rights, asks you to continue, and then opens the Windows UAC prompt. Declining leaves both tasks unchanged. Later health checks and task runs need no elevation.</p>
+          </div>
+
+          <div class="setup__command">
+            <pre data-testid="runner-setup-tunnel-command"><code>{{ tunnelSetupCommand() }}</code></pre>
+            <button type="button"
+                    data-testid="runner-setup-tunnel-copy"
+                    [disabled]="!tunnelDevspacePath().trim()"
+                    (click)="copyTunnelSetupCommand()">
+              {{ tunnelCommandCopyState() === 'copied' ? 'Copied' : 'Copy PowerShell command' }}
+            </button>
+          </div>
+          @if (tunnelCommandCopyState() === 'failed') {
+            <p class="setup__copy-failure" role="status">Clipboard access was unavailable. Select and copy the command above.</p>
+          }
+
+          <app-tunnel-supervision-status [showUnconfigured]="true" [refreshable]="true" />
+        </section>
+      }
+
       <section class="setup__authentication" aria-labelledby="runner-setup-auth-title">
         <div class="setup__section-head">
-          <span class="setup__step">2</span>
+          <span class="setup__step">{{ connectionMode() === 'tunnel' ? 3 : 2 }}</span>
           <div>
             <h3 id="runner-setup-auth-title">Provider authentication</h3>
             <p>Studio sends this value once through SSH stdin to <code>/etc/agent-runner/provider-auth.env</code>. It is not stored in the Studio database, repository, or setup task.</p>
@@ -148,7 +192,7 @@
 
       <section class="setup__execution" aria-labelledby="runner-setup-execution-title">
         <div class="setup__section-head">
-          <span class="setup__step">3</span>
+          <span class="setup__step">{{ connectionMode() === 'tunnel' ? 4 : 3 }}</span>
           <div>
             <h3 id="runner-setup-execution-title">Visible setup task</h3>
             <p>The standard CLI-task surface owns installation output, provider probe results, completion, and history. It never receives the credential.</p>
@@ -169,6 +213,9 @@
               }
               @if (!providerAuthGateSatisfied()) {
                 <li>Provision provider authentication through the protected SSH channel.</li>
+              }
+              @if (!tunnelRegistrationReady()) {
+                <li>Run the Windows tunnel supervision command, approve elevation, and refresh until both Scheduled Tasks are registered.</li>
               }
             </ul>
           </div>
