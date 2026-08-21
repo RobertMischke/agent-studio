@@ -63,6 +63,9 @@ cat > "$fake_bin/powershell.exe" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$FAKE_TUNNEL_STATE/powershell-calls.log"
+if [[ "$*" == *"-StatusOnly"* ]]; then
+  exit 0
+fi
 if [ "${FAKE_POWERSHELL_FAIL:-0}" = "1" ]; then
   exit 1
 fi
@@ -103,6 +106,9 @@ FAKE_TUNNEL_STATE="$fake_state" FAKE_REMOTE_PORT="$remote_port" "$watchdog" \
   --ssh-target agent-runner \
   --remote-port "$remote_port" \
   --keeper-task AgentRunner-TunnelKeeper \
+  --watchdog-task AgentRunner-TunnelWatchdog \
+  --status-refresh-script "$watchdog" \
+  --supervision-status-path "$fake_devspace/supervision-status.json" \
   --probe-interval-seconds "$functional_interval_seconds" \
   --failure-threshold 2 \
   --verify-attempts 2 \
@@ -120,6 +126,7 @@ grep -Fq 'event=keeper_restart result=0 task=AgentRunner-TunnelKeeper' "$log"
 grep -Fq "event=heal_succeeded health_url=http://127.0.0.1:$remote_port/healthz" "$log"
 grep -Fq 'Stop-ScheduledTask' "$fake_state/powershell-calls.log"
 grep -Fq 'Start-ScheduledTask' "$fake_state/powershell-calls.log"
+grep -Fq -- '-StatusOnly' "$fake_state/powershell-calls.log"
 curl -sf --max-time 1 "http://127.0.0.1:$remote_port/healthz" >/dev/null
 test "$elapsed" -le $((functional_interval_seconds + 12))
 

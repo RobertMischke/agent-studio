@@ -11,6 +11,7 @@ set -u
 ssh_target="agent-runner"
 remote_port="15031"
 keeper_task="AgentRunner-TunnelKeeper"
+watchdog_task="AgentRunner-TunnelWatchdog"
 probe_interval_seconds="60"
 failure_threshold="2"
 verify_attempts="6"
@@ -18,6 +19,8 @@ verify_interval_seconds="5"
 max_cycles="0"
 devspace_dir=""
 operator_alarm_path=""
+status_refresh_script=""
+supervision_status_path=""
 ssh_executable="${TUNNEL_WATCHDOG_SSH:-ssh}"
 powershell_executable="${TUNNEL_WATCHDOG_POWERSHELL:-powershell.exe}"
 
@@ -29,9 +32,12 @@ Usage: tunnel-watchdog.sh [options]
   --ssh-target TARGET             SSH alias for the runner host (default: agent-runner)
   --remote-port PORT              Runner-side reverse-forward port (default: 15031)
   --keeper-task NAME              Scheduled Task to restart (default: AgentRunner-TunnelKeeper)
+  --watchdog-task NAME            This Scheduled Task's name (default: AgentRunner-TunnelWatchdog)
   --operator-alarm PATH           Existing operator-alarm append-only channel
   --probe-interval-seconds N      Probe cadence (default: 60)
   --failure-threshold N           Consecutive failures before healing (default: 2)
+  --status-refresh-script PATH    Product setup script used to refresh UI status
+  --supervision-status-path PATH  Combined status file served by Agent Studio
   --verify-attempts N             Post-restart health attempts (default: 6)
   --verify-interval-seconds N     Seconds between verification attempts (default: 5)
 
@@ -48,9 +54,12 @@ while [ "$#" -gt 0 ]; do
     --ssh-target) ssh_target=${2-}; shift 2 ;;
     --remote-port) remote_port=${2-}; shift 2 ;;
     --keeper-task) keeper_task=${2-}; shift 2 ;;
+    --watchdog-task) watchdog_task=${2-}; shift 2 ;;
     --operator-alarm) operator_alarm_path=${2-}; shift 2 ;;
     --probe-interval-seconds) probe_interval_seconds=${2-}; shift 2 ;;
     --failure-threshold) failure_threshold=${2-}; shift 2 ;;
+    --status-refresh-script) status_refresh_script=${2-}; shift 2 ;;
+    --supervision-status-path) supervision_status_path=${2-}; shift 2 ;;
     --verify-attempts) verify_attempts=${2-}; shift 2 ;;
     --verify-interval-seconds) verify_interval_seconds=${2-}; shift 2 ;;
     --max-cycles) max_cycles=${2-}; shift 2 ;;
@@ -73,6 +82,14 @@ fi
 case "$keeper_task" in
   *[!A-Za-z0-9._-]*|'') printf 'tunnel-watchdog: keeper task name contains unsupported characters\n' >&2; exit 2 ;;
 esac
+case "$watchdog_task" in
+  *[!A-Za-z0-9._-]*|'') printf 'tunnel-watchdog: watchdog task name contains unsupported characters\n' >&2; exit 2 ;;
+esac
+if { [ -n "$status_refresh_script" ] && [ -z "$supervision_status_path" ]; } ||
+   { [ -z "$status_refresh_script" ] && [ -n "$supervision_status_path" ]; }; then
+  printf 'tunnel-watchdog: status refresh script and supervision status path must be provided together\n' >&2
+  exit 2
+fi
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 if [ -z "$devspace_dir" ]; then
@@ -82,6 +99,7 @@ fi
 
 log_path="$devspace_dir/.tunnel-watchdog.log"
 state_dir="$devspace_dir/.tunnel-watchdog-state"
+status_path="$state_dir/status.json"
 lock_dir="$state_dir/lock"
 operator_alarm_path=${operator_alarm_path:-"$devspace_dir/.operator-alarm.log"}
 health_url="http://127.0.0.1:$remote_port/healthz"
@@ -114,6 +132,69 @@ iso_now() {
 
 journal() {
   printf '%s %s\n' "$(iso_now)" "$*" >> "$log_path"
+}
+
+# Renders an optional timestamp as a JSON string, or the bare token `null`
+# when unset. The reader on the other end (TunnelWatchdogStatus in
+# backend/Features/TunnelSupervision/TunnelSupervisionStatus.cs) types these
+# fields DateTime? - an empty string is not a valid DateTime and would fail
+# deserialization, which is the common case for lastHealAt on a tunnel that
+# has never needed healing.
+json_timestamp_or_null() {
+  if [ -z "$1" ]; then printf 'null'; else printf '"%s"' "$1"; fi
+}
+
+# Machine-readable snapshot read by the product's visibility surface (Studio
+# admin UI). A plain journal line is enough for a human tailing the log; the
+# Task Server needs one atomic-write file to poll instead of parsing history.
+write_status() {
+  probe_at=$1
+  probe_result=$2
+  temp_path="$status_path.tmp"
+  cat > "$temp_path" <<STATUS
+{
+  "schemaVersion": 1,
+  "generatedAt": "$(iso_now)",
+  "sshTarget": "$ssh_target",
+  "remotePort": $remote_port,
+  "lastProbeAt": $(json_timestamp_or_null "$probe_at"),
+  "lastProbeResult": "$probe_result",
+  "consecutiveProbeFailures": $probe_failures,
+  "lastHealAt": $(json_timestamp_or_null "${last_heal_at:-}"),
+  "lastHealResult": "${last_heal_result:-}",
+  "consecutiveHealFailures": $heal_failures
+}
+STATUS
+  mv -f "$temp_path" "$status_path"
+}
+
+# Keep the product-facing snapshot current without elevation. StatusOnly reads
+# both Scheduled Tasks plus the keeper/watchdog state files and atomically
+# rewrites the file served by GET /api/system/tunnel-supervision. A failure is
+# journaled only on transition so a missing checkout does not create noise.
+refresh_failed=0
+refresh_supervision_status() {
+  [ -n "$status_refresh_script" ] || return 0
+  if "$powershell_executable" -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+      -File "$status_refresh_script" \
+      -SshTarget "$ssh_target" \
+      -RemotePort "$remote_port" \
+      -KeeperTaskName "$keeper_task" \
+      -WatchdogTaskName "$watchdog_task" \
+      -DevspacePath "$devspace_dir" \
+      -StatusPath "$supervision_status_path" \
+      -StatusOnly >/dev/null 2>&1; then
+    if [ "$refresh_failed" -eq 1 ]; then
+      journal "event=supervision_status_refresh_recovered path=$supervision_status_path"
+    fi
+    refresh_failed=0
+    return 0
+  fi
+  if [ "$refresh_failed" -eq 0 ]; then
+    journal "event=supervision_status_refresh_failed path=$supervision_status_path"
+  fi
+  refresh_failed=1
+  return 0
 }
 
 alarm() {
@@ -197,34 +278,50 @@ heal_route() {
 
   if [ "$cleanup_rc" -eq 0 ] && [ "$restart_rc" -eq 0 ] && verify_route; then
     journal "event=heal_succeeded health_url=$health_url"
+    last_heal_at=$(iso_now)
+    last_heal_result="succeeded"
     return 0
   fi
 
   journal "event=heal_failed cleanup_result=$cleanup_rc restart_result=$restart_rc health_url=$health_url"
+  last_heal_at=$(iso_now)
+  last_heal_result="failed"
   return 1
 }
 
 probe_failures=0
 heal_failures=0
 cycles=0
+last_heal_at=""
+last_heal_result=""
 journal "event=watchdog_started interval_seconds=$probe_interval_seconds threshold=$failure_threshold target=$ssh_target port=$remote_port"
+write_status "" "starting"
+refresh_supervision_status
 
 while :; do
   cycle_started_epoch=$(date +%s)
   cycles=$((cycles + 1))
+  probed_at=$(iso_now)
   if probe_route; then
     if [ "$probe_failures" -gt 0 ] || [ "$heal_failures" -gt 0 ]; then
       journal "event=route_recovered_without_heal prior_probe_failures=$probe_failures prior_heal_failures=$heal_failures"
     fi
     probe_failures=0
     heal_failures=0
+    write_status "$probed_at" "ok"
+    refresh_supervision_status
   else
     probe_failures=$((probe_failures + 1))
     journal "event=probe_failed consecutive=$probe_failures threshold=$failure_threshold"
+    cycle_probe_result="failed"
     if [ "$probe_failures" -ge "$failure_threshold" ]; then
       if heal_route; then
         probe_failures=0
         heal_failures=0
+        # heal_route only returns success after its own verify_route() probe
+        # passed, so the route is confirmed reachable again by now - report
+        # that, not the stale "failed" from the probe that triggered the heal.
+        cycle_probe_result="ok"
       else
         heal_failures=$((heal_failures + 1))
         journal "event=heal_failure_count consecutive=$heal_failures alarm_threshold=2"
@@ -233,6 +330,8 @@ while :; do
         fi
       fi
     fi
+    write_status "$probed_at" "$cycle_probe_result"
+    refresh_supervision_status
   fi
 
   if [ "$max_cycles" -gt 0 ] && [ "$cycles" -ge "$max_cycles" ]; then
