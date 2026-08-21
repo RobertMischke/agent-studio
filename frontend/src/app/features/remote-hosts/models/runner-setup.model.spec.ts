@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { RemoteHost } from './remote-host.model';
-import { buildRunnerSetupRequest, runnerSetupIssues, type RunnerSetupConfig } from './runner-setup.model';
+import {
+  buildRunnerSetupRequest,
+  buildTunnelSupervisionCommand,
+  runnerSetupIssues,
+  type RunnerSetupConfig,
+} from './runner-setup.model';
 
 const HOST: RemoteHost = {
   id: 'agent-runner-01',
@@ -24,12 +29,14 @@ const VALID: RunnerSetupConfig = {
   clientId: 'runner-client-01',
   gitRemote: 'https://github.com/example/agent-studio.git',
   gitPushRemote: 'git@github.com:example/agent-studio.git',
+  tunnelDevspacePath: '',
 };
 
 describe('runner setup model', () => {
   it('requires every operator-owned connection value', () => {
     expect(runnerSetupIssues({
       sshTarget: '', taskServerUrl: '', connectionMode: '', clientId: '', gitRemote: '', gitPushRemote: '',
+      tunnelDevspacePath: '',
     })).toEqual([
       'SSH target is required.',
       'Task Server URL is required.',
@@ -45,7 +52,11 @@ describe('runner setup model', () => {
     expect(runnerSetupIssues(loopback)).toContain(
       'A remote host cannot reach this loopback URL. Choose Tunnel or enter a central or LAN URL.',
     );
-    expect(runnerSetupIssues({ ...loopback, connectionMode: 'tunnel' })).toEqual([]);
+    expect(runnerSetupIssues({
+      ...loopback,
+      connectionMode: 'tunnel',
+      tunnelDevspacePath: 'C:\\Projects\\agent-taskboard-devspace',
+    })).toEqual([]);
   });
 
   it('builds the exact idempotent remote setup and protected provider-auth contract', () => {
@@ -79,5 +90,22 @@ describe('runner setup model', () => {
     expect(request.prompt).not.toContain('codex login --device-auth');
     expect(request.prompt).not.toContain('claude auth login');
     expect(request.prompt).toContain('one real smoke task');
+  });
+
+  it('builds the consent-gated product command for a reverse tunnel', () => {
+    const config: RunnerSetupConfig = {
+      ...VALID,
+      connectionMode: 'tunnel',
+      taskServerUrl: 'http://127.0.0.1:15031',
+      tunnelDevspacePath: "C:\\Projects\\operator's devspace",
+    };
+
+    expect(buildTunnelSupervisionCommand(config)).toBe(
+      ".\\deploy\\windows\\agent-runner-tunnel\\setup-tunnel-supervision.ps1 "
+      + "-SshTarget 'agent-runner' -RemotePort 15031 -OrchestratorPort 5031 "
+      + "-DevspacePath 'C:\\Projects\\operator''s devspace'",
+    );
+    expect(buildRunnerSetupRequest(HOST, config).prompt)
+      .toContain('guided Studio flow has already required the Windows keeper and watchdog registration');
   });
 });

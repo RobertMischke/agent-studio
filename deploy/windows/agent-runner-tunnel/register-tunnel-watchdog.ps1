@@ -25,6 +25,10 @@ param(
 
     [string] $BashExecutable = 'C:\Program Files\Git\bin\bash.exe',
 
+    [string] $StatusRefreshScript,
+
+    [string] $SupervisionStatusPath,
+
     [string] $RunAsUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 )
 
@@ -38,6 +42,15 @@ if ([string]::IsNullOrWhiteSpace($OperatorAlarmPath)) {
 $watchdogBashPath = $watchdog -replace '\\', '/'
 $devspaceBashPath = $devspace -replace '\\', '/'
 $operatorAlarmBashPath = $OperatorAlarmPath -replace '\\', '/'
+$statusRefreshBashPath = ''
+$supervisionStatusBashPath = ''
+if ($StatusRefreshScript -or $SupervisionStatusPath) {
+    if (-not $StatusRefreshScript -or -not $SupervisionStatusPath) {
+        throw 'StatusRefreshScript and SupervisionStatusPath must be provided together.'
+    }
+    $statusRefreshBashPath = (Resolve-Path -LiteralPath $StatusRefreshScript).Path -replace '\\', '/'
+    $supervisionStatusBashPath = $SupervisionStatusPath -replace '\\', '/'
+}
 
 function Quote-TaskArgument {
     param([Parameter(Mandatory)] [string] $Value)
@@ -54,6 +67,13 @@ $argumentList = @(
     '--probe-interval-seconds', $ProbeIntervalSeconds,
     '--failure-threshold', $FailureThreshold
 )
+if ($statusRefreshBashPath) {
+    $argumentList += @(
+        '--watchdog-task', (Quote-TaskArgument $TaskName),
+        '--status-refresh-script', (Quote-TaskArgument $statusRefreshBashPath),
+        '--supervision-status-path', (Quote-TaskArgument $supervisionStatusBashPath)
+    )
+}
 $action = New-ScheduledTaskAction -Execute $bash -Argument ($argumentList -join ' ')
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal `
