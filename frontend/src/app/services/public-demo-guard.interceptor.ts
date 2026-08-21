@@ -39,7 +39,7 @@ export const publicDemoGuardInterceptor: HttpInterceptorFn = (req, next) => {
       lastToastAt = now;
       notify.warning(
         'This is a read-only public demo, so this action was not sent.',
-        'Action blocked — read-only demo',
+        'Action blocked: read-only demo',
       );
     }
 
