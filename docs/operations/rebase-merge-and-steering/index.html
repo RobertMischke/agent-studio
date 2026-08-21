@@ -161,6 +161,11 @@
   </div>
 </header>
 
+<div class="box">
+  <h4>Architecture documentation pointer</h4>
+  <p>The attribution-lens mechanics this dossier already runs in code (stage-specific rebase/merge/promotion policy, the SHA-attribution asymmetry, the two bounded recovery mechanisms) are mirrored as a standing architecture reference at <a href="../../concepts/platform-architecture/rebase-merge-and-integration-invariants.md">docs/concepts/platform-architecture/rebase-merge-and-integration-invariants.md</a>. It documents only what is already decided and implemented; the automation and guardian slices below remain this dossier's open recommendation.</p>
+</div>
+
 <div class="box accent" data-document-section="recommendation">
   <h4>Recommendation</h4>
   <p><b>Keep the hybrid and make its boundary explicit.</b> A fresh agent recovery round rebases its delivery onto current <code>origin/&lt;integration-branch&gt;</code>, records a new fenced result and reruns review. Canonical integration tries SHA-preserving merge first. Promotion advances <code>main</code> only to the exact tested candidate SHA. Move routine conflict bounces from session labor into one deterministic backend round; invoke a strong guardian only after repetition, contradictory evidence, or a genuinely semantic conflict.</p>

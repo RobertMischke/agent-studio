@@ -160,6 +160,11 @@
   </div>
 </header>
 
+<div class="box">
+  <h4>Architecture documentation pointer</h4>
+  <p>A standing architecture reference distinguishing what this proposal builds on (already shipped) from what it still asks the operator to decide lives at <a href="../../concepts/platform-architecture/batch-gate-mechanics.md">docs/concepts/platform-architecture/batch-gate-mechanics.md</a>. It is kept in sync with this dossier's decision state and is the citable link for readers outside this dossier; it is not itself an approval record.</p>
+</div>
+
 <div class="box accent">
   <h4>Recommendation</h4>
   <p><b>Choose Option A, Batch Gate, as the primary throughput control and pilot it with docs-only deliveries.</b> Keep per-card model review and immutable delivery validation. Move the full build and test suite into one single-flight batch run. Option C, a separate gate host, composes with A when one serialized suite no longer provides enough capacity. Do not use risk classification as the only guard for code-bearing changes.</p>
