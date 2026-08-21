@@ -7,7 +7,7 @@ param(
     [int] $RemotePort = 15031,
 
     [ValidateRange(1, 65535)]
-    [int] $TaskServerPort = 5031,
+    [int] $OrchestratorPort = 5031,
 
     [ValidateRange(1, 60)]
     [int] $IntervalMinutes = 5,
@@ -29,7 +29,7 @@ $arguments = @(
     '-File', $quotedKeeper,
     '-SshTarget', $SshTarget,
     '-RemotePort', $RemotePort,
-    '-TaskServerPort', $TaskServerPort
+    '-OrchestratorPort', $OrchestratorPort
 ) -join ' '
 
 $action = New-ScheduledTaskAction -Execute $powerShell -Argument $arguments

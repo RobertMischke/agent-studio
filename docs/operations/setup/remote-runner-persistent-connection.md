@@ -70,7 +70,7 @@ Set-Location C:\Projects\agent-studio
 .\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
     -SshTarget agent-runner `
     -RemotePort 15031 `
-    -TaskServerPort 5031 `
+    -OrchestratorPort 5031 `
     -IntervalMinutes 5
 
 .\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `

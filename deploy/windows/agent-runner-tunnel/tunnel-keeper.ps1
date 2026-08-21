@@ -7,7 +7,7 @@ param(
     [int] $RemotePort = 15031,
 
     [ValidateRange(1, 65535)]
-    [int] $TaskServerPort = 5031,
+    [int] $OrchestratorPort = 5031,
 
     [string] $SshExecutable = 'ssh.exe',
 
@@ -20,7 +20,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $sentinel = 'AGENT_TASK_SERVER_ROUTE_OK'
 $healthUrl = "http://127.0.0.1:$RemotePort/healthz"
-$forward = "${RemotePort}:127.0.0.1:${TaskServerPort}"
+$forward = "${RemotePort}:127.0.0.1:${OrchestratorPort}"
 $statePath = Join-Path $StateDirectory 'state.json'
 $logPath = Join-Path $StateDirectory 'events.log'
 $sshAttemptLogPath = Join-Path $StateDirectory 'ssh-attempts.log'
