@@ -33,6 +33,8 @@
     <span class="rh__count"><strong>{{ remoteCount() }}</strong> remote</span>
   </div>
 
+  <app-tunnel-supervision-status />
+
   @if (error(); as err) {
     <div class="rh__error" data-testid="remote-hosts-error">{{ err }}</div>
   }
