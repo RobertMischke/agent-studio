@@ -70,7 +70,7 @@ public sealed class ClaudeOneShot : ICliOneShot
         {
             _logger.LogWarning(
                 "claude --version failed pre-OneShot at '{Path}'; running rollback NpmShimHealer", executable);
-            var outcome = await NpmShimHealer.TryHealClaudeAsync(_logger, ct);
+            var outcome = await NpmShimHealer.TryHealClaudeAsync(_logger, ct, _configuration["TaskRepository"]);
             if (outcome.Actions.Count > 0)
             {
                 _logger.LogInformation(

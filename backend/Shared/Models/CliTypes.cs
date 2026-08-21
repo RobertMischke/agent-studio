@@ -108,6 +108,17 @@ public record CliUsageSection
     public string? Error { get; init; }
     /// <summary>Sessions grouped by project (cwd or project name).</summary>
     public List<CliUsageProjectGroup> Projects { get; init; } = [];
+
+    /// <summary>When the most recent <c>NpmShimHealer</c> pass ran for this CLI (AGT-2673),
+    /// read from <c>logs/npm-shim-repairs.jsonl</c>. Null when no repair pass has run - the
+    /// common case, since the healer only runs after a pre-spawn probe already failed.</summary>
+    public DateTime? LastRepairAt { get; init; }
+    /// <summary>Classification of the most recent repair pass; one of the
+    /// <c>NpmShimHealDiagnosis</c> constants (e.g. <c>shim-missing-package-present</c>).</summary>
+    public string? LastRepairDiagnosis { get; init; }
+    /// <summary>Whether the most recent repair pass left the CLI available. False renders as
+    /// an alarm, not a note - a repair that failed is exactly what must not stay silent.</summary>
+    public bool? LastRepairSucceeded { get; init; }
 }
 
 public record CliUsageProjectGroup

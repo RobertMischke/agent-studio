@@ -213,7 +213,7 @@ internal static class BuiltInCliBehaviors
         ctx.Logger.LogWarning(
             "claude --version failed pre-spawn at '{Path}'; running rollback NpmShimHealer", probe.Path);
 
-        var outcome = await NpmShimHealer.TryHealClaudeAsync(ctx.Logger, ct);
+        var outcome = await NpmShimHealer.TryHealClaudeAsync(ctx.Logger, ct, ctx.Configuration["TaskRepository"]);
         if (outcome.Actions.Count > 0)
         {
             ctx.Logger.LogInformation(

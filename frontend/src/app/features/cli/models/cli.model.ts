@@ -97,6 +97,14 @@ export interface CliUsageSection {
   path: string | null;
   error: string | null;
   projects: CliUsageProjectGroup[];
+  /** When the most recent npm-shim repair pass ran for this CLI (AGT-2673), ISO 8601.
+   *  Null/absent when no repair pass has run - the common case. */
+  lastRepairAt?: string | null;
+  /** Repair diagnosis, e.g. "shim-missing-package-present". Null/absent when lastRepairAt is null. */
+  lastRepairDiagnosis?: string | null;
+  /** Whether the most recent repair pass left the CLI available. False renders as an
+   *  alarm - a repair that failed is exactly what must not stay silent. */
+  lastRepairSucceeded?: boolean | null;
 }
 
 export interface CliUsageReport {

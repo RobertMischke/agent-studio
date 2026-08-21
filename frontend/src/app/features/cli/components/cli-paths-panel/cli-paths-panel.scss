@@ -109,6 +109,12 @@
 }
 .cli-paths__muted { font-size: 11px; color: var(--studio-fg-muted); font-style: italic; }
 
+.cli-paths__repair-note {
+  margin: var(--studio-spacing-2) 0 0;
+  font-size: 11px;
+  color: var(--studio-fg-dim);
+}
+
 .cli-paths__roots {
   list-style: none;
   margin: var(--studio-spacing-2) 0 0;

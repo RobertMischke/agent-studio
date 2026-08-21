@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
-import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
+import { cliTypeIcon, cliTypeLabel, formatDateTime } from '../../../../services/format.util';
 import type { CliType } from '../../../../models/task.model';
 import type { CliUsageReport, CliUsageSection } from '../../models/cli.model';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
@@ -23,6 +23,10 @@ interface CliPathGroup {
   executablePath: string | null;
   error: string | null;
   roots: CliPathRow[];
+  /** Most recent npm-shim self-heal pass for this CLI (AGT-2673), if any. */
+  lastRepairAt: string | null;
+  lastRepairDiagnosis: string | null;
+  lastRepairSucceeded: boolean | null;
 }
 
 /**
@@ -51,8 +55,11 @@ export class CliPathsPanelComponent implements OnInit {
 
   readonly groups = computed<CliPathGroup[]>(() => {
     const sections = this.report()?.sections ?? [];
+    // A CLI with no local session history and a currently-failed repair
+    // (AGT-2673) still belongs on this page - "available || has sessions"
+    // alone would silently drop a freshly-broken CLI with an empty history.
     return sections
-      .filter((s) => s.available || s.projects.length > 0)
+      .filter((s) => s.available || s.projects.length > 0 || !!s.lastRepairAt)
       .map((s) => this.toGroup(s));
   });
 
@@ -77,6 +84,18 @@ export class CliPathsPanelComponent implements OnInit {
     });
   }
 
+  /** "Repaired at <time> (shim missing package present)" / "Repair failed at <time> (…)".
+   *  Non-silent surfacing of the AGT-2673 npm-shim self-heal: a repair note is only ever
+   *  shown when one actually ran - the common case (nothing was ever broken) shows nothing. */
+  repairNote(g: CliPathGroup): string | null {
+    if (!g.lastRepairAt) return null;
+    const when = formatDateTime(g.lastRepairAt);
+    const diagnosis = (g.lastRepairDiagnosis ?? '').replace(/-/g, ' ');
+    return g.lastRepairSucceeded
+      ? `Repaired at ${when} (${diagnosis})`
+      : `Repair failed at ${when} (${diagnosis})`;
+  }
+
   private toGroup(section: CliUsageSection): CliPathGroup {
     const roots: CliPathRow[] = section.projects
       .map((p) => ({
@@ -95,6 +114,9 @@ export class CliPathsPanelComponent implements OnInit {
       executablePath: section.path,
       error: section.error,
       roots,
+      lastRepairAt: section.lastRepairAt ?? null,
+      lastRepairDiagnosis: section.lastRepairDiagnosis ?? null,
+      lastRepairSucceeded: section.lastRepairSucceeded ?? null,
     };
   }
 }

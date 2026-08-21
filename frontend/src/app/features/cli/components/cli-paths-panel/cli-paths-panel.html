@@ -51,6 +51,14 @@
           <div class="cli-paths__error cli-paths__error--inline">{{ g.error }}</div>
         }
 
+        @if (repairNote(g); as note) {
+          @if (g.lastRepairSucceeded) {
+            <p class="cli-paths__repair-note" [attr.data-testid]="'cli-paths-repair-note-' + g.cliType">{{ note }}</p>
+          } @else {
+            <div class="cli-paths__error cli-paths__error--inline" [attr.data-testid]="'cli-paths-repair-note-' + g.cliType">{{ note }}</div>
+          }
+        }
+
         @if (g.roots.length) {
           <ul class="cli-paths__roots">
             @for (r of g.roots; track r.rootPath) {

@@ -51,4 +51,82 @@ describe('CliPathsPanelComponent', () => {
     expect(g.roots.map((r) => r.projectName)).toEqual(['alpha', 'beta']);
     expect(g.roots[1].sessionCount).toBe(1);
   });
+
+  it('formats a repair note only when one was recorded, and none when nothing ran', async () => {
+    await TestBed.configureTestingModule({
+      imports: [CliPathsPanelComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CliPathsPanelComponent);
+    const cmp = fixture.componentInstance;
+
+    cmp.report.set({
+      at: new Date().toISOString(),
+      sections: [
+        {
+          cliType: 'claude',
+          available: true,
+          version: '2.1.234',
+          path: '/usr/bin/claude',
+          error: null,
+          projects: [],
+          lastRepairAt: '2026-08-18T10:05:00Z',
+          lastRepairDiagnosis: 'shim-missing-package-present',
+          lastRepairSucceeded: true,
+        },
+        {
+          cliType: 'codex',
+          available: true,
+          version: '1.0.0',
+          path: '/usr/bin/codex',
+          error: null,
+          projects: [],
+        },
+      ],
+    });
+
+    const [claude, codex] = cmp.groups();
+    expect(cmp.repairNote(claude)).toMatch(/^Repaired at .* \(shim missing package present\)$/);
+    expect(cmp.repairNote(codex)).toBeNull();
+  });
+
+  it('surfaces a failed repair as an alarm note, not a silent success', async () => {
+    await TestBed.configureTestingModule({
+      imports: [CliPathsPanelComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(CliPathsPanelComponent);
+    const cmp = fixture.componentInstance;
+
+    cmp.report.set({
+      at: new Date().toISOString(),
+      sections: [
+        {
+          cliType: 'claude',
+          available: false,
+          version: null,
+          path: '/usr/bin/claude',
+          error: 'still missing after npm install -g',
+          projects: [],
+          lastRepairAt: '2026-08-18T11:00:00Z',
+          lastRepairDiagnosis: 'shim-missing-package-present',
+          lastRepairSucceeded: false,
+        },
+      ],
+    });
+
+    const [claude] = cmp.groups();
+    expect(claude.lastRepairSucceeded).toBe(false);
+    expect(cmp.repairNote(claude)).toMatch(/^Repair failed at /);
+  });
 });

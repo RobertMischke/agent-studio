@@ -18,6 +18,7 @@ public sealed class SessionRegistry
     private readonly ILogger<SessionRegistry> _logger;
     private readonly ITaskScanner _scanner;
     private readonly SessionToTaskIndex? _sessionIndex;
+    private readonly IConfiguration? _configuration;
 
     public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner)
         : this(logger, scanner, sessionIndex: null) { }
@@ -28,13 +29,21 @@ public sealed class SessionRegistry
     /// <see cref="CliSessionInfo.LinkedJob"/> chip. The parameterless
     /// overload above stays so existing tests that build a registry
     /// without the index keep working (the chip is just empty in that
-    /// case, which matches today's behaviour).
+    /// case, which matches today's behaviour). <paramref name="configuration"/>
+    /// is optional too - it resolves the workspace root for reading the
+    /// last <see cref="NpmShimRepairLog"/> entry onto the Claude section
+    /// (AGT-2673); a registry built without it just reports no repair note.
     /// </summary>
-    public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner, SessionToTaskIndex? sessionIndex)
+    public SessionRegistry(
+        ILogger<SessionRegistry> logger,
+        ITaskScanner scanner,
+        SessionToTaskIndex? sessionIndex,
+        IConfiguration? configuration = null)
     {
         _logger = logger;
         _scanner = scanner;
         _sessionIndex = sessionIndex;
+        _configuration = configuration;
     }
 
     public CliUsageReport BuildReport(CliRouter router)
@@ -128,6 +137,20 @@ public sealed class SessionRegistry
             Version = version,
             Path = path
         };
+
+        // Read-only surfacing of the last NpmShimHealer pass (AGT-2673): this
+        // never triggers a repair itself, it only reports the most recent one
+        // so the CLI paths panel is not silent about a fix that already ran.
+        var lastRepair = NpmShimRepairLog.ReadLast(_configuration?["TaskRepository"], cli.CliType);
+        if (lastRepair is not null)
+        {
+            section = section with
+            {
+                LastRepairAt = lastRepair.At,
+                LastRepairDiagnosis = lastRepair.Diagnosis,
+                LastRepairSucceeded = lastRepair.Available,
+            };
+        }
 
         try
         {
