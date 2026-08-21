@@ -11,6 +11,7 @@ export interface RunnerSetupConfig {
   clientId: string;
   gitRemote: string;
   gitPushRemote: string;
+  tunnelDevspacePath: string;
 }
 
 /** Validate the operator-owned values before a provisioning task can be queued. */
@@ -26,6 +27,9 @@ export function runnerSetupIssues(config: RunnerSetupConfig): string[] {
   if (!config.clientId.trim()) issues.push('Client identity is required.');
   if (!config.gitRemote.trim()) issues.push('Git remote URL is required.');
   if (!config.gitPushRemote.trim()) issues.push('Git push URL is required.');
+  if (config.connectionMode === 'tunnel' && !config.tunnelDevspacePath.trim()) {
+    issues.push('Windows control-plane devspace path is required for tunnel supervision.');
+  }
   if (config.taskServerUrl.trim() && isLocalUrl(config.taskServerUrl) && config.connectionMode !== 'tunnel') {
     issues.push('A remote host cannot reach this loopback URL. Choose Tunnel or enter a central or LAN URL.');
   }
@@ -76,7 +80,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
       '',
       '1. Reachability gate (must run first)',
       `- From the remote host, verify \`${healthUrl}\` with curl and the exact header \`X-Client-Id: ${clientId}\`.`,
-      `- Connection mode is \`${connectionMode}\`. If it is \`tunnel\`, verify the tunnel on the remote host before curl.`,
+      `- Connection mode is \`${connectionMode}\`. If it is \`tunnel\`, the guided Studio flow has already required the Windows keeper and watchdog registration; verify the tunnel on the remote host before curl.`,
       '- Do not install or start agent-host until this remote curl succeeds. On failure, show whether the operator needs a central URL, LAN binding, or tunnel.',
       '',
       '2. Agent host and source setup',
@@ -106,6 +110,23 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
   };
 }
 
+/**
+ * Product-owned Windows control-plane command shown by the guided host setup.
+ * The script explains the one-time administrator requirement before asking
+ * for UAC consent, registers both tasks, and writes the status consumed by
+ * the Execution Hosts surface.
+ */
+export function buildTunnelSupervisionCommand(config: RunnerSetupConfig): string {
+  const remotePort = explicitUrlPort(config.taskServerUrl) ?? 15031;
+  return [
+    '.\\deploy\\windows\\agent-runner-tunnel\\setup-tunnel-supervision.ps1',
+    `-SshTarget ${powerShellArg(config.sshTarget.trim())}`,
+    `-RemotePort ${remotePort}`,
+    '-OrchestratorPort 5031',
+    `-DevspacePath ${powerShellArg(config.tunnelDevspacePath.trim())}`,
+  ].join(' ');
+}
+
 function isHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
@@ -117,4 +138,17 @@ function isHttpUrl(value: string): boolean {
 
 function shellArg(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function explicitUrlPort(value: string): number | null {
+  try {
+    const port = new URL(value).port;
+    return port ? Number(port) : null;
+  } catch {
+    return null;
+  }
+}
+
+function powerShellArg(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }

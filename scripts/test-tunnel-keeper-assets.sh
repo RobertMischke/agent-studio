@@ -6,12 +6,14 @@ keeper="$repo_root/deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1"
 registration="$repo_root/deploy/windows/agent-runner-tunnel/register-tunnel-keeper.ps1"
 watchdog="$repo_root/deploy/windows/agent-runner-tunnel/tunnel-watchdog.sh"
 watchdog_registration="$repo_root/deploy/windows/agent-runner-tunnel/register-tunnel-watchdog.ps1"
+guided_setup="$repo_root/deploy/windows/agent-runner-tunnel/setup-tunnel-supervision.ps1"
 forced_kill_test="$repo_root/deploy/windows/agent-runner-tunnel/test-tunnel-watchdog-forced-kill.ps1"
 
 test -f "$keeper"
 test -f "$registration"
 test -f "$watchdog"
 test -f "$watchdog_registration"
+test -f "$guided_setup"
 test -f "$forced_kill_test"
 
 grep -Fq "AGENT_TASK_SERVER_ROUTE_OK" "$keeper"
@@ -42,6 +44,9 @@ grep -Fq "Stop-ScheduledTask" "$watchdog"
 grep -Fq "Start-ScheduledTask" "$watchdog"
 grep -Fq "event=heal_succeeded" "$watchdog"
 grep -Fq "source=tunnel-watchdog severity=alarm" "$watchdog"
+grep -Fq -- "-StatusOnly" "$watchdog"
+grep -Fq -- "--status-refresh-script" "$watchdog_registration"
+grep -Fq "StatusRefreshScript  = \$PSCommandPath" "$guided_setup"
 grep -Fq -- "-LogonType S4U" "$watchdog_registration"
 grep -Fq -- "-AtStartup" "$watchdog_registration"
 grep -Fq -- "-ExecutionTimeLimit ([TimeSpan]::Zero)" "$watchdog_registration"
@@ -50,7 +55,7 @@ grep -Fq "tunnel-watchdog-forced-kill--real.md" "$forced_kill_test"
 
 if command -v pwsh >/dev/null 2>&1; then
   pwsh -NoProfile -NonInteractive -Command \
-    "[void][System.Management.Automation.Language.Parser]::ParseFile('$keeper',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$watchdog_registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$forced_kill_test',[ref]\$null,[ref]\$null)"
+    "[void][System.Management.Automation.Language.Parser]::ParseFile('$keeper',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$watchdog_registration',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$guided_setup',[ref]\$null,[ref]\$null); [void][System.Management.Automation.Language.Parser]::ParseFile('$forced_kill_test',[ref]\$null,[ref]\$null)"
 fi
 
 printf 'Tunnel assets contain functional probes, targeted cleanup, captured SSH diagnostics, and session-independent watchdog registration.\n'

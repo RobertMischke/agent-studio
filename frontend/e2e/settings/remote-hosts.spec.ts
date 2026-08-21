@@ -62,6 +62,10 @@ async function stubBackgroundApis(page: Page) {
       runnerActiveGateCount: 0, runnerGateCapacity: 4 },
   ]));
   await page.route('**/api/v1/management/remote-hosts', json([]));
+  await page.route('**/api/system/tunnel-supervision', json({
+    overall: 'not-configured',
+    snapshot: null,
+  }));
   await page.route('**/api/clients/*/telemetry?window=*', json({ clientId: 'mock', window: '14d', points: [{
     timestamp: now, cpuPercent: 7, load1: 0.1, load5: 0.1, load15: 0.1,
     memoryUsedBytes: 4_000_000_000, memoryTotalBytes: 16_000_000_000,
@@ -162,6 +166,62 @@ test.describe('Execution Hosts settings section', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'execution-hosts-after-light--mocked.png'), fullPage: false });
     await setTheme(page, 'dark');
     await page.screenshot({ path: join(SHOT_DIR, 'execution-hosts-after-dark--mocked.png'), fullPage: false });
+  });
+
+  test('guides Windows tunnel registration and shows keeper/watchdog status in both themes', async ({ page }) => {
+    await page.unroute('**/api/system/tunnel-supervision');
+    await page.route('**/api/system/tunnel-supervision', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        overall: 'healthy',
+        snapshot: {
+          schemaVersion: 1,
+          generatedAt: '2026-08-25T10:00:00Z',
+          keeper: {
+            taskName: 'AgentRunner-TunnelKeeper', registered: true, state: 'Running',
+            lastStatus: 'healthy', lastObservedAt: '2026-08-25T09:59:30Z', lastMessage: null,
+          },
+          watchdog: {
+            taskName: 'AgentRunner-TunnelWatchdog', registered: true, state: 'Running',
+            lastProbeAt: '2026-08-25T09:59:45Z', lastProbeResult: 'ok',
+            lastHealAt: '2026-08-25T08:30:00Z', lastHealResult: 'succeeded',
+            consecutiveProbeFailures: 0,
+          },
+        },
+      }),
+    }));
+
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const supervision = page.getByTestId('tunnel-supervision-status').first();
+    await expect(supervision).toContainText('Windows tunnel supervision');
+    await expect(supervision).toContainText('registered: yes');
+    await expect(supervision).toContainText('last heal: succeeded');
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await supervision.screenshot({
+        path: join(SHOT_DIR, `tunnel-supervision-status-${theme}--mocked.png`),
+      });
+    }
+
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expandHost(remote);
+    await remote.getByTestId('remote-host-action-setup').click();
+    await page.getByTestId('runner-setup-connection-mode').selectOption('tunnel');
+    await page.getByTestId('runner-setup-tunnel-devspace').fill('C:\\Projects\\agent-taskboard-devspace');
+    const tunnelStep = page.getByTestId('runner-setup-tunnel');
+    await expect(tunnelStep).toContainText('One-time administrator consent');
+    await expect(tunnelStep).toContainText('Windows UAC prompt');
+    await expect(page.getByTestId('runner-setup-tunnel-command'))
+      .toContainText('setup-tunnel-supervision.ps1');
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: join(SHOT_DIR, `remote-host-tunnel-setup-${theme}--mocked.png`),
+        fullPage: false,
+      });
+    }
   });
 
   test('shows a corrupt identity with its restore path in both themes', async ({ page }) => {
