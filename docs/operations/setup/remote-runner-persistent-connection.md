@@ -63,23 +63,39 @@ Host agent-runner
     ExitOnForwardFailure yes
 ```
 
-Use the repository-owned functional keeper instead of a bare `ssh -N` loop:
+Use the repository-owned functional keeper instead of a bare `ssh -N` loop.
+The guided product entry point is
+[`setup-tunnel-supervision.ps1`](../../../deploy/windows/agent-runner-tunnel/setup-tunnel-supervision.ps1) -
+see [windows-control-plane-host.md](./windows-control-plane-host.md) for the
+full walkthrough, including the elevation-consent step and the resulting
+Studio admin-UI visibility:
 
 ```powershell
 Set-Location C:\Projects\agent-studio
-.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
+.\deploy\windows\agent-runner-tunnel\setup-tunnel-supervision.ps1 `
     -SshTarget agent-runner `
     -RemotePort 15031 `
     -OrchestratorPort 5031 `
-    -IntervalMinutes 5
+    -DevspacePath C:\Projects\agent-taskboard-devspace
+```
+
+That one command registers both Scheduled Tasks - still through the two
+scripts below unchanged - and requests the one-time administrator elevation
+they need, explaining why before the UAC prompt appears. Always pass
+`-DevspacePath` explicitly and match it across every registration, guided or
+manual: the script's own default differs from the devspace convention below,
+and a mismatch silently splits the watchdog's log and state files across two
+directories. Calling the two scripts directly still works and takes the same
+parameters as before:
+
+```powershell
+.\deploy\windows\agent-runner-tunnel\register-tunnel-keeper.ps1 `
+    -SshTarget agent-runner -RemotePort 15031 -OrchestratorPort 5031 -IntervalMinutes 5
 
 .\deploy\windows\agent-runner-tunnel\register-tunnel-watchdog.ps1 `
     -DevspacePath C:\Projects\agent-taskboard-devspace `
-    -SshTarget agent-runner `
-    -RemotePort 15031 `
-    -KeeperTaskName AgentRunner-TunnelKeeper `
-    -ProbeIntervalSeconds 60 `
-    -FailureThreshold 2 `
+    -SshTarget agent-runner -RemotePort 15031 -KeeperTaskName AgentRunner-TunnelKeeper `
+    -ProbeIntervalSeconds 60 -FailureThreshold 2 `
     -OperatorAlarmPath C:\Projects\agent-taskboard-devspace\.operator-alarm.log
 ```
 
@@ -90,7 +106,7 @@ trigger. The independent `AgentRunner-TunnelWatchdog` starts at boot and owns a
 an interactive logon session. The selected identity must own a local protected
 SSH key and a non-interactive `agent-runner` alias. Run the registration from
 an elevated PowerShell session because an at-startup task can require that
-authority.
+authority; `setup-tunnel-supervision.ps1` requests that elevation for you.
 
 The keeper task has no execution time limit and remains the owner of its
 `ssh.exe` child until SSH exits. It deliberately has no Task Scheduler retry:
@@ -266,6 +282,12 @@ claim poll.
 5. Confirm the next capability advertisement returns Execution Hosts to
    **reachable** and preserve the live test report in the task's absolute
    `results/` directory.
+6. Confirm `setup-tunnel-supervision.ps1 -StatusOnly` reports both tasks
+   `registered=True`, the watchdog's `lastHeal` matching the journal's
+   `heal_succeeded` timestamp, and that
+   **Workspace Settings -> Execution Hosts** shows the matching registered /
+   running / last-heal facts (see
+   [windows-control-plane-host.md](./windows-control-plane-host.md#3-visibility-in-studio)).
 
 ## Is the tunnel still the right topology?
 
