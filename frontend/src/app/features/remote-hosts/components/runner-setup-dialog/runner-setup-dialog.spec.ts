@@ -53,15 +53,25 @@ describe('RunnerSetupDialogComponent', () => {
     expect(el.querySelector('[data-testid="runner-setup-loopback-block"]')).toBeTruthy();
 
     component.setConnectionMode('tunnel');
+    component.tunnelDevspacePath.set('C:\\Projects\\agent-taskboard-devspace');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/system/tunnel-supervision').flush({
+      overall: 'not-configured',
+      snapshot: null,
+    });
     fixture.detectChanges();
     expect(component.taskServerUrl()).toBe('http://127.0.0.1:15031');
     expect(component.ready()).toBe(false);
+    expect(el.querySelector('[data-testid="runner-setup-tunnel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="runner-setup-tunnel-command"]')?.textContent)
+      .toContain('setup-tunnel-supervision.ps1');
     expect(el.querySelector('[data-testid="visible-cli-task-card"]')).toBeNull();
 
     const secret = 'sk-ant-oat01-provider-auth-fixture';
     component.providerAuthSecret.set(secret);
     component.provisionProviderAuth();
-    const request = TestBed.inject(HttpTestingController).expectOne(
+    const request = http.expectOne(
       '/api/v1/management/remote-hosts/provider-auth',
     );
     expect(request.request.body).toEqual({
@@ -83,6 +93,29 @@ describe('RunnerSetupDialogComponent', () => {
     fixture.detectChanges();
 
     expect(component.providerAuthSecret()).toBe('');
+    expect(component.ready()).toBe(false);
+    expect(el.querySelector('[data-testid="runner-setup-blocked"]')?.textContent)
+      .toContain('approve elevation');
+
+    (el.querySelector('[data-testid="tunnel-supervision-refresh"]') as HTMLButtonElement).click();
+    http.expectOne('/api/system/tunnel-supervision').flush({
+      overall: 'healthy',
+      snapshot: {
+        schemaVersion: 1,
+        generatedAt: '2026-08-25T10:00:00Z',
+        keeper: {
+          taskName: 'AgentRunner-TunnelKeeper', registered: true, state: 'Running',
+          lastStatus: 'healthy', lastObservedAt: '2026-08-25T10:00:00Z', lastMessage: null,
+        },
+        watchdog: {
+          taskName: 'AgentRunner-TunnelWatchdog', registered: true, state: 'Running',
+          lastProbeAt: '2026-08-25T10:00:00Z', lastProbeResult: 'ok',
+          lastHealAt: null, lastHealResult: null, consecutiveProbeFailures: 0,
+        },
+      },
+    });
+    fixture.detectChanges();
+
     expect(component.ready()).toBe(true);
     expect(el.querySelector('[data-testid="runner-setup-loopback-block"]')).toBeNull();
     expect(el.querySelector('[data-testid="visible-cli-task-card"]')).toBeTruthy();
@@ -105,7 +138,8 @@ describe('RunnerSetupDialogComponent', () => {
     fixture.componentRef.setInput('host', HOST);
     fixture.detectChanges();
     const component = fixture.componentInstance;
-    component.setConnectionMode('tunnel');
+    component.setConnectionMode('central');
+    component.taskServerUrl.set('https://tasks.example.test');
     component.gitRemote.set('git@github.com:example/agent-studio.git');
     component.gitPushRemote.set('git@github.com:example/agent-studio.git');
     component.providerAuthSecret.set('sk-ant-oat01-active-runner-fixture');

@@ -1,0 +1,64 @@
+:host { display: contents; }
+
+.tunnel-supervision {
+  display: grid;
+  gap: var(--studio-spacing-2);
+  margin-bottom: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border-block: 1px solid var(--studio-border);
+  color: var(--studio-fg);
+  font-size: 12px;
+}
+.tunnel-supervision[data-tone='warn'] { background: var(--notify-warning-icon-bg); }
+.tunnel-supervision[data-tone='error'] {
+  background: var(--notify-error-icon-bg);
+  color: var(--notify-error-icon-fg);
+}
+
+.tunnel-supervision > header {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+}
+
+.tunnel-supervision > header button {
+  margin-left: auto;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: var(--studio-radius-1);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+.tunnel-supervision > header button:disabled { cursor: not-allowed; opacity: 0.6; }
+.tunnel-supervision > header button:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
+.tunnel-supervision > p { margin: 0; color: var(--studio-fg-dim); line-height: 1.5; }
+
+.badge {
+  border-radius: 999px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  font-size: 10px;
+  font-weight: 600;
+}
+.badge[data-tone='ok'] { background: var(--notify-success-icon-bg); color: var(--notify-success-icon-fg); }
+.badge[data-tone='idle'] { background: var(--studio-bg-selected); color: var(--studio-fg-dim); }
+.badge[data-tone='warn'] { background: var(--notify-warning-icon-bg); color: var(--notify-warning-icon-fg); }
+.badge[data-tone='error'] { background: var(--notify-error-icon-bg); color: var(--notify-error-icon-fg); }
+
+.tunnel-supervision__components {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--studio-spacing-3);
+}
+
+.component {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  color: var(--studio-fg-dim);
+}
+.component__label {
+  color: var(--studio-fg-strong);
+  font-weight: 600;
+}
