@@ -89,6 +89,7 @@ public static class EndpointMapping
         app.MapBusEndpoints();
         app.MapRuntimeEventEndpoints();
         app.MapClientEndpoints();
+        app.MapTunnelSupervisionEndpoints();
         app.MapAnalysisReportEndpoints();
         app.MapDriftReportEndpoints();
         app.MapTagEndpoints();

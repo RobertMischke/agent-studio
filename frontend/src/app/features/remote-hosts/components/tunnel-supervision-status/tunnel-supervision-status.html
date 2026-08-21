@@ -1,0 +1,40 @@
+@if (overall() !== 'not-configured') {
+  <section class="tunnel-supervision" [attr.data-tone]="tone()" data-testid="tunnel-supervision-status">
+    <header>
+      <strong>Windows tunnel supervision</strong>
+      <span class="badge" [attr.data-tone]="tone()">{{ overall() }}</span>
+    </header>
+    @if (snapshot(); as s) {
+      <div class="tunnel-supervision__components">
+        <div class="component" data-testid="tunnel-supervision-keeper">
+          <span class="component__label">Keeper</span>
+          <span>registered: {{ s.keeper.registered ? 'yes' : 'no' }}</span>
+          <span>state: {{ s.keeper.state ?? 'unknown' }}</span>
+          <span>
+            last status: {{ s.keeper.lastStatus ?? 'unknown' }}
+            @if (s.keeper.lastObservedAt) {
+              · {{ s.keeper.lastObservedAt | date:'short' }}
+            }
+          </span>
+        </div>
+        <div class="component" data-testid="tunnel-supervision-watchdog">
+          <span class="component__label">Watchdog</span>
+          <span>registered: {{ s.watchdog.registered ? 'yes' : 'no' }}</span>
+          <span>state: {{ s.watchdog.state ?? 'unknown' }}</span>
+          <span>
+            last probe: {{ s.watchdog.lastProbeResult ?? 'unknown' }}
+            @if (s.watchdog.lastProbeAt) {
+              · {{ s.watchdog.lastProbeAt | date:'short' }}
+            }
+          </span>
+          <span>
+            last heal: {{ s.watchdog.lastHealResult ?? 'none yet' }}
+            @if (s.watchdog.lastHealAt) {
+              · {{ s.watchdog.lastHealAt | date:'short' }}
+            }
+          </span>
+        </div>
+      </div>
+    }
+  </section>
+}
