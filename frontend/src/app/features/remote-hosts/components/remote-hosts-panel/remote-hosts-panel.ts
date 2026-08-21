@@ -16,6 +16,8 @@ import {
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
+import { TunnelSupervisionStatusComponent } from '../tunnel-supervision-status/tunnel-supervision-status';
+import { TunnelSupervisionService } from '../../services/tunnel-supervision.service';
 import {
   RemoteHostTableState,
   type RemoteHostSortKey,
@@ -41,7 +43,12 @@ import {
 @Component({
   selector: 'app-remote-hosts-panel',
   standalone: true,
-  imports: [RemoteHostCardComponent, AddHostWizardComponent, RunnerSetupDialogComponent],
+  imports: [
+    RemoteHostCardComponent,
+    AddHostWizardComponent,
+    RunnerSetupDialogComponent,
+    TunnelSupervisionStatusComponent,
+  ],
   templateUrl: './remote-hosts-panel.html',
   styleUrl: './remote-hosts-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,6 +57,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private readonly service = inject(RemoteHostsService);
   private readonly tasks = inject(TaskService);
   private readonly reviewQueue = inject(ReviewQueueService);
+  private readonly tunnelSupervision = inject(TunnelSupervisionService);
   private readonly tableState = new RemoteHostTableState();
 
   readonly hosts = this.service.hosts;
@@ -117,7 +125,10 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
     if (this.tickHandle) clearInterval(this.tickHandle);
   }
 
-  reload(): void { this.service.reload(); }
+  reload(): void {
+    this.service.reload();
+    this.tunnelSupervision.refresh();
+  }
 
   boardSlots(host: RemoteHost): number {
     const truth = this.boardRunningTruth();
