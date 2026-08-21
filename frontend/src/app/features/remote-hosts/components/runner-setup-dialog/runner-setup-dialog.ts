@@ -9,11 +9,14 @@ import {
 import type { RemoteHost } from '../../models/remote-host.model';
 import {
   buildRunnerSetupRequest,
+  buildTunnelSupervisionCommand,
   runnerSetupIssues,
   type RunnerSetupConfig,
   type RunnerSetupConnectionMode,
 } from '../../models/runner-setup.model';
 import { ProviderAuthStatusService } from '../../services/provider-auth-status.service';
+import { TunnelSupervisionService } from '../../services/tunnel-supervision.service';
+import { TunnelSupervisionStatusComponent } from '../tunnel-supervision-status/tunnel-supervision-status';
 
 type ProviderAuthEnvironmentVariable = 'CLAUDE_CODE_OAUTH_TOKEN' | 'ANTHROPIC_API_KEY';
 type ProvisioningPhase = 'idle' | 'provisioning' | 'waiting' | 'ok' | 'unavailable' | 'error';
@@ -21,7 +24,7 @@ type ProvisioningPhase = 'idle' | 'provisioning' | 'waiting' | 'ok' | 'unavailab
 @Component({
   selector: 'app-runner-setup-dialog',
   standalone: true,
-  imports: [FormsModule, VisibleCliTaskCardComponent],
+  imports: [FormsModule, VisibleCliTaskCardComponent, TunnelSupervisionStatusComponent],
   templateUrl: './runner-setup-dialog.html',
   styleUrl: './runner-setup-dialog.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -38,12 +41,15 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
   readonly clientId = signal('');
   readonly gitRemote = signal('');
   readonly gitPushRemote = signal('');
+  readonly tunnelDevspacePath = signal('');
+  readonly tunnelCommandCopyState = signal<'idle' | 'copied' | 'failed'>('idle');
   readonly providerAuthEnvironmentVariable = signal<ProviderAuthEnvironmentVariable>('CLAUDE_CODE_OAUTH_TOKEN');
   readonly providerAuthSecret = signal('');
   readonly providerAuthPhase = signal<ProvisioningPhase>('idle');
   readonly providerAuthDetail = signal('No credential has been sent from this dialog.');
   readonly providerAuthBootstrapReady = signal(false);
   private readonly providerAuth = inject(ProviderAuthStatusService);
+  private readonly tunnelSupervision = inject(TunnelSupervisionService);
   private verificationSubscription: Subscription | null = null;
 
   readonly config = computed<RunnerSetupConfig>(() => ({
@@ -53,6 +59,7 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
     clientId: this.clientId(),
     gitRemote: this.gitRemote(),
     gitPushRemote: this.gitPushRemote(),
+    tunnelDevspacePath: this.tunnelDevspacePath(),
   }));
   readonly issues = computed(() => runnerSetupIssues(this.config()));
   readonly currentProviderAuth = computed(() => {
@@ -70,8 +77,17 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
   readonly providerAuthVerified = computed(() => this.currentProviderAuth()?.state === 'ok');
   readonly providerAuthGateSatisfied = computed(() =>
     this.providerAuthVerified() || this.providerAuthBootstrapReady());
-  readonly ready = computed(() => this.issues().length === 0 && this.providerAuthGateSatisfied());
+  readonly tunnelRegistrationReady = computed(() => {
+    if (this.connectionMode() !== 'tunnel') return true;
+    const snapshot = this.tunnelSupervision.response()?.snapshot;
+    return snapshot?.keeper.registered === true && snapshot.watchdog.registered === true;
+  });
+  readonly ready = computed(() =>
+    this.issues().length === 0
+    && this.providerAuthGateSatisfied()
+    && this.tunnelRegistrationReady());
   readonly request = computed(() => buildRunnerSetupRequest(this.host(), this.config()));
+  readonly tunnelSetupCommand = computed(() => buildTunnelSupervisionCommand(this.config()));
   readonly loopbackBlocked = computed(() => this.issues().some(issue => issue.startsWith('A remote host cannot reach')));
 
   ngOnInit(): void {
@@ -104,6 +120,15 @@ export class RunnerSetupDialogComponent implements OnInit, OnDestroy {
     this.providerAuthBootstrapReady.set(false);
     this.providerAuthPhase.set('idle');
     this.providerAuthDetail.set('No credential has been sent from this dialog.');
+  }
+
+  async copyTunnelSetupCommand(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(this.tunnelSetupCommand());
+      this.tunnelCommandCopyState.set('copied');
+    } catch {
+      this.tunnelCommandCopyState.set('failed');
+    }
   }
 
   provisionProviderAuth(): void {
