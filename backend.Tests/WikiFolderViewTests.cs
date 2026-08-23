@@ -399,8 +399,14 @@ public class WikiFolderViewTests : IDisposable
             psi.Environment["GIT_COMMITTER_DATE"] = iso;
         }
         using var process = Process.Start(psi)!;
-        process.WaitForExit(15_000);
-        Assert.True(process.HasExited && process.ExitCode == 0,
-            $"git {string.Join(' ', args)} failed: {process.StandardError.ReadToEnd()}");
+        // Drain both pipes while waiting and wait for the exit itself: a 15 s
+        // cap made `git add -A` fail with an empty error on a loaded host
+        // (full-suite run, every core busy), and reading stderr only after
+        // the cap hides the reason.
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0,
+            $"git {string.Join(' ', args)} failed: {stderr.GetAwaiter().GetResult()}{stdout.GetAwaiter().GetResult()}");
     }
 }
