@@ -116,6 +116,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action</td>
   <td>Two admin-only actions remain for the operator: register the watchdog (register-tunnel-watchdog.ps1) AND fix the TunnelKeeper task's power/startup conditions (allow on battery, do not stop on battery, AtStartup trigger). Follow-ups mapped to AGT-2658/AGT-2664 (carry the hardenings, add server-side ClientAliveInterval). Candidate closed: 08-16 cause identified.</td>
 </tr>
+<tr>
+  <td class="meta">08-23 12:0x</td>
+  <td><strong>Cycle-time per-project view built locally</strong> (operator order, outside the pipeline): GET /api/projects/{project}/cycle-time?window=7d|30d|all + rail panel "Cycle time" in the project hub; stage model documented in docs/concepts/cycle-time-stage-model.md; 7 commits on develop (03819b635..a306af198), backend+frontend tests green. First real numbers (Agent Studio, last 7 days, 17 completions, medians): queue wait 28 min, coding 1.7 h, <strong>post-processing wait 1.2 d</strong>, build/test gate 2.1 h (30d median 15.6 min, p90 2.2 h, max 7.4 h), review aspects 3.2 h, integration 2.2 min, human review 2.1 d; lead time 3.8 d. Post-processing wait + human-review dwell dominate - the bottleneck thesis is now measured, not felt.</td>
+  <td class="v covered">covered-by (measurement for 2648)</td>
+  <td>Feeds the batch-gate decision with numbers. Data gaps recorded in the concept doc (950 legacy tasks lack lane_changed ledger rows; review-claim timestamp approximated; integrate-on-delivery lacks integration_started) - candidates for small ledger-emission cards once the operator has seen the view.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
