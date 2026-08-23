@@ -396,14 +396,17 @@ Agent Studio solution
   studio-web/            Angular surface and generated API clients
   studio-bff/            optional surface aggregation only
   task-server/           Task API, control plane, persistence, auth, management
-  agent-runner/          daemon, host integration, execution adapter
+  runner/                agent-host daemon, host integration, execution adapter
   contracts/             versioned wire contracts and compatibility fixtures
   orchestration-core/    deterministic state and policy primitives
 ```
 
-CodingAgentRunner remains the process and CLI-protocol library used by
-`agent-runner`. The standalone Runner must not recreate a second unstructured
-Codex invocation path.
+The standalone per-host daemon is named `agent-host` (renamed from
+`agent-runner` on 2026-07-25 because the old name collided with the
+CodingAgentRunner library and hid the host level; source directory `runner/`
+kept its name). CodingAgentRunner remains the process and CLI-protocol library
+used by `agent-host`. The standalone daemon must not recreate a second
+unstructured Codex invocation path.
 
 Each deployable publishes its own version and compatibility range. Contract
 tests pin supported combinations. Release order is additive first: Task Server
@@ -523,6 +526,31 @@ key-alias decision. Do not duplicate or renumber these tasks in the meantime.
 | Live management API and recovery console | AGT-2194 | Replaces AGT-1924 seed/simulation with an authenticated server contract. |
 | Workspace/component project model | AGT-2195 | Solution workspace, component boards, initiatives, and repository bindings. |
 | Client-off topology acceptance harness | AGT-2196 | Release-blocking proof of independent lifecycles. |
+
+### Current migration state and implementation evidence (added 2026-08-23)
+
+This page is the coordinating target picture; it is not itself where day-to-day
+cutover progress is tracked. The live migration toward this target is
+`AGT-2663` ("Task-Server topology cutover: planned local migration to the
+standalone control plane"), **in progress** as of 2026-08-23 - not complete.
+Its concrete deployment plan, network/auth design, threat model, and
+migration/rollback runbook live in
+[Private Hetzner Task Server with local Angular Studio](../operations/remote-task-server-local-studio.md),
+which states its own status as Phase A delivered, Phase B deployment pending
+approval; treat that page, not this one, as the up-to-date cutover record.
+
+The decision-log family under
+[`operations/haertung-verteilte-ausfuehrung/target-architecture/`](../operations/haertung-verteilte-ausfuehrung/target-architecture/)
+(`actors.md`, `contracts.md`, `migration-path.md`, `restart-matrix.md`,
+`orchestrator-plan.md`, `decision-history.md`) restates the same actor/control-plane
+split in terser working-decision form, including the `agent-runner` ->
+`agent-host` rename (`decision-history.md`, D2) folded into §10 above. Treat
+that folder as implementation evidence and decision history, not a competing
+architecture; this page remains the one that other detailed concepts must not
+contradict. The German-language deep dive
+[`drei-einheiten-architektur.html`](drei-einheiten-architektur.html) predates
+this page and self-flags parts as outdated since commit `33b67fc6a`
+(2026-07-28) - prefer this page as current source of truth.
 
 ## 13. Delivery sequence
 

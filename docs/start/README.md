@@ -171,6 +171,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Orchestrator supervision loop | [concepts/orchestrator-supervision-loop.html](../concepts/orchestrator-supervision-loop.html) |
 | Runner stability & incident chronicle (incidents, invariants, sessions; supersedes the retired runner-stability / overnight / claude-termination pages) | [workbenches/haertung-verteilte-ausfuehrung/historie.html](../operations/haertung-verteilte-ausfuehrung/historie.html) |
 | Agent fencing (platform-owned Git history, trust-graded oversight, real incidents, open proof point) | [operations/haertung-verteilte-ausfuehrung/agent-fencing.html](../operations/haertung-verteilte-ausfuehrung/agent-fencing.html) · [separate AHP-style diagram](../operations/haertung-verteilte-ausfuehrung/agent-fencing-diagram.html) |
+| Agent fencing and lease authority (lease/fence/authority-epoch mechanism, consolidated architecture doc) | [concepts/agent-fencing-and-lease-authority.md](../concepts/agent-fencing-and-lease-authority.md) |
 | Process termination & abort scenarios (test suite) | [concepts/process-termination-scenarios.html](../concepts/process-termination-scenarios.html) |
 | Documentation inventory and cleanup (July 2026) | [inventory](../operations/doku-inventur-2026-07/README.md) · [archive convention](../archive/README.md) |
 | Wiki consolidation analysis 2026-07-18 (inventory, redundancy clusters, cleanup plan) | [konsolidierung-analyse-2026-07-18.md](konsolidierung-analyse-2026-07-18.md) |

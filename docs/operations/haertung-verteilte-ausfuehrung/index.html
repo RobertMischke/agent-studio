@@ -1413,6 +1413,7 @@ funktionieren. <code>historie.html</code> verwendet dieselben Anker für die aus
 <!-- Append-only operator explainer, 11.08.2026. Existing anchors remain unchanged. -->
 <section class="lease-explainer" aria-labelledby="lease-fence-epoch">
 <h2 id="lease-fence-epoch"><span class="no">§9</span>Lease, Fence und Authority Epoch lesen</h2>
+<p class="stx stx-ok"><b>Durable mechanism extracted 2026-08-23:</b> the lease/fence/authority-epoch invariants below (and the platform-owned Git authority model from §4) are now also documented as permanent architecture at <a href="../../concepts/agent-fencing-and-lease-authority.md">Agent Fencing and Lease Authority</a>. This section stays as the dated incident context (the Standby zombie-writer case) that motivated the write-up.</p>
 <p class="stx stx-ok"><b>Stand 11.08.:</b> Dieser Nachtrag erklärt die technischen Timeline-Chips
 <code>Fence</code>, <code>Authority Epoch</code> und <code>Idempotency Key</code>. Er ändert weder die
 Verträge aus §4 noch die bestehenden Historienanker. Anlass war der reale Standby-Fall, in dem ein
