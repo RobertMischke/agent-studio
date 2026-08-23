@@ -87,11 +87,38 @@ transition with:
 | `direction` | lane levels: backlog 0, preparation 1 (incl. `1a`), ready 2, progress 3 (incl. `3a`/`3b`), post processing 4, human review and escalated 5, completed 6, archive 7. `backward` = lower level, `lateral` = same level (Escalated to Human Review), else `forward` |
 | `dwellSeconds` | time since the previous lane change (or creation) = time spent in `from`; null when the stay start is unknown |
 | `actor`, `actorKind` | ledger actor; `runner` (`remote-runner*`, `remote-claim*`), `review` (`remote-review*`), `human`, `orchestrator`, `system`, `external` |
-| `cause`, `causeDetail` | classification below, with the detail the ledger carries |
+| `cause`, `causeDetail` | `lane_changed.details.cause` / `details.causeDetail` when the row carries them (every automatic move since 2026-08-23, see below); else the legacy classification below |
 | `reworkSeconds` | backward only: time until the task next reached the level it fell from or higher; null when it never did |
 
-Causes are classified from the cause rows the platform writes within 120 s of
-the lane change, then from actor and lane pair:
+The transition site that knows why a lane changed writes the cause onto the
+row: `details.cause` is one of the ids below (the ledger vocabulary
+`LaneChangeCauses`, which `TransitionCauses` aliases), `details.causeDetail` a
+short qualifier, `details.reason` the operator prose as before. The extractor
+takes the explicit id as is; an id outside the vocabulary is ignored. The
+qualifier, else the reason, is the detail; when the row carries neither and
+the legacy inference agrees with the explicit id, the inferred detail (for
+example the integration outcome behind an operator requeue) is kept.
+
+| Writer | Cause (qualifier) |
+|---|---|
+| Runner claim (local pickup, remote claim, claim replay) | `claimed` (`local-pickup`, `claim-replay`) |
+| Core-run completion, remote completion, liveness re-trigger, stale-progress sentinel recovery, crash-recovery completion marker, settled-run recovery, UI iteration review, epic planning | `delivered` (agent outcome, `settled-run-recovery`, `ui-iteration-n/m`, `epic-planning`, ...) |
+| Remote review verdict, orchestrator accept paths | `review-verdict` (integration outcome or `delivery-gate-failed`; `accept`, `accept-with-concerns`, `loop-break-accept`, `concept-sight-review`, `stale-verdict-backfill`) |
+| Escalation funnel and orchestrator escalations | `escalated` (escalation category or orchestrator escalate id: `agent-blocked`, `completion-gate`, `build-test-gate-double-fail`, ...) |
+| Orchestrator reissue `build-test-gate-fail` | `gate-failure` (`build-test-gate-fail`) |
+| Other orchestrator reissues, unworked-card bounce, completed-lane audit | `quality-loop` (the `quality_loop_reopened` cause id) |
+| Automatic agent round, operator rebase recovery | `integration-recovery` (merge outcome or failure code) |
+| Remote lease recovery, liveness demotion, crash-recovery stale pickup lock | `lease-recovery` (`remote-runner-confirmed-inactive`, `run-liveness-process-lost`, ...) |
+| Remote claim environment retry | `claim-environment-retry` (`n/m`) |
+| Pick reverted, spawn failure, stale-progress orphan, delivery-envelope retry, steer-timeout auto-answer, empty epic decomposition | `runner-requeue` (qualifier names the path) |
+| Acceptance finalization (worker, backstop) | `accepted`; failed acceptance integration back to Human Review: `acceptance-integration-failed` (outcome) |
+| External completion | `external-completion` (source) |
+| Orchestrator prep accept/bounce, operator promotion | `promoted` |
+| Archive sweeps, stale-folder archive | `archived`; dead-letter to failed pickup: `system-move` |
+| Human actor without an explicit cause (board drag, lane button, API move, Do Next) | derived from the lane pair: `operator-requeue`, `escalation-requeue`, `completed-reopen`, `operator-move`, `promoted`, `escalated`, `operator-decision`, `accepted`, `archived` |
+
+Rows written before the field existed are classified from the cause rows the
+platform writes within 120 s of the lane change, then from actor and lane pair:
 
 | Cause | Rule | Detail |
 |---|---|---|
@@ -150,10 +177,12 @@ refreshing (read-through refresh, not a cost of this read model).
   `provenance.transitions` only records pickup anchors. A one-time backfill that
   derives completion from the archive entry or the last `status.md` write would
   make them visible, at the cost of a less precise timestamp.
-- The review claim is approximated by the first projected step row of the
-  attempt. Recording the ReviewAttempt lease acquisition
-  (`AttemptLeaseDto.AcquiredAt`) as a ledger row would separate queue wait from
-  worktree materialization exactly.
+- The review claim is recorded since 2026-08-23: the claim routes write a
+  `review_attempt_claimed` row whose `ts` is the lease acquisition
+  (`AttemptLeaseDto.AcquiredAt`; `runId` = attempt id, details carry lease,
+  executor, host, subject, source run). The reader still approximates the
+  attempt start by its first projected step row; consuming the claim row is
+  the remaining reader-side step, and rows before that date stay approximated.
 - A gate step that is rerun inside one attempt is projected once (the final
   run); the earlier run lands in `reviewOther`. Projecting every execution, or
   the attempt's own start and end, would sharpen the gate number.
@@ -164,20 +193,27 @@ refreshing (read-through refresh, not a cost of this read model).
 - Rows that land after the completion move (`6-completed` then an outcome
   row, or a `7-archive` stay before a reopen) are outside every stage; the
   archive stay shows up as `unattributed`.
-- The acceptance transaction records `integration_started`, but integrate-on-
-  delivery does not; its duration comes from the pipeline merge step. Emitting
-  `integration_started` there as well would remove the pairing heuristic.
+- Integrate-on-delivery writes `integration_started` since 2026-08-23 (stage
+  `pre-human-review`, paired with its outcome row; the reader already prefers
+  the pair). The merge-step pairing heuristic remains for rows written before.
 - Local post-processing (the in-process worker) writes pipeline steps but no
   `post_step_*` ledger rows; the remote projector writes both. Teeing the local
   steps into the ledger would make the ledger the single source for both flows.
-- Transition causes are inferred from rows within 120 s of the lane change.
-  Writing the cause onto the `lane_changed` row itself (`details.cause`,
-  `details.reason` for every automatic move, not only operator moves) would make
-  the taxonomy exact and remove the remaining `unclassified` residue (18 of
-  8181 backward moves over all time).
+- Transition causes are written onto the `lane_changed` row since 2026-08-23
+  (`details.cause`, `details.causeDetail`; operator moves derive theirs from
+  the lane pair). Rows before that date are still inferred from rows within
+  120 s of the lane change, including the `unclassified` residue (18 of 8181
+  backward moves over all time).
 
 ## Living knowledge log
 
+- 2026-08-23 (recording): the three ledger gaps closed on the writer side.
+  Every automatic lane change stamps `details.cause` and `details.causeDetail`
+  on its `lane_changed` row (shared vocabulary `LaneChangeCauses`, human moves
+  derive the operator cause from the lane pair); the extractor prefers the
+  field and infers only for legacy rows. Integrate-on-delivery writes
+  `integration_started`; the review claim writes `review_attempt_claimed` at
+  the lease acquisition. The reader-side consumption of the claim row is open.
 - 2026-08-23 (review): adversarial review against the live store. Fixed:
   repeated outcome rows counted as attempts (AGT-2575 reported 156, now 17),
   one pipeline merge step paired with every nearby outcome row (13 tasks),

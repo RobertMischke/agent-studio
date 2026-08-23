@@ -360,7 +360,11 @@ category, or `operator-decision` for a manual park), a condition a sweep can
 re-check, the park timestamp, and the original freetext reason verbatim. The
 write happens in `TaskStateMachine.RecordParkedBlocker`, at the same lane-change
 choke point that appends the `lane_changed` ledger row, so every park path gets a
-marker; leaving a parked lane clears it.
+marker; leaving a parked lane clears it. That ledger row also names why the lane
+changed: `details.cause` (one of `LaneChangeCauses`, supplied by the transition
+site or derived from the lane pair for a human actor) and `details.causeDetail`
+(a short qualifier); see the lane-transition section of the
+[cycle-time stage model](../../concepts/cycle-time-stage-model.md#lane-transitions).
 
 `ParkedCardRecallSweep` re-evaluates those conditions on a timer and through
 `GET /api/parked-cards`. A card whose precondition is provably gone is REPORTED -
