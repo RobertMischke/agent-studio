@@ -223,6 +223,25 @@ It is separate from the Project Hub Git tree, which is strictly read-only.
   holding) and gate on the same per-project setting as push-on-merge; until then,
   removing merged refs is always an explicit operator action.
 
+## Merge-vs-rebase identity model
+
+Canonical integration is a **merge-first hybrid**, not a single strategy. The rule differs by stage because each stage answers a different question about SHA identity (which delivery evidence, review subject, and published object are the same object):
+
+| Stage | Behavior | Why |
+| --- | --- | --- |
+| Fresh or requeued agent delivery | The agent fetches current `origin/<integration-branch>`, rebases the existing delivery, resolves conservatively, reruns gates, and publishes a new delivery. | A recovery run is a new attempt: it gets a fresh fence and new `commits[]` attribution, so rewriting SHAs here is safe. Old entries stay as audit history, marked superseded. |
+| Canonical integration | The integrator tries `merge --no-ff` first, then one mechanical three-way `ort`/`rerere` merge, and only then a disposable-worktree rebase, gated on an exact one-to-one old-to-new commit map. | Merge preserves the original delivery SHAs already named by review grades, evidence records, and `commits[]`. A rebase fallback is allowed only when identity can be exactly re-attributed; an ambiguous mapping becomes `AgentRoundRequired`, not a forced success. |
+| Acceptance | Does not perform integration; it validates the current review attempt, then requires Git-derived `integrated` status from active attributed commits. | Keeps acceptance a read of integration truth, not a second integration path. |
+| Develop to main | The promotion train publishes the exact pinned candidate SHA once it is green; any new merge/squash/rebase between gate and publish would test one object and release another. | Exact-SHA publication is forced by the acceptance evidence model, not a style preference. |
+
+**Squash merge is rejected**, not merely deferred: original attributed SHAs would no longer be ancestors of `develop`, which breaks the `commits[]` ancestry invariant acceptance depends on. It would require replacing the whole evidence model with a squash receipt first.
+
+**History that changed the answer:** the first 10 August 2026 recovery cut rebased a behind delivery before trying a merge, which made acceptance attribution fragile whenever the replacement map was not exact. The 11 August (AGT-2632) amendment reversed the order — preserve identity first, map only as a fallback, refuse when the map is not exact — and the acceptance guard and rollback behavior now enforce that as an invariant, not a preference.
+
+**Bounce-steering escalation ladder** (the part of this area still being built out, not yet fully decided): a `conflict-skipped` round is meant to escalate through a deterministic backend rule first (one automatic round per operator review epoch, reusing the existing integration recovery/supersession/Ready-promotion services — this is the `AGT-2544`-style deterministic rail) and only reach a strong guardian model (the `AGT-2654`-style visual guardian steer) on repeat, complex/semantic conflicts, contradictory evidence, or cross-member interaction. Automation is bounded to append-steer / floor-safe-route / supersede-delivery / requeue; it never performs a semantic merge or a protected-branch mutation. Which slice (extending the deterministic rail vs. adding the guardian escalation tier) ships next is the open part of this decision.
+
+Source: [Rebase, merge, and bounce steering decision dossier](../operations/rebase-merge-and-steering/index.html) (AGT-W37). The dossier's own forward automation roadmap (S1 deterministic-rail extension, S2 route/visibility, S3 guardian escalation, S4 Batch Gate alignment) is still decision-pending; the identity model and squash rejection above describe already-shipped, current behavior, not the roadmap.
+
 ## See also
 
 - `docs/concepts/parallel-task-execution.md` - parallel execution model, integration strategies, merge-queue.

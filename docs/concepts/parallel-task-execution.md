@@ -142,6 +142,18 @@ This is deliberately later than the local worktree/slot slices. Do **not** start
 - Expiry permits a new runner to acquire a new lease with a higher fencing token. The old runner may still be alive, but its later writes are rejected as stale. This is the split-brain guard; TTL without fencing is not sufficient.
 - Lease expiry, heartbeat failure, stale-token rejection, and re-acquisition are first-class timeline/runtime events with runner id, lease id, fencing token, and reason.
 
+**Fence vs. Authority Epoch vs. Idempotency Key.** The distributed-execution hardening dossier (AGT-W7) names three distinct primitives that this lease contract's `fencingToken` bundles together; keeping them conceptually separate matters for reasoning about zombie writers:
+
+| Primitive | Answers | Scope | Not |
+| --- | --- | --- | --- |
+| **Fence** | Is this the newest lease generation for this task? | Per task, monotonically increasing on every new lease grant | Not a write counter and not the attempt number. |
+| **Authority Epoch** | Which global claim-generation of the Authority Store granted this authority? | Global to the store, bumped by a store-level recovery/rotation | Not per task; a rotation does not automatically bump every task's fence. |
+| **Idempotency Key** | Has this exact delivery already been processed? | Per delivery/write | Grants no authority; a never-seen key does not make a stale writer current. |
+
+A claim/acquire returns lease id, attempt id, expiry, fence, and authority epoch together; a heartbeat/renew must present a matching fence, epoch, and lease id, plus a new idempotency key, before it extends anything. Every server-mediated write path (log ingestion, timeline append, completion, lane transition, artifact registration, branch integration, cleanup) checks attempt, fence, epoch, and lease state before the side effect — this is the concrete mechanism behind the lease-contract rule above, not a separate one.
+
+**Zombie-writer scenario (the reason the fence exists):** Runner A acquires Fence 9 in Authority Epoch 1 and goes into standby (for example, a sleeping laptop). Its lease expires; Runner B claims the task and receives Fence 10 in the same epoch. Runner A wakes up and still tries to heartbeat and complete with Fence 9 — the server rejects both as `409 StaleFence / Superseded`. Fence 10 remains authoritative permanently; Fence 9 cannot be revived even by an idempotency key the server has never seen before, because an idempotency key proves delivery identity, not authority. The boundary of this protection is real: a fence only protects write paths the task server mediates, not out-of-band side effects a stale process might still perform directly.
+
 **Store requirements.** The shared store must provide atomic conditional update or compare-and-swap semantics over task/run lease rows. Use the store/server clock for `expiresAt`; runner-local clocks are not authoritative. If the Task Server itself becomes highly available, it must sit on an externally consistent database or consensus-backed store. Do not implement multi-primary locking in application memory.
 
 **Code distribution.** Task code does not travel through the Task Store. It travels through `origin`:

@@ -172,6 +172,9 @@
     <span><b>Anlass:</b> Grade-D-Welle 17.07. (Spätfolge der Phantom-Welle 11.07.)</span>
     <span><b>Historie:</b> <a href="#historie">Zusammenfassung und Anker</a>; Langform mit
     identischen <code>#incident-*</code>-Ankern in <code>historie.html</code></span>
+    <span><b>Curated 2026-08-23 (English):</b> live host-migration status against the target
+    picture is tracked in <a href="../../concepts/distributed-agent-studio-target-architecture.md">Distributed
+    Agent Studio target architecture, §16</a>.</span>
   </div>
 </header>
 
@@ -1418,6 +1421,11 @@ funktionieren. <code>historie.html</code> verwendet dieselben Anker für die aus
 Verträge aus §4 noch die bestehenden Historienanker. Anlass war der reale Standby-Fall, in dem ein
 alter Runner nach dem Aufwachen noch schreiben kann, obwohl ein neuer Runner die Aufgabe übernommen
 hat.</p>
+
+<p class="stx stx-ok"><b>Curated 2026-08-23 (English):</b> the Fence / Authority Epoch / Idempotency Key
+distinction and the zombie-writer scenario below are also carried, in English, in
+<a href="../../concepts/parallel-task-execution.md">Parallel Task Execution §8.2C</a>, cross-linked back
+to this dossier (AGT-W7) as the source.</p>
 
 <p><b>Die Kurzlesart:</b> Eine Lease sagt, <i>wie lange</i> ein Executor schreiben darf. Der Fence sagt,
 <i>welche von mehreren Lease-Generationen</i> die neueste ist. Die Authority Epoch sagt,

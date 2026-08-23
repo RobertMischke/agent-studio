@@ -571,3 +571,13 @@ key-alias decision. Do not duplicate or renumber these tasks in the meantime.
 | Repository layout | Keep the monorepo until independent release or ownership pressure justifies extraction. |
 | Task Server outage | No new work; bounded spool and fail-closed authority stop. |
 | Direct Runner UI attachment | Not required for the first target. Reconnect through the surviving Task Server. |
+
+## 16. Live topology cutover status (curated 2026-08-23)
+
+This section tracks the actual host migration against the target above; it is a status pointer, not a duplicate of the source documents. Detailed, frequently-updated material stays in [Distributed execution hardening](../operations/haertung-verteilte-ausfuehrung/index.html) (AGT-W7) and its `target-architecture/` subfolder — read those for the current numbers.
+
+- **Migration tranches** (task/domains and control-plane extraction): [`target-architecture/migration-path.md`](../operations/haertung-verteilte-ausfuehrung/target-architecture/migration-path.md) — three reversible tranches (Task Server onto its own host -> Orchestrator Engine as its own unit -> Studio as a static client). Distributed attempt authority (AGT-2182), durable result-SHA handoff (AGT-2183), exact-SHA review (AGT-2184), and the authenticated management API (AGT-2194) are the accepted building blocks it already stands on.
+- **Runner-host resource governance** (Linux cgroups, coding/review role capacity defaults, AIMD boundary): [`target-architecture/resource-governance.md`](../operations/haertung-verteilte-ausfuehrung/target-architecture/resource-governance.md) — decided 2026-07-25.
+- **Control plane as a distributable** (D1-D4 packaging decisions): [`target-architecture/distributable.md`](../operations/haertung-verteilte-ausfuehrung/target-architecture/distributable.md).
+- **Orchestrator control-plane migration plan** (4-phase supervision rollout): [`target-architecture/orchestrator-plan.md`](../operations/haertung-verteilte-ausfuehrung/target-architecture/orchestrator-plan.md), whose phases are also tracked in [Orchestrator supervision loop](orchestrator-supervision-loop.html).
+- **Live cutover card:** AGT-2663 ("Task-Server topology cutover: planned local migration to the standalone control plane") is in progress on the board as of 2026-08-23. It closed an open question from the 2026-08-16 stall investigation (root cause was a roaming-laptop tunnel keeper, not a topology defect or a removed API route — see [`docs/operations/tunnel-keeper-diagnosis.md`](../operations/tunnel-keeper-diagnosis.md) and the [Live improvement log](../operations/live-improvement-log/index.html), AGT-W39, entries 2026-08-20/21/23).
