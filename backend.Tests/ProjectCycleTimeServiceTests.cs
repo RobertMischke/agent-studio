@@ -299,6 +299,95 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
         Assert.Equal(5 * 60, row.Stages.ReviewWait);
     }
 
+    [Fact]
+    public void RepeatedOutcomeRows_CountOnce_AndAMergeStepPairsWithOneOutcomeOnly()
+    {
+        // Two writers record the same failure 17 s apart, a retry loop repeats an
+        // outcome every 5 s, and a later integration round starts with its own row.
+        var task = Task("dupes", TaskStates.Completed, createdAt: T0, enteredLaneAt: T0.AddHours(3));
+        var delivered = T0.AddMinutes(10);
+        var mergeStart = delivered.AddMinutes(5);
+        var mergeEnd = mergeStart.AddSeconds(100);
+        var toHuman = mergeEnd.AddSeconds(2);
+        var events = new List<TimelineEvent>
+        {
+            Created(T0, TaskStates.Ready),
+            Lane(T0.AddMinutes(1), TaskStates.Ready, TaskStates.Progress),
+            Lane(delivered, TaskStates.Progress, TaskStates.AutoReview),
+            Integration(mergeEnd, TimelineEventKinds.IntegrationFailed, "Conflict", "pre-human-review"),
+            Integration(mergeEnd.AddSeconds(1), TimelineEventKinds.IntegrationFailed, "Conflict", "pre-human-review"),
+            Lane(toHuman, TaskStates.AutoReview, TaskStates.HumanReview),
+        };
+        // Burst of the same outcome after the lane change, every 5 s for a minute.
+        for (var i = 0; i < 12; i++)
+            events.Add(Integration(toHuman.AddSeconds(3 + i * 5), TimelineEventKinds.IntegrationFailed, "Conflict", "pre-human-review"));
+        // A real acceptance round later: started row, its own outcome.
+        var acceptStart = toHuman.AddHours(1);
+        events.Add(Event(acceptStart, TimelineEventKinds.IntegrationStarted, new() { ["outcome"] = "integrating" }));
+        events.Add(Integration(acceptStart.AddSeconds(60), TimelineEventKinds.IntegrationSucceeded, "Merged", null));
+        events.Add(Lane(T0.AddHours(3), TaskStates.HumanReview, TaskStates.Completed));
+        var pipeline = new PipelineExecutionRecord
+        {
+            StartedAt = T0.AddMinutes(1),
+            Steps = [Step(PipelineCatalogue.MergeIntoDevelopStepId, mergeStart, mergeEnd)],
+        };
+
+        var row = TaskCycleTimeAnalyzer.Analyze(task, events, pipeline).Row;
+
+        Assert.NotNull(row);
+        // 1 failed merge (all repeats folded) + 1 acceptance merge.
+        Assert.Equal(2, row!.IntegrationAttempts);
+        // The merge step pairs once (100 s), the acceptance span is 60 s.
+        Assert.Equal(160, row.Stages.Integration);
+        Assert.Equal("Merged", row.IntegrationOutcome);
+        Assert.Equal("acceptance", row.IntegrationStage);
+        Assert.DoesNotContain("integration-duration-unknown", row.DataGaps);
+        Assert.Equal(row.LeadTimeSeconds, Math.Round(row.Stages.Sum, 1));
+
+        var collapsed = TaskCycleTimeAnalyzer.CollapseRepeatedOutcomes(events.OrderBy(e => e.Ts).ToList());
+        Assert.Equal(2, collapsed.Count);
+        Assert.Equal(mergeEnd, collapsed[0].Ts); // the first row of a repeat group keeps the attempt end
+    }
+
+    [Fact]
+    public void AcceptanceOutcomeRecordedAfterTheCompletionMove_CountsAsAttempt_AndIsTheOutcome()
+    {
+        // Acceptance moves the card to 6-completed and records Merged a second
+        // later; an earlier failed attempt must not remain the reported outcome.
+        var task = Task("late", TaskStates.Archive, createdAt: T0, enteredLaneAt: T0.AddHours(3));
+        var toHuman = T0.AddMinutes(30);
+        var firstStart = toHuman.AddMinutes(10);
+        var firstFail = firstStart.AddSeconds(20);
+        var acceptStart = toHuman.AddHours(1);
+        var completed = acceptStart.AddSeconds(45);
+        var lateOutcome = completed.AddSeconds(1.1);
+        var events = new List<TimelineEvent>
+        {
+            Created(T0, TaskStates.Ready),
+            Lane(T0.AddMinutes(1), TaskStates.Ready, TaskStates.Progress),
+            Lane(T0.AddMinutes(20), TaskStates.Progress, TaskStates.AutoReview),
+            Lane(toHuman, TaskStates.AutoReview, TaskStates.HumanReview),
+            Event(firstStart, TimelineEventKinds.IntegrationStarted, new() { ["outcome"] = "integrating" }),
+            Integration(firstFail, TimelineEventKinds.IntegrationFailed, "Conflict", null),
+            Event(acceptStart, TimelineEventKinds.IntegrationStarted, new() { ["outcome"] = "integrating" }),
+            Lane(completed, TaskStates.HumanReview, TaskStates.Completed),
+            Integration(lateOutcome, TimelineEventKinds.IntegrationSucceeded, "AlreadyMerged", null),
+            Lane(completed.AddHours(1), TaskStates.Completed, TaskStates.Archive),
+        };
+
+        var row = TaskCycleTimeAnalyzer.Analyze(task, events, null).Row;
+
+        Assert.NotNull(row);
+        Assert.Equal(completed, row!.CompletedAt);
+        Assert.Equal(2, row.IntegrationAttempts);
+        Assert.Equal("AlreadyMerged", row.IntegrationOutcome);
+        Assert.Equal("acceptance", row.IntegrationStage);
+        // 20 s failed attempt + 45 s of the acceptance attempt up to the completion move.
+        Assert.Equal(65, row.Stages.Integration);
+        Assert.Equal((completed - toHuman).TotalSeconds - 65, row.Stages.HumanReview);
+        Assert.Equal(row.LeadTimeSeconds, Math.Round(row.Stages.Sum, 1));
+    }
+
     // ---- statistics ---------------------------------------------------------
 
     [Fact]

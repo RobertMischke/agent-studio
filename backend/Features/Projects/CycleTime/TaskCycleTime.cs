@@ -116,6 +116,15 @@ public static class TaskCycleTimeAnalyzer
     /// <summary>Maximum distance between a pipeline merge step end and the ledger integration outcome to pair them.</summary>
     private static readonly TimeSpan MergeStepPairingTolerance = TimeSpan.FromMinutes(3);
 
+    /// <summary>
+    /// Two writers record the same integration failure (acceptance backstop and
+    /// recovery path, seconds apart), and a retry loop can repeat one outcome row
+    /// every few seconds. An outcome row that repeats the previous outcome row's
+    /// kind and outcome within this window, without an <c>integration_started</c>
+    /// in between, is the same attempt.
+    /// </summary>
+    private static readonly TimeSpan RepeatedOutcomeWindow = TimeSpan.FromSeconds(120);
+
     public static TaskCycleAnalysis Analyze(
         TaskInfo task,
         IReadOnlyList<TimelineEvent> events,
@@ -237,15 +246,12 @@ public static class TaskCycleTimeAnalyzer
             integration = 0, humanReview = 0, unattributed = 0, reviewRun = 0;
         int integrationAttempts = 0;
         string? integrationOutcome = null, integrationStage = null;
-        var integrationOutcomeEvents = ledger
-            .Where(e => e.Kind is TimelineEventKinds.IntegrationSucceeded
-                or TimelineEventKinds.IntegrationFailed
-                or TimelineEventKinds.IntegrationOverridden)
-            .ToList();
+        var integrationOutcomeEvents = CollapseRepeatedOutcomes(ledger);
         var integrationStarts = ledger.Where(e => e.Kind == TimelineEventKinds.IntegrationStarted).ToList();
         var postStepEvents = ledger
             .Where(e => e.Kind is TimelineEventKinds.PostStepStarted or TimelineEventKinds.PostStepFinished)
             .ToList();
+        var usedMergeSteps = new HashSet<PipelineStepTiming>(ReferenceEqualityComparer.Instance);
 
         foreach (var interval in intervals)
         {
@@ -266,31 +272,21 @@ public static class TaskCycleTimeAnalyzer
             }
             else if (interval.Lane == TaskStates.AutoReview)
             {
-                var split = SplitAutoReview(interval, postStepEvents, steps, integrationOutcomeEvents, integrationStarts, gaps);
+                var split = SplitAutoReview(interval, postStepEvents, steps, integrationOutcomeEvents, integrationStarts, usedMergeSteps, gaps);
                 reviewWait += split.Wait;
                 reviewRun += split.Run;
                 testGate += split.TestGate;
                 reviewOther += split.Other;
                 integration += split.Integration;
                 integrationAttempts += split.IntegrationAttempts;
-                if (split.LastOutcome is not null)
-                {
-                    integrationOutcome = split.LastOutcome;
-                    integrationStage = split.LastOutcomeStage;
-                }
             }
             else if (HumanLanes.Contains(interval.Lane))
             {
-                var spans = IntegrationSpans(interval, integrationOutcomeEvents, integrationStarts, steps, gaps);
+                var spans = IntegrationSpans(interval, integrationOutcomeEvents, integrationStarts, steps, usedMergeSteps, gaps);
                 var inReview = Math.Min(length, spans.Seconds);
                 humanReview += length - inReview;
                 integration += inReview;
                 integrationAttempts += spans.Attempts;
-                if (spans.LastOutcome is not null)
-                {
-                    integrationOutcome = spans.LastOutcome;
-                    integrationStage = spans.LastOutcomeStage;
-                }
             }
             else
             {
@@ -298,16 +294,14 @@ public static class TaskCycleTimeAnalyzer
             }
         }
 
-        // Outcome events that fall outside any interval we attributed (for
-        // example after completion) still carry the latest outcome fact.
-        if (integrationOutcome is null)
+        // The last integration row is the outcome fact, also when it lands after
+        // the final lane change (the acceptance transaction moves the card first
+        // and records Merged / AlreadyMerged a second later).
+        var lastOutcomeEvent = integrationOutcomeEvents.LastOrDefault();
+        if (lastOutcomeEvent is not null)
         {
-            var last = integrationOutcomeEvents.LastOrDefault();
-            if (last is not null)
-            {
-                integrationOutcome = OutcomeOf(last);
-                integrationStage = StageOf(last, intervals);
-            }
+            integrationOutcome = OutcomeOf(lastOutcomeEvent);
+            integrationStage = StageOf(lastOutcomeEvent, intervals);
         }
 
         // Lead time is the authoritative total; anything the lane ladder did not
@@ -362,8 +356,7 @@ public static class TaskCycleTimeAnalyzer
     // ---- auto review split ----
 
     private readonly record struct AutoReviewSplit(
-        double Wait, double Run, double TestGate, double Other, double Integration,
-        int IntegrationAttempts, string? LastOutcome, string? LastOutcomeStage);
+        double Wait, double Run, double TestGate, double Other, double Integration, int IntegrationAttempts);
 
     private static AutoReviewSplit SplitAutoReview(
         LaneInterval interval,
@@ -371,6 +364,7 @@ public static class TaskCycleTimeAnalyzer
         List<PipelineStepTiming> steps,
         List<TimelineEvent> outcomes,
         List<TimelineEvent> starts,
+        HashSet<PipelineStepTiming> usedMergeSteps,
         List<string> gaps)
     {
         var inWindowEvents = postStepEvents.Where(e => interval.Contains(e.Ts)).ToList();
@@ -387,7 +381,7 @@ public static class TaskCycleTimeAnalyzer
             activity.Add((attempt.Min(e => e.Ts), attempt.Max(e => e.Ts)));
         foreach (var attempt in inWindowSteps.Where(s => s.IsReviewStep).GroupBy(s => s.Attempt))
             activity.Add((attempt.Min(s => s.StartedAt), attempt.Max(s => s.CompletedAt ?? s.StartedAt)));
-        var spans = IntegrationSpans(interval, outcomes, starts, steps, gaps);
+        var spans = IntegrationSpans(interval, outcomes, starts, steps, usedMergeSteps, gaps);
 
         if (activity.Count == 0)
         {
@@ -395,8 +389,7 @@ public static class TaskCycleTimeAnalyzer
             // moved on by a human or a sweep. That is waiting, not reviewing.
             if (interval.Seconds > 0) gaps.Add(ReviewStartUnknownGap);
             var integrationOnly = Math.Min(interval.Seconds, spans.Seconds);
-            return new AutoReviewSplit(interval.Seconds - integrationOnly, 0, 0, 0, integrationOnly,
-                spans.Attempts, spans.LastOutcome, spans.LastOutcomeStage);
+            return new AutoReviewSplit(interval.Seconds - integrationOnly, 0, 0, 0, integrationOnly, spans.Attempts);
         }
 
         var merged = MergeSpans(activity, interval.Start, interval.End);
@@ -435,50 +428,69 @@ public static class TaskCycleTimeAnalyzer
         gate = Math.Min(gate, run);
         var integration = Math.Min(spans.Seconds, Math.Max(0, run - gate));
         var other = Math.Max(0, run - gate - integration);
-        return new AutoReviewSplit(wait, run, gate, other, integration,
-            spans.Attempts, spans.LastOutcome, spans.LastOutcomeStage);
+        return new AutoReviewSplit(wait, run, gate, other, integration, spans.Attempts);
     }
 
     // ---- integration spans ----
 
-    private readonly record struct IntegrationSpanSummary(double Seconds, int Attempts, string? LastOutcome, string? LastOutcomeStage);
+    private readonly record struct IntegrationSpanSummary(double Seconds, int Attempts);
 
+    /// <summary>
+    /// Integration attempts that belong to one lane stay: outcome rows inside the
+    /// stay, plus (for the final stay) outcome rows that land after the completion
+    /// move but were started inside it. The span is the ledger start to the
+    /// outcome (clipped to the stay), else the pipeline merge step nearest to the
+    /// outcome; each merge step pairs with at most one outcome.
+    /// </summary>
     private static IntegrationSpanSummary IntegrationSpans(
         LaneInterval interval,
         List<TimelineEvent> outcomes,
         List<TimelineEvent> starts,
         List<PipelineStepTiming> steps,
+        HashSet<PipelineStepTiming> usedMergeSteps,
         List<string> gaps)
     {
         double seconds = 0;
         var attempts = 0;
-        string? lastOutcome = null, lastStage = null;
-        foreach (var outcome in outcomes.Where(o => interval.Contains(o.Ts)))
+        foreach (var outcome in outcomes)
         {
-            var value = OutcomeOf(outcome);
-            lastOutcome = value;
-            lastStage = Detail(outcome, "stage") ?? (interval.Lane == TaskStates.AutoReview ? "pre-human-review" : "acceptance");
-            if (string.Equals(value, DeliveryGateFailedOutcome, StringComparison.OrdinalIgnoreCase))
+            TimelineEvent? start;
+            if (interval.Contains(outcome.Ts))
+            {
+                start = StartOf(outcome, interval, starts, outcomes);
+            }
+            else if (interval.IncludeEnd && outcome.Ts > interval.End)
+            {
+                // Acceptance moves the card to 6-completed first and records the
+                // outcome a second later; the attempt still belongs to this stay
+                // when its start does.
+                start = StartOf(outcome, interval, starts, outcomes);
+                if (start is null) continue;
+            }
+            else
+            {
+                continue;
+            }
+
+            if (string.Equals(OutcomeOf(outcome), DeliveryGateFailedOutcome, StringComparison.OrdinalIgnoreCase))
                 continue; // the review failed; no merge was attempted.
 
             attempts++;
-            var start = starts
-                .Where(s => s.Ts <= outcome.Ts && interval.Contains(s.Ts))
-                .Where(s => !outcomes.Any(o => o.Ts > s.Ts && o.Ts < outcome.Ts))
-                .LastOrDefault();
             if (start is not null)
             {
-                seconds += Math.Max(0, (outcome.Ts - start.Ts).TotalSeconds);
+                var end = outcome.Ts > interval.End ? interval.End : outcome.Ts;
+                seconds += Math.Max(0, (end - start.Ts).TotalSeconds);
                 continue;
             }
 
             var merge = steps
-                .Where(s => s.IsMergeStep && s.CompletedAt is not null
+                .Where(s => s.IsMergeStep && s.CompletedAt is not null && !usedMergeSteps.Contains(s)
                             && (outcome.Ts - s.CompletedAt.Value).Duration() <= MergeStepPairingTolerance)
                 .OrderBy(s => (outcome.Ts - s.CompletedAt!.Value).Duration())
                 .FirstOrDefault();
             if (merge is not null)
             {
+                usedMergeSteps.Add(merge);
                 var push = steps.FirstOrDefault(s => s.StepId == PipelineCatalogue.MergeIntoDevelopPushStepId
                                                      && s.StartedAt >= merge.StartedAt
                                                      && s.StartedAt <= merge.StartedAt.AddMinutes(10));
@@ -488,7 +500,45 @@ public static class TaskCycleTimeAnalyzer
 
             gaps.Add(IntegrationDurationUnknownGap);
         }
-        return new IntegrationSpanSummary(seconds, attempts, lastOutcome, lastStage);
+        return new IntegrationSpanSummary(seconds, attempts);
+    }
+
+    /// <summary>The <c>integration_started</c> row inside the stay that opened this outcome: the latest start before it with no other outcome in between.</summary>
+    private static TimelineEvent? StartOf(TimelineEvent outcome, LaneInterval interval, List<TimelineEvent> starts, List<TimelineEvent> outcomes) =>
+        starts
+            .Where(s => s.Ts <= outcome.Ts && interval.Contains(s.Ts))
+            .Where(s => !outcomes.Any(o => o.Ts > s.Ts && o.Ts < outcome.Ts))
+            .LastOrDefault();
+
+    /// <summary>
+    /// Integration outcome rows in ledger order with repeats folded: a row that
+    /// repeats the previous row's kind and outcome within
+    /// <see cref="RepeatedOutcomeWindow"/> and without an <c>integration_started</c>
+    /// in between is the same attempt recorded twice (or a retry loop).
+    /// </summary>
+    internal static List<TimelineEvent> CollapseRepeatedOutcomes(IReadOnlyList<TimelineEvent> sortedLedger)
+    {
+        var result = new List<TimelineEvent>();
+        TimelineEvent? previous = null;
+        foreach (var e in sortedLedger)
+        {
+            if (e.Kind == TimelineEventKinds.IntegrationStarted)
+            {
+                previous = null;
+                continue;
+            }
+            if (e.Kind is not (TimelineEventKinds.IntegrationSucceeded
+                or TimelineEventKinds.IntegrationFailed
+                or TimelineEventKinds.IntegrationOverridden))
+                continue;
+            var repeat = previous is not null
+                         && previous.Kind == e.Kind
+                         && string.Equals(OutcomeOf(previous), OutcomeOf(e), StringComparison.OrdinalIgnoreCase)
+                         && e.Ts - previous.Ts <= RepeatedOutcomeWindow;
+            if (!repeat) result.Add(e);
+            previous = e;
+        }
+        return result;
     }
 
     private static string OutcomeOf(TimelineEvent e) =>
@@ -499,11 +549,18 @@ public static class TaskCycleTimeAnalyzer
             _ => "failed",
         });
 
+    /// <summary>
+    /// Stage of an outcome row: the explicit detail, else derived from the lane
+    /// that held the task when the row was written. A row after the final stay
+    /// (the acceptance outcome that follows the completion move) takes the final
+    /// stay's lane.
+    /// </summary>
     private static string? StageOf(TimelineEvent e, List<LaneInterval> intervals)
     {
         var explicitStage = Detail(e, "stage");
         if (explicitStage is not null) return explicitStage;
         var lane = intervals.FirstOrDefault(i => i.Contains(e.Ts))?.Lane;
+        if (lane is null && intervals.Count > 0 && e.Ts > intervals[^1].End) lane = intervals[^1].Lane;
         return lane == TaskStates.AutoReview ? "pre-human-review" : lane is null ? null : "acceptance";
     }
 
