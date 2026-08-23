@@ -500,7 +500,7 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
             completedAt, "ledger",
             new CycleTimeStageSeconds { QueueWait = 60, Coding = leadTime - 60 - testGate, TestGate = testGate },
             testGate, leadTime, leadTime - 60, 1, 1, 0, outcome is null ? 0 : 1, outcome,
-            outcome is null ? null : "pre-human-review", []);
+            outcome is null ? null : "pre-human-review", [], 0, []);
 
     private static TimelineEvent Event(DateTime at, string kind, Dictionary<string, string>? details = null) => new()
     {
