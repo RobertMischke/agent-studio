@@ -13,7 +13,7 @@ export interface AuthUser {
 }
 
 export interface AuthStatus {
-  profile: 'local' | 'networked';
+  profile: 'local' | 'networked' | 'public-demo-readonly';
   bootstrapRequired: boolean;
   authenticated: boolean;
   user?: AuthUser | null;
@@ -26,7 +26,13 @@ export class AuthSessionState {
   readonly loading = signal(true);
   readonly studioAllowed = computed(() => {
     const status = this.status();
+    // public-demo-readonly has no sign-in flow at all - every visitor is an
+    // anonymous, unauthenticated read-only viewer by design (W34 §8 S4). The
+    // server edge (PublicDemoEdgeMiddleware) is the actual boundary; letting
+    // the shell render here is what makes the demo browsable in the first
+    // place.
     return status?.profile === 'local'
+      || status?.profile === 'public-demo-readonly'
       || (status?.authenticated === true && !status.user?.mustChangePassword);
   });
   readonly networkedAuthenticated = computed(() => {
