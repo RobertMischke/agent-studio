@@ -59,12 +59,17 @@ public sealed class AtomicJsonFileWriterTests : IDisposable
                     // refused for that instant; that is the one tolerated
                     // collision. FileNotFound, partial JSON and foreign ids
                     // are failures.
-                    Thread.Yield();
                 }
                 catch (Exception ex)
                 {
                     failures.Enqueue(ex);
                 }
+                // The cadence of a real consumer (scanner, watcher, API read):
+                // open, read, close, come back a moment later. A reader that
+                // re-opens the file back-to-back is not a consumer pattern this
+                // store has; on a saturated CPU it merely starves the writer
+                // and makes the run a scheduling lottery.
+                Thread.Sleep(1);
             }
         });
         started.Wait();
@@ -72,10 +77,19 @@ public sealed class AtomicJsonFileWriterTests : IDisposable
         var large = Enumerable.Range(0, 2_000).Select(i => $"\"integration:test-{i:D4}\"");
         var bigDocument = $$"""{"id":"fixture","tags":[{{string.Join(",", large)}}]}""";
         const string smallDocument = """{"id":"fixture","tags":["integration:pending"]}""";
+        var writes = 0;
         try
         {
-            for (var i = 0; i < 60; i++)
-                writer.Write(path, i % 2 == 0 ? bigDocument : smallDocument);
+            // At least 100 swaps, and keep swapping until the reader has
+            // sampled the file often enough for the interleaving to be real.
+            var deadline = DateTime.UtcNow + Deadline;
+            while ((writes < 100 || Interlocked.Read(ref successfulReads) < 50)
+                   && DateTime.UtcNow < deadline)
+            {
+                writer.Write(path, writes % 2 == 0 ? bigDocument : smallDocument);
+                writes++;
+            }
+            if (writes % 2 == 1) { writer.Write(path, smallDocument); writes++; }
         }
         finally
         {
@@ -84,7 +98,10 @@ public sealed class AtomicJsonFileWriterTests : IDisposable
         }
 
         Assert.Empty(failures);
-        Assert.True(Interlocked.Read(ref successfulReads) > 0, "the reader must have observed the file");
+        Assert.True(writes >= 100, $"expected at least 100 swaps, made {writes}");
+        Assert.True(
+            Interlocked.Read(ref successfulReads) >= 50,
+            $"the reader must have sampled the file during the swaps (reads: {successfulReads})");
         Assert.Equal(smallDocument, File.ReadAllText(path));
         Assert.Equal(["task.json"], Directory.GetFiles(_dir).Select(Path.GetFileName));
     }

@@ -1036,14 +1036,13 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                 }
                 catch (IOException ex) when (IsRetryableFileSharingViolation(ex))
                 {
-                    // Windows: ReplaceFile keeps the destination name valid but
-                    // holds it exclusively for the instant of the swap, so a
-                    // plain open can transiently fail with a sharing violation.
-                    // That is OS behaviour, not a truncation: the invariant
-                    // under test is that a reader that GETS the file never sees
-                    // partial JSON or a foreign id. Only sharing/lock collisions
-                    // retry; every other IOException remains a test failure.
-                    Thread.Yield();
+                    // Windows: a plain open that lands on the instant of the
+                    // rename-with-replace can be refused with a sharing
+                    // violation. That is OS behaviour, not a truncation: the
+                    // invariant under test is that a reader that GETS the file
+                    // never sees partial JSON, a foreign id, or a missing name.
+                    // Only sharing/lock collisions retry; every other
+                    // IOException (FileNotFound included) remains a failure.
                 }
                 catch (Exception ex)
                 {
@@ -1051,6 +1050,11 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
                     if (!firstSuccessfulRead.TrySetException(ex))
                         successfulReadAfterWrites.TrySetException(ex);
                 }
+                // Consumer cadence: open, read, close, come back a moment later.
+                // A reader re-opening the file back-to-back starves the single
+                // rename on a saturated CPU and is not a pattern any task.json
+                // consumer has.
+                Thread.Sleep(1);
             }
         });
         started.Wait();
