@@ -72,6 +72,7 @@ public static class EndpointMapping
         app.MapReviewDecisionsEndpoints();
         app.MapProjectSnapshotEndpoints();
         app.MapProjectOperatorDashboardEndpoints();
+        app.MapProjectCycleTimeEndpoints();
         app.MapTestRunEndpoints();
         app.MapProjectGraphEndpoints();
         app.MapPublishEndpoints();
