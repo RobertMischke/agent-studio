@@ -9,10 +9,13 @@
   --ctt-level-2: color-mix(in srgb, var(--studio-accent-3) 26%, var(--studio-bg-elevated));
   --ctt-level-3: color-mix(in srgb, var(--studio-accent-3) 44%, var(--studio-bg-elevated));
   --ctt-level-4: color-mix(in srgb, var(--studio-accent-3) 66%, var(--studio-bg-elevated));
+  // The loop ramp tops out lower than the forward ramp: at 68 % the purple
+  // accent drops --studio-fg-strong below 4.5:1 on the dark elevated surface
+  // (admin guideline contrast contract); 58 % keeps both themes above it.
   --ctt-back-level-1: color-mix(in srgb, var(--studio-accent-4) 14%, var(--studio-bg-elevated));
   --ctt-back-level-2: color-mix(in srgb, var(--studio-accent-4) 28%, var(--studio-bg-elevated));
-  --ctt-back-level-3: color-mix(in srgb, var(--studio-accent-4) 46%, var(--studio-bg-elevated));
-  --ctt-back-level-4: color-mix(in srgb, var(--studio-accent-4) 68%, var(--studio-bg-elevated));
+  --ctt-back-level-3: color-mix(in srgb, var(--studio-accent-4) 42%, var(--studio-bg-elevated));
+  --ctt-back-level-4: color-mix(in srgb, var(--studio-accent-4) 58%, var(--studio-bg-elevated));
   --ctt-diagonal: color-mix(in srgb, var(--studio-fg-dim) 8%, var(--studio-bg-elevated));
 
   margin-top: var(--studio-spacing-5);
@@ -146,7 +149,9 @@
 .ctt__cell--backward.ctt__cell--level-3 { background: var(--ctt-back-level-3); }
 .ctt__cell--backward.ctt__cell--level-4 { background: var(--ctt-back-level-4); }
 .ctt__cell--backward { color: var(--studio-fg-strong); }
-.ctt__cell-back { color: var(--studio-fg-dim); font-size: 10px; margin-right: 2px; }
+// The mark is the non-color carrier of "backward"; it inherits the cell text
+// color so it keeps the cell's contrast on the darkest ramp step.
+.ctt__cell-back { color: inherit; font-size: 10px; margin-right: 2px; }
 
 // ---- side by side ----------------------------------------------------------
 
