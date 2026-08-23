@@ -2,11 +2,12 @@
   "schemaVersion": 1,
   "id": "admin-design-guideline",
   "title": "Admin Surface Design Guideline",
-  "summary": "Binding admin-surface standard: flat full-bleed composition, compact disclosure-first headers, one grid for stream entries, non-redundant sober copy, project identity, operator-grade density, bounded prose width, theme tokens, and locally hosted fonts. Includes a fully specified Activity reference, a screenshot-backed violation audit, an incremental adoption contract, an explicit prohibition on nested outcome-summary boxes, the details-panel addendum, the append-only Navigation citizenship chapter with three light/dark Tree variants, a neutral waiting-decision counter recommendation, state rules, a follow-up slice boundary, visual Dos and Don'ts pairs, and an append-only Applied surfaces register.",
+  "summary": "Binding admin-surface standard: flat full-bleed composition, compact disclosure-first headers, one grid for stream entries, non-redundant sober copy, project identity, operator-grade density, bounded prose width, theme tokens, and locally hosted fonts. Includes a fully specified Activity reference, a screenshot-backed violation audit, an incremental adoption contract, an explicit prohibition on nested outcome-summary boxes, the details-panel addendum, the append-only Navigation citizenship chapter with three light/dark Tree variants, a neutral waiting-decision counter recommendation, state rules, a follow-up slice boundary, visual Dos and Don'ts pairs, and an append-only Applied surfaces register. [Curated 2026-08-23: previous status/phase values ('living-standard'/'accepted') were not in the platform's allowed lifecycle vocabulary and made this descriptor invalid in the live Dossier catalogue - corrected to 'decided' with no phase. This is a living standard by design: it stays adopted and current, is amended in place as new surfaces land, and is not expected to move to History.]",
   "entrypoint": "index.html",
-  "status": "living-standard",
-  "phase": "accepted",
-  "updatedAt": "2026-08-16T00:00:00Z",
+  "status": "decided",
+  "updatedAt": "2026-08-23T00:00:00Z",
+  "editedBy": "Operator dossier curation 2026-08-23",
+  "statusReason": "Previous status 'living-standard'/phase 'accepted' were out of the schema vocabulary and rendered this descriptor invalid. Corrected to decided with no phase (none of the four allowed phase values fit a living standard honestly). Stays adopted and current by design, amended in place; not expected to move to History.",
   "pages": [
     { "title": "Visual dos and don'ts", "path": "pages/dos-and-donts.html" },
     { "title": "Applied surfaces", "path": "pages/applied-surfaces.html" }
