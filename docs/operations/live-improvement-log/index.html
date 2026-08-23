@@ -110,6 +110,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done)</td>
   <td>UI-fix backlog is now LIVE for the operator (footer/status visibility 2645/2656, tab pinning, popover, demo slices). Real 08-16 root cause remains open - evidence points at auth/session freshness after backend restarts; watching with longer windows tonight instead of theorizing.</td>
 </tr>
+<tr>
+  <td class="meta">08-23 10:3x</td>
+  <td><strong>Tunnel deaths root-caused (local forensics, docs/operations/tunnel-keeper-diagnosis.md):</strong> the control plane is a roaming Wi-Fi LAPTOP that sleeps - every sleep/roam/Windows-Update reboot tears the ssh session. Three amplifiers: (A) the TunnelKeeper task's power policy (DisallowStartIfOnBatteries, StopIfGoingOnBatteries, no WakeToRun/AtStartup) keeps the keeper from running while asleep/on battery; (B) PS 5.1 $ErrorActionPreference=Stop + unguarded ssh calls turned a failed connect into a silent script death - THIS was the 08-16 11h stall (the 2663 open question is closed: not auth, not routes - the keeper died mid-run while Wi-Fi roamed); (C) the zombie-port cleanup was a no-op (sudo ss not permitted for agent). Hardening applied live to the ops keeper script (guarded ssh, exit-code logging + rotation, no-sudo zombie kill), verified end-to-end.</td>
+  <td class="v action">operator-action</td>
+  <td>Two admin-only actions remain for the operator: register the watchdog (register-tunnel-watchdog.ps1) AND fix the TunnelKeeper task's power/startup conditions (allow on battery, do not stop on battery, AtStartup trigger). Follow-ups mapped to AGT-2658/AGT-2664 (carry the hardenings, add server-side ClientAliveInterval). Candidate closed: 08-16 cause identified.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
