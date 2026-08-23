@@ -1,0 +1,172 @@
+// Lane transition section of the Cycle Time rail. Flat admin grammar; the
+// matrix shades cells through a four-step token ramp, backward cells carry a
+// quiet loop marker instead of an alarm color.
+
+:host { display: block; min-width: 0; }
+
+.ctt {
+  --ctt-level-1: color-mix(in srgb, var(--studio-accent-3) 12%, var(--studio-bg-elevated));
+  --ctt-level-2: color-mix(in srgb, var(--studio-accent-3) 26%, var(--studio-bg-elevated));
+  --ctt-level-3: color-mix(in srgb, var(--studio-accent-3) 44%, var(--studio-bg-elevated));
+  --ctt-level-4: color-mix(in srgb, var(--studio-accent-3) 66%, var(--studio-bg-elevated));
+  --ctt-back-level-1: color-mix(in srgb, var(--studio-accent-4) 14%, var(--studio-bg-elevated));
+  --ctt-back-level-2: color-mix(in srgb, var(--studio-accent-4) 28%, var(--studio-bg-elevated));
+  --ctt-back-level-3: color-mix(in srgb, var(--studio-accent-4) 46%, var(--studio-bg-elevated));
+  --ctt-back-level-4: color-mix(in srgb, var(--studio-accent-4) 68%, var(--studio-bg-elevated));
+  --ctt-diagonal: color-mix(in srgb, var(--studio-fg-dim) 8%, var(--studio-bg-elevated));
+
+  margin-top: var(--studio-spacing-5);
+  color: var(--studio-fg);
+}
+
+.ctt__title,
+.ctt__subtitle {
+  margin: 0 0 var(--studio-spacing-2);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--studio-fg-muted);
+}
+.ctt__subtitle { margin-top: var(--studio-spacing-4); }
+
+.ctt__summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.ctt__summary strong { color: var(--studio-fg-strong); font-weight: 700; }
+.ctt__sep { color: var(--studio-fg-muted); margin: 0 var(--studio-spacing-1); }
+
+.ctt__empty,
+.ctt__note {
+  margin: var(--studio-spacing-2) 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--studio-fg-dim);
+  max-width: 76ch;
+}
+
+// ---- tables ---------------------------------------------------------------
+
+.ctt__table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border-block: 1px solid var(--studio-border);
+}
+
+.ctt__table,
+.ctt__matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctt__matrix caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.ctt__table th,
+.ctt__table td,
+.ctt__matrix th,
+.ctt__matrix td {
+  padding: 0 var(--studio-spacing-2);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ctt__table thead th,
+.ctt__matrix thead th {
+  height: 30px;
+  background: var(--studio-surface-muted);
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ctt__table tbody th,
+.ctt__table tbody td,
+.ctt__matrix tbody th,
+.ctt__matrix tbody td {
+  height: 26px;
+  border-top: 1px solid var(--studio-border);
+  color: var(--studio-fg);
+  font-weight: 400;
+}
+.ctt__table tbody th,
+.ctt__matrix tbody th { color: var(--studio-fg-strong); }
+
+.ctt__num { text-align: right !important; }
+
+// One quiet line per fact: long operator reasons ellipsize, the full text
+// stays available in the tooltip (ADM-04, ADM-08).
+.ctt__details {
+  max-width: 44ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--studio-fg-dim);
+  font-size: 11px;
+}
+
+.ctt__table--causes { max-width: 90rem; }
+.ctt__table--dwell,
+.ctt__table--loops { min-width: 26rem; }
+
+// ---- matrix ---------------------------------------------------------------
+
+.ctt__matrix { max-width: 80rem; }
+.ctt__matrix-corner { white-space: nowrap; }
+.ctt__matrix-head,
+.ctt__cell { text-align: right !important; }
+.ctt__matrix-total {
+  border-left: 1px solid var(--studio-border-strong);
+  color: var(--studio-fg-dim);
+}
+
+.ctt__cell { min-width: 4.5rem; }
+.ctt__cell--diagonal { background: var(--ctt-diagonal); }
+.ctt__cell--level-1 { background: var(--ctt-level-1); }
+.ctt__cell--level-2 { background: var(--ctt-level-2); }
+.ctt__cell--level-3 { background: var(--ctt-level-3); }
+.ctt__cell--level-4 { background: var(--ctt-level-4); color: var(--studio-fg-strong); font-weight: 600; }
+
+// Backward cells use the integration/loop hue ramp and a leading glyph, so the
+// loop reads without color and without a stripe.
+.ctt__cell--backward.ctt__cell--level-1 { background: var(--ctt-back-level-1); }
+.ctt__cell--backward.ctt__cell--level-2 { background: var(--ctt-back-level-2); }
+.ctt__cell--backward.ctt__cell--level-3 { background: var(--ctt-back-level-3); }
+.ctt__cell--backward.ctt__cell--level-4 { background: var(--ctt-back-level-4); }
+.ctt__cell--backward { color: var(--studio-fg-strong); }
+.ctt__cell-back { color: var(--studio-fg-dim); font-size: 10px; margin-right: 2px; }
+
+// ---- side by side ----------------------------------------------------------
+
+.ctt__pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(26rem, 1fr));
+  gap: var(--studio-spacing-2) var(--studio-spacing-5);
+  align-items: start;
+}
+.ctt__pair-item { min-width: 0; }
+
+.ctt__link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--studio-accent-3-strong);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.ctt__link:hover { text-decoration: underline; }
+.ctt__link:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }

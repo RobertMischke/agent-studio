@@ -281,8 +281,8 @@
 }
 .cyc__table tbody th { color: var(--studio-fg-strong); }
 
-.cyc__table--tasks tbody tr:hover td,
-.cyc__table--tasks tbody tr:hover th { background: var(--studio-bg-hover); }
+.cyc__table--tasks tbody tr:not(.cyc__expansion):hover td,
+.cyc__table--tasks tbody tr:not(.cyc__expansion):hover th { background: var(--studio-bg-hover); }
 
 .cyc__num { text-align: right !important; }
 
@@ -304,7 +304,43 @@
 .cyc__table--stages,
 .cyc__table--counts { max-width: 64rem; }
 
-.cyc__table--tasks { min-width: 72rem; }
+.cyc__table--tasks { min-width: 78rem; }
+
+.cyc__disclosure-head,
+.cyc__disclosure { width: 28px; padding: 0 !important; text-align: center !important; }
+
+.cyc__toggle {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--studio-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.cyc__toggle:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+.cyc__toggle:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+.cyc__toggle[aria-expanded="true"] { color: var(--studio-fg-strong); }
+
+.cyc__expansion td {
+  height: auto;
+  padding: 0 !important;
+  background: var(--studio-surface-muted);
+  white-space: normal;
+}
+
+.cyc__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 
 .cyc__col--highlighted { background: var(--cyc-highlight-tint); }
 thead .cyc__col--highlighted { color: var(--studio-fg); }

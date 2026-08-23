@@ -10,6 +10,7 @@ export type CycleTimeSortKey =
   | 'reviewRun'
   | 'codingRuns'
   | 'bounceRounds'
+  | 'backwardTransitions'
   | 'outcome'
   | CycleTimeStageKey;
 
@@ -54,6 +55,7 @@ export function sortValue(row: TaskCycleTimeRow, key: CycleTimeSortKey): number 
     case 'reviewRun': return row.reviewRunSeconds;
     case 'codingRuns': return row.codingRuns;
     case 'bounceRounds': return row.bounceRounds;
+    case 'backwardTransitions': return row.backwardTransitions ?? 0;
     case 'outcome': return row.integrationOutcome ?? '';
     default: return row.stages[key] ?? 0;
   }

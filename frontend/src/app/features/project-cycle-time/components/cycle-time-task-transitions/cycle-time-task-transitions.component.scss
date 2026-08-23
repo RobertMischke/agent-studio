@@ -1,0 +1,72 @@
+// Inline per-task transition history inside the Cycle Time drill-down row.
+
+:host { display: block; min-width: 0; }
+
+.ctx {
+  --ctx-backward-tint: color-mix(in srgb, var(--studio-accent-4) 10%, transparent);
+
+  padding: var(--studio-spacing-2) 0 var(--studio-spacing-3) var(--studio-spacing-5);
+  color: var(--studio-fg);
+}
+
+.ctx__state {
+  margin: 0;
+  font-size: 11px;
+  color: var(--studio-fg-dim);
+}
+.ctx__state--error { color: var(--notify-error-icon-fg); }
+
+.ctx__table {
+  width: 100%;
+  max-width: 96rem;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctx__table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.ctx__table th,
+.ctx__table td {
+  padding: 0 var(--studio-spacing-2);
+  text-align: left;
+  white-space: nowrap;
+  height: 22px;
+}
+
+.ctx__table thead th {
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--studio-border);
+}
+
+.ctx__table tbody td {
+  border-top: 1px solid var(--studio-border);
+  color: var(--studio-fg);
+}
+.ctx__table tbody tr:first-child td { border-top: 0; }
+
+.ctx__num { text-align: right !important; }
+.ctx__time { font-family: var(--font-mono); color: var(--studio-fg-dim); }
+.ctx__actor { color: var(--studio-fg-dim); }
+.ctx__detail {
+  white-space: normal !important;
+  max-width: 52ch;
+  color: var(--studio-fg-dim);
+  line-height: 1.35;
+  padding-block: 2px !important;
+}
+
+.ctx__row--backward td { background: var(--ctx-backward-tint); }
+.ctx__row--lateral td { color: var(--studio-fg-dim); }
+.ctx__back { color: var(--studio-accent-4-strong); margin-right: 2px; }

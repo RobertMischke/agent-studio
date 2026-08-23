@@ -46,6 +46,37 @@ export function formatTimestamp(iso: string | null | undefined): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** Short lane labels for the matrix and the transition tables. Unknown lanes keep their key. */
+export function laneLabel(lane: string | null | undefined): string {
+  switch (lane) {
+    case '0-backlog': return 'Backlog';
+    case '1-preparation': return 'Preparation';
+    case '1a-orchestrator-prep': return 'Orchestrator prep';
+    case '2-ready': return 'Ready';
+    case '3-progress': return 'Progress';
+    case '3a-failed-pickup': return 'Failed pickup';
+    case '3b-code-not-complete': return 'Code not complete';
+    case '4-auto-review': return 'Post Processing';
+    case '5-human-review': return 'Human Review';
+    case '5e-escalated': return 'Escalated';
+    case '6-completed': return 'Completed';
+    case '7-archive': return 'Archive';
+    case '': case null: case undefined: return 'unknown';
+    default: return lane;
+  }
+}
+
+/**
+ * Matrix shading level 0..4 for a cell count against the largest off-diagonal
+ * count: 0 for empty, then four equal-width bands on a square-root scale so a
+ * few very large cells do not flatten every other cell to the same tint.
+ */
+export function matrixLevel(count: number, max: number): number {
+  if (count <= 0 || max <= 0) return 0;
+  const ratio = Math.sqrt(count) / Math.sqrt(max);
+  return Math.min(4, Math.max(1, Math.ceil(ratio * 4)));
+}
+
 export interface CompositionSegment {
   stage: CycleTimeStageKey;
   label: string;

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { CycleTimeAggregate, TaskCycleTimeRow } from '../../models/project-cycle-time.model';
-import { compositionSegments, formatCount, formatDuration, formatTimestamp, windowLabel } from './cycle-time-format';
+import {
+  compositionSegments,
+  formatCount,
+  formatDuration,
+  formatTimestamp,
+  laneLabel,
+  matrixLevel,
+  windowLabel,
+} from './cycle-time-format';
 import { CycleTimeTableState, sortValue } from './cycle-time-table-state';
 
 describe('cycle-time formatting', () => {
@@ -30,6 +38,21 @@ describe('cycle-time formatting', () => {
     expect(formatTimestamp(iso)).toBe('2026-08-21 06:44');
     expect(formatTimestamp('not-a-date')).toBe('not-a-date');
     expect(formatTimestamp(null)).toBe('');
+  });
+
+  it('labels lanes and bands matrix counts on a square-root scale', () => {
+    expect(laneLabel('4-auto-review')).toBe('Post Processing');
+    expect(laneLabel('5e-escalated')).toBe('Escalated');
+    expect(laneLabel('')).toBe('unknown');
+    expect(laneLabel('9-custom')).toBe('9-custom');
+
+    expect(matrixLevel(0, 100)).toBe(0);
+    expect(matrixLevel(5, 0)).toBe(0);
+    expect(matrixLevel(1, 100)).toBe(1);   // sqrt ratio 0.1 -> band 1
+    expect(matrixLevel(25, 100)).toBe(2);  // 0.5 -> band 2
+    expect(matrixLevel(36, 100)).toBe(3);  // 0.6 -> band 3
+    expect(matrixLevel(100, 100)).toBe(4);
+    expect(matrixLevel(400, 100)).toBe(4);
   });
 
   it('builds composition segments from stage medians in lane order and skips empty stages', () => {
@@ -149,5 +172,7 @@ function row(key: string, completedAt: string, lead: number, testGate: number, o
     integrationOutcome: outcome,
     integrationStage: outcome ? 'pre-human-review' : null,
     dataGaps: [],
+    backwardTransitions: testGate > 600 ? 2 : 0,
+    transitions: null,
   };
 }

@@ -45,6 +45,84 @@ export interface TaskCycleTimeRow {
   integrationOutcome: string | null;
   integrationStage: string | null;
   dataGaps: string[];
+  /** Backward lane moves (any level drop, including runner lease recovery). */
+  backwardTransitions: number;
+  /** Present only with `detail=transitions` or on the per-task endpoint. */
+  transitions?: TaskLaneTransition[] | null;
+}
+
+export type TransitionDirection = 'forward' | 'backward' | 'lateral';
+
+export interface TaskLaneTransition {
+  at: string;
+  from: string;
+  to: string;
+  direction: TransitionDirection;
+  /** Seconds spent in `from` before this move; null when the stay start is unknown. */
+  dwellSeconds: number | null;
+  actor: string;
+  actorKind: 'runner' | 'review' | 'human' | 'orchestrator' | 'system' | 'external' | string;
+  cause: string;
+  causeDetail: string | null;
+  attemptId: string | null;
+  /** Backward moves only: seconds until the task got back to the level it fell from. */
+  reworkSeconds: number | null;
+}
+
+export interface CycleTimeTransitionCell {
+  from: string;
+  to: string;
+  count: number;
+  direction: TransitionDirection;
+}
+
+export interface CycleTimeLaneDwell {
+  lane: string;
+  stays: number;
+  p50Seconds: number | null;
+  p90Seconds: number | null;
+  maxSeconds: number | null;
+  totalSeconds: number;
+}
+
+export interface CycleTimeBounceCause {
+  cause: string;
+  label: string;
+  count: number;
+  tasks: number;
+  reworkKnown: number;
+  reworkP50Seconds: number | null;
+  reworkP90Seconds: number | null;
+  reworkTotalSeconds: number;
+  details: CycleTimeOutcomeCount[];
+}
+
+export interface CycleTimeLoopTask {
+  taskId: string;
+  taskKey: string;
+  title: string;
+  watchPath: string;
+  backwardTransitions: number;
+  leadTimeSeconds: number;
+  causes: CycleTimeOutcomeCount[];
+}
+
+export interface CycleTimeTransitionSummary {
+  totalTransitions: number;
+  backwardTransitions: number;
+  tasksWithBackwardTransitions: number;
+  /** Lanes that occur as source or target, canonical order. */
+  lanes: string[];
+  cells: CycleTimeTransitionCell[];
+  laneDwell: CycleTimeLaneDwell[];
+  bounceCauses: CycleTimeBounceCause[];
+  topLoops: CycleTimeLoopTask[];
+}
+
+export interface ProjectCycleTimeTaskResponse {
+  project: string;
+  capturedAt: string;
+  task: TaskCycleTimeRow;
 }
 
 export type CycleTimeAggregateKind = 'stage' | 'rollup' | 'count';
@@ -90,5 +168,6 @@ export interface ProjectCycleTimeResponse {
   coverage: ProjectCycleTimeCoverage;
   aggregates: CycleTimeAggregate[];
   integrationOutcomes: CycleTimeOutcomeCount[];
+  transitions: CycleTimeTransitionSummary;
   tasks: TaskCycleTimeRow[];
 }

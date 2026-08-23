@@ -152,13 +152,18 @@
         }
       </section>
 
+      @if (d.transitions; as transitions) {
+        <app-cycle-time-transitions [summary]="transitions" (openTask)="openTask.emit($event)" />
+      }
+
       <section class="cyc__section" aria-labelledby="cyc-tasks-title">
         <h3 id="cyc-tasks-title" class="cyc__section-title">Tasks</h3>
         <div class="cyc__table-wrap">
           <table class="cyc__table cyc__table--tasks" data-testid="cycle-time-tasks">
-            <caption>Completed tasks in the window with their stage durations; click a header to sort</caption>
+            <caption>Completed tasks in the window with their stage durations; click a header to sort, expand a row for its lane changes</caption>
             <thead>
               <tr>
+                <th scope="col" class="cyc__disclosure-head"><span class="cyc__sr-only">Lane changes</span></th>
                 @for (c of columns; track c.key) {
                   <th scope="col"
                       [attr.aria-sort]="ariaSort(c.key)"
@@ -176,6 +181,14 @@
             <tbody>
               @for (row of sortedTasks(); track row.taskId) {
                 <tr [attr.data-task-key]="row.taskKey" [cacTooltip]="rowTooltip(row)">
+                  <td class="cyc__disclosure">
+                    <button type="button"
+                            class="cyc__toggle"
+                            [attr.aria-expanded]="isExpanded(row)"
+                            [attr.aria-label]="'Lane changes of ' + row.taskKey"
+                            [attr.data-testid]="'cycle-time-expand-' + row.taskKey"
+                            (click)="toggleExpanded(row)">{{ isExpanded(row) ? '⌄' : '›' }}</button>
+                  </td>
                   @for (c of columns; track c.key) {
                     <td [class.cyc__num]="c.numeric" [class.cyc__col--highlighted]="c.highlighted">
                       @if (c.key === 'key') {
@@ -189,6 +202,13 @@
                     </td>
                   }
                 </tr>
+                @if (isExpanded(row)) {
+                  <tr class="cyc__expansion" [attr.data-task-key]="row.taskKey + ':transitions'">
+                    <td [attr.colspan]="columnCount">
+                      <app-cycle-time-task-transitions [projectName]="projectName()" [taskKey]="row.taskKey" />
+                    </td>
+                  </tr>
+                }
               }
             </tbody>
           </table>

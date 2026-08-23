@@ -1,0 +1,153 @@
+<section class="ctt" data-testid="cycle-time-transitions" aria-labelledby="ctt-title">
+  <h3 id="ctt-title" class="ctt__title">Lane transitions</h3>
+  <p class="ctt__summary" data-testid="cycle-time-transitions-summary">
+    <strong>{{ summary().totalTransitions }}</strong> lane moves
+    <span class="ctt__sep" aria-hidden="true">·</span>
+    <strong>{{ summary().backwardTransitions }}</strong> backward
+    <span class="ctt__sep" aria-hidden="true">·</span>
+    {{ summary().tasksWithBackwardTransitions }} {{ summary().tasksWithBackwardTransitions === 1 ? 'task' : 'tasks' }} with a backward move
+  </p>
+
+  @if (!hasTransitions()) {
+    <p class="ctt__empty" data-testid="cycle-time-transitions-empty">No lane changes recorded for the tasks in this window.</p>
+  } @else {
+    <h4 class="ctt__subtitle">Backward moves by cause</h4>
+    @if (causes().length === 0) {
+      <p class="ctt__empty">No backward move in this window.</p>
+    } @else {
+      <div class="ctt__table-wrap">
+        <table class="ctt__table ctt__table--causes" data-testid="cycle-time-bounce-causes">
+          <thead>
+            <tr>
+              <th scope="col">Cause</th>
+              <th scope="col" class="ctt__num">Moves</th>
+              <th scope="col" class="ctt__num">Tasks</th>
+              <th scope="col" class="ctt__num">Rework median</th>
+              <th scope="col" class="ctt__num">Rework p90</th>
+              <th scope="col" class="ctt__num">Rework total</th>
+              <th scope="col">Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of causes(); track c.cause) {
+              <tr [attr.data-cause]="c.cause">
+                <th scope="row">{{ c.label }}</th>
+                <td class="ctt__num">{{ c.count }}</td>
+                <td class="ctt__num">{{ c.tasks }}</td>
+                <td class="ctt__num">{{ duration(c.reworkP50Seconds) }}</td>
+                <td class="ctt__num">{{ duration(c.reworkP90Seconds) }}</td>
+                <td class="ctt__num">{{ c.reworkKnown > 0 ? duration(c.reworkTotalSeconds) : '–' }}</td>
+                <td class="ctt__details" [cacTooltip]="detailsLine(c)">{{ detailsLine(c) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="ctt__note">
+        Rework is the time from the backward move until the task got back to the lane level it fell from; a move the task never recovered from has no rework value.
+      </p>
+    }
+
+    <h4 class="ctt__subtitle">Transition matrix</h4>
+    <div class="ctt__table-wrap">
+      <table class="ctt__matrix" data-testid="cycle-time-matrix">
+        <caption>Lane changes in the window: rows are the lane a task left, columns the lane it entered</caption>
+        <thead>
+          <tr>
+            <th scope="col" class="ctt__matrix-corner">From \ To</th>
+            @for (lane of lanes(); track lane) {
+              <th scope="col" class="ctt__matrix-head">{{ laneLabel(lane) }}</th>
+            }
+            <th scope="col" class="ctt__matrix-head ctt__matrix-total">Out</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.from) {
+            <tr [attr.data-from]="row.from">
+              <th scope="row">{{ row.label }}</th>
+              @for (cell of row.cells; track cell.to) {
+                <td class="ctt__cell"
+                    [class]="'ctt__cell ctt__cell--level-' + cell.level"
+                    [class.ctt__cell--backward]="cell.backward && cell.count > 0"
+                    [class.ctt__cell--diagonal]="cell.diagonal"
+                    [attr.data-to]="cell.to"
+                    [attr.data-count]="cell.count"
+                    [cacTooltip]="cellTooltip(cell)">
+                  @if (cell.count > 0) {
+                    @if (cell.backward) { <span class="ctt__cell-back" aria-hidden="true">↩</span> }{{ cell.count }}
+                  }
+                </td>
+              }
+              <td class="ctt__cell ctt__matrix-total">{{ row.outgoing }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="ctt__note">
+      Shading follows the move count. A backward cell (the task fell to an earlier lane) uses the loop hue and the ↩ mark.
+    </p>
+
+    <div class="ctt__pair">
+      <div class="ctt__pair-item">
+        <h4 class="ctt__subtitle">Dwell per lane</h4>
+        <div class="ctt__table-wrap">
+          <table class="ctt__table ctt__table--dwell" data-testid="cycle-time-lane-dwell">
+            <thead>
+              <tr>
+                <th scope="col">Lane</th>
+                <th scope="col" class="ctt__num">Stays</th>
+                <th scope="col" class="ctt__num">Median</th>
+                <th scope="col" class="ctt__num">p90</th>
+                <th scope="col" class="ctt__num">Max</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (d of dwell(); track d.lane) {
+                <tr [attr.data-lane]="d.lane">
+                  <th scope="row">{{ laneLabel(d.lane) }}</th>
+                  <td class="ctt__num">{{ d.stays }}</td>
+                  <td class="ctt__num">{{ duration(d.p50Seconds) }}</td>
+                  <td class="ctt__num">{{ duration(d.p90Seconds) }}</td>
+                  <td class="ctt__num">{{ duration(d.maxSeconds) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="ctt__pair-item">
+        <h4 class="ctt__subtitle">Tasks with the most backward moves</h4>
+        @if (loops().length === 0) {
+          <p class="ctt__empty">No task fell back in this window.</p>
+        } @else {
+          <div class="ctt__table-wrap">
+            <table class="ctt__table ctt__table--loops" data-testid="cycle-time-top-loops">
+              <thead>
+                <tr>
+                  <th scope="col">Task</th>
+                  <th scope="col" class="ctt__num">Backward</th>
+                  <th scope="col" class="ctt__num">Lead</th>
+                  <th scope="col">Causes</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (loop of loops(); track loop.taskId) {
+                  <tr [attr.data-task-key]="loop.taskKey" [cacTooltip]="loop.title">
+                    <th scope="row">
+                      <button type="button" class="ctt__link" [attr.data-testid]="'cycle-time-loop-open-' + loop.taskKey" (click)="open(loop)">{{ loop.taskKey }}</button>
+                    </th>
+                    <td class="ctt__num">{{ loop.backwardTransitions }}</td>
+                    <td class="ctt__num">{{ duration(loop.leadTimeSeconds) }}</td>
+                    <td class="ctt__details">{{ causesLine(loop) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</section>

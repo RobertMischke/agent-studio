@@ -28,6 +28,8 @@ import {
   type CompositionSegment,
 } from './cycle-time-format';
 import { CycleTimeTableState, type CycleTimeSortKey } from './cycle-time-table-state';
+import { CycleTimeTransitionsComponent } from '../cycle-time-transitions/cycle-time-transitions.component';
+import { CycleTimeTaskTransitionsComponent } from '../cycle-time-task-transitions/cycle-time-task-transitions.component';
 
 /** One sortable drill-down column. Stage columns carry the stage key so the cell reads `row.stages[key]`. */
 interface DrillDownColumn {
@@ -52,6 +54,7 @@ const DRILL_DOWN_COLUMNS: readonly DrillDownColumn[] = [
   { key: 'humanReview', label: 'Human', stage: 'humanReview', numeric: true },
   { key: 'codingRuns', label: 'Runs', numeric: true },
   { key: 'bounceRounds', label: 'Bounces', numeric: true },
+  { key: 'backwardTransitions', label: 'Back', numeric: true },
   { key: 'outcome', label: 'Integration outcome', numeric: false },
 ];
 
@@ -67,7 +70,7 @@ const DRILL_DOWN_COLUMNS: readonly DrillDownColumn[] = [
 @Component({
   selector: 'app-project-cycle-time-panel',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, CycleTimeTransitionsComponent, CycleTimeTaskTransitionsComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-cycle-time-panel.component.html',
   styleUrl: './project-cycle-time-panel.component.scss',
@@ -107,6 +110,10 @@ export class ProjectCycleTimePanelComponent {
       .map(o => `${o.outcome} ${o.count}`)
       .join(' · '));
   readonly hasRows = computed<boolean>(() => (this.data()?.coverage.tasksInWindow ?? 0) > 0);
+  /** Task keys whose transition history is expanded in the drill-down. */
+  readonly expandedKeys = signal<readonly string[]>([]);
+  /** Drill-down column count including the leading disclosure column. */
+  readonly columnCount = DRILL_DOWN_COLUMNS.length + 1;
 
   constructor() {
     effect(() => {
@@ -144,6 +151,16 @@ export class ProjectCycleTimePanelComponent {
     this.openTask.emit({ jobId: row.taskId, watchPath: row.watchPath });
   }
 
+  isExpanded(row: TaskCycleTimeRow): boolean {
+    return this.expandedKeys().includes(row.taskKey);
+  }
+
+  toggleExpanded(row: TaskCycleTimeRow): void {
+    this.expandedKeys.update(keys => keys.includes(row.taskKey)
+      ? keys.filter(k => k !== row.taskKey)
+      : [...keys, row.taskKey]);
+  }
+
   windowLabel(window: CycleTimeWindow): string {
     return windowLabel(window);
   }
@@ -167,6 +184,7 @@ export class ProjectCycleTimePanelComponent {
       case 'cycleTime': return this.duration(row.cycleTimeSeconds);
       case 'codingRuns': return String(row.codingRuns);
       case 'bounceRounds': return String(row.bounceRounds);
+      case 'backwardTransitions': return String(row.backwardTransitions ?? 0);
       case 'outcome': return row.integrationOutcome ?? '–';
       default: return column.stage ? this.duration(row.stages[column.stage]) : '';
     }
