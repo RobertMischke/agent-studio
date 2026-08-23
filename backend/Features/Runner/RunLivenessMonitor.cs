@@ -277,7 +277,9 @@ public sealed class RunLivenessMonitor
                 entry.Path,
                 ct,
                 cause: "run-liveness-detector",
-                suppressProductExecution: true);
+                suppressProductExecution: true,
+                transitionCause: LaneChangeCauses.LeaseRecovery,
+                transitionDetail: "run-liveness-process-lost");
             if (move.Status != MoveJobStatus.Success)
             {
                 return Outcome(RunLivenessOutcomeKinds.DemoteFailed, entry, c, decision, jobId,
@@ -342,7 +344,10 @@ public sealed class RunLivenessMonitor
         // is not going to be resumed, and tombstoning it would lose run history.
         try
         {
-            var move = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, entry.Path, ct);
+            var move = await _transitions.MoveAsync(
+                jobId, TaskStates.AutoReview, entry.Path, ct,
+                transitionCause: LaneChangeCauses.Delivered,
+                transitionDetail: "run-liveness-post-processing-retrigger");
             if (move.Status != MoveJobStatus.Success)
             {
                 return Outcome(RunLivenessOutcomeKinds.RetriggerFailed, entry, c, decision, jobId,

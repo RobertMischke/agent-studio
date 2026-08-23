@@ -55,7 +55,9 @@ public static class EpicDecompositionLifecycle
                 });
 
             var recovery = states.MoveJob(epic.Id, TaskStates.Backlog, epic.WatchPath,
-                cause: "epic_decomposition_empty");
+                cause: "epic_decomposition_empty",
+                transitionCause: LaneChangeCauses.RunnerRequeue,
+                transitionDetail: "epic-decomposition-empty");
             if (recovery.Status != MoveJobStatus.Success)
                 logger?.LogError(
                     "epic-decomposition-recovery-failed epic={EpicId} state={State} status={Status} error={Error}",

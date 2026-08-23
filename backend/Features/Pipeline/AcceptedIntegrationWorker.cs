@@ -125,7 +125,9 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
                 request.Cause ?? TimelineActors.System,
                 request.Reason,
                 expectedSourceState: TaskStates.HumanReview,
-                suppressIntegrationTrigger: true).ConfigureAwait(false);
+                suppressIntegrationTrigger: true,
+                transitionCause: LaneChangeCauses.Accepted,
+                transitionDetail: result.Outcome.ToString()).ConfigureAwait(false);
             if (moved.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -185,7 +187,9 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
                 cause: TimelineActors.System,
                 reason: moveReason,
                 expectedSourceState: TaskStates.Completed,
-                suppressIntegrationTrigger: true).ConfigureAwait(false);
+                suppressIntegrationTrigger: true,
+                transitionCause: LaneChangeCauses.AcceptanceIntegrationFailed,
+                transitionDetail: result.Outcome.ToString()).ConfigureAwait(false);
             if (moved.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -232,7 +236,9 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
                 request.Cause ?? TimelineActors.System,
                 request.Reason,
                 expectedSourceState: TaskStates.HumanReview,
-                suppressIntegrationTrigger: true).ConfigureAwait(false);
+                suppressIntegrationTrigger: true,
+                transitionCause: LaneChangeCauses.Accepted,
+                transitionDetail: "no-delivery-branch").ConfigureAwait(false);
             if (moved.Status != MoveJobStatus.Success) return;
             job = _scanner.FindJob(request.JobId, request.WatchPath) ?? job;
         }

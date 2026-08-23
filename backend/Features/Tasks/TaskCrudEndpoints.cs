@@ -444,7 +444,9 @@ public static class TaskCrudEndpoints
                     watchPath,
                     ct,
                     cause: "concept-sight-review-approved",
-                    reason: "Concept sight review approved and implementation promotion completed.");
+                    reason: "Concept sight review approved and implementation promotion completed.",
+                    transitionCause: LaneChangeCauses.Accepted,
+                    transitionDetail: "concept-sight-review");
                 if (move.Status != MoveJobStatus.Success)
                     return Results.Conflict(new
                     {
@@ -850,10 +852,12 @@ public static class TaskCrudEndpoints
         // queue with one click. The state machine handles the reorder atomically
         // on disk and preserves the relative position of any other queued
         // jobs that already carry a PendingIntent.
-        group.MapPost("/{jobId}/move-to-top", (string jobId, string? project, string? watchPath, TaskStateMachine states, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapPost("/{jobId}/move-to-top", (string jobId, string? project, string? watchPath, HttpContext ctx, TaskStateMachine states, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
-            var position = states.PromoteToReadyTop(jobId, watchPath);
+            // Operator-initiated like the two move routes: the human actor lets
+            // the ledger derive the operator cause of a lane change into Ready.
+            var position = states.PromoteToReadyTop(jobId, watchPath, cause: OperatorActor(ctx));
             return position == 0 ? Results.NotFound() : Results.Ok(new { position });
         });
 

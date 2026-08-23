@@ -113,7 +113,12 @@ public static class TaskIntegrationRecoveryEndpoints
                     new { error = "The recovery intent was persisted, but the superseded delivery history could not be marked." },
                     statusCode: StatusCodes.Status500InternalServerError);
             }
-            var position = states.PromoteToReadyTop(job.Id, job.WatchPath);
+            // An operator queues the recovery round, but the ledger cause is the
+            // integration recovery it serves; the failure code is the qualifier.
+            var position = states.PromoteToReadyTop(
+                job.Id, job.WatchPath,
+                transitionCause: LaneChangeCauses.IntegrationRecovery,
+                transitionDetail: failure.Code);
             var queued = scanner.FindJob(job.Id, job.WatchPath);
             if (queued is null || queued.State != TaskStates.Ready)
             {

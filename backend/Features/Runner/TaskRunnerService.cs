@@ -756,7 +756,12 @@ public class TaskRunnerService : BackgroundService
                 watchPath: watchPath);
 
             var fromState = info.State;
-            var position = _states.PromoteToReadyTop(jobId, watchPath);
+            // A user follow-up queued behind the busy project: the lane change is
+            // the operator's, so its cause is the operator cause of the lane pair.
+            var position = _states.PromoteToReadyTop(
+                jobId, watchPath,
+                transitionCause: LaneChangeCauses.ForOperatorMove(fromState, TaskStates.Ready),
+                transitionDetail: "follow-up-queued-project-busy");
 
             try
             {

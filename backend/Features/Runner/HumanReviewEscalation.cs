@@ -246,7 +246,9 @@ public sealed class HumanReviewEscalation
             cause: TimelineActors.System,
             reason: reason,
             authorityWrite: authorityWrite,
-            suppressProductExecution: authorityWrite is not null);
+            suppressProductExecution: authorityWrite is not null,
+            transitionCause: LaneChangeCauses.Escalated,
+            transitionDetail: category);
         if (outcome.Status == MoveJobStatus.Success)
         {
             RecordVerdictAndStatus(project, jobId, outcome.NewFolderPath, category, reason, statusDetail);
@@ -277,7 +279,9 @@ public sealed class HumanReviewEscalation
                 watchPath,
                 CancellationToken.None,
                 cause: TimelineActors.System,
-                reason: reason)
+                reason: reason,
+                transitionCause: LaneChangeCauses.Escalated,
+                transitionDetail: category)
             .GetAwaiter()
             .GetResult();
         if (outcome.Status == MoveJobStatus.Success)

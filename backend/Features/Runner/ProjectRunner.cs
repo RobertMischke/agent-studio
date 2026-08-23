@@ -2249,7 +2249,9 @@ public class ProjectRunner
             // with two folders in 3-progress at maxParallelism=1.
             if (plan.MoveJobToProgress && info.State != TaskStates.Progress)
             {
-                var move = _states.MoveJob(jobId, TaskStates.Progress, Entry.Path);
+                var move = _states.MoveJob(
+                    jobId, TaskStates.Progress, Entry.Path,
+                    transitionCause: LaneChangeCauses.Claimed, transitionDetail: "local-pickup");
                 if (move.Status != MoveJobStatus.Success)
                 {
                     _logger.LogWarning(
@@ -6018,7 +6020,10 @@ public class ProjectRunner
                     }, _logger);
                 }
 
-                var moveOutcome = await _transitions.MoveAsync(jobId, completionLane, Entry.Path, CancellationToken.None);
+                var moveOutcome = await _transitions.MoveAsync(
+                    jobId, completionLane, Entry.Path, CancellationToken.None,
+                    transitionCause: CompletionLaneChangeCause(completionLane),
+                    transitionDetail: epicPlanningLane is null ? outcome.Kind.ToString() : "epic-planning");
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
                     // The job made it out of the run loop; forget any spent
@@ -6228,6 +6233,16 @@ public class ProjectRunner
             result.Summary);
     }
 
+    /// <summary>
+    /// Ledger cause of a core-run completion move. A run that lands in a review
+    /// lane is a delivery hand-off; an epic planning run that produced no valid
+    /// plan returns to Backlog, which is the runner handing the task back.
+    /// </summary>
+    internal static string CompletionLaneChangeCause(string completionLane)
+        => completionLane is TaskStates.AutoReview or TaskStates.HumanReview
+            ? LaneChangeCauses.Delivered
+            : LaneChangeCauses.RunnerRequeue;
+
     private async Task HandleUiIterationCompletionAsync(
         TaskInfo info,
         ActiveRun run,
@@ -6417,7 +6432,10 @@ public class ProjectRunner
             AgentOutcome = $"ui-iteration-{iteration:D3}-awaiting-review",
         }, _logger);
 
-        var move = await _transitions.MoveAsync(jobId, TaskStates.HumanReview, Entry.Path, CancellationToken.None);
+        var move = await _transitions.MoveAsync(
+            jobId, TaskStates.HumanReview, Entry.Path, CancellationToken.None,
+            transitionCause: LaneChangeCauses.Delivered,
+            transitionDetail: $"ui-iteration-{iteration}/{maxIterations}");
         if (move.Status == MoveJobStatus.Success)
         {
             TeardownWorktreeForJob(jobId);
@@ -6899,7 +6917,10 @@ public class ProjectRunner
                     ExecutionStatus = execution.Status,
                     AgentOutcome = "abort-review-accept"
                 }, _logger);
-                var move = await _transitions.MoveAsync(jobId, acceptLane, Entry.Path, CancellationToken.None);
+                var move = await _transitions.MoveAsync(
+                    jobId, acceptLane, Entry.Path, CancellationToken.None,
+                    transitionCause: CompletionLaneChangeCause(acceptLane),
+                    transitionDetail: "abort-review-accept");
                 if (move.Status == MoveJobStatus.Success)
                 {
                     // Terminal accept: tear down the coding worktree+branch.
@@ -8743,7 +8764,9 @@ public class ProjectRunner
         // terminal: route it through the escalation funnel so 5e-escalated
         // always carries an Escalate verdict + status.md stub.
         var moveResult = spawnFailure
-            ? _states.MoveJob(jobIdBeforeMove, TaskStates.Ready, Entry.Path)
+            ? _states.MoveJob(
+                jobIdBeforeMove, TaskStates.Ready, Entry.Path,
+                transitionCause: LaneChangeCauses.RunnerRequeue, transitionDetail: "spawn-failure")
             : _humanReviewEscalation.Escalate(
                 jobIdBeforeMove, Entry.Path, ProjectName,
                 worktreeBlocked ? HumanReviewEscalationCategories.WorktreeBlocked : HumanReviewEscalationCategories.PickupZombie, reason);
@@ -9026,7 +9049,9 @@ public class ProjectRunner
             return;
         }
 
-        var move = _states.MoveJob(jobId, TaskStates.Ready, Entry.Path);
+        var move = _states.MoveJob(
+            jobId, TaskStates.Ready, Entry.Path,
+            transitionCause: LaneChangeCauses.RunnerRequeue, transitionDetail: "pick-reverted-no-run");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(

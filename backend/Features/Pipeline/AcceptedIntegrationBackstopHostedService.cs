@@ -361,7 +361,9 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                 cause: TimelineActors.System,
                 reason: "Recovered transactional acceptance after integration succeeded.",
                 expectedSourceState: TaskStates.HumanReview,
-                suppressIntegrationTrigger: true)
+                suppressIntegrationTrigger: true,
+                transitionCause: LaneChangeCauses.Accepted,
+                transitionDetail: "acceptance-integration-recovered")
             .GetAwaiter()
             .GetResult();
         if (moved.Status != MoveJobStatus.Success)
@@ -402,7 +404,9 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                     cause: TimelineActors.System,
                     reason: moveReason,
                     expectedSourceState: TaskStates.Completed,
-                    suppressIntegrationTrigger: true)
+                    suppressIntegrationTrigger: true,
+                    transitionCause: LaneChangeCauses.AcceptanceIntegrationFailed,
+                    transitionDetail: outcome)
                 .GetAwaiter()
                 .GetResult();
             if (moved.Status != MoveJobStatus.Success)

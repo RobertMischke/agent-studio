@@ -554,7 +554,10 @@ public sealed class StaleProgressArchiver
         var jobId = TryReadJobId(jobFolder) ?? slug;
         try
         {
-            var outcome = await _transitions.MoveAsync(jobId, TaskStates.AutoReview, entry.Path, ct);
+            var outcome = await _transitions.MoveAsync(
+                jobId, TaskStates.AutoReview, entry.Path, ct,
+                transitionCause: LaneChangeCauses.Delivered,
+                transitionDetail: $"stale-progress-sentinel:{keyword}");
             if (outcome.Status != MoveJobStatus.Success)
             {
                 return new StaleProgressDecision
@@ -628,7 +631,10 @@ public sealed class StaleProgressArchiver
 
         try
         {
-            var outcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
+            var outcome = await _transitions.MoveAsync(
+                jobId, TaskStates.Ready, entry.Path, ct,
+                transitionCause: LaneChangeCauses.RunnerRequeue,
+                transitionDetail: "stale-progress-orphan");
             if (outcome.Status != MoveJobStatus.Success)
             {
                 return new StaleProgressDecision

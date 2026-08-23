@@ -305,7 +305,9 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
                 .ToList();
             foreach (var job in stray)
             {
-                var moved = _states.MoveJob(job.Id, TaskStates.Preparation, job.WatchPath);
+                var moved = _states.MoveJob(
+                    job.Id, TaskStates.Preparation, job.WatchPath,
+                    transitionCause: LaneChangeCauses.SystemMove, transitionDetail: "stray-prep-lane-migration");
                 if (moved.Status == MoveJobStatus.Success)
                 {
                     _logger.LogInformation(
@@ -325,7 +327,9 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
         switch (decision.Verdict)
         {
             case OrchestratorPrepRules.Verdict.Accept:
-                _states.MoveJob(job.Id, TaskStates.Ready, job.WatchPath);
+                _states.MoveJob(
+                    job.Id, TaskStates.Ready, job.WatchPath,
+                    transitionCause: LaneChangeCauses.Promoted, transitionDetail: "orchestrator-prep-accept");
                 _chatLog.Append(job, OrchestratorMessageKind.Decision,
                     decision.Note ?? $"orchestrator-prep: accept (clarity {decision.Clarity:F2}); -> {TaskStates.Ready}");
                 break;
@@ -337,7 +341,9 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
                 // agent attempt (it can still emit NEEDS_INPUT), and an explicit
                 // human-decision-needed marker is herded onward to 5-human-review
                 // by the runner's pickup sweep (RelocateStrayHumanDecisionCards).
-                _states.MoveJob(job.Id, TaskStates.Ready, job.WatchPath);
+                _states.MoveJob(
+                    job.Id, TaskStates.Ready, job.WatchPath,
+                    transitionCause: LaneChangeCauses.Promoted, transitionDetail: "orchestrator-prep-bounce");
                 _chatLog.Append(job, OrchestratorMessageKind.GiveUp,
                     $"orchestrator-prep: bounce ({decision.BounceReason}); clarity {decision.Clarity:F2}; -> {TaskStates.Ready}");
                 break;

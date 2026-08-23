@@ -225,7 +225,9 @@ public sealed class ManagementService
                     item.Id,
                     TaskStates.Archive,
                     item.WatchPath,
-                    "management-archive-sweep");
+                    "management-archive-sweep",
+                    transitionCause: LaneChangeCauses.Archived,
+                    transitionDetail: "management-archive-sweep");
                 var moved = _reviewAttemptLifecycle is null
                     ? MoveCore()
                     : _reviewAttemptLifecycle.ExecuteTerminalTransition(

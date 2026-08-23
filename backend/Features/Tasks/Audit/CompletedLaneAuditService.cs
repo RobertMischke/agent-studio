@@ -155,7 +155,9 @@ public sealed class CompletedLaneAuditService
         {
             // Reopen for another pass at 2-ready (the retired 1b-needs-human-review
             // lane is gone; QualityLoopReopened always means a re-attempt now).
-            var outcome = _states.MoveJob(jobId, TaskStates.Ready, watchPath);
+            var outcome = _states.MoveJob(
+                jobId, TaskStates.Ready, watchPath,
+                transitionCause: LaneChangeCauses.QualityLoop, transitionDetail: AuditReopenCause);
             if (outcome.Status == MoveJobStatus.Success)
             {
                 newState = TaskStates.Ready;
@@ -268,7 +270,9 @@ public sealed class CompletedLaneAuditService
                 {
                     // Reopen for another pass at 2-ready (the retired
                     // 1b-needs-human-review lane is gone).
-                    var outcome = _states.MoveJob(jobId, TaskStates.Ready, watchPath);
+                    var outcome = _states.MoveJob(
+                        jobId, TaskStates.Ready, watchPath,
+                        transitionCause: LaneChangeCauses.QualityLoop, transitionDetail: AuditReopenCause);
                     if (outcome.Status == MoveJobStatus.Success)
                     {
                         var refreshed = _scanner.FindJob(jobId, watchPath);
@@ -382,10 +386,14 @@ public sealed class CompletedLaneAuditService
         };
     }
 
+    /// <summary>Quality-loop cause id of a completed-lane audit reopen, on the reopen row and the lane row alike.</summary>
+    internal const string AuditReopenCause = "completed-lane-audit";
+
     private void AppendQualityLoopReopened(string folderPath, TaskInfo job, List<EvidenceDiagnostic> diagnostics, string actorEmail)
     {
         var details = new Dictionary<string, string>
         {
+            ["cause"] = AuditReopenCause,
             ["fromState"] = job.State,
             ["toState"] = TaskStates.Ready,
             ["diagnosticCount"] = diagnostics.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),

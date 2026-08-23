@@ -130,7 +130,10 @@ public sealed class IntegrationAgentRoundService
             return Task.FromResult(Failed(reason));
         }
 
-        var position = _states.PromoteToReadyTop(job.Id, job.WatchPath);
+        var position = _states.PromoteToReadyTop(
+            job.Id, job.WatchPath,
+            transitionCause: LaneChangeCauses.IntegrationRecovery,
+            transitionDetail: result.Outcome.ToString());
         var queued = _scanner.FindJob(job.Id, job.WatchPath);
         if (position <= 0 || queued is null || queued.State != TaskStates.Ready)
         {

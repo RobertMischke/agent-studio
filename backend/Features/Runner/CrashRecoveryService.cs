@@ -178,7 +178,10 @@ public sealed class CrashRecoveryService
                 // completed normally. The crash-recovery tag only applies
                 // to orphan changes (Phase 2) where no completion marker
                 // was found.
-                var moveOutcome = await _transitions.MoveAsync(jobId, marker.TargetState, entry.Path, ct);
+                var moveOutcome = await _transitions.MoveAsync(
+                    jobId, marker.TargetState, entry.Path, ct,
+                    transitionCause: ProjectRunner.CompletionLaneChangeCause(marker.TargetState),
+                    transitionDetail: "crash-recovery-completion-marker");
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
                     var movedInfo = _scanner.FindJob(jobId, entry.Path);
@@ -733,7 +736,10 @@ public sealed class CrashRecoveryService
 
             try
             {
-                var moveOutcome = await _transitions.MoveAsync(jobId, TaskStates.Ready, entry.Path, ct);
+                var moveOutcome = await _transitions.MoveAsync(
+                    jobId, TaskStates.Ready, entry.Path, ct,
+                    transitionCause: LaneChangeCauses.LeaseRecovery,
+                    transitionDetail: "crash-recovery-stale-pickup-lock");
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
                     var moved = _scanner.FindJob(jobId, entry.Path);

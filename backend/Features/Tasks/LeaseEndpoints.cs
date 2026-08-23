@@ -318,7 +318,9 @@ public static class LeaseEndpoints
                                     replay.Lease.FencingToken,
                                     replay.Lease.AuthorityEpoch,
                                     $"lane-claim:{requestedClaimKey}"),
-                                expectedSourceState: TaskStates.Ready);
+                                expectedSourceState: TaskStates.Ready,
+                                transitionCause: LaneChangeCauses.Claimed,
+                                transitionDetail: "claim-replay");
                             if (replayMove.Status != MoveJobStatus.Success)
                             {
                                 // Do not release replayed authority here. The
@@ -492,7 +494,9 @@ public static class LeaseEndpoints
                         interrupted.Id, TaskStates.Ready, interrupted.WatchPath, ct,
                         cause: $"remote-runner-lease-recovery:{req.RunnerName.Trim()}",
                         authorityWrite: recoveryWrite,
-                        suppressProductExecution: true);
+                        suppressProductExecution: true,
+                        transitionCause: LaneChangeCauses.LeaseRecovery,
+                        transitionDetail: requeueDecision.ReasonCode);
                     if (recoveryWrite is not null)
                         recoveredSources[interruptedKey] = recoveryWrite.AttemptId;
                 }
@@ -828,7 +832,8 @@ public static class LeaseEndpoints
                         acquire.Lease.AttemptId!,
                         acquire.Lease.FencingToken,
                         acquire.Lease.AuthorityEpoch,
-                        $"lane-claim:{claimKey}"));
+                        $"lane-claim:{claimKey}"),
+                    transitionCause: LaneChangeCauses.Claimed);
                 if (move.Status != MoveJobStatus.Success)
                 {
                     leases.Release(new RunLeaseReleaseRequest(
@@ -1574,7 +1579,9 @@ public static class LeaseEndpoints
                         ct,
                         cause: $"remote-claim-environment-retry:{claimFailure.Attempt}/{claimFailure.MaximumAttempts}",
                         authorityWrite: laneWrite,
-                        suppressProductExecution: true);
+                        suppressProductExecution: true,
+                        transitionCause: LaneChangeCauses.ClaimEnvironmentRetry,
+                        transitionDetail: $"{claimFailure.Attempt}/{claimFailure.MaximumAttempts}");
                     if (retryMove.Status != MoveJobStatus.Success)
                         return Results.Conflict(new RemoteRunCompletionResponse(
                             req.TaskKey,
@@ -1669,7 +1676,9 @@ public static class LeaseEndpoints
                         ct,
                         cause: $"remote-epic-planning-completion:{source}",
                         authorityWrite: laneWrite,
-                        suppressProductExecution: true);
+                        suppressProductExecution: true,
+                        transitionCause: LaneChangeCauses.Delivered,
+                        transitionDetail: "epic-planning");
                     if (planningMove.Status != MoveJobStatus.Success)
                         return Results.Conflict(new RemoteRunCompletionResponse(
                             req.TaskKey, reportedOutcome, task.State,
@@ -1765,7 +1774,15 @@ public static class LeaseEndpoints
                         ? $"remote-runner-completion:{source}"
                         : $"remote-delivery-envelope-retry:{deliveryFailure.Attempt}/{deliveryFailure.MaximumAttempts}",
                     authorityWrite: laneWrite,
-                    suppressProductExecution: true);
+                    suppressProductExecution: true,
+                    // A verified completion is the delivery hand-off; an unverified
+                    // one is requeued for another delivery round by the runner.
+                    transitionCause: deliveryFailure is null
+                        ? LaneChangeCauses.Delivered
+                        : LaneChangeCauses.RunnerRequeue,
+                    transitionDetail: deliveryFailure is null
+                        ? outcome
+                        : $"delivery-envelope-retry {deliveryFailure.Attempt}/{deliveryFailure.MaximumAttempts}");
                 if (move.Status != MoveJobStatus.Success)
                     return Results.Conflict(new RemoteRunCompletionResponse(
                         req.TaskKey, reportedOutcome, task.State, $"Lane move refused: {move.Status} {move.Message}",

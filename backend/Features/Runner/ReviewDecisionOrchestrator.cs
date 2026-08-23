@@ -618,7 +618,15 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// shared checkout working tree at the same time. The move itself is fast, so the
     /// gate costs little relative to the model/gate/aspect work that stays parallel.
     /// </summary>
-    private MoveJobOutcome GuardedMoveJob(string jobId, string targetState, string? watchPath = null, string? cause = null)
+    /// <param name="transitionCause">Ledger cause id of the move (why), one of <see cref="LaneChangeCauses"/>.</param>
+    /// <param name="transitionDetail">Short qualifier: the verdict or gate id behind the move.</param>
+    private MoveJobOutcome GuardedMoveJob(
+        string jobId,
+        string targetState,
+        string? watchPath = null,
+        string? cause = null,
+        string? transitionCause = null,
+        string? transitionDetail = null)
     {
         _postProcessingGitGate.Wait();
         try
@@ -629,6 +637,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     TargetLane = targetState,
                     WatchPath = watchPath,
                     Cause = cause,
+                    TransitionCause = transitionCause,
+                    TransitionDetail = transitionDetail,
                 })
                 .GetAwaiter()
                 .GetResult();
@@ -1377,7 +1387,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 current,
                 "escalate",
                 $"Concept review found an incomplete or uncontained Dossier. {review.Summary} Promoted to {TaskStates.Escalated}.");
-            var failedMove = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var failedMove = GuardedMoveJob(
+                current.Id, TaskStates.Escalated, entry.Path,
+                transitionCause: LaneChangeCauses.Escalated, transitionDetail: "concept-review-failed");
             if (failedMove.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -1408,7 +1420,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             OrchestratorMessageKind.Decision,
             $"Concept delivered: `{stored!.RepoRelativeEntrypoint}`. Awaiting sight review; NeedsInput is expected and is not an escalation.");
 
-        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.HumanReview, entry.Path,
+            transitionCause: LaneChangeCauses.ReviewVerdict, transitionDetail: "concept-sight-review");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1500,7 +1514,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.Append(current, OrchestratorMessageKind.Reissue,
             $"Decision: reissue (NOOP recovery). Reason: {reason}");
 
-        var moved = MoveReissueToReadyTop(current, entry, "NOOP");
+        var moved = MoveReissueToReadyTop(current, entry, "noop-recovery");
         if (moved != null)
         {
             var priorReissues = CountPriorReissues(workspace, entry.Name, current.Id);
@@ -1538,7 +1552,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Escalated, entry.Path,
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "noop-escalate");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1724,7 +1740,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.Append(current, OrchestratorMessageKind.Reissue,
             $"Decision: reissue (no completion signal). Reason: {reason}");
 
-        var moved = MoveReissueToReadyTop(current, entry, "NO-SIGNAL");
+        var moved = MoveReissueToReadyTop(current, entry, "no-completion-signal");
         if (moved != null)
         {
             // Post-core Orchestrator-Review row: the silent-finish reissue is the
@@ -1772,7 +1788,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.AppendSupervisor(current, "escalate",
             $"Orchestrator could not obtain a deterministic completion signal. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Escalated, entry.Path,
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "no-completion-signal");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1822,7 +1840,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             $"Orchestrator escalated BLOCKED for human decision. Reason: {reason}. Promoted to {TaskStates.Escalated}.");
 
         // BLOCKED escalations move to the decision lane, not acceptance review.
-        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Escalated, entry.Path,
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "agent-blocked");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1868,7 +1888,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private void ProcessUnworkedCard(string workspace, WatchPathEntry entry, PendingDecision pending)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
-        var move = GuardedMoveJob(current.Id, TaskStates.Ready, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Ready, entry.Path,
+            transitionCause: LaneChangeCauses.QualityLoop, transitionDetail: UnworkedNoCoreRunCause);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -1892,7 +1914,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             "Bounced: card reached 4-auto-review with no core run; sent to 2-ready to be worked.",
             new Dictionary<string, string>
             {
-                ["cause"] = "unworked-no-core-run",
+                ["cause"] = UnworkedNoCoreRunCause,
             });
 
         _logger.LogInformation(
@@ -1939,7 +1961,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         if (verdict == ReviewDecisionKind.Reissue)
         {
-            var moved = MoveReissueToReadyTop(current, entry, "stale-verdict backfill");
+            var moved = MoveReissueToReadyTop(current, entry, "stale-verdict-backfill");
             if (moved == null)
             {
                 _logger.LogWarning(
@@ -1967,7 +1989,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var targetState = verdict == ReviewDecisionKind.AcceptAsDone
             ? TaskStates.HumanReview
             : TaskStates.Escalated;
-        var move = GuardedMoveJob(current.Id, targetState, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, targetState, entry.Path,
+            transitionCause: verdict == ReviewDecisionKind.AcceptAsDone
+                ? LaneChangeCauses.ReviewVerdict
+                : LaneChangeCauses.Escalated,
+            transitionDetail: "stale-verdict-backfill");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -2507,7 +2534,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         // Promote to 5-human-review with or without concern tags. ADR-0025:
         // accept-as-done routes to human-review, never directly to completed.
-        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.HumanReview, entry.Path,
+            transitionCause: LaneChangeCauses.ReviewVerdict,
+            transitionDetail: report.Overall == AspectStatus.Concerns ? "accept-with-concerns" : "accept");
         if (move.Status != MoveJobStatus.Success)
         {
             // Move failed -> do NOT fire the operator-facing "accepted as
@@ -2651,7 +2681,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (reaction.Disposition == AgentStudio.Review.CouncilReactionDisposition.Reissue)
         {
             var followUp = AgentStudio.Review.CouncilReviewPolicy.BuildTargetedFollowUp(reaction);
-            var moved = MoveReissueToReadyTop(current, entry, "code-review council findings");
+            var moved = MoveReissueToReadyTop(current, entry, "code-review-council");
             if (moved is null) return true;
 
             AgentStudio.Review.CouncilReviewReactionStore.Write(moved.FolderPath, reaction);
@@ -2687,7 +2717,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return true;
         }
 
-        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Escalated, entry.Path,
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "code-review-council");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -2755,7 +2787,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             "then re-run the task and end with [[TASK_DONE]]:\n\n" +
             report.FollowUpSummary;
 
-        var moved = MoveReissueToReadyTop(current, entry, "multi-aspect block");
+        var moved = MoveReissueToReadyTop(current, entry, "multi-aspect-block");
         if (moved == null)
         {
             // Move failed -> no operator-facing "sent back to ready" banner.
@@ -2852,7 +2884,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             $"Auto-review could not obtain an aspect verdict: the reviewing CLI died even after an environmental retry. " +
             $"This is an infrastructure crash (InfraCrash), not a problem with the change. Promoted to {TaskStates.Escalated} flagged environmental.");
 
-        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Escalated, entry.Path,
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "aspect-verdict-infra-crash");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -2972,7 +3006,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
 
-        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.HumanReview, entry.Path,
+            transitionCause: LaneChangeCauses.ReviewVerdict, transitionDetail: "loop-break-accept");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -3043,7 +3079,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.AppendSupervisor(current, "escalate",
             $"Auto-review reissue budget spent; not reissuing again. Reason: {loopBreak.Reason}. Promoted to {TaskStates.Escalated}.");
 
-        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Escalated, entry.Path,
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "reissue-budget-exhausted");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -3108,7 +3146,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _chatLog.AppendSupervisor(current, "escalate",
                 $"Auto-review could not verify this task's result. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
 
-            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(
+                current.Id, TaskStates.Escalated, entry.Path,
+                transitionCause: LaneChangeCauses.Escalated, transitionDetail: "evidence-gate");
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -3210,7 +3250,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _chatLog.AppendSupervisor(current, "escalate",
                 $"Auto-review could not clear solution-quality concerns. Reason: {gate.Reason}. Promoted to {TaskStates.Escalated}.");
 
-            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(
+                current.Id, TaskStates.Escalated, entry.Path,
+                transitionCause: LaneChangeCauses.Escalated, transitionDetail: "solution-quality-gate");
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -3939,7 +3981,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             _chatLog.AppendSupervisor(current, "escalate",
                 $"Auto-review completion gate could not clear unfinished-work evidence. Reason: {escalationReason}. Promoted to {TaskStates.Escalated}.");
 
-            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(
+                current.Id, TaskStates.Escalated, entry.Path,
+                transitionCause: LaneChangeCauses.Escalated, transitionDetail: "completion-gate");
             if (move.Status != MoveJobStatus.Success)
             {
                 _logger.LogWarning(
@@ -5285,7 +5329,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             + $"in attempt chain {result.AttemptChainId ?? "missing"} after "
             + $"{PostProcessingOutcomeTaxonomy.DefaultMaxEnvironmentalRetries} retries "
             + $"(fingerprint {result.FailureFingerprint ?? "missing"}); coding reissue budget was not consumed.";
-        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Escalated, entry.Path,
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "build-test-gate-infrastructure");
         if (move.Status == MoveJobStatus.Success)
         {
             var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
@@ -5393,7 +5439,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                     councilReaction,
                     "the build/test gate ended this attempt at its loop guard, so no further automatic round can start");
             }
-            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(
+                current.Id, TaskStates.Escalated, entry.Path,
+                transitionCause: LaneChangeCauses.Escalated, transitionDetail: "build-test-gate-double-fail");
             if (move.Status == MoveJobStatus.Success)
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
@@ -5445,7 +5493,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
-        var moved = MoveReissueToReadyTop(current, entry, "build-test gate fail");
+        var moved = MoveReissueToReadyTop(current, entry, BuildTestGateReopenCause);
         if (moved == null) return;
 
         if (councilReaction is not null)
@@ -5473,7 +5521,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         EmitVerdictTimeline(moved.FolderPath, TimelineEventKinds.QualityLoopReopened,
             TimelineActors.QualityLoop,
             $"Reopened: build/test gate failed ({result.Reason}).",
-            BuildReopenDetails("build-test-gate-fail",
+            BuildReopenDetails(BuildTestGateReopenCause,
                 CountPriorReissues(workspace, entry.Name, current.Id),
                 followUp));
 
@@ -5552,7 +5600,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         if (priorLintReissues >= 1)
         {
             var reason = $"lint-scss failed twice in a row (exit {result.ExitCode}); escalating per ASS-46 infinite-spin guard.";
-            var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+            var move = GuardedMoveJob(
+                current.Id, TaskStates.Escalated, entry.Path,
+                transitionCause: LaneChangeCauses.Escalated, transitionDetail: "lint-scss-double-fail");
             if (move.Status == MoveJobStatus.Success)
             {
                 var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
@@ -5589,7 +5639,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
-        var moved2 = MoveReissueToReadyTop(current, entry, "lint-scss fail");
+        var moved2 = MoveReissueToReadyTop(current, entry, "lint-scss-fail");
         if (moved2 == null) return;
 
         // Final verdict step: reissue (lint-scss gate failed once).
@@ -6396,7 +6446,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // Move first so the operator-visible "sent back to ready" notification
         // only fires once the folder has actually left 4-auto-review. A failed
         // move must not produce a banner that claims the task moved.
-        var moved = MoveReissueToReadyTop(current, entry, "NEEDS_INPUT");
+        var moved = MoveReissueToReadyTop(current, entry, "needs-input");
         if (moved == null)
         {
             return;
@@ -6448,7 +6498,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // orchestrator_escalated event on that card's timeline - the timeline
         // is the explanation. No sibling human-decision-needed-<slug> card is
         // spawned: the wrapper-card pattern (ASS-30) is the bug this ADR ends.
-        var move = GuardedMoveJob(current.Id, TaskStates.Escalated, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Escalated, entry.Path,
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "needs-input-escalate");
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -6509,7 +6561,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // to 6-completed. The user always gets the final say on whether a
         // task is done; the orchestrator's accept signal is "the agent's
         // answer looks complete to me, please confirm."
-        var move = GuardedMoveJob(current.Id, TaskStates.HumanReview, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.HumanReview, entry.Path,
+            transitionCause: LaneChangeCauses.ReviewVerdict, transitionDetail: "accept");
         if (move.Status != MoveJobStatus.Success)
         {
             // Move failed -> do NOT write the operator-facing "accepted as
@@ -7080,14 +7134,23 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// rule.
     /// </para>
     /// </summary>
-    private TaskInfo? MoveReissueToReadyTop(TaskInfo current, WatchPathEntry entry, string causeLabel)
+    /// <param name="reopenCause">
+    /// The quality-loop cause id the matching <c>quality_loop_reopened</c> row
+    /// carries (<c>build-test-gate-fail</c>, <c>multi-aspect-block</c>, ...). It
+    /// is also stamped onto the lane row: a build/test gate failure is its own
+    /// ledger cause, every other reopen is a quality-loop reopen.
+    /// </param>
+    private TaskInfo? MoveReissueToReadyTop(TaskInfo current, WatchPathEntry entry, string reopenCause)
     {
-        var move = GuardedMoveJob(current.Id, TaskStates.Ready, entry.Path);
+        var move = GuardedMoveJob(
+            current.Id, TaskStates.Ready, entry.Path,
+            transitionCause: ReopenLaneChangeCause(reopenCause),
+            transitionDetail: reopenCause);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator: failed to move {JobId} to ready (reissue after {Cause}): {Status} {Message}",
-                current.Id, causeLabel, move.Status, move.Message);
+                current.Id, reopenCause, move.Status, move.Message);
             return null;
         }
 
@@ -7111,6 +7174,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _scanner.InvalidateCache();
         return moved;
     }
+
+    /// <summary>Quality-loop reopen cause id of the ledger row to the lane-change cause of the same row.</summary>
+    internal static string ReopenLaneChangeCause(string reopenCause)
+        => string.Equals(reopenCause, BuildTestGateReopenCause, StringComparison.Ordinal)
+            ? LaneChangeCauses.GateFailure
+            : LaneChangeCauses.QualityLoop;
+
+    /// <summary>The <c>quality_loop_reopened.details.cause</c> of a failed build/test gate.</summary>
+    internal const string BuildTestGateReopenCause = "build-test-gate-fail";
+
+    /// <summary>The <c>quality_loop_reopened.details.cause</c> of an unworked card bounced back to Ready.</summary>
+    private const string UnworkedNoCoreRunCause = "unworked-no-core-run";
 
     /// <summary>
     /// Persist the exact steering prompt that the orchestrator handed the agent,

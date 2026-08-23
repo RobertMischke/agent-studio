@@ -560,6 +560,9 @@ public static class V1ReviewPlaneEndpoints
                     settled.ReviewAttempt.Outcome?.ToString(),
                     settledReviewPlan,
                     request.Verdicts);
+                // Carried onto the Human Review lane row as the verdict's
+                // qualifier: the integration outcome behind the park.
+                string? integrationOutcome = null;
                 if (string.Equals(task.State, TaskStates.AutoReview, StringComparison.OrdinalIgnoreCase))
                 {
                     var projectSettings = settings.Get(task.ProjectName);
@@ -578,13 +581,15 @@ public static class V1ReviewPlaneEndpoints
                             : DateTimeOffset.UtcNow));
                     if (integrationDecision.ShouldIntegrate)
                     {
-                        await remoteIntegration.EnqueueAsync(integrationRequest).ConfigureAwait(false);
+                        var integrated = await remoteIntegration.EnqueueAsync(integrationRequest).ConfigureAwait(false);
+                        integrationOutcome = integrated.Outcome.ToString();
                     }
                     else
                     {
                         remoteIntegration.RecordGateFailure(
                             integrationRequest,
                             integrationDecision.Reason);
+                        integrationOutcome = AcceptedIntegrationFailureCodes.DeliveryGateFailed;
                     }
                 }
 
@@ -602,7 +607,9 @@ public static class V1ReviewPlaneEndpoints
                             request.AuthorityEpoch,
                             $"lane:{request.IdempotencyKey}"),
                         suppressProductExecution: true,
-                        expectedSourceState: TaskStates.AutoReview);
+                        expectedSourceState: TaskStates.AutoReview,
+                        transitionCause: LaneChangeCauses.ReviewVerdict,
+                        transitionDetail: integrationOutcome ?? request.Outcome);
                     if (moved.Status == MoveJobStatus.SourceStateMismatch)
                     {
                         var racedTask = FindTask(scanner, settled.ReviewAttempt.TaskKey);

@@ -296,7 +296,11 @@ public sealed class SteerTimeoutMonitor
             entry.Path,
             ct,
             cause: "steer-timeout-detector",
-            suppressProductExecution: true);
+            suppressProductExecution: true,
+            // The run paused on a question and is handed back to the queue to
+            // resume with the auto-answer: a system requeue, not a quality verdict.
+            transitionCause: LaneChangeCauses.RunnerRequeue,
+            transitionDetail: "steer-timeout-auto-answer");
         if (moveOutcome.Status != MoveJobStatus.Success)
         {
             // Keep the marker + phase on a failed move. The next sweep retries,

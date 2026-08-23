@@ -174,6 +174,15 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.Equal(
             IntegrationStatuses.Integrated,
             Assert.Single(deps.Integration.BuildLookup([integratedBeforeReview]).Values).Status);
+        // Integrate-on-delivery records its start as well as its outcome, so the
+        // integration span is read from the ledger pair, not from the merge step.
+        var ledger = deps.Timeline.ReadAll(integratedBeforeReview.FolderPath);
+        var started = Assert.Single(ledger, entry => entry.Kind == TimelineEventKinds.IntegrationStarted);
+        var succeeded = Assert.Single(ledger, entry => entry.Kind == TimelineEventKinds.IntegrationSucceeded);
+        Assert.Equal(RemoteDeliveryIntegrationCoordinator.PreHumanReviewStage, started.Details!["stage"]);
+        Assert.Equal("develop", started.Details["integrationBranch"]);
+        Assert.Equal(RemoteDeliveryIntegrationCoordinator.PreHumanReviewStage, succeeded.Details!["stage"]);
+        Assert.True(started.Ts <= succeeded.Ts);
 
         var moved = await deps.Transitions.MoveAsync(
             Slug,
@@ -284,13 +293,21 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.Equal(ContinueModes.Steer, queued.PendingIntent?.Mode);
         Assert.Contains("cardinality", queued.PendingIntent?.Prompt, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("do not squash, split, drop, or combine", queued.PendingIntent?.Prompt, StringComparison.OrdinalIgnoreCase);
+        var queuedLedger = deps.Timeline.ReadAll(queued.FolderPath);
         Assert.Contains(
             "Automatically started a new agent round to preserve unambiguous delivery SHA attribution.",
-            deps.Timeline.ReadAll(queued.FolderPath).Select(entry => entry.Summary));
+            queuedLedger.Select(entry => entry.Summary));
         Assert.Contains(
             "Automatic integration recovery",
             File.ReadAllText(Path.Combine(queued.FolderPath, "prompt.md")),
             StringComparison.Ordinal);
+        // The requeue names its cause on the lane row itself.
+        var laneChange = Assert.Single(queuedLedger, entry => entry.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal(TaskStates.Ready, laneChange.Details!["to"]);
+        Assert.Equal(LaneChangeCauses.IntegrationRecovery, laneChange.Details![LaneChangeCauses.DetailKey]);
+        Assert.Equal(
+            MergeIntoIntegrationOutcome.AgentRoundRequired.ToString(),
+            laneChange.Details![LaneChangeCauses.DetailQualifierKey]);
     }
 
     [Fact]
@@ -1443,7 +1460,10 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
-        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
+        var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
+        // The state machine writes the lane_changed rows; the same ledger
+        // instance is read back by the integration assertions below.
+        var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance, timeline: timeline);
         var mutations = new TaskMutationService(
             scanner,
             new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance),
@@ -1502,7 +1522,6 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
             preDevelopTimeout: TimeSpan.FromSeconds(30));
         var integration = new TaskIntegrationStatusService(
             git, settings, pipeline, NullLogger<TaskIntegrationStatusService>.Instance);
-        var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
         var provenance = new TaskProvenanceService(
             git,
             settings,

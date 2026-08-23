@@ -175,7 +175,9 @@ public sealed class ExternalCompletionService
                 ExternalEscalationCategory(request.GateItems),
                 summary,
                 ct)
-            : await _transitions.MoveAsync(jobId, targetState, watchPath, ct, cause: moveCause);
+            : await _transitions.MoveAsync(
+                jobId, targetState, watchPath, ct, cause: moveCause,
+                transitionCause: LaneChangeCauses.ExternalCompletion, transitionDetail: source);
         var afterFolder = beforeFolder;
         switch (move.Status)
         {
