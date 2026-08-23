@@ -242,6 +242,96 @@ public sealed class RemoteCommitAttributionGuardTests
         }
     }
 
+    /// <summary>
+    /// Windows MAX_PATH regression behind the AGT-2494 fixture failure: git
+    /// disambiguates every revision argument against the working tree, and on
+    /// Windows the <c>lstat</c> of the literal <c>&lt;sha&gt;..&lt;ref&gt;</c>
+    /// fails with "Filename too long" instead of "not found" once checkout path
+    /// plus argument exceed 260 characters - <c>rev-list --count</c> then dies
+    /// with exit 128 on a perfectly valid range. The delivery ref below is sized
+    /// so that the range argument crosses that limit from this fixture's
+    /// checkout while every loose ref file stays below it; the range must still
+    /// resolve. On other platforms the test simply exercises a long ref.
+    /// </summary>
+    [Fact]
+    public void InspectRemoteDeliveryCommitRange_LongDeliveryRef_IsNotDisambiguatedAgainstTheWorkingTree()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "remote-attribution-long-ref-" + Guid.NewGuid().ToString("N"));
+        var remote = Path.Combine(root, "origin.git");
+        var repo = Path.Combine(root, "repo");
+        Directory.CreateDirectory(root);
+        try
+        {
+            // "<sha>..refs/remotes/origin/<branch>" is the argument git stats.
+            const int rangeArgumentOverhead = 40 + 2 + 20;
+            // "\.git\refs\remotes\origin\<branch>.lock" is the longest loose-ref path git writes.
+            const int looseRefOverhead = 26 + 5;
+            const string prefix = "runner/agent-runner-01/AGT-2494-collision-";
+            var branchLength = Math.Max(prefix.Length + 8, 215 - repo.Length);
+            var branch = prefix + new string('f', branchLength - prefix.Length);
+            Assert.True(
+                repo.Length + 1 + rangeArgumentOverhead + branch.Length > 260,
+                "the fixture must push the range argument past MAX_PATH");
+            Assert.True(
+                repo.Length + looseRefOverhead + branch.Length <= 259,
+                "the fixture must keep git's own loose ref files below MAX_PATH");
+
+            RunGit(root, $"init -q --bare \"{remote}\"");
+            RunGit(root, $"clone -q \"{remote}\" \"{repo}\"");
+            RunGit(repo, "config user.email test@example.com");
+            RunGit(repo, "config user.name Test");
+            RunGit(repo, "checkout -q -b main");
+            File.WriteAllText(Path.Combine(repo, "base.txt"), "base");
+            RunGit(repo, "add -A");
+            RunGit(repo, "commit -q -m \"chore: base\"");
+            var baseSha = RunGit(repo, "rev-parse HEAD");
+            RunGit(repo, "push -q origin main");
+            RunGit(repo, $"checkout -q -b {branch} main");
+            File.WriteAllText(Path.Combine(repo, "result.txt"), "result");
+            RunGit(repo, "add -A");
+            RunGit(repo, "commit -q -m \"feat(AGT-2494): the delivered result\"");
+            var tip = RunGit(repo, "rev-parse HEAD");
+            RunGit(repo, $"push -q origin {branch}");
+            RunGit(repo, "checkout -q main");
+
+            var config = new ConfigurationBuilder().AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["WatchPaths:0:Name"] = "Fixture",
+                    ["WatchPaths:0:RootPath"] = repo,
+                    ["WatchPaths:0:RepositoryPath"] = repo,
+                    ["WatchPaths:0:Path"] = Path.Combine(repo, ".orchestrator", "jobs"),
+                }).Build();
+            var summary = new SummaryGenerationService(
+                NullLogger<SummaryGenerationService>.Instance,
+                config);
+            var scanner = new TaskScannerService(
+                config,
+                NullLogger<TaskScannerService>.Instance,
+                summary);
+            var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+
+            var range = git.InspectRemoteDeliveryCommitRange(repo, branch, tip, "refs/heads/main");
+
+            Assert.True(range.Success, range.Warning);
+            Assert.Equal(DeliveryVerificationStatus.Verified, range.Verification);
+            Assert.Equal(baseSha, range.MergeBaseSha);
+            Assert.Equal(tip, range.TipSha);
+            Assert.Equal([tip], range.Commits.Select(commit => commit.Sha));
+
+            // The same range through the batch helper the board uses.
+            Assert.Equal(
+                [tip],
+                git.GetReachableShaSet(repo, baseSha, $"refs/remotes/origin/{branch}"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     private static GitCommitInfo Commit(string sha, string subject) =>
         new(
             sha,

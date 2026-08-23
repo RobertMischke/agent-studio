@@ -3303,7 +3303,7 @@ public class GitService
         if (!IsLikelyBranchName(targetRef) || !IsLikelyBranchName(sourceRef)) return null;
 
         var (output, _, code) = RunGitArgs(
-            repoRoot, "diff", "--name-only", $"{targetRef}...{sourceRef}");
+            repoRoot, "diff", "--name-only", $"{targetRef}...{sourceRef}", RevisionsOnly);
         if (code != 0) return null;
 
         return output.Replace("\r\n", "\n")
@@ -3752,7 +3752,7 @@ public class GitService
 
         const char US = '\x1f';
         var fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
-        var args = $"log --no-merges --shortstat --pretty=format:\"{fmt}\" {fromRef}..{toRef}";
+        var args = $"log --no-merges --shortstat --pretty=format:\"{fmt}\" {fromRef}..{toRef} {RevisionsOnly}";
         var (output, _, code) = RunGit(root, args);
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
 
@@ -3902,7 +3902,7 @@ public class GitService
             var mergeBase = GetMergeBase(repoRoot, integrationRef, deliveryRef);
             if (string.IsNullOrWhiteSpace(mergeBase)) continue;
             var (distanceText, _, distanceCode) = RunGitArgs(
-                repoRoot, "rev-list", "--count", $"{mergeBase}..{deliveryRef}");
+                repoRoot, "rev-list", "--count", $"{mergeBase}..{deliveryRef}", RevisionsOnly);
             if (distanceCode != 0 || !int.TryParse(distanceText.Trim(), out var distance)) continue;
             resolved.Add((candidate, integrationRef, mergeBase, distance));
         }
@@ -4545,7 +4545,8 @@ public class GitService
                 "rev-list",
                 "--count",
                 "--merges",
-                $"{mergeBase}..{sourceRef}");
+                $"{mergeBase}..{sourceRef}",
+                RevisionsOnly);
         if (mergeCommitCountCode != 0
             || !int.TryParse(mergeCommitCountRaw.Trim(), out var mergeCommitCount))
         {
@@ -4672,7 +4673,8 @@ public class GitService
             "rev-list",
             "--reverse",
             "--first-parent",
-            $"{fromExclusive}..{throughInclusive}");
+            $"{fromExclusive}..{throughInclusive}",
+            RevisionsOnly);
         if (code != 0)
         {
             error = $"Mechanical rebase could not enumerate delivery commits: {rangeError.Trim()}";
@@ -5534,6 +5536,24 @@ public class GitService
     /// flows into a git argument list, not a shell, so this is defence in
     /// depth rather than the only guard.
     /// </summary>
+    /// <summary>
+    /// The <c>--</c> terminator that tells <c>rev-list</c>, <c>log</c> and
+    /// <c>diff</c> that every preceding argument is a revision. Without it git
+    /// disambiguates each revision argument against the working tree
+    /// (<c>verify_non_filename</c> -> <c>lstat</c> of the literal argument,
+    /// relative to the checkout). On Windows that stat fails with
+    /// <c>ENAMETOOLONG</c> instead of <c>ENOENT</c> once checkout path plus
+    /// argument exceed MAX_PATH, and git dies with
+    /// <c>fatal: failed to stat '&lt;sha&gt;..&lt;ref&gt;': Filename too long</c> -
+    /// a valid revision range reported as exit 128. Long runner refs
+    /// (<c>runner/&lt;host&gt;/&lt;key&gt;-collision-&lt;sha&gt;-&lt;sha&gt;</c>,
+    /// immutable result envelopes) combined with a 40-character SHA cross
+    /// that limit on ordinary checkout depths, which emptied AGT-2220's review
+    /// subject. Append this to every revision-argument spawn whose refs can be
+    /// long; it is a no-op for git on every platform otherwise.
+    /// </summary>
+    private const string RevisionsOnly = "--";
+
     private static bool IsLikelyBranchName(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return false;
@@ -6559,7 +6579,7 @@ public class GitService
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return set;
         if (!IsLikelyShaOrRef(baseSha) || !IsLikelyBranchName(tipRef)) return set;
-        var (output, _, code) = RunGitArgs(repoRoot, "rev-list", $"{baseSha}..{tipRef}");
+        var (output, _, code) = RunGitArgs(repoRoot, "rev-list", $"{baseSha}..{tipRef}", RevisionsOnly);
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return set;
         foreach (var line in output.Split('\n'))
         {
@@ -6613,6 +6633,7 @@ public class GitService
 
         var args = new List<string> { "rev-list", "--ignore-missing" };
         args.AddRange(refs);
+        args.Add(RevisionsOnly);
         var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
         if (code != 0) return false;
         if (string.IsNullOrWhiteSpace(output)) return true;
@@ -6639,6 +6660,7 @@ public class GitService
         if (refs.Length == 0) return graph;
         var args = new List<string> { "rev-list", "--parents", "--ignore-missing" };
         args.AddRange(refs);
+        args.Add(RevisionsOnly);
         var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
         if (code != 0) return graph;
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
@@ -6675,6 +6697,7 @@ public class GitService
             "--format=%H%x1f%cI%x1f%s",
         };
         args.AddRange(refs);
+        args.Add(RevisionsOnly);
         var (output, _, code) = RunGitArgs(repoRoot, args.ToArray());
         if (code != 0 || string.IsNullOrWhiteSpace(output)) return
             new Dictionary<string, IReadOnlyList<GitIntegrationMerge>>(StringComparer.OrdinalIgnoreCase);
