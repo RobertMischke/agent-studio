@@ -34,37 +34,40 @@ public static class TransitionDirections
 
 /// <summary>
 /// Closed cause vocabulary. Backward causes answer "why did the task fall back";
-/// forward causes name the normal pipeline hand-off that moved it on.
+/// forward causes name the normal pipeline hand-off that moved it on. The ids
+/// are the ledger vocabulary <see cref="LaneChangeCauses"/> that the transition
+/// writers stamp onto <c>lane_changed.details.cause</c>; the extractor reads
+/// that field first and infers only for legacy rows.
 /// </summary>
 public static class TransitionCauses
 {
     // forward / lateral
-    public const string Promoted = "promoted";
-    public const string Claimed = "claimed";
-    public const string Delivered = "delivered";
-    public const string ExternalCompletion = "external-completion";
-    public const string ReviewVerdict = "review-verdict";
-    public const string Escalated = "escalated";
-    public const string OperatorDecision = "operator-decision";
-    public const string Accepted = "accepted";
-    public const string Archived = "archived";
-    public const string OperatorMove = "operator-move";
-    public const string SystemMove = "system-move";
+    public const string Promoted = LaneChangeCauses.Promoted;
+    public const string Claimed = LaneChangeCauses.Claimed;
+    public const string Delivered = LaneChangeCauses.Delivered;
+    public const string ExternalCompletion = LaneChangeCauses.ExternalCompletion;
+    public const string ReviewVerdict = LaneChangeCauses.ReviewVerdict;
+    public const string Escalated = LaneChangeCauses.Escalated;
+    public const string OperatorDecision = LaneChangeCauses.OperatorDecision;
+    public const string Accepted = LaneChangeCauses.Accepted;
+    public const string Archived = LaneChangeCauses.Archived;
+    public const string OperatorMove = LaneChangeCauses.OperatorMove;
+    public const string SystemMove = LaneChangeCauses.SystemMove;
 
     // backward
-    public const string GateFailure = "gate-failure";
-    public const string QualityLoop = "quality-loop";
-    public const string IntegrationRecovery = "integration-recovery";
-    public const string ReviewInfrastructure = "review-infrastructure";
-    public const string LeaseRecovery = "lease-recovery";
-    public const string ClaimEnvironmentRetry = "claim-environment-retry";
+    public const string GateFailure = LaneChangeCauses.GateFailure;
+    public const string QualityLoop = LaneChangeCauses.QualityLoop;
+    public const string IntegrationRecovery = LaneChangeCauses.IntegrationRecovery;
+    public const string ReviewInfrastructure = LaneChangeCauses.ReviewInfrastructure;
+    public const string LeaseRecovery = LaneChangeCauses.LeaseRecovery;
+    public const string ClaimEnvironmentRetry = LaneChangeCauses.ClaimEnvironmentRetry;
     /// <summary>A runner or the system returned a claimed task to Ready/Preparation without a cause row (pick reverted, no run).</summary>
-    public const string RunnerRequeue = "runner-requeue";
-    public const string AcceptanceIntegrationFailed = "acceptance-integration-failed";
-    public const string CompletedReopen = "completed-reopen";
-    public const string EscalationRequeue = "escalation-requeue";
-    public const string OperatorRequeue = "operator-requeue";
-    public const string Unclassified = "unclassified";
+    public const string RunnerRequeue = LaneChangeCauses.RunnerRequeue;
+    public const string AcceptanceIntegrationFailed = LaneChangeCauses.AcceptanceIntegrationFailed;
+    public const string CompletedReopen = LaneChangeCauses.CompletedReopen;
+    public const string EscalationRequeue = LaneChangeCauses.EscalationRequeue;
+    public const string OperatorRequeue = LaneChangeCauses.OperatorRequeue;
+    public const string Unclassified = LaneChangeCauses.Unclassified;
 
     public static string Label(string cause) => cause switch
     {
@@ -115,18 +118,7 @@ public static class LaneOrder
         TaskStates.HumanReview, TaskStates.Escalated, TaskStates.Completed, TaskStates.Archive,
     ];
 
-    public static int Level(string? lane) => lane switch
-    {
-        TaskStates.Backlog => 0,
-        TaskStates.Preparation or TaskStates.OrchestratorPrep => 1,
-        TaskStates.Ready => 2,
-        TaskStates.Progress or TaskStates.FailedPickup or TaskStates.CodeNotComplete => 3,
-        TaskStates.AutoReview => 4,
-        TaskStates.HumanReview or TaskStates.Escalated => 5,
-        TaskStates.Completed => 6,
-        TaskStates.Archive => 7,
-        _ => -1,
-    };
+    public static int Level(string? lane) => LaneChangeCauses.Level(lane);
 
     public static int CanonicalIndex(string lane)
     {
@@ -138,14 +130,27 @@ public static class LaneOrder
 
 /// <summary>
 /// Extracts the ordered lane transitions of a task from its ledger and classifies
-/// every move. The classification reads the cause rows the platform writes next
-/// to a lane change (quality-loop reopen, operator requeue, integration recovery,
-/// review-attempt supersession) within a short window, then falls back to the
-/// actor and the lane pair.
+/// every move. A row that carries <c>details.cause</c> (written by the transition
+/// site since the ledger vocabulary <see cref="LaneChangeCauses"/> exists) is
+/// taken as is. A legacy row without it is classified from the cause rows the
+/// platform writes next to a lane change (quality-loop reopen, operator requeue,
+/// integration recovery, review-attempt supersession) within a short window,
+/// then from the actor and the lane pair.
 /// </summary>
 public static class LaneTransitionExtractor
 {
     private static readonly TimeSpan CauseWindow = TimeSpan.FromSeconds(120);
+
+    /// <summary>
+    /// Explicit cause of a ledger row, or null for a legacy row. Only ids of the
+    /// closed vocabulary count; an unknown value is treated as absent so a
+    /// typo can never create a new bucket in the analysis.
+    /// </summary>
+    public static string? ExplicitCause(TimelineEvent evt)
+    {
+        var cause = Detail(evt, LaneChangeCauses.DetailKey);
+        return cause is not null && LaneChangeCauses.All.Contains(cause) ? cause : null;
+    }
 
     public static IReadOnlyList<TaskLaneTransition> Extract(IReadOnlyList<TimelineEvent> sortedLedger, DateTime? createdAt)
     {
@@ -177,7 +182,19 @@ public static class LaneTransitionExtractor
             }
 
             var near = Nearby(sortedLedger, index, evt.Ts);
-            var (cause, detail) = Classify(evt, from, to, direction, near);
+            var (inferredCause, inferredDetail) = Classify(evt, from, to, direction, near);
+            var explicitCause = ExplicitCause(evt);
+            var cause = explicitCause ?? inferredCause;
+            // An explicit row carries its own qualifier (or the operator reason).
+            // Only when it carries neither and the inference agrees does the
+            // neighbouring-row detail still apply (e.g. the integration outcome
+            // behind an operator requeue); a disagreeing inference is discarded
+            // with its detail, never mixed into the explicit cause.
+            var detail = explicitCause is null
+                ? inferredDetail
+                : Detail(evt, LaneChangeCauses.DetailQualifierKey)
+                  ?? Detail(evt, "reason")
+                  ?? (string.Equals(explicitCause, inferredCause, StringComparison.Ordinal) ? inferredDetail : null);
             var actor = evt.Actor ?? string.Empty;
 
             double? rework = null;

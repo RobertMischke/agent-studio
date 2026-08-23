@@ -156,6 +156,112 @@ public sealed class CycleTimeLaneTransitionTests
     }
 
     [Fact]
+    public void Extract_PrefersTheExplicitCauseOfTheRow_AndInfersOnlyForLegacyRows()
+    {
+        var a = T0.AddHours(1);
+        var ledger = new List<TimelineEvent>
+        {
+            Event(T0, TimelineEventKinds.PromptCreated, new() { ["targetState"] = TaskStates.Ready }),
+            // Explicit lease recovery with a qualifier: the inference alone would
+            // call this system Progress->Ready move a runner requeue.
+            Lane(a, TaskStates.Progress, TaskStates.Ready, "run-liveness-detector", new()
+            {
+                [LaneChangeCauses.DetailKey] = LaneChangeCauses.LeaseRecovery,
+                [LaneChangeCauses.DetailQualifierKey] = "run-liveness-process-lost",
+            }),
+            // The same move without the field stays a legacy row and is inferred.
+            Lane(a.AddMinutes(1), TaskStates.Ready, TaskStates.Progress, "system"),
+            Lane(a.AddMinutes(2), TaskStates.Progress, TaskStates.Ready, "run-liveness-detector"),
+            // Explicit escalation with the category as qualifier; the nearby
+            // orchestrator_escalated summary is no longer needed for the detail.
+            Lane(a.AddMinutes(3), TaskStates.Ready, TaskStates.Progress, "remote-runner:r", new()
+            {
+                [LaneChangeCauses.DetailKey] = LaneChangeCauses.Claimed,
+            }),
+            Lane(a.AddMinutes(10), TaskStates.Progress, TaskStates.Escalated, "system", new()
+            {
+                [LaneChangeCauses.DetailKey] = LaneChangeCauses.Escalated,
+                [LaneChangeCauses.DetailQualifierKey] = HumanReviewEscalationCategories.AgentBlocked,
+                ["reason"] = "agent-blocked: The agent reported a blocking dependency.",
+            }),
+            Event(a.AddMinutes(10).AddSeconds(1), TimelineEventKinds.OrchestratorEscalated, null, "prose summary"),
+            // Explicit operator requeue without qualifier or reason: the inference
+            // agrees, so its neighbouring-row detail (the integration outcome) is kept.
+            Lane(a.AddMinutes(30), TaskStates.Escalated, TaskStates.HumanReview, "human:op", new()
+            {
+                [LaneChangeCauses.DetailKey] = LaneChangeCauses.OperatorDecision,
+            }),
+            Event(a.AddMinutes(40).AddSeconds(-2), TimelineEventKinds.IntegrationFailed, new() { ["outcome"] = "GateFailed" }),
+            Lane(a.AddMinutes(40), TaskStates.HumanReview, TaskStates.Ready, "human:op", new()
+            {
+                [LaneChangeCauses.DetailKey] = LaneChangeCauses.OperatorRequeue,
+            }),
+            // Explicit cause that disagrees with the inference: the inferred
+            // detail (actor) is not mixed into the explicit cause.
+            Lane(a.AddMinutes(41), TaskStates.Ready, TaskStates.Progress, "system"),
+            Lane(a.AddMinutes(45), TaskStates.Progress, TaskStates.Ready, "system", new()
+            {
+                [LaneChangeCauses.DetailKey] = LaneChangeCauses.ClaimEnvironmentRetry,
+            }),
+            // An id outside the closed vocabulary is ignored, never a new bucket.
+            Lane(a.AddMinutes(46), TaskStates.Ready, TaskStates.Progress, "system", new()
+            {
+                [LaneChangeCauses.DetailKey] = "made-up-cause",
+            }),
+            Lane(a.AddMinutes(50), TaskStates.Progress, TaskStates.AutoReview, "remote-runner-completion:r", new()
+            {
+                [LaneChangeCauses.DetailKey] = LaneChangeCauses.Delivered,
+                [LaneChangeCauses.DetailQualifierKey] = "done",
+            }),
+            Lane(a.AddMinutes(55), TaskStates.AutoReview, TaskStates.Ready, "system", new()
+            {
+                [LaneChangeCauses.DetailKey] = LaneChangeCauses.GateFailure,
+                [LaneChangeCauses.DetailQualifierKey] = "build-test-gate-fail",
+            }),
+        };
+
+        var transitions = LaneTransitionExtractor.Extract(ledger.OrderBy(e => e.Ts).ToList(), T0);
+        var byTime = transitions.ToDictionary(t => t.At, t => t);
+
+        Assert.Equal(TransitionCauses.LeaseRecovery, byTime[a].Cause);
+        Assert.Equal("run-liveness-process-lost", byTime[a].CauseDetail);
+        Assert.Equal(TransitionCauses.RunnerRequeue, byTime[a.AddMinutes(2)].Cause);
+        Assert.Equal(TransitionCauses.Claimed, byTime[a.AddMinutes(3)].Cause);
+        Assert.Null(byTime[a.AddMinutes(3)].CauseDetail);
+        Assert.Equal(TransitionCauses.Escalated, byTime[a.AddMinutes(10)].Cause);
+        Assert.Equal(HumanReviewEscalationCategories.AgentBlocked, byTime[a.AddMinutes(10)].CauseDetail);
+        Assert.Equal(TransitionCauses.OperatorDecision, byTime[a.AddMinutes(30)].Cause);
+        Assert.Equal(TransitionCauses.OperatorRequeue, byTime[a.AddMinutes(40)].Cause);
+        Assert.Equal("after integration GateFailed", byTime[a.AddMinutes(40)].CauseDetail);
+        Assert.Equal(TransitionCauses.ClaimEnvironmentRetry, byTime[a.AddMinutes(45)].Cause);
+        Assert.Null(byTime[a.AddMinutes(45)].CauseDetail);
+        Assert.Equal(TransitionCauses.Claimed, byTime[a.AddMinutes(46)].Cause);
+        Assert.Equal(TransitionCauses.Delivered, byTime[a.AddMinutes(50)].Cause);
+        Assert.Equal("done", byTime[a.AddMinutes(50)].CauseDetail);
+        Assert.Equal(TransitionCauses.GateFailure, byTime[a.AddMinutes(55)].Cause);
+        Assert.Equal("build-test-gate-fail", byTime[a.AddMinutes(55)].CauseDetail);
+        Assert.Null(LaneTransitionExtractor.ExplicitCause(ledger.Single(e => e.Ts == a.AddMinutes(46))));
+        Assert.Equal(LaneChangeCauses.Delivered, LaneTransitionExtractor.ExplicitCause(ledger.Single(e => e.Ts == a.AddMinutes(50))));
+    }
+
+    [Fact]
+    public void TransitionCauses_AreTheLedgerVocabulary()
+    {
+        static Dictionary<string, string> Constants(Type type) => type
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string) && !f.Name.StartsWith("Detail", StringComparison.Ordinal))
+            .ToDictionary(f => f.Name, f => (string)f.GetRawConstantValue()!);
+
+        var analysis = Constants(typeof(TransitionCauses));
+        var ledger = Constants(typeof(LaneChangeCauses));
+
+        Assert.Equal(ledger.OrderBy(p => p.Key), analysis.OrderBy(p => p.Key));
+        Assert.Equal(ledger.Values.OrderBy(v => v, StringComparer.Ordinal), LaneChangeCauses.All.OrderBy(v => v, StringComparer.Ordinal));
+        // Every id has a human label; the fallback returns the id itself.
+        Assert.All(analysis.Values, id => Assert.NotEqual(id, TransitionCauses.Label(id)));
+    }
+
+    [Fact]
     public void Extract_ToleratesMissingDetails_AndKeepsDwellUnknownWhenTheStayStartIsUnknown()
     {
         var ledger = new List<TimelineEvent>

@@ -304,6 +304,117 @@ public static class TimelineEventKinds
     /// re-queued, because "no auto rerun" remains the parker's decision.
     /// </summary>
     public const string ParkedBlockerResolved = "parked_blocker_resolved";
+    /// <summary>
+    /// A Remote Review executor acquired the lease of a ReviewAttempt
+    /// (<c>AttemptLeaseDto.AcquiredAt</c> is the row <see cref="TimelineEvent.Ts"/>).
+    /// Written by the claim routes so the review queue wait ends at the claim,
+    /// not at the first projected step row. <see cref="TimelineEvent.RunId"/> is
+    /// the ReviewAttempt id; <see cref="TimelineEvent.Details"/> carry the lease,
+    /// executor, host, subject, and source run.
+    /// </summary>
+    public const string ReviewAttemptClaimed = "review_attempt_claimed";
+}
+
+/// <summary>
+/// Closed vocabulary for <c>lane_changed.details.cause</c>: why a lane change
+/// happened, written by the transition site that knows. The ids are the
+/// taxonomy of the cycle-time lane-transition analysis
+/// (<c>AgentStudio.Projects.TransitionCauses</c> aliases these constants), so a
+/// reader can take the field as exact and only infer from neighbouring ledger
+/// rows for rows written before the field existed. Forward causes name the
+/// pipeline hand-off that moved the task on; backward causes answer why it
+/// fell back. A short free-text qualifier travels in
+/// <c>details.causeDetail</c> (quality-loop cause id, integration outcome,
+/// escalation category, retry counter); the operator prose stays in
+/// <c>details.reason</c>.
+/// </summary>
+public static class LaneChangeCauses
+{
+    /// <summary>Key of the cause id in <see cref="TimelineEvent.Details"/>.</summary>
+    public const string DetailKey = "cause";
+    /// <summary>Key of the short qualifier in <see cref="TimelineEvent.Details"/>.</summary>
+    public const string DetailQualifierKey = "causeDetail";
+
+    // forward / lateral
+    public const string Promoted = "promoted";
+    public const string Claimed = "claimed";
+    public const string Delivered = "delivered";
+    public const string ExternalCompletion = "external-completion";
+    public const string ReviewVerdict = "review-verdict";
+    public const string Escalated = "escalated";
+    public const string OperatorDecision = "operator-decision";
+    public const string Accepted = "accepted";
+    public const string Archived = "archived";
+    public const string OperatorMove = "operator-move";
+    public const string SystemMove = "system-move";
+
+    // backward
+    public const string GateFailure = "gate-failure";
+    public const string QualityLoop = "quality-loop";
+    public const string IntegrationRecovery = "integration-recovery";
+    public const string ReviewInfrastructure = "review-infrastructure";
+    public const string LeaseRecovery = "lease-recovery";
+    public const string ClaimEnvironmentRetry = "claim-environment-retry";
+    public const string RunnerRequeue = "runner-requeue";
+    public const string AcceptanceIntegrationFailed = "acceptance-integration-failed";
+    public const string CompletedReopen = "completed-reopen";
+    public const string EscalationRequeue = "escalation-requeue";
+    public const string OperatorRequeue = "operator-requeue";
+    public const string Unclassified = "unclassified";
+
+    /// <summary>The closed set; a reader ignores any other value of <see cref="DetailKey"/>.</summary>
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
+    {
+        Promoted, Claimed, Delivered, ExternalCompletion, ReviewVerdict, Escalated, OperatorDecision,
+        Accepted, Archived, OperatorMove, SystemMove,
+        GateFailure, QualityLoop, IntegrationRecovery, ReviewInfrastructure, LeaseRecovery, ClaimEnvironmentRetry,
+        RunnerRequeue, AcceptanceIntegrationFailed, CompletedReopen, EscalationRequeue, OperatorRequeue, Unclassified,
+    };
+
+    /// <summary>
+    /// Cause of a move a human initiated (board drag, lane button, API move),
+    /// derived from the lane pair: an operator never states the taxonomy id,
+    /// so the writer derives it the same way the analysis would.
+    /// </summary>
+    public static string ForOperatorMove(string? from, string? to)
+    {
+        var fromLevel = Level(from);
+        var toLevel = Level(to);
+        if (fromLevel >= 0 && toLevel >= 0 && toLevel < fromLevel)
+        {
+            return from switch
+            {
+                TaskStates.Completed => CompletedReopen,
+                TaskStates.Escalated => EscalationRequeue,
+                TaskStates.HumanReview or TaskStates.AutoReview => OperatorRequeue,
+                _ => OperatorMove,
+            };
+        }
+
+        return to switch
+        {
+            TaskStates.Escalated => Escalated,
+            TaskStates.HumanReview => from == TaskStates.Escalated ? OperatorDecision : OperatorMove,
+            TaskStates.Completed => Accepted,
+            TaskStates.Archive => Archived,
+            TaskStates.Ready or TaskStates.Preparation or TaskStates.OrchestratorPrep => Promoted,
+            _ => OperatorMove,
+        };
+    }
+
+    /// <summary>Lane level for direction; sub-lanes share the level of their parent lane.</summary>
+    public static int Level(string? lane) => lane switch
+    {
+        TaskStates.Backlog => 0,
+        TaskStates.Preparation or TaskStates.OrchestratorPrep => 1,
+        TaskStates.Ready => 2,
+        TaskStates.Progress or TaskStates.FailedPickup or TaskStates.CodeNotComplete => 3,
+        TaskStates.AutoReview => 4,
+        TaskStates.HumanReview or TaskStates.Escalated => 5,
+        TaskStates.Completed => 6,
+        TaskStates.Archive => 7,
+        _ => -1,
+    };
 }
 
 /// <summary>
