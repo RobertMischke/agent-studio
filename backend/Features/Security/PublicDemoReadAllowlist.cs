@@ -18,7 +18,6 @@ public static class PublicDemoReadAllowlist
         "/api/system",
         "/api/auth/status",
         "/api/tasks",
-        "/api/projects",
         "/api/workbenches",
         "/api/search",
         "/api/watch-paths",
@@ -28,6 +27,39 @@ public static class PublicDemoReadAllowlist
         "/hubs/",
     ];
 
-    public static bool Allows(string path) =>
-        PathPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    // "/api/projects" fans out into dozens of per-project sub-resources
+    // (security review, token usage, proposals, settings, ...) that a plain
+    // prefix match would open up wholesale. Only the project list itself and
+    // the two sub-resources the S1 seed actually renders - the Wiki and the
+    // Dossier/workbench gallery - belong to the demo's browse story.
+    private const string ProjectsRoot = "/api/projects";
+
+    private static readonly IReadOnlyList<string> ProjectScopedReadSuffixes =
+    [
+        "/wiki",
+        "/workbenches",
+    ];
+
+    public static bool Allows(string path)
+    {
+        if (PathPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return AllowsProjectScopedRead(path);
+    }
+
+    private static bool AllowsProjectScopedRead(string path)
+    {
+        if (path.Equals(ProjectsRoot, StringComparison.OrdinalIgnoreCase)) return true;
+
+        var rootWithSlash = ProjectsRoot + "/";
+        if (!path.StartsWith(rootWithSlash, StringComparison.OrdinalIgnoreCase)) return false;
+
+        var afterProjectName = path[rootWithSlash.Length..];
+        var subResourceStart = afterProjectName.IndexOf('/');
+        if (subResourceStart < 0) return false;
+
+        var subResource = afterProjectName[subResourceStart..];
+        return ProjectScopedReadSuffixes.Any(
+            suffix => subResource.StartsWith(suffix, StringComparison.OrdinalIgnoreCase));
+    }
 }
