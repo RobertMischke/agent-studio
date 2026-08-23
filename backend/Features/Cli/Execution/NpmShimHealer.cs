@@ -34,10 +34,93 @@ namespace AgentStudio.Cli;
 public sealed record HealOutcome(
     bool Available,
     IReadOnlyList<string> Actions,
-    string? Error);
+    string? Error)
+{
+    /// <summary>Which repair shape the final smoke-test failure fell into.
+    /// <see cref="ShimRepairCategory.Healthy"/> when <see cref="Available"/>
+    /// is true or the host is non-Windows (steps 1-4 never needed to run).</summary>
+    public ShimRepairCategory Category { get; init; } = ShimRepairCategory.Healthy;
+
+    /// <summary>claude-code package.json <c>version</c> read before the
+    /// <c>npm install -g</c> fallback ran, when it ran. Null otherwise -
+    /// this is the AGT-2673 root-cause signal (2.1.231 -&gt; 2.1.234 across
+    /// the two 2026-08 incidents), not a general-purpose field.</summary>
+    public string? VersionBefore { get; init; }
+
+    /// <summary>Same, read after the fallback. Null if the fallback did not run.</summary>
+    public string? VersionAfter { get; init; }
+
+    /// <summary>True once step 6 (see below) actually invoked <c>npm install -g</c>,
+    /// as opposed to skipping it (already healthy, wrong category, or rate-limited).</summary>
+    public bool NpmInstallAttempted { get; init; }
+
+    /// <summary>True when step 6 was eligible (category
+    /// <see cref="ShimRepairCategory.ShimMissingPackagePresent"/>) but skipped
+    /// because an attempt already ran within <see cref="NpmShimRepairPolicy.NpmInstallCooldown"/>.</summary>
+    public bool RateLimited { get; init; }
+}
+
+/// <summary>
+/// Which repair shape a still-broken <c>claude</c> shim falls into once
+/// steps 1-4 (orphan rename, platform/wrapper binary restore, postinstall
+/// re-run, staging cleanup) have run and the smoke test still fails.
+/// </summary>
+public enum ShimRepairCategory
+{
+    /// <summary>The shim already works (or the host is non-Windows); no
+    /// further repair is needed.</summary>
+    Healthy,
+
+    /// <summary>The <c>claude</c> npm package is present under
+    /// <c>node_modules/@anthropic-ai/claude-code</c> but the top-level bin
+    /// shim (<c>claude.cmd</c> etc.) is still missing or non-functional
+    /// after steps 1-4. This is the shape steps 1-4 cannot fix on their
+    /// own: npm's own bin-shim linking never re-ran, which only
+    /// <c>npm install -g</c> regenerates. Eligible for the bounded,
+    /// rate-limited fallback.</summary>
+    ShimMissingPackagePresent,
+
+    /// <summary>No <c>node_modules/@anthropic-ai/claude-code</c> directory
+    /// at all - a real uninstall, not a broken shim. Never auto-repaired:
+    /// running a fresh global install on a host where the package was
+    /// deliberately removed is an operator decision, not an infra self-heal.</summary>
+    TrulyUninstalled,
+}
+
+/// <summary>
+/// Pure decision library for the <c>npm install -g</c> fallback (step 6):
+/// which category is eligible, and whether the cooldown has elapsed. No I/O,
+/// no clock reads - same shape as <c>RapidCrashBreaker</c> so the policy is
+/// unit-testable without Windows or a filesystem.
+/// </summary>
+public static class NpmShimRepairPolicy
+{
+    /// <summary>One <c>npm install -g</c> attempt per host per hour. A
+    /// racing auto-updater can put the install back into a broken shape
+    /// every few minutes (the 2026-08 incidents); without a bound, a
+    /// pickup loop hammering the pre-spawn health check would turn one
+    /// broken shim into a storm of global npm installs.</summary>
+    public static readonly TimeSpan NpmInstallCooldown = TimeSpan.FromHours(1);
+
+    public static ShimRepairCategory Classify(bool shimAvailable, bool packagePresent)
+        => shimAvailable
+            ? ShimRepairCategory.Healthy
+            : packagePresent
+                ? ShimRepairCategory.ShimMissingPackagePresent
+                : ShimRepairCategory.TrulyUninstalled;
+
+    public static bool IsNpmInstallAllowed(DateTime? lastAttemptUtc, DateTime nowUtc)
+        => lastAttemptUtc is null || nowUtc - lastAttemptUtc.Value >= NpmInstallCooldown;
+}
 
 public static class NpmShimHealer
 {
+    /// <summary>Marker file recording the UTC timestamp of the last
+    /// <c>npm install -g</c> fallback attempt, so the cooldown survives a
+    /// backend restart. Lives next to the shims themselves (same directory
+    /// the check-cli-shims.sh fallback cache file uses).</summary>
+    internal const string NpmInstallMarkerFileName = ".atp-npm-install-repair";
+
     /// <summary>
     /// Repair the <c>claude</c> npm-shim install on Windows and smoke-test
     /// the resulting <c>claude.cmd</c>. No-op on non-Windows hosts (the
@@ -232,14 +315,73 @@ public static class NpmShimHealer
         // 5. Smoke test. The shim is what the OS actually invokes via PATH;
         //    call it directly so we don't depend on PATH ordering.
         var shim = Path.Combine(npmBin, "claude.cmd");
+        var (smokeOk, smokeError) = await SmokeTestAsync(shim, ct);
+        if (smokeOk)
+        {
+            return new HealOutcome(true, actions, null);
+        }
+
+        // 6. Last-resort fallback: `npm install -g` regenerates npm's own
+        // bin-shim linking. Steps 1-4 repair every anthropic-postinstall
+        // failure shape (orphan renames, stub swap, staging orphans) but not
+        // the case where npm itself never re-linked `claude.cmd` in the
+        // global bin - the 2026-08-13 and 2026-08-18 incidents: `claude` gone
+        // from PATH, the package present under node_modules, version jumped
+        // 2.1.231 -> 2.1.234 (auto-update suspected), only a manual
+        // `npm install -g @anthropic-ai/claude-code` fixed it. Bounded to one
+        // attempt per hour (NpmShimRepairPolicy.NpmInstallCooldown) so a
+        // racing auto-updater cannot turn repeated pre-spawn health checks
+        // into an install storm; the caller journals the outcome fields
+        // below (AGT-2673).
+        var packagePresent = Directory.Exists(wrapDir);
+        var category = NpmShimRepairPolicy.Classify(shimAvailable: false, packagePresent);
+        if (category != ShimRepairCategory.ShimMissingPackagePresent)
+        {
+            return new HealOutcome(false, actions, smokeError) { Category = category };
+        }
+
+        var versionBefore = ReadPackageVersion(wrapDir);
+        var markerPath = Path.Combine(npmBin, NpmInstallMarkerFileName);
+        var lastAttempt = ReadLastNpmInstallAttempt(markerPath, logger);
+        if (!NpmShimRepairPolicy.IsNpmInstallAllowed(lastAttempt, DateTime.UtcNow))
+        {
+            return new HealOutcome(
+                false,
+                actions,
+                $"{smokeError}; npm install -g skipped (rate-limited, last attempt {lastAttempt:o})")
+            {
+                Category = category,
+                VersionBefore = versionBefore,
+                RateLimited = true,
+            };
+        }
+
+        WriteLastNpmInstallAttempt(markerPath, DateTime.UtcNow, logger);
+        actions.Add("running npm install -g @anthropic-ai/claude-code (shim missing, package present)");
+        var installOk = await TryRunNpmInstallGlobalAsync(logger, ct);
+        actions.Add(installOk ? "npm install -g completed" : "npm install -g failed (smoke re-test below is verdict)");
+
+        var versionAfter = ReadPackageVersion(wrapDir);
+        var (retestOk, retestError) = await SmokeTestAsync(shim, ct);
+        return new HealOutcome(retestOk, actions, retestOk ? null : retestError ?? smokeError)
+        {
+            Category = category,
+            VersionBefore = versionBefore,
+            VersionAfter = versionAfter,
+            NpmInstallAttempted = true,
+        };
+    }
+
+    private static async Task<(bool Ok, string? Error)> SmokeTestAsync(string shim, CancellationToken ct)
+    {
         if (!File.Exists(shim))
         {
-            return new HealOutcome(false, actions, $"shim '{shim}' still missing after repair pass");
+            return (false, $"shim '{shim}' still missing after repair pass");
         }
 
         try
         {
-            using var p = Process.Start(new ProcessStartInfo
+            var psi = new ProcessStartInfo
             {
                 FileName = shim,
                 Arguments = "--version",
@@ -247,10 +389,19 @@ public static class NpmShimHealer
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
-            });
+            };
+            // AGT-2673 root-cause finding: a bare `claude --version` smoke test
+            // can itself trigger the CLI's own auto-updater, which racing a
+            // concurrent repair/spawn on Windows is the leading suspect for the
+            // 2026-08-13 / 2026-08-18 shim-corruption incidents (version jumped
+            // 2.1.231 -> 2.1.234 between sightings). The smoke test's only job
+            // is to answer "does this shim run", not to let the CLI mutate its
+            // own install mid-probe.
+            psi.Environment["CLAUDE_CODE_DISABLE_AUTOUPDATER"] = "1";
+            using var p = Process.Start(psi);
             if (p is null)
             {
-                return new HealOutcome(false, actions, "failed to start smoke-test probe");
+                return (false, "failed to start smoke-test probe");
             }
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -262,20 +413,112 @@ public static class NpmShimHealer
             catch (OperationCanceledException)
             {
                 try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: best effort"); /* best effort */ }
-                return new HealOutcome(false, actions, "smoke-test probe timed out");
+                return (false, "smoke-test probe timed out");
             }
 
             if (p.ExitCode != 0)
             {
-                return new HealOutcome(false, actions, $"smoke-test probe exited {p.ExitCode}");
+                return (false, $"smoke-test probe exited {p.ExitCode}");
             }
         }
         catch (Exception ex)
         {
-            return new HealOutcome(false, actions, $"smoke-test probe error: {ex.Message}");
+            return (false, $"smoke-test probe error: {ex.Message}");
         }
 
-        return new HealOutcome(true, actions, null);
+        return (true, null);
+    }
+
+    private static string? ReadPackageVersion(string wrapDir)
+    {
+        try
+        {
+            var pkgJson = Path.Combine(wrapDir, "package.json");
+            if (!File.Exists(pkgJson)) return null;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(pkgJson));
+            return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
+        }
+        catch (Exception __ex)
+        {
+            SilentCatch.Note(__ex, "NpmShimHealer: version read is best-effort root-cause evidence, never a repair gate");
+            return null;
+        }
+    }
+
+    private static DateTime? ReadLastNpmInstallAttempt(string markerPath, ILogger logger)
+    {
+        try
+        {
+            if (!File.Exists(markerPath)) return null;
+            var text = File.ReadAllText(markerPath).Trim();
+            return DateTime.TryParse(
+                text,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                out var parsed)
+                ? parsed
+                : null;
+        }
+        catch (Exception ex)
+        {
+            // A stale/corrupt marker must never permanently block the fallback -
+            // treat as "no prior attempt" rather than fail closed.
+            logger.LogWarning(ex, "Failed to read npm-install cooldown marker {Path}; treating as no prior attempt", markerPath);
+            return null;
+        }
+    }
+
+    private static void WriteLastNpmInstallAttempt(string markerPath, DateTime utcNow, ILogger logger)
+    {
+        try
+        {
+            File.WriteAllText(markerPath, utcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex)
+        {
+            // Best-effort: if the marker can't be written, the next call retries
+            // npm install -g immediately rather than silently double-cooling-down.
+            logger.LogWarning(ex, "Failed to write npm-install cooldown marker {Path}", markerPath);
+        }
+    }
+
+    private static async Task<bool> TryRunNpmInstallGlobalAsync(ILogger logger, CancellationToken ct)
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo
+            {
+                FileName = "npm",
+                ArgumentList = { "install", "-g", "@anthropic-ai/claude-code" },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+            if (p is null) return false;
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            // npm resolves the registry and may re-download the platform
+            // binary; allow the same generous budget as the local postinstall.
+            cts.CancelAfter(TimeSpan.FromMinutes(3));
+            try
+            {
+                await p.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: best effort"); /* best effort */ }
+                logger.LogWarning("npm install -g @anthropic-ai/claude-code timed out");
+                return false;
+            }
+
+            return p.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "npm install -g @anthropic-ai/claude-code failed to start");
+            return false;
+        }
     }
 
     private static DateTime SafeLastWriteTime(string path)

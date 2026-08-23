@@ -219,6 +219,7 @@ internal static class BuiltInCliBehaviors
             ctx.Logger.LogInformation(
                 "Rollback NpmShimHealer actions for claude: {Actions}", string.Join("; ", outcome.Actions));
         }
+        CliSelfHealJournal.RecordIfRepairAttempted(ctx.Configuration, ctx.Logger, "claude", outcome, DateTime.UtcNow);
         if (!outcome.Available)
         {
             return (false,

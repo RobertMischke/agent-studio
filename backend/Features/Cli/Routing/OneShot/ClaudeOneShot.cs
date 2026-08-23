@@ -77,6 +77,7 @@ public sealed class ClaudeOneShot : ICliOneShot
                     "Rollback NpmShimHealer (one-shot) actions for claude: {Actions}",
                     string.Join("; ", outcome.Actions));
             }
+            CliSelfHealJournal.RecordIfRepairAttempted(_configuration, _logger, "claude", outcome, DateTime.UtcNow);
             // Preserve the established one-shot contract: a failed repair does
             // not abort here. The spawn below returns the existing SpawnFailure
             // result and its callers apply their own fallback policy.
@@ -336,7 +337,7 @@ public sealed class ClaudeOneShot : ICliOneShot
     {
         try
         {
-            using var p = Process.Start(new ProcessStartInfo
+            var psi = new ProcessStartInfo
             {
                 FileName = executable,
                 Arguments = "--version",
@@ -344,7 +345,13 @@ public sealed class ClaudeOneShot : ICliOneShot
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-            });
+            };
+            // AGT-2673 root-cause finding: see NpmShimHealer.SmokeTestAsync -
+            // a bare `--version` probe can itself trigger the CLI's
+            // auto-updater, the leading suspect for the 2026-08 shim
+            // corruption incidents.
+            psi.Environment["CLAUDE_CODE_DISABLE_AUTOUPDATER"] = "1";
+            using var p = Process.Start(psi);
             if (p is null) return false;
             if (!p.WaitForExit(5000))
             {

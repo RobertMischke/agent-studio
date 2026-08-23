@@ -195,6 +195,43 @@ if [[ "$shim_ok" -eq 0 ]]; then
     exit 0
   fi
 
+  # 6. Last-resort fallback (AGT-2673): steps 1-4 above repair every
+  #    anthropic-postinstall failure shape (orphan renames, stub swap,
+  #    staging orphans), but not the shape where npm itself never re-linked
+  #    claude.cmd in the global bin - only `npm install -g` regenerates that.
+  #    The 2026-08-13 and 2026-08-18 incidents were exactly this: package
+  #    present under node_modules, shim gone, only a manual npm reinstall
+  #    fixed it. Only attempted when the package IS present (a truly
+  #    uninstalled CLI is an operator decision, not an infra self-heal), and
+  #    bounded to one attempt per hour via a marker file so a racing
+  #    auto-updater cannot turn repeated boot checks into an install storm.
+  WRAP_DIR="$NPM_BIN/node_modules/@anthropic-ai/claude-code"
+  if [[ -d "$WRAP_DIR" ]]; then
+    version_before="$(node -p "require('$WRAP_DIR/package.json').version" 2>/dev/null || echo "unknown")"
+    marker="$NPM_BIN/.atp-npm-install-repair"
+    now_epoch="$(date -u +%s)"
+    last_epoch=0
+    [[ -f "$marker" ]] && last_epoch="$(cat "$marker" 2>/dev/null | tr -d '[:space:]')"
+    [[ "$last_epoch" =~ ^[0-9]+$ ]] || last_epoch=0
+    elapsed=$(( now_epoch - last_epoch ))
+    if [[ "$elapsed" -ge 3600 ]]; then
+      echo "$now_epoch" > "$marker" 2>/dev/null || true
+      echo "[check-cli-shims] shim missing, package present (version $version_before): running npm install -g @anthropic-ai/claude-code"
+      if npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; then
+        version_after="$(node -p "require('$WRAP_DIR/package.json').version" 2>/dev/null || echo "unknown")"
+        if [[ -f "$SHIM_CMD" ]] && "$SHIM_CMD" --version >/dev/null 2>&1; then
+          echo "[check-cli-shims] cli-self-heal-succeeded cli=claude versionBefore=$version_before versionAfter=$version_after"
+          exit 0
+        fi
+        echo "[check-cli-shims] cli-self-heal-failed cli=claude versionBefore=$version_before versionAfter=$version_after reason=shim-still-broken-after-npm-install" >&2
+      else
+        echo "[check-cli-shims] cli-self-heal-failed cli=claude versionBefore=$version_before reason=npm-install-failed" >&2
+      fi
+    else
+      echo "[check-cli-shims] npm install -g skipped (rate-limited, last attempt ${elapsed}s ago, cooldown 3600s)"
+    fi
+  fi
+
   if [[ ! -f "$SHIM_CMD" ]]; then
     echo "[check-cli-shims] ERROR: $SHIM_CMD still missing after repair pass and no working claude on PATH." >&2
   else

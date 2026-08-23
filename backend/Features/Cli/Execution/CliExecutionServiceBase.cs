@@ -179,6 +179,16 @@ public partial class GenericCliExecutionService : ICliExecutionService
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            // AGT-2673 root-cause finding: unlike a real job spawn (which sets
+            // this below in StartLegacyAsync), this lightweight probe used to
+            // run bare - so a `claude --version` health check could itself
+            // trigger the CLI's own auto-updater. That update racing a
+            // concurrent probe/spawn on Windows is the leading suspect for the
+            // 2026-08-13 / 2026-08-18 shim-corruption incidents. Harmless to
+            // set for every CLI, matching the full-spawn env block.
+            proc.StartInfo.Environment["CLAUDE_CODE_DISABLE_AUTOUPDATER"] = "1";
+            proc.StartInfo.Environment["GEMINI_NO_UPDATE_NOTIFIER"] = "1";
+            proc.StartInfo.Environment["CODEX_DISABLE_TIP_OF_THE_DAY"] = "1";
             proc.Start();
             var rawVersion = proc.StandardOutput.ReadToEnd().Trim();
             proc.WaitForExit(5000);
