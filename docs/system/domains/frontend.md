@@ -158,9 +158,12 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
 - `frontend/src/app/features/project-cycle-time/`: the Cycle Time rail (Insight
   group). It reads `GET /api/projects/{projectName}/cycle-time?window=7d|30d|all`
   and renders the per-stage aggregates (tasks, median, p90, max), a median
-  composition bar, round counts, the integration outcome distribution, and a
-  sortable per-task drill-down that opens the task. The stage model and its data
-  sources are documented in
+  composition bar, round counts, the integration outcome distribution, the lane
+  transition section (backward moves by cause with rework, from x to matrix,
+  dwell per lane, tasks with the most backward moves), and a sortable per-task
+  drill-down that opens the task and expands its lane change history from
+  `GET .../cycle-time/tasks/{taskKey}`. The stage model, the transition
+  taxonomy, and their data sources are documented in
   [concepts/cycle-time-stage-model.md](../../concepts/cycle-time-stage-model.md).
 - `frontend/src/app/features/project-detail/`: project shell and project-level
   quality, settings, architecture, runtime, drift, and supervisor panels. The
