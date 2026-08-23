@@ -328,6 +328,17 @@ export class TaskService {
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
 
   /**
+   * Bumped once per applied `GET /tasks/grouped` response (initial load,
+   * manual refresh, and every SignalR-coalesced silent poll). Distinct from
+   * `jobs`/`grouped` identity, which also change on granular per-task
+   * upserts (`upsertJobLocal`) — this counter fires only for a wholesale
+   * board re-fetch, so board-level UI (e.g. the token-usage popover) can
+   * close itself on an actual refresh without flinching on every live
+   * single-task update.
+   */
+  readonly boardRefreshedAt = signal(0);
+
+  /**
    * F35: resolved per-lane sort strategy for every project, keyed
    * `projectName -> laneKey -> strategyId`. The board reads this to render
    * the lane-header indicator and to gate drag-reorder (manual only).
@@ -408,6 +419,7 @@ export class TaskService {
         if (acceptOptimisticTarget()) {
           this.grouped.set(grouped);
           this.jobs.set(uniqueJobsFromGrouped(grouped));
+          this.boardRefreshedAt.update((v) => v + 1);
         }
         if (silent) {
           this.error.set(null);
