@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "demo-instanz",
   "title": "Public demo instance with no execution authority",
-  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670. Implementation state in section 14, refreshed 2026-08-23: S1 (seed and gallery), S2 (hard execution profile), S3 (replay-only Runner), and S5 (scrub, bundle, reset contract) are delivered and archived; S4 (public read-only edge, AGT-2669) is now actively in progress (3-progress); S6 (launch rehearsal) has no task card yet, so the launch invariant is not met.]",
+  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670.] [Curation 2026-08-18 (AGT-2671): DONE CHECK - only slice S5 (AGT-2670) is archived; S1/S2/S4 (AGT-2666/2667/2669) are in review, S3 (AGT-2668) is in progress. Not ready for History; stays accepted/in-progress. No dossier is archived while an attached slice is open.] [Curation 2026-08-23 (AGT-2671): DONE CHECK refresh - S1, S2, S3, and S5 (AGT-2666/2667/2668/2670) are now archived; S4 (AGT-2669) is actively in 3-progress; S6 (launch rehearsal) has no task card yet. Launch invariant still not met.]",
   "entrypoint": "index.html",
   "status": "decided",
   "phase": "testing",
@@ -24,5 +24,6 @@
     "AGT-2558",
     "WEB-17"
   ],
-  "key": "AGT-W34"
+  "key": "AGT-W34",
+  "editedBy": "Claude / AGT-2671"
 }

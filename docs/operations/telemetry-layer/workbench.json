@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "telemetry-layer",
   "title": "Organization-wide telemetry layer",
-  "summary": "Decision-ready dossier for a local-first telemetry layer across organization applications. It inventories current Agent Studio signals, defines a privacy-bounded event envelope and log-level mapping, compares file, push, and hybrid bus options, recommends durable per-app JSONL plus best-effort local push, maps clustered signals to bounded orchestrator actions, establishes Agent Studio as the CI/CD, telemetry, alarm, and orchestration hub, and proposes a Coding Agent Chat error-cluster pilot before broader rollout.",
+  "summary": "Decision-ready dossier for a local-first telemetry layer across organization applications. It inventories current Agent Studio signals, defines a privacy-bounded event envelope and log-level mapping, compares file, push, and hybrid bus options, recommends durable per-app JSONL plus best-effort local push, maps clustered signals to bounded orchestrator actions, establishes Agent Studio as the CI/CD, telemetry, alarm, and orchestration hub, and proposes a Coding Agent Chat error-cluster pilot before broader rollout. [Curation 2026-08-18 (AGT-2671): DONE CHECK - bus-topology and positioning decisions still open, no runtime wiring exists (verified by code search); stays decision-pending. DOC TRANSFER - envelope shape, log-level/action mapping, privacy posture, and orchestrator consumption contract extracted to docs/concepts/telemetry-layer.md.]",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-16T00:00:00Z",
+  "updatedAt": "2026-08-18T12:00:00Z",
   "sourceTaskKeys": [
     "AGT-2661"
   ],
@@ -15,5 +15,6 @@
     "AGT-2557",
     "AGT-2654"
   ],
-  "key": "AGT-W38"
+  "key": "AGT-W38",
+  "editedBy": "Claude / AGT-2671"
 }

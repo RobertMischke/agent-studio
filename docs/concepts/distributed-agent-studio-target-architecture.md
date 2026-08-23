@@ -179,6 +179,87 @@ The Runner spool is an outage buffer, not a local Task API. It stores typed
 events, artifact chunks, acknowledgements, and idempotency keys. It does not
 store a freely mutable clone of the board.
 
+### Lease, fence, and authority-epoch mechanics
+
+This section makes the "durable fence prevents duplicate acceptance" row above
+concrete. It documents already-delivered mechanism (AGT-2182 persistent
+Attempt-Authority and fencing, AGT-2260 epoch-bound review verdicts), backfilled
+from
+[haertung-verteilte-ausfuehrung](../operations/haertung-verteilte-ausfuehrung/index.html#lease-fence-epoch)
+and its
+[contracts summary](../operations/haertung-verteilte-ausfuehrung/target-architecture/contracts.md).
+Illustrative TTL numbers in that source are diagram examples, not a confirmed
+production constant, and are omitted here.
+
+A lease is a time-bounded, exclusive write grant for one Attempt, issued and
+evaluated only against the Task Server's own clock, never the Runner's. Three
+independent axes compose to make a write valid:
+
+- **Lease.** States are Claim/Acquire (the server atomically mints a Lease ID,
+  Attempt ID, expiry, Fence, and Authority Epoch for one executor and
+  Idempotency Key), Heartbeat/Renew (the same executor must resend Attempt ID,
+  Lease ID, Fence, Authority Epoch, and a *new* Idempotency Key; only a full
+  match extends `expiresAt` — a transport failure is never treated as
+  confirmation), Release (cooperative, fenced, idempotent), and Expire (a
+  missed renewal lapses authority by server time; the old process is not
+  presumed dead, merely no longer authorized).
+- **Fence.** A per-task, monotonically increasing integer persisted across Task
+  Server restarts. Once fence *n* is superseded, no new authority can ever be
+  re-issued at *n*. A lease expiring does not by itself prove the old process
+  is dead (a suspended laptop is the motivating case) — only a strictly higher
+  fence makes a woken zombie writer's late calls provably stale.
+- **Authority epoch.** A second, orthogonal counter: a global, persisted
+  claim-generation counter over the whole authority store (not per task).
+  Recovery or controlled rotation increments it, and only newly issued leases
+  receive the new epoch. Rotation is a **soft drain, not a kill switch** — a
+  lease issued before rotation keeps its old epoch and may keep renewing,
+  writing, and settling under that identity until it releases, expires, or is
+  fenced out. This avoids a requeue storm on every recovery. Epoch is a
+  supersede boundary over generations of leases; it does not replace fence or
+  lease expiry.
+
+An **idempotency key** identifies one specific delivery attempt so a retried
+claim/renew/complete call cannot double-apply; on its own it grants no
+authority, so an unseen key cannot resurrect a stale writer.
+
+Every server-mediated write checks, in this order, before any side effect
+runs: the attempt is known and current, the authority epoch matches the
+attempt, the fence matches, the lease is valid and owned by this executor, and
+the idempotency key has not already been processed. The resulting failure
+vocabulary is canonical and should not be re-derived per feature: `Duplicate`,
+`409 StaleFence`, `Superseded`, `AuthorityEpochMismatch`, `LeaseExpired`.
+
+This fencing protects only write paths the Task Server itself validates. A raw
+or ambient Git push credential can bypass it entirely, which is why
+attempt-specific immutable refs, protected branches, expected-SHA verification,
+and Runner credential isolation (section 8) remain necessary alongside it, not
+instead of it. The complementary boundary is authority over Git history
+itself: the platform, not any worker agent, owns commits, pushes, merges, and
+history rewrites. Workers may inspect Git and edit files in their assigned
+worktree only. A command guard blocks mutating Git verbs before they run, and
+a before/after HEAD comparison catches anything that slips through, routing it
+to quarantine rather than silent acceptance. Model trust, tracked per model
+from observed evidence, adjusts how closely that boundary is supervised, never
+whether it exists. See [agent fencing](../operations/haertung-verteilte-ausfuehrung/agent-fencing.html)
+for the full worker/platform trust model and incident evidence.
+
+A related, already-hardening safety net sits below the lease itself: a
+**salvage fence** pushes work-in-progress to
+`agent-studio/salvage/<runner>/<key>/<run>/fence-N/<sha>` before a Runner
+teardown can lose it, guaranteeing preservation even when a lease is about to
+expire uncleanly. This is becoming a hard contract requirement (`AGT-2544`);
+see the
+[unverifizierte-lieferungen dossier](../operations/unverifizierte-lieferungen/index.html)
+for the incident history that motivated it.
+
+Two concrete elaborations of this same lease/fence/epoch model for specific
+subsystems are tracked as target architecture, not yet built:
+[batch gate mechanics](batch-gate-mechanics.md) (a coordinator lease plus a
+shared project ref-mutation lease for batched integration) and the
+[remote gate target architecture](remote-gate-target-architecture.md) (a
+`GateSubject`/`GateAttempt`/`GateLease` model that reuses these conventions for
+claimable build/test gate steps).
+
 ## 7. Task Server API and management story
 
 ### Resource API

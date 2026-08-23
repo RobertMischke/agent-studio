@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "batch-gate-concept",
   "title": "Batch Gate: one full suite for a delivery wave",
-  "summary": "Decision-ready concept for mechanically assembling every eligible pending delivery into a closed, fenced temporary candidate, running one full suite, publishing an exact green tip with per-member evidence, and isolating red members through honestly bounded halving. Reconciles the 25 July per-task economics with the 11 August 12-core host saturation evidence and defines authority alongside integrate-before-review, auto-main advancement, and candidate-SHA promotion.",
+  "summary": "Decision-ready concept for mechanically assembling every eligible pending delivery into a closed, fenced temporary candidate, running one full suite, publishing an exact green tip with per-member evidence, and isolating red members through honestly bounded halving. Reconciles the 25 July per-task economics with the 11 August 12-core host saturation evidence and defines authority alongside integrate-before-review, auto-main advancement, and candidate-SHA promotion. [Curation 2026-08-18 (AGT-2671): DONE CHECK - sourceTaskKey AGT-2648 delivered, dossier itself still decision-pending, no implementation exists in the codebase (verified by code search and live task-server state); stays. DOC TRANSFER - durable mechanism (eligibility, construction, green path, evidence contract, red-path halving, authority/fencing) extracted to docs/concepts/batch-gate-mechanics.md, cross-linked from the target architecture doc's lease section.]",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-11T21:40:58Z",
+  "updatedAt": "2026-08-18T12:00:00Z",
   "sourceTaskKeys": [
     "AGT-2648"
   ],
@@ -17,5 +17,6 @@
     "AGT-2603",
     "AGT-2594"
   ],
-  "key": "AGT-W36"
+  "key": "AGT-W36",
+  "editedBy": "Claude / AGT-2671"
 }
