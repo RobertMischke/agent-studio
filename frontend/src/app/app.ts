@@ -120,6 +120,7 @@ import { StudioIconComponent } from './components/studio-icon/studio-icon.compon
 import { NotificationStackComponent } from './components/app-dialog/notification-stack/notification-stack.component';
 import { MediaLightboxComponent } from './components/media-lightbox/media-lightbox.component';
 import { OfflineBannerComponent } from './components/offline-banner/offline-banner.component';
+import { PublicDemoBannerComponent } from './components/public-demo-banner/public-demo-banner.component';
 import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
@@ -128,6 +129,7 @@ import { buildRunActivityBadge, freshestRunInfo } from './services/run-activity.
 import { NowTickService } from './services/now-tick.service';
 import { PageContextService } from './services/page-context.service';
 import { DevToolsService } from './services/dev-tools.service';
+import { PublicDemoModeService } from './services/public-demo-mode.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
@@ -179,6 +181,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     NotificationStackComponent,
     MediaLightboxComponent,
     OfflineBannerComponent,
+    PublicDemoBannerComponent,
     ProjectTabsComponent,
     E2ECleanupDialogComponent,
     TagManagerDialogComponent,
@@ -228,6 +231,7 @@ export class App implements OnInit, OnDestroy {
   readonly jobService = inject(TaskService);
   readonly errorDialog = inject(ErrorDialogService);
   readonly devTools = inject(DevToolsService);
+  readonly publicDemo = inject(PublicDemoModeService);
   readonly clientService = inject(ClientService);
   private readonly notifications = inject(NotificationService);
   readonly featureFlags = inject(FeatureFlagsService);
@@ -1234,6 +1238,7 @@ export class App implements OnInit, OnDestroy {
     this.loadWatchPaths();
     this.jobService.refreshRunnerStatus();
     this.devTools.loadFlags();
+    this.publicDemo.loadFlags();
     this.clientService.refresh();
     this.jobSelection.restoreFromUrl();
 
