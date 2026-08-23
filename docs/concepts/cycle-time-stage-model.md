@@ -42,7 +42,7 @@ overlap them and are reported separately.
 | `reviewWait` | Time in `4-auto-review` not covered by a review attempt | stay minus review activity (below) | whole stay when no activity is recorded (`review-start-unknown`) |
 | `testGate` | Build/test gate executions inside the review run | `post_step_finished` rows with `pipelineStepId = post-build-test-gate` (`durationMs`, else finished minus started) | `pipeline-execution.json` step `post-build-test-gate` (`durationMs`, current and previous attempts) |
 | `reviewOther` | Remainder of the review run: aspect reviews, grade, decision, step overhead, idle time inside one attempt | review run minus `testGate` minus integration inside the stay | - |
-| `integration` | Delivery integration spans, wherever they occur | `integration_started` to `integration_succeeded` / `integration_failed` / `integration_overridden`; else the `post-merge-into-develop` (+ `-push`) step whose end lies within three minutes of the outcome row | unknown duration is reported as `integration-duration-unknown`, the attempt still counts |
+| `integration` | Delivery integration spans, wherever they occur | `integration_started` to `integration_succeeded` / `integration_failed` / `integration_overridden`; else the `post-merge-into-develop` (+ `-push`) step whose end lies within three minutes of the outcome row (each step pairs with one outcome). An acceptance outcome recorded after the completion move still belongs to the final stay when its start does; the span is clipped at completion | unknown duration is reported as `integration-duration-unknown`, the attempt still counts |
 | `humanReview` | Time in `5-human-review`, `5e-escalated`, and a non-final `6-completed` stay, minus integration spans inside it | `lane_changed` | - |
 | `unattributed` | Lead-time remainder no lane interval explains | computed | whole lead time when the ledger is missing (`no-ledger`) |
 | `reviewRun` (rollup) | Review activity inside `4-auto-review`: from the first step of an attempt to the lane change; several attempts in one stay are summed, idle time between them is `reviewWait` | `post_step_*` rows grouped by `attemptId`, pipeline post steps grouped by pipeline attempt | - |
@@ -56,8 +56,8 @@ Counts per task:
 | `codingRuns` | Entries into `3-progress` (retries = runs - 1) |
 | `reviewRounds` | Entries into `4-auto-review` |
 | `bounceRounds` | Transitions from a review lane (`4-auto-review`, `5-human-review`, `5e-escalated`, `6-completed`) back to a work lane (`0-backlog` ... `3-progress`): quality-loop reopen, operator requeue, integration recovery rounds |
-| `integrationAttempts` | `integration_succeeded` / `integration_failed` / `integration_overridden` rows, excluding `delivery-gate-failed` (the review failed, no merge was tried) |
-| `integrationOutcome` | `details.outcome` of the last integration row (`Merged`, `AlreadyMerged`, `MergedAfterRebase`, `AlreadyIntegrated`, `GateFailed`, `Conflict`, `Error`, `delivery-gate-failed`, ...) plus `integrationStage` (`pre-human-review` for integrate-on-delivery, `acceptance` for the human accept transaction) |
+| `integrationAttempts` | `integration_succeeded` / `integration_failed` / `integration_overridden` rows, excluding `delivery-gate-failed` (the review failed, no merge was tried). A row that repeats the previous row's kind and outcome within 120 s without an `integration_started` in between is the same attempt (the acceptance backstop and the recovery path both record one failure; a retry loop repeats one outcome every few seconds: AGT-2575 carries 137 such repeats) |
+| `integrationOutcome` | `details.outcome` of the last integration row (`Merged`, `AlreadyMerged`, `MergedAfterRebase`, `AlreadyIntegrated`, `GateFailed`, `Conflict`, `Error`, `delivery-gate-failed`, ...), also when that row lands after the completion move (acceptance moves the card first and records the outcome a second later), plus `integrationStage` (`pre-human-review` for integrate-on-delivery, `acceptance` for the human accept transaction; derived from the lane that held the task when no explicit stage is recorded) |
 
 Lane stays are half-open (`[entered, left)`); a row stamped exactly at a lane
 change is attributed to the lane entered at that instant, never to both stays.
@@ -130,13 +130,18 @@ seconds. Over all time the July pickup flapping shows as thousands of
 ## Performance
 
 The service enumerates tasks through the index-cache-backed scanner
-(`ScanAllAutomationJobsWithArchive`, never a cold walk), reads
+(`ScanAllAutomationJobsWithArchive`, never a cold walk of its own), reads
 `logs/timeline.jsonl` and `pipeline-execution.json` once per task, and memoises
 the per-task row against both file stamps plus lane and `enteredLaneAt`. A
 bounded window skips terminal tasks whose `enteredLaneAt` (the terminal-lane
 entry, which follows completion) lies before the window. The per-project result
-is cached for 15 seconds. Measured on the Agent Studio store (1667 tasks): about
-3 seconds cold for `all`, under 200 ms afterwards.
+is cached for 15 seconds per window (`7d`, `30d`, `all` each have their own
+entry, so the coverage counts of a window never depend on which window ran
+before). Measured on the Agent Studio store (1668 tasks, in-process): about
+1.2 s cold for `30d`, about 200 ms with warm per-task memos (two `FileInfo`
+probes per examined task, 3336 probes in 340 ms). A request through the live API
+can still take 1 to 3 s when it arrives while the shared task index cache is
+refreshing (read-through refresh, not a cost of this read model).
 
 ## Known gaps
 
@@ -152,6 +157,13 @@ is cached for 15 seconds. Measured on the Agent Studio store (1667 tasks): about
 - A gate step that is rerun inside one attempt is projected once (the final
   run); the earlier run lands in `reviewOther`. Projecting every execution, or
   the attempt's own start and end, would sharpen the gate number.
+- The tail between the last projected step of an attempt and the lane change
+  (grade, decision, merge, or a stuck attempt) belongs to `reviewOther`, because
+  the attempt that moved the card still owned it; AGT-2604's final round carries
+  4.7 h of such tail. An attempt-end row would separate work from that wait.
+- Rows that land after the completion move (`6-completed` then an outcome
+  row, or a `7-archive` stay before a reopen) are outside every stage; the
+  archive stay shows up as `unattributed`.
 - The acceptance transaction records `integration_started`, but integrate-on-
   delivery does not; its duration comes from the pipeline merge step. Emitting
   `integration_started` there as well would remove the pairing heuristic.
@@ -166,6 +178,15 @@ is cached for 15 seconds. Measured on the Agent Studio store (1667 tasks): about
 
 ## Living knowledge log
 
+- 2026-08-23 (review): adversarial review against the live store. Fixed:
+  repeated outcome rows counted as attempts (AGT-2575 reported 156, now 17),
+  one pipeline merge step paired with every nearby outcome row (13 tasks),
+  the acceptance outcome recorded a second after the completion move was
+  ignored (22 rows showed Conflict/Error instead of Merged/AlreadyMerged, and
+  the acceptance span up to completion went to human review), and the 7d
+  coverage counts depended on whether a 30d run was cached. Per-task stage sums
+  verified against lead time on all 684 rows; three real tasks (AGT-2674,
+  AGT-2672, AGT-2604) recomputed by hand.
 - 2026-08-23 (later): lane transitions added after the operator asked for the
   lane changes in the analysis: per-task transition history with dwell, actor,
   cause, and rework; project matrix, per-lane dwell, bounce taxonomy, top loops.
