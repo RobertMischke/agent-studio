@@ -122,6 +122,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v covered">covered-by (measurement for 2648)</td>
   <td>Feeds the batch-gate decision with numbers. Data gaps recorded in the concept doc (950 legacy tasks lack lane_changed ledger rows; review-claim timestamp approximated; integrate-on-delivery lacks integration_started) - candidates for small ledger-emission cards once the operator has seen the view.</td>
 </tr>
+<tr>
+  <td class="meta">08-23 18:0x</td>
+  <td><strong>Lane-transition analysis added to the cycle-time view</strong> (local build, commits fc9854475..653a21881): per-task transition history (from&rarr;to, dwell, actor, cause), per-project from&times;to matrix, dwell per lane, bounce taxonomy, top loopers. Real 30-day numbers (Agent Studio): 5842 moves, 1187 backward across 259 tasks; <strong>operator requeue 354 moves = 95 days cumulative rework</strong> (median 1.9 h each), escalation requeue 187 (52 d), lease recovery 263, quality loop 163, gate failure 112, integration recovery 42. The bounce carousel is now a measured quantity: most rework is the orchestrator's own rebase-requeue rail reacting to develop movement.</td>
+  <td class="v covered">covered-by (measurement for 2648 + 2662)</td>
+  <td>Numbers feed the batch-gate decision (2648) and the steer-automation scenarios (2662). Gap: cause is inferred from neighbouring ledger rows; writing cause/reason onto lane_changed rows would make the taxonomy exact (candidate small ledger card after operator review).</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
