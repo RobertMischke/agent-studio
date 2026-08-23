@@ -5527,16 +5527,6 @@ public class GitService
            && !string.Equals(status, "already-remote", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// True when <paramref name="s"/> is a safe local branch name. Like
-    /// <see cref="IsLikelyShaOrRef"/> but additionally allows the slash that
-    /// namespaced branches need (e.g. <c>task/42</c>, <c>develop</c>). Still
-    /// rejects whitespace and shell metacharacters, a leading dash (so the
-    /// name can't be read as a flag), and git's invalid sequences
-    /// (<c>..</c>, leading/trailing slash, trailing <c>.lock</c>). The value
-    /// flows into a git argument list, not a shell, so this is defence in
-    /// depth rather than the only guard.
-    /// </summary>
-    /// <summary>
     /// The <c>--</c> terminator that tells <c>rev-list</c>, <c>log</c> and
     /// <c>diff</c> that every preceding argument is a revision. Without it git
     /// disambiguates each revision argument against the working tree
@@ -5554,6 +5544,16 @@ public class GitService
     /// </summary>
     private const string RevisionsOnly = "--";
 
+    /// <summary>
+    /// True when <paramref name="s"/> is a safe local branch name. Like
+    /// <see cref="IsLikelyShaOrRef"/> but additionally allows the slash that
+    /// namespaced branches need (e.g. <c>task/42</c>, <c>develop</c>). Still
+    /// rejects whitespace and shell metacharacters, a leading dash (so the
+    /// name can't be read as a flag), and git's invalid sequences
+    /// (<c>..</c>, leading/trailing slash, trailing <c>.lock</c>). The value
+    /// flows into a git argument list, not a shell, so this is defence in
+    /// depth rather than the only guard.
+    /// </summary>
     private static bool IsLikelyBranchName(string s)
     {
         if (string.IsNullOrWhiteSpace(s)) return false;
