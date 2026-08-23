@@ -1722,7 +1722,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         string phase)
     {
         var (fileName, args) = shell == VerifyCommandShell.Bash
-            ? ("bash", (IReadOnlyList<string>)["-lc", command])
+            ? (BashExecutable.Path, (IReadOnlyList<string>)["-lc", command])
             : OperatingSystem.IsWindows()
                 ? ("cmd.exe", (IReadOnlyList<string>)["/c", command])
                 : ("/bin/sh", (IReadOnlyList<string>)["-c", command]);

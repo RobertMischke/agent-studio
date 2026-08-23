@@ -223,21 +223,11 @@ public static class DevToolsEndpoints
 
     private static string ResolveBashExecutable()
     {
-        // Order: env override -> Git Bash on Windows -> WSL bash -> plain bash.
+        // Order: env override -> the shared Git Bash resolution (Git Bash on
+        // Windows, then plain bash).
         var fromEnv = Environment.GetEnvironmentVariable("DEVTOOLS_BASH");
         if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
-
-        if (OperatingSystem.IsWindows())
-        {
-            string[] candidates =
-            {
-                @"C:\Program Files\Git\bin\bash.exe",
-                @"C:\Program Files\Git\usr\bin\bash.exe",
-                @"C:\Program Files (x86)\Git\bin\bash.exe"
-            };
-            foreach (var c in candidates) if (File.Exists(c)) return c;
-        }
-        return "bash";
+        return BashExecutable.Path;
     }
 
     private static string ToBashPath(string path)

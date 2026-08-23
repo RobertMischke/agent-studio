@@ -21,8 +21,9 @@ public interface IBuildCommandRunner
 
 /// <summary>
 /// Default <see cref="IBuildCommandRunner"/>: runs the command through git-bash
-/// (<c>bash -lc</c>) in the given working directory, matching the repo's shell
-/// policy (sh, not PowerShell). Captures combined stdout+stderr (tail-bounded).
+/// (<c>bash -lc</c>, located by <see cref="BashExecutable"/>) in the given
+/// working directory, matching the repo's shell policy (sh, not PowerShell).
+/// Captures combined stdout+stderr (tail-bounded).
 /// </summary>
 public sealed class ProcessBuildCommandRunner : IBuildCommandRunner
 {
@@ -32,7 +33,7 @@ public sealed class ProcessBuildCommandRunner : IBuildCommandRunner
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "bash",
+            FileName = BashExecutable.Path,
             WorkingDirectory = workingDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
