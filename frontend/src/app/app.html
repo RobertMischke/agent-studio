@@ -1,6 +1,8 @@
 @if (auth.studioAllowed()) {
     <!-- Backend-offline warning shown whenever the SignalR socket is down. Present in both layout branches. -->
     <app-offline-banner />
+    <!-- Read-only public demo warning (W34 §8 S4), shown whenever the backend reports the public-demo-readonly profile. -->
+    <app-public-demo-banner />
     @if (featureFlags.vsCodeLayout()) {
       <!--
         Agent Software Studio redesign — VS-Code-inspired shell.
