@@ -456,6 +456,7 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
         Assert.Single(week.Tasks);
         var row = week.Tasks[0];
         Assert.Equal("done-task", row.TaskId);
+        Assert.True(WatchPathComparison.PathsEqual(watchPath, row.WatchPath), row.WatchPath);
         Assert.Equal(5 * 60, row.Stages.QueueWait);
         Assert.Equal(20 * 60, row.Stages.Coding);
         Assert.Equal(2 * 60, row.Stages.ReviewWait);
@@ -495,7 +496,7 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
     };
 
     private static TaskCycleTime Row(string id, DateTime completedAt, double leadTime, double testGate, string? outcome) =>
-        new(id, "DEM-" + id, id, TaskStates.Archive, completedAt.AddSeconds(-leadTime), completedAt.AddSeconds(-leadTime + 60),
+        new(id, "DEM-" + id, id, TaskStates.Archive, @"C:\demo", completedAt.AddSeconds(-leadTime), completedAt.AddSeconds(-leadTime + 60),
             completedAt, "ledger",
             new CycleTimeStageSeconds { QueueWait = 60, Coding = leadTime - 60 - testGate, TestGate = testGate },
             testGate, leadTime, leadTime - 60, 1, 1, 0, outcome is null ? 0 : 1, outcome,

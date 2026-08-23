@@ -39,6 +39,8 @@ public sealed record TaskCycleTime(
     string TaskKey,
     string Title,
     string TerminalState,
+    /// <summary>Project watch path of the task, so a drill-down row can open the task like every other task link.</summary>
+    string WatchPath,
     DateTime CreatedAt,
     DateTime? FirstClaimedAt,
     DateTime CompletedAt,
@@ -173,7 +175,8 @@ public static class TaskCycleTimeAnalyzer
         {
             gaps.Add(NoLedgerGap);
             return new TaskCycleAnalysis(new TaskCycleTime(
-                task.Id, taskKey, task.Title, task.State, createdAt.Value, null, completedAt.Value, completionSource,
+                task.Id, taskKey, task.Title, task.State, task.WatchPath ?? string.Empty,
+                createdAt.Value, null, completedAt.Value, completionSource,
                 new CycleTimeStageSeconds { Unattributed = leadTime },
                 0, leadTime, null, 0, 0, 0, 0, null, null, gaps), null);
         }
@@ -329,6 +332,7 @@ public static class TaskCycleTimeAnalyzer
             taskKey,
             task.Title,
             task.State,
+            task.WatchPath ?? string.Empty,
             createdAt.Value,
             firstClaimedAt,
             completedAt.Value,
