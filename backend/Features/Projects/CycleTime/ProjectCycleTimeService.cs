@@ -37,8 +37,16 @@ public sealed record ProjectCycleTimeResponse(
     /// <summary>Additive lane stages in lane order, then the rollups, then the counts.</summary>
     IReadOnlyList<CycleTimeStageAggregate> Aggregates,
     IReadOnlyList<CycleTimeOutcomeCount> IntegrationOutcomes,
-    /// <summary>Per-task rows, newest completion first.</summary>
+    /// <summary>Lane transition matrix, per-lane dwell, bounce causes, and the tasks with the most backward moves.</summary>
+    CycleTimeTransitionSummary Transitions,
+    /// <summary>Per-task rows, newest completion first. <c>transitions</c> is null unless <c>detail=transitions</c> was requested.</summary>
     IReadOnlyList<TaskCycleTime> Tasks);
+
+/// <summary>Per-task response of <c>GET /api/projects/{project}/cycle-time/tasks/{taskKey}</c>.</summary>
+public sealed record ProjectCycleTimeTaskResponse(
+    string Project,
+    DateTime CapturedAt,
+    TaskCycleTime Task);
 
 /// <summary>
 /// Read model for <c>GET /api/projects/{project}/cycle-time</c>. Enumerates the
@@ -102,8 +110,14 @@ public sealed class ProjectCycleTimeService
         return true;
     }
 
-    /// <summary>Builds the response, or null when the project is unknown.</summary>
-    public ProjectCycleTimeResponse? Build(string projectHandle, string? window, DateTime? nowUtc = null)
+    public const string TransitionsDetail = "transitions";
+
+    /// <summary>
+    /// Builds the response, or null when the project is unknown. Per-task
+    /// transition lists are included only when <paramref name="detail"/> is
+    /// <c>transitions</c>; the project-level transition summary is always present.
+    /// </summary>
+    public ProjectCycleTimeResponse? Build(string projectHandle, string? window, DateTime? nowUtc = null, string? detail = null)
     {
         if (!TryParseWindow(window, out var normalizedWindow, out var span))
             throw new ArgumentException($"Invalid window '{window}'. Use 7d, 30d, or all.", nameof(window));
@@ -117,13 +131,37 @@ public sealed class ProjectCycleTimeService
         var now = (nowUtc ?? DateTime.UtcNow).ToUniversalTime();
         DateTime? since = span is null ? null : now - span.Value;
 
-        var tasks = _scanner.ScanAllAutomationJobsWithArchive()
+        var tasks = ProjectTasks(entry);
+        var analyses = AnalyzeProject(entry.Name, tasks, since);
+        var includeTransitions = string.Equals(detail?.Trim(), TransitionsDetail, StringComparison.OrdinalIgnoreCase);
+        return BuildResponse(entry.Name, project?.Id, project?.ShortCode, normalizedWindow, now, since, analyses, includeTransitions);
+    }
+
+    /// <summary>
+    /// One task with its full transition list, independent of any window. Null
+    /// when the project is unknown; a result without <c>Task</c> when the task is
+    /// unknown or not analysable (<see cref="TaskCycleAnalysis.ExclusionReason"/>).
+    /// </summary>
+    public (ProjectCycleTimeTaskResponse? Response, string? ExclusionReason)? BuildTask(string projectHandle, string taskKey, DateTime? nowUtc = null)
+    {
+        var entry = ResolveWatchPath(projectHandle);
+        if (entry is null) return null;
+        var key = (taskKey ?? string.Empty).Trim();
+        var task = ProjectTasks(entry).FirstOrDefault(t =>
+            string.Equals(t.Key, key, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t.Id, key, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t.TaskKey, key, StringComparison.OrdinalIgnoreCase));
+        if (task is null) return (null, "unknown-task");
+        var analysis = AnalyzeTask(task);
+        if (analysis.Row is null) return (null, analysis.ExclusionReason ?? TaskCycleAnalysis.ExcludedNotCompleted);
+        var now = (nowUtc ?? DateTime.UtcNow).ToUniversalTime();
+        return (new ProjectCycleTimeTaskResponse(entry.Name, now, analysis.Row), null);
+    }
+
+    private List<TaskInfo> ProjectTasks(WatchPathEntry entry) =>
+        _scanner.ScanAllAutomationJobsWithArchive()
             .Where(task => WatchPathComparison.PathsEqual(task.WatchPath, entry.Path))
             .ToList();
-
-        var analyses = AnalyzeProject(entry.Name, tasks, since);
-        return BuildResponse(entry.Name, project?.Id, project?.ShortCode, normalizedWindow, now, since, analyses);
-    }
 
     /// <summary>Pure aggregation over analysed tasks; exposed for tests.</summary>
     internal static ProjectCycleTimeResponse BuildResponse(
@@ -133,7 +171,8 @@ public sealed class ProjectCycleTimeService
         string window,
         DateTime now,
         DateTime? since,
-        IReadOnlyList<TaskCycleAnalysis> analyses)
+        IReadOnlyList<TaskCycleAnalysis> analyses,
+        bool includeTransitions = false)
     {
         var completed = analyses.Where(a => a.Row is not null).Select(a => a.Row!).ToList();
         var rows = completed
@@ -182,8 +221,13 @@ public sealed class ProjectCycleTimeService
             .ThenBy(o => o.Outcome, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var transitions = CycleTimeTransitionAggregation.Build(rows);
+        var taskRows = includeTransitions
+            ? rows
+            : rows.Select(r => r.Transitions is null ? r : r with { Transitions = null }).ToList();
+
         return new ProjectCycleTimeResponse(
-            projectName, projectId, shortCode, window, now, since, coverage, aggregates, outcomes, rows);
+            projectName, projectId, shortCode, window, now, since, coverage, aggregates, outcomes, transitions, taskRows);
     }
 
     private WatchPathEntry? ResolveWatchPath(string handle)

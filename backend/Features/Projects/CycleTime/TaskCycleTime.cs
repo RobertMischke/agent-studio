@@ -57,7 +57,11 @@ public sealed record TaskCycleTime(
     string? IntegrationOutcome,
     /// <summary><c>pre-human-review</c> (integrate-on-delivery) or <c>acceptance</c> (human accept), for the last integration outcome.</summary>
     string? IntegrationStage,
-    IReadOnlyList<string> DataGaps);
+    IReadOnlyList<string> DataGaps,
+    /// <summary>Number of backward lane moves (any level drop, including runner lease recovery).</summary>
+    int BackwardTransitions,
+    /// <summary>Every lane change with dwell, actor, and cause. Null on list responses unless transitions detail was requested.</summary>
+    IReadOnlyList<TaskLaneTransition>? Transitions);
 
 /// <summary>Outcome of analysing one task: either a row or the reason it was excluded.</summary>
 public sealed record TaskCycleAnalysis(TaskCycleTime? Row, string? ExclusionReason)
@@ -178,8 +182,11 @@ public static class TaskCycleTimeAnalyzer
                 task.Id, taskKey, task.Title, task.State, task.WatchPath ?? string.Empty,
                 createdAt.Value, null, completedAt.Value, completionSource,
                 new CycleTimeStageSeconds { Unattributed = leadTime },
-                0, leadTime, null, 0, 0, 0, 0, null, null, gaps), null);
+                0, leadTime, null, 0, 0, 0, 0, null, null, gaps, 0, []), null);
         }
+
+        // ---- lane transitions (complete history, including moves after completion) ----
+        var transitions = LaneTransitionExtractor.Extract(ledger, createdAt);
 
         // ---- lane intervals ----
         var steps = CollectSteps(pipeline);
@@ -217,9 +224,9 @@ public static class TaskCycleTimeAnalyzer
         if (firstClaimedAt is null)
         {
             firstClaimedAt = ledger.FirstOrDefault(e => e.Kind == TimelineEventKinds.AgentRunStarted)?.Ts;
-            if (firstClaimedAt is null && task.Provenance?.Transitions is { Count: > 0 } transitions)
+            if (firstClaimedAt is null && task.Provenance?.Transitions is { Count: > 0 } provenanceTransitions)
             {
-                var t = transitions.FirstOrDefault(x => string.Equals(x.Lane, TaskStates.Progress, StringComparison.Ordinal));
+                var t = provenanceTransitions.FirstOrDefault(x => string.Equals(x.Lane, TaskStates.Progress, StringComparison.Ordinal));
                 if (t is not null && t.AtUtc != default) firstClaimedAt = Utc(t.AtUtc);
             }
             if (firstClaimedAt is not null && codingRuns == 0) codingRuns = 1;
@@ -347,7 +354,9 @@ public static class TaskCycleTimeAnalyzer
             integrationAttempts,
             integrationOutcome,
             integrationStage,
-            gaps.Distinct(StringComparer.Ordinal).ToList()), null);
+            gaps.Distinct(StringComparer.Ordinal).ToList(),
+            transitions.Count(t => t.Direction == TransitionDirections.Backward),
+            transitions), null);
     }
 
     // ---- auto review split ----
