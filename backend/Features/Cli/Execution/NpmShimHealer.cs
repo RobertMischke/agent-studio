@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace AgentStudio.Cli;
 
@@ -31,10 +32,29 @@ namespace AgentStudio.Cli;
 /// pass.
 /// </para>
 /// </summary>
+/// <param name="Available">Smoke-test verdict after the repair pass.</param>
+/// <param name="Actions">Repair steps actually taken, in order.</param>
+/// <param name="Error">Failure reason when <paramref name="Available"/> is false.</param>
+/// <param name="PackagePresent">
+/// Whether the <c>@anthropic-ai/claude-code</c> package directory existed at
+/// all. False means there is nothing on disk this healer could repair (a
+/// truly-uninstalled CLI, not a half-installed shim) - callers should not
+/// treat a false-with-no-actions outcome the same as a failed repair attempt.
+/// </param>
+/// <param name="VersionBefore">
+/// Installed package.json version read from disk before any repair step
+/// runs. Read from disk, not via <c>claude --version</c>, because the whole
+/// reason this heal path fires is that the executable is currently broken -
+/// probing through the broken binary would always observe null here.
+/// </param>
+/// <param name="VersionAfter">Same read, taken after the repair pass.</param>
 public sealed record HealOutcome(
     bool Available,
     IReadOnlyList<string> Actions,
-    string? Error);
+    string? Error,
+    bool PackagePresent = false,
+    string? VersionBefore = null,
+    string? VersionAfter = null);
 
 public static class NpmShimHealer
 {
@@ -64,6 +84,15 @@ public static class NpmShimHealer
             return new HealOutcome(false, Array.Empty<string>(),
                 $"npm global bin not found at '{npmBin}'");
         }
+
+        // Resolved up front and read from disk (package.json), not via
+        // `claude --version`, so the "before" value is captured while it can
+        // still be non-null: by construction, the executable is already
+        // known-broken on every call path that reaches this method, so a
+        // probe through the binary itself would always observe absence here.
+        var wrapDir = Path.Combine(npmBin, "node_modules", "@anthropic-ai", "claude-code");
+        var packagePresent = Directory.Exists(wrapDir);
+        var versionBefore = ReadInstalledVersion(wrapDir, logger);
 
         var actions = new List<string>();
 
@@ -142,7 +171,6 @@ public static class NpmShimHealer
         //    the .old payload is the previously-correct binary); shapes (a) and (c) need
         //    the wrapper's node install.cjs postinstall to fetch / unpack the platform
         //    binary again.
-        var wrapDir = Path.Combine(npmBin, "node_modules", "@anthropic-ai", "claude-code");
         var wrapBin = Path.Combine(wrapDir, "bin", "claude.exe");
         var wrapBinDir = Path.Combine(wrapDir, "bin");
         if (Directory.Exists(wrapDir))
@@ -229,12 +257,18 @@ public static class NpmShimHealer
             }
         }
 
+        // Read again after the repair pass so the pair proves (or disproves)
+        // that a version change - not just a shim rename - happened between
+        // the two reads. Same disk read, not the smoke-tested binary below.
+        var versionAfter = ReadInstalledVersion(wrapDir, logger);
+
         // 5. Smoke test. The shim is what the OS actually invokes via PATH;
         //    call it directly so we don't depend on PATH ordering.
         var shim = Path.Combine(npmBin, "claude.cmd");
         if (!File.Exists(shim))
         {
-            return new HealOutcome(false, actions, $"shim '{shim}' still missing after repair pass");
+            return new HealOutcome(false, actions, $"shim '{shim}' still missing after repair pass",
+                packagePresent, versionBefore, versionAfter);
         }
 
         try
@@ -250,8 +284,17 @@ public static class NpmShimHealer
             });
             if (p is null)
             {
-                return new HealOutcome(false, actions, "failed to start smoke-test probe");
+                return new HealOutcome(false, actions, "failed to start smoke-test probe",
+                    packagePresent, versionBefore, versionAfter);
             }
+
+            // Drain both streams concurrently with the wait: `claude --version`
+            // output is small, but an unread redirected pipe is a latent
+            // deadlock risk (child blocks on a full OS pipe buffer, parent
+            // blocks in WaitForExitAsync) that only needs a noisier CLI
+            // version banner to trigger - not worth leaving unread.
+            var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = p.StandardError.ReadToEndAsync(ct);
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(8));
@@ -262,20 +305,53 @@ public static class NpmShimHealer
             catch (OperationCanceledException)
             {
                 try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: best effort"); /* best effort */ }
-                return new HealOutcome(false, actions, "smoke-test probe timed out");
+                // Drain before the `using` disposes p below: an abandoned
+                // ReadToEndAsync racing Dispose() throws ObjectDisposedException
+                // in a task nobody observes.
+                await DrainBothAsync(stdoutTask, stderrTask, logger);
+                return new HealOutcome(false, actions, "smoke-test probe timed out",
+                    packagePresent, versionBefore, versionAfter);
             }
 
             if (p.ExitCode != 0)
             {
-                return new HealOutcome(false, actions, $"smoke-test probe exited {p.ExitCode}");
+                await DrainBothAsync(stdoutTask, stderrTask, logger);
+                return new HealOutcome(false, actions, $"smoke-test probe exited {p.ExitCode}",
+                    packagePresent, versionBefore, versionAfter);
             }
+
+            await DrainBothAsync(stdoutTask, stderrTask, logger);
         }
         catch (Exception ex)
         {
-            return new HealOutcome(false, actions, $"smoke-test probe error: {ex.Message}");
+            return new HealOutcome(false, actions, $"smoke-test probe error: {ex.Message}",
+                packagePresent, versionBefore, versionAfter);
         }
 
-        return new HealOutcome(true, actions, null);
+        return new HealOutcome(true, actions, null, packagePresent, versionBefore, versionAfter);
+    }
+
+    /// <summary>
+    /// Reads the installed package version straight off <c>package.json</c>
+    /// in the claude-code wrapper directory. Works whether or not the CLI
+    /// binary itself currently runs - the only signal that lets a caller
+    /// prove "the version changed under us" rather than "the shim broke".
+    /// </summary>
+    /// <summary>Internal test seam - the read itself has no Windows dependency, unlike the rest of this class.</summary>
+    internal static string? ReadInstalledVersion(string wrapDir, ILogger logger)
+    {
+        var pkgJsonPath = Path.Combine(wrapDir, "package.json");
+        if (!File.Exists(pkgJsonPath)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(pkgJsonPath));
+            return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to read installed version from {Path}", pkgJsonPath);
+            return null;
+        }
     }
 
     private static DateTime SafeLastWriteTime(string path)
@@ -283,6 +359,31 @@ public static class NpmShimHealer
         try { return new FileInfo(path).LastWriteTimeUtc; }
         catch { return DateTime.MinValue; }
     }
+
+    private static async Task<string> SafeReadAsync(Task<string> readTask, ILogger logger)
+    {
+        try { return await readTask; }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to drain postinstall output stream");
+            return "";
+        }
+    }
+
+    /// <summary>
+    /// Drains both redirected streams before the caller's <c>using</c>
+    /// disposes the process, on every return path - not just the success
+    /// path. An abandoned <c>ReadToEndAsync</c> racing <c>Process.Dispose()</c>
+    /// throws <see cref="ObjectDisposedException"/> inside a task nobody
+    /// observes otherwise.
+    /// </summary>
+    private static async Task DrainBothAsync(Task<string> stdoutTask, Task<string> stderrTask, ILogger logger)
+    {
+        await SafeReadAsync(stdoutTask, logger);
+        await SafeReadAsync(stderrTask, logger);
+    }
+
+    private static string Truncate(string s) => s.Length <= 2000 ? s : s[^2000..];
 
     private static async Task<bool> TryRunPostInstallAsync(
         string wrapDir,
@@ -310,6 +411,16 @@ public static class NpmShimHealer
             });
             if (p is null) return false;
 
+            // Must be read concurrently with the wait, not after. install.cjs
+            // logs npm progress while it copies a 254 MB binary - enough
+            // output to fill the OS pipe buffer. An unread redirected stream
+            // then blocks the child on write() while WaitForExitAsync blocks
+            // the parent on the exit that write() is blocking, a deadlock
+            // that only resolves via the 2-minute timeout kill below instead
+            // of the postinstall's real, much shorter completion time.
+            var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = p.StandardError.ReadToEndAsync(ct);
+
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             // Postinstall copies a 254 MB binary; allow generous wall-clock budget.
             cts.CancelAfter(TimeSpan.FromMinutes(2));
@@ -320,11 +431,23 @@ public static class NpmShimHealer
             catch (OperationCanceledException)
             {
                 try { p.Kill(entireProcessTree: true); } catch (Exception __ex) { SilentCatch.Note(__ex, "NpmShimHealer: best effort"); /* best effort */ }
+                // Drain before the `using` disposes p below (same reasoning
+                // as the smoke test's DrainBothAsync calls).
+                await DrainBothAsync(stdoutTask, stderrTask, logger);
                 logger.LogWarning("postinstall (node install.cjs) timed out");
                 return false;
             }
 
-            return p.ExitCode == 0;
+            if (p.ExitCode != 0)
+            {
+                var stderr = await SafeReadAsync(stderrTask, logger);
+                await SafeReadAsync(stdoutTask, logger);
+                logger.LogWarning("postinstall (node install.cjs) exited {ExitCode}: {Stderr}", p.ExitCode, Truncate(stderr));
+                return false;
+            }
+
+            await SafeReadAsync(stdoutTask, logger);
+            return true;
         }
         catch (Exception ex)
         {
