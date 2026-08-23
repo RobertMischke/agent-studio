@@ -134,6 +134,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done)</td>
   <td>Lesson: runner-side fixes are not live until a runner release is deployed - add "runner deploy due?" to the tick checklist whenever runner/ files integrate. Keeper regression fixed; the repo copy of the keeper (deploy/windows/agent-runner-tunnel) must get the same `|| true` via AGT-2664. AGT-2675 cut for the popover bug.</td>
 </tr>
+<tr>
+  <td class="meta">08-23 21:0x</td>
+  <td><strong>Five-day silent starvation of the whole QS fleet, root-caused:</strong> QS-92 rewrote the Quality Studio build profile -> status reset to 'declared' -> BuildProfileGate closed auto-pickup for every QS card (queued-remote, lastRejection=null, no banner) since 08-18. The local validation dry-run cannot go green (runs in a workspace without the project sources) although the profile is proven on the runner. Healed: Status=pipeline-ready patched in project-settings.json + a REAL process restart - which exposed a second defect: `api.sh restart` never replaced the API process (live process from 12:34 survived two "restarts"; stop misses the listener), so config patches and even rollouts were hollow. Killed and started cleanly; QS claims resumed within a minute (QS-79/68/70...).</td>
+  <td class="v candidate">new-candidates &rarr; 2 cards</td>
+  <td>AGT-2677 (gate starvation must be visible; validate where it runs; edit semantics must not silently close the gate) and AGT-2678 (api.sh restart must replace the process; self-check). Lesson for the tick checklist: after every restart assert a NEW process start time; after every project-settings change verify the gate via GET build-profile.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
