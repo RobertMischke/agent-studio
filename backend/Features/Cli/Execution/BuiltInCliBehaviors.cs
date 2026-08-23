@@ -213,12 +213,10 @@ internal static class BuiltInCliBehaviors
         ctx.Logger.LogWarning(
             "claude --version failed pre-spawn at '{Path}'; running rollback NpmShimHealer", probe.Path);
 
-        var outcome = await NpmShimHealer.TryHealClaudeAsync(ctx.Logger, ct);
-        if (outcome.Actions.Count > 0)
-        {
-            ctx.Logger.LogInformation(
-                "Rollback NpmShimHealer actions for claude: {Actions}", string.Join("; ", outcome.Actions));
-        }
+        // CliRepairGate logs the outcome (actions, versions, success/failure)
+        // centrally - no need to duplicate that here.
+        var outcome = await CliRepairGate.TryHealWithCooldownAsync(
+            "claude", h => NpmShimHealer.TryHealClaudeAsync(ctx.Logger, h), ctx.Configuration, ctx.Logger, DateTime.UtcNow, ct);
         if (!outcome.Available)
         {
             return (false,
