@@ -155,6 +155,13 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   Each review row also shows its council reaction, including
   per-finding rulings and the linked follow-up round. Reviews without a reaction
   sidecar expose that audit gap explicitly.
+- `frontend/src/app/features/project-cycle-time/`: the Cycle Time rail (Insight
+  group). It reads `GET /api/projects/{projectName}/cycle-time?window=7d|30d|all`
+  and renders the per-stage aggregates (tasks, median, p90, max), a median
+  composition bar, round counts, the integration outcome distribution, and a
+  sortable per-task drill-down that opens the task. The stage model and its data
+  sources are documented in
+  [concepts/cycle-time-stage-model.md](../../concepts/cycle-time-stage-model.md).
 - `frontend/src/app/features/project-detail/`: project shell and project-level
   quality, settings, architecture, runtime, drift, and supervisor panels. The
   left rail (`project-shell`) is a collapsible-segment tree
