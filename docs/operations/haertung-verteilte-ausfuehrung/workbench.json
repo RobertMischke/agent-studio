@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "haertung-verteilte-ausfuehrung",
   "title": "Verteilte Ausf\u00fchrung",
-  "summary": "Ergebniszuordnung zwischen Runner- und Task-Branches, Result-SHA-Vertrag, Fencing und hermetische Gates mit kanonischer Historie. Nachtrag 11.08. (\u00a79): ausf\u00fchrlicher Lease-Lebenszyklus von Claim \u00fcber Heartbeat/Renew bis Release/Expire, pro Task monotoner Fence mit realem Standby-Zombie-Writer-Fall, globale Authority Epoch als Soft-Drain-Generation bei Recovery, klare Abgrenzung zum Idempotency Key sowie drei theme-f\u00e4hige Inline-SVG-Sequenzdiagramme und stabile Ziele f\u00fcr das Timeline-Glossar AGT-2631. [Curation 2026-08-18 (AGT-2671): DONE CHECK - result-SHA/Attempt-Record contract (AGT-2183/AGT-2184) and claimable remote gate steps (AGT-2229) remain open; stays active. DOC TRANSFER - lease/fence/authority-epoch mechanics (section 9) consolidated into docs/concepts/distributed-agent-studio-target-architecture.md section 6, cross-linked from this dossier's target-architecture/contracts.md.]",
+  "summary": "Ergebniszuordnung zwischen Runner- und Task-Branches, Result-SHA-Vertrag, Fencing und hermetische Gates mit kanonischer Historie. Nachtrag 11.08. (\u00a79): ausf\u00fchrlicher Lease-Lebenszyklus von Claim \u00fcber Heartbeat/Renew bis Release/Expire, pro Task monotoner Fence mit realem Standby-Zombie-Writer-Fall, globale Authority Epoch als Soft-Drain-Generation bei Recovery, klare Abgrenzung zum Idempotency Key sowie drei theme-f\u00e4hige Inline-SVG-Sequenzdiagramme und stabile Ziele f\u00fcr das Timeline-Glossar AGT-2631. [Curation 2026-08-18 (AGT-2671): DONE CHECK - result-SHA/Attempt-Record contract (AGT-2183/AGT-2184) and claimable remote gate steps (AGT-2229) remain open; stays active. DOC TRANSFER - lease/fence/authority-epoch mechanics (section 9) consolidated into docs/concepts/distributed-agent-studio-target-architecture.md section 6, cross-linked from this dossier's target-architecture/contracts.md.] [Curation 2026-08-23 (AGT-2671): DONE CHECK refresh - the 08-18 blockers (AGT-2183, AGT-2184, AGT-2229) are now archived (7-archive), but a new open item surfaced: T4/AGT-2373 (Legacy-Invocation-Pfade entfernen) is still 2-ready, explicitly \"bewusst geparkt\" per the dossier's own tranche table (index.html Stand 03.08.). Stays active - an attached related slice remains open. All 12 sourceTaskKeys are 7-archive.]",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-18T12:00:00Z",
+  "updatedAt": "2026-08-23T00:00:00Z",
   "sourceTaskKeys": [
     "AGT-2147",
     "AGT-2148",

@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "project-feed",
   "title": "Projekt-Feed: High-Level-Timeline aus Entscheidungen & Ereignissen",
-  "summary": "Ein Feed pro Projekt (und projekt\u00fcbergreifend): wichtige Entscheidungen und Ereignisse als verlinkte Timeline. Zwei Publika \u2014 Menschen sehen high-level, was passiert; Tasks/Agenten finden einen Einstieg und den zuletzt relevanten Kontext. Token-Kosten \u00fcberall sichtbar; kostenbewusste, inkrementelle Zusammenstellung; t\u00e4gliche/w\u00f6chentliche Zusammenfassungen als Stakeholder-News. Datenlage-L\u00fccke: viele Entscheidungen fallen heute in externen Chats au\u00dferhalb des Tools. [Curation 2026-08-18 (AGT-2671): DONE CHECK - still concept-stage with four open operator decisions, stays active/shaping. Durable 'cost-aware composition' pattern (deterministic-first, LLM-only-for-batch-rollup, cache-as-artifact) noted, left in place as too narrow for a standalone page.]",
+  "summary": "Ein Feed pro Projekt (und projekt\u00fcbergreifend): wichtige Entscheidungen und Ereignisse als verlinkte Timeline. Zwei Publika \u2014 Menschen sehen high-level, was passiert; Tasks/Agenten finden einen Einstieg und den zuletzt relevanten Kontext. Token-Kosten \u00fcberall sichtbar; kostenbewusste, inkrementelle Zusammenstellung; t\u00e4gliche/w\u00f6chentliche Zusammenfassungen als Stakeholder-News. Datenlage-L\u00fccke: viele Entscheidungen fallen heute in externen Chats au\u00dferhalb des Tools. [Curation 2026-08-18 (AGT-2671): DONE CHECK - still concept-stage with four open operator decisions, stays active/shaping. Durable 'cost-aware composition' pattern (deterministic-first, LLM-only-for-batch-rollup, cache-as-artifact) noted, left in place as too narrow for a standalone page.] [Curation 2026-08-23 (AGT-2671): DONE CHECK refresh - source TE-8 is open in 5-human-review, source MKT-14 is archived (7-archive). Dossier remains concept-stage with open operator decisions per its own text; stays active/shaping, no status change.]",
   "entrypoint": "index.html",
   "status": "active",
   "phase": "shaping",
-  "updatedAt": "2026-08-18T12:00:00Z",
+  "updatedAt": "2026-08-23T00:00:00Z",
   "sourceTaskKeys": [
     "TE-8",
     "MKT-14"

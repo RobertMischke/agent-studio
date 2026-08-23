@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "id": "escalation-view-information-architecture",
   "title": "Escalation view information architecture",
-  "summary": "Decision-ready information architecture for escalated task details. It assigns the actual blocker to the escalation header, removes duplicate escalation outcome surfaces from Pipeline and Result, preserves the failed-step ATTENTION marker, and flattens Goal and Where it stopped into sibling Result rows with a calm red stopped-state tint. [Curation 2026-08-18 (AGT-2671): DONE CHECK - stays decision-pending, no completion claims found. Data hygiene: this dossier's key AGT-W36 collides with batch-gate-concept's key; flagged for operator/key-registry attention, not corrected here since key assignment is app-owned. Durable single-owner-per-fact IA principle noted, left in dossier as too narrow for a standalone architecture page.]",
+  "summary": "Decision-ready information architecture for escalated task details. It assigns the actual blocker to the escalation header, removes duplicate escalation outcome surfaces from Pipeline and Result, preserves the failed-step ATTENTION marker, and flattens Goal and Where it stopped into sibling Result rows with a calm red stopped-state tint. [Curation 2026-08-18 (AGT-2671): DONE CHECK - stays decision-pending, no completion claims found. Data hygiene: this dossier's key AGT-W36 collides with batch-gate-concept's key; flagged for operator/key-registry attention, not corrected here since key assignment is app-owned. Durable single-owner-per-fact IA principle noted, left in dossier as too narrow for a standalone architecture page.] [Curation 2026-08-23 (AGT-2671): key collision repaired - reassigned this dossier from AGT-W36 to AGT-W40 (one past the highest key in use, 39). The app's own EnsureCanonicalKeys logic in WorkbenchCatalogueService.cs only mints a key when the \"key\" field is absent; it never revisits an already-keyed descriptor, so this collision could not have self-healed and needed a manual edit. AGT-W36 stays with batch-gate-concept, whose workbench.json was committed first (2026-08-11 23:49 vs 2026-08-12 06:51). No other file referenced this dossier by key. Escalation-view remains decision-pending; no status change.]",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "decision-ready",
   "pattern": "ui",
-  "updatedAt": "2026-08-18T12:00:00Z",
+  "updatedAt": "2026-08-23T00:00:00Z",
   "sourceTaskKeys": [
     "AGT-2643"
   ],
@@ -17,6 +17,6 @@
     "AGT-2583"
   ],
   "implementationTasks": [],
-  "key": "AGT-W36",
+  "key": "AGT-W40",
   "editedBy": "Claude / AGT-2671"
 }
