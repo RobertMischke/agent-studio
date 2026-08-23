@@ -47,6 +47,13 @@ export class TaskReferenceMicrocardHydratorService {
         for (const item of response.items) this.cache.set(item.key.toUpperCase(), item);
         this.render(occurrences);
       },
+      // A denied or failed batch (e.g. the public-demo edge's typed
+      // unsafe-method denial) still marks the keys resolved so the next
+      // mutation-triggered scan does not retry them forever; the microcards
+      // for this batch simply stay unrendered.
+      error: () => {
+        for (const key of missing) this.cache.set(key, null);
+      },
     });
   }
 
