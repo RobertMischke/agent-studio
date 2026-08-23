@@ -23,6 +23,7 @@ export type ProjectRailKey =
   | 'uxui'
   | 'test-quality'
   | 'token-usage'
+  | 'cycle-time'
   | 'observability'
   | 'steering'
   | 'wiki'
@@ -159,6 +160,16 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'Token Usage placeholder. Heatmap, timeline, and per-job drill-down land in a later slice.',
     icon: '▦',
     railIcon: 'cli',
+  },
+  {
+    key: 'cycle-time',
+    group: 'insight',
+    label: 'Cycle Time',
+    panelTitle: 'Cycle Time',
+    description: 'Time per pipeline stage for completed tasks: queue, coding, gate, review, integration, human review',
+    empty: 'No completed task in the selected window.',
+    icon: '◷',
+    railIcon: 'activity',
   },
 
   // ---- QUALITY: what guards the project ----

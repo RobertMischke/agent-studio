@@ -1,0 +1,199 @@
+<section class="cyc" data-testid="project-cycle-time-panel">
+  <header class="cyc__head">
+    <div class="cyc__intro">
+      <h2 class="cyc__title">Cycle time</h2>
+      <p class="cyc__subtitle">
+        Time per pipeline stage for completed tasks. Median and p90 are taken over the tasks in which a stage occurred.
+      </p>
+    </div>
+    <div class="cyc__controls">
+      <div class="cyc__windows" role="group" aria-label="Time window">
+        @for (w of windows; track w) {
+          <button type="button"
+                  class="cyc__window"
+                  [class.cyc__window--active]="window() === w"
+                  [attr.aria-pressed]="window() === w"
+                  [attr.data-testid]="'cycle-time-window-' + w"
+                  (click)="selectWindow(w)">{{ windowLabel(w) }}</button>
+        }
+      </div>
+      <button type="button"
+              class="cyc__reload"
+              data-testid="cycle-time-reload"
+              [disabled]="loading()"
+              (click)="reload()">
+        <span aria-hidden="true">{{ loading() ? '⏳' : '↻' }}</span>
+        <span>Reload</span>
+      </button>
+    </div>
+  </header>
+
+  @if (error(); as err) {
+    <div class="cyc__error" role="alert" data-testid="cycle-time-error">{{ err }}</div>
+  }
+
+  @if (data(); as d) {
+    <p class="cyc__summary" data-testid="cycle-time-summary">
+      <strong>{{ d.coverage.tasksInWindow }}</strong>
+      {{ d.coverage.tasksInWindow === 1 ? 'task' : 'tasks' }} completed
+      <span class="cyc__sep" aria-hidden="true">·</span>
+      {{ windowLabel(window()) }}
+      <span class="cyc__sep" aria-hidden="true">·</span>
+      {{ d.coverage.tasksTerminal }} completed or archived overall
+      @if (d.coverage.excludedInFlight > 0) {
+        <span class="cyc__sep" aria-hidden="true">·</span>
+        {{ d.coverage.excludedInFlight }} in flight
+      }
+      @if (d.coverage.excludedNoCompletionTimestamp > 0) {
+        <span class="cyc__sep" aria-hidden="true">·</span>
+        {{ d.coverage.excludedNoCompletionTimestamp }} archived without a completion timestamp (excluded)
+      }
+    </p>
+
+    @if (!hasRows()) {
+      <p class="cyc__empty" data-testid="cycle-time-empty">No task completed in this window.</p>
+    } @else {
+      <section class="cyc__section" aria-labelledby="cyc-composition-title">
+        <h3 id="cyc-composition-title" class="cyc__section-title">Median stage composition</h3>
+        <div class="cyc__bar" data-testid="cycle-time-bar" role="img"
+             aria-label="Stacked bar of the median duration per stage, in lane order">
+          @for (s of segments(); track s.stage) {
+            <div class="cyc__segment"
+                 [class]="'cyc__segment cyc__segment--' + s.stage"
+                 [class.cyc__segment--highlighted]="s.highlighted"
+                 [style.flex-basis.%]="s.percent"
+                 [attr.data-stage]="s.stage"
+                 [cacTooltip]="segmentTooltip(s)"></div>
+          }
+        </div>
+        <ul class="cyc__legend" data-testid="cycle-time-legend">
+          @for (s of segments(); track s.stage) {
+            <li class="cyc__legend-item" [class.cyc__legend-item--highlighted]="s.highlighted">
+              <span class="cyc__swatch" [class]="'cyc__swatch cyc__swatch--' + s.stage" aria-hidden="true"></span>
+              <span class="cyc__legend-label">{{ s.label }}</span>
+              <span class="cyc__legend-value">{{ duration(s.seconds) }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <section class="cyc__section" aria-labelledby="cyc-stages-title">
+        <h3 id="cyc-stages-title" class="cyc__section-title">Stages</h3>
+        <div class="cyc__table-wrap">
+          <table class="cyc__table cyc__table--stages" data-testid="cycle-time-stages">
+            <thead>
+              <tr>
+                <th scope="col">Stage</th>
+                <th scope="col" class="cyc__num">Tasks</th>
+                <th scope="col" class="cyc__num">Median</th>
+                <th scope="col" class="cyc__num">p90</th>
+                <th scope="col" class="cyc__num">Max</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of stageRows(); track a.stage) {
+                <tr [attr.data-stage]="a.stage" [class.cyc__row--highlighted]="a.highlighted">
+                  <th scope="row">{{ a.label }}</th>
+                  <td class="cyc__num">{{ a.count }}</td>
+                  <td class="cyc__num">{{ value(a, 'p50') }}</td>
+                  <td class="cyc__num">{{ value(a, 'p90') }}</td>
+                  <td class="cyc__num">{{ value(a, 'max') }}</td>
+                </tr>
+              }
+            </tbody>
+            <tbody class="cyc__rollups">
+              @for (a of rollupRows(); track a.stage) {
+                <tr [attr.data-stage]="a.stage">
+                  <th scope="row">{{ a.label }}</th>
+                  <td class="cyc__num">{{ a.count }}</td>
+                  <td class="cyc__num">{{ value(a, 'p50') }}</td>
+                  <td class="cyc__num">{{ value(a, 'p90') }}</td>
+                  <td class="cyc__num">{{ value(a, 'max') }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="cyc__note">
+          Review run spans the build/test gate, the review aspects, and an integration inside Post Processing. Lead time runs from creation to completion, cycle time from the first claim.
+        </p>
+      </section>
+
+      <section class="cyc__section" aria-labelledby="cyc-rounds-title">
+        <h3 id="cyc-rounds-title" class="cyc__section-title">Rounds per task</h3>
+        <div class="cyc__table-wrap">
+          <table class="cyc__table cyc__table--counts" data-testid="cycle-time-counts">
+            <thead>
+              <tr>
+                <th scope="col">Count</th>
+                <th scope="col" class="cyc__num">Tasks</th>
+                <th scope="col" class="cyc__num">Median</th>
+                <th scope="col" class="cyc__num">p90</th>
+                <th scope="col" class="cyc__num">Max</th>
+                <th scope="col" class="cyc__num">Mean</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of countRows(); track a.stage) {
+                <tr [attr.data-stage]="a.stage">
+                  <th scope="row">{{ a.label }}</th>
+                  <td class="cyc__num">{{ a.count }}</td>
+                  <td class="cyc__num">{{ value(a, 'p50') }}</td>
+                  <td class="cyc__num">{{ value(a, 'p90') }}</td>
+                  <td class="cyc__num">{{ value(a, 'max') }}</td>
+                  <td class="cyc__num">{{ value(a, 'mean') }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (outcomesLine(); as outcomes) {
+          <p class="cyc__note" data-testid="cycle-time-outcomes">Last integration outcome per task: {{ outcomes }}</p>
+        }
+      </section>
+
+      <section class="cyc__section" aria-labelledby="cyc-tasks-title">
+        <h3 id="cyc-tasks-title" class="cyc__section-title">Tasks</h3>
+        <div class="cyc__table-wrap">
+          <table class="cyc__table cyc__table--tasks" data-testid="cycle-time-tasks">
+            <caption>Completed tasks in the window with their stage durations; click a header to sort</caption>
+            <thead>
+              <tr>
+                @for (c of columns; track c.key) {
+                  <th scope="col"
+                      [attr.aria-sort]="ariaSort(c.key)"
+                      [class.cyc__num]="c.numeric"
+                      [class.cyc__col--highlighted]="c.highlighted">
+                    <button type="button"
+                            [attr.data-testid]="'cycle-time-sort-' + c.key"
+                            (click)="sort(c.key)">
+                      {{ c.label }} <span aria-hidden="true">{{ sortIndicator(c.key) }}</span>
+                    </button>
+                  </th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of sortedTasks(); track row.taskId) {
+                <tr [attr.data-task-key]="row.taskKey" [cacTooltip]="rowTooltip(row)">
+                  @for (c of columns; track c.key) {
+                    <td [class.cyc__num]="c.numeric" [class.cyc__col--highlighted]="c.highlighted">
+                      @if (c.key === 'key') {
+                        <button type="button"
+                                class="cyc__link"
+                                [attr.data-testid]="'cycle-time-open-' + row.taskKey"
+                                (click)="open(row)">{{ row.taskKey }}</button>
+                      } @else {
+                        {{ cell(row, c) }}
+                      }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+  }
+</section>

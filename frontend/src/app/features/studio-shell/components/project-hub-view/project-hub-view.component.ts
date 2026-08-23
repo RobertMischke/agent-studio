@@ -20,6 +20,7 @@ import {
   OwnershipMappingPanelComponent,
 } from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
+import { ProjectCycleTimePanelComponent } from '../../../project-cycle-time';
 import { PromptAdminPanelComponent } from '../../../orchestrator';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { RegressionRadarComponent } from '../../../regression-radar';
@@ -49,6 +50,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
   'uxui',
   'test-quality',
   'token-usage',
+  'cycle-time',
   'observability',
   'steering',
   'wiki',
@@ -89,6 +91,7 @@ const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRail
     SecurityPanelComponent,
     UxuiPanelComponent,
     ProjectTokenUsagePanelComponent,
+    ProjectCycleTimePanelComponent,
     ProjectObservabilityPanelComponent,
     ProjectPipelinePanelComponent,
     ProjectSteeringDocsSectionComponent,

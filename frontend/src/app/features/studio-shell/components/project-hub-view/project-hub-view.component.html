@@ -97,6 +97,13 @@
       <app-project-token-usage-panel [projectName]="projectName()" />
     }
   }
+  @defer (when activeRail() === 'cycle-time') {
+    @if (activeRail() === 'cycle-time') {
+      <app-project-cycle-time-panel
+        [projectName]="projectName()"
+        (openTask)="openTask.emit($event)" />
+    }
+  }
   @defer (when activeRail() === 'observability') {
     @if (activeRail() === 'observability') {
       <app-project-observability-panel [projectName]="projectName()" />
