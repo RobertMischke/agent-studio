@@ -266,6 +266,42 @@ public sealed class ProjectChatStoreAndIndexTests : IDisposable
         var hits = _index.Search(_projectFolder, "rate/limit:14:00", limit: 5);
         Assert.NotEmpty(hits);
     }
+
+    /// <summary>
+    /// The index must not keep <c>chat/.index.db</c> open between calls. With
+    /// Microsoft.Data.Sqlite pooling the native handle outlived every
+    /// <c>Dispose</c>, and on Windows that one handle made the data directory
+    /// un-zippable (management <c>backup-create</c>) and the project folder
+    /// un-deletable. After any index operation the file must be exclusively
+    /// openable and the folder removable, which is also what keeps every temp
+    /// fixture of this suite from leaking.
+    /// </summary>
+    [Fact]
+    public void Index_ReleasesTheDatabaseFileHandleAfterEveryOperation()
+    {
+        var turn = new ProjectChatTurn
+        {
+            TurnId = "p1",
+            Author = ProjectChatTurnAuthors.User,
+            Kind = ProjectChatTurnKinds.Turn,
+            Ts = DateTime.UtcNow,
+            Body = "handle release probe"
+        };
+        var path = _store.Write(_projectFolder, turn);
+        _index.EnsureFresh(_projectFolder);
+        _index.Upsert(_projectFolder, turn, path);
+        Assert.NotEmpty(_index.Search(_projectFolder, "probe", limit: 5));
+
+        var db = ProjectChatPaths.IndexDbPath(_projectFolder);
+        Assert.True(File.Exists(db));
+        using (new FileStream(db, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            // Exclusive open succeeds only when no pooled connection holds the file.
+        }
+
+        Directory.Delete(ProjectChatPaths.ChatRoot(_projectFolder), recursive: true);
+        Assert.False(Directory.Exists(ProjectChatPaths.ChatRoot(_projectFolder)));
+    }
 }
 
 public sealed class ProjectChatMigrationTests : IDisposable

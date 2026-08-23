@@ -33,6 +33,16 @@ public sealed class ProjectChatIndex
     /// the FTS5 virtual table + a tiny <c>meta</c> table if missing, and
     /// returns the (possibly rebuilt) connection string. The caller must
     /// open and dispose its own connection.
+    ///
+    /// <para>Pooling stays OFF on purpose: Microsoft.Data.Sqlite's pool keeps
+    /// the native handle - and with it the <c>.index.db</c> file - open after
+    /// <c>Dispose</c> for the lifetime of the process. On Windows that single
+    /// pooled handle makes the data directory un-zippable
+    /// (<c>backup-create</c> failed with a sharing violation on
+    /// <c>chat/.index.db</c>) and the project folder un-deletable. Closing the
+    /// handle with the connection is the "one open connection per invocation"
+    /// footprint this class promises; the per-call open costs well under a
+    /// millisecond against the FTS scan it precedes.</para>
     /// </summary>
     private static string ConnectionString(string projectFolder)
     {
@@ -43,7 +53,7 @@ public sealed class ProjectChatIndex
             DataSource = db,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Cache = SqliteCacheMode.Private,
-            Pooling = true
+            Pooling = false
         }.ToString();
     }
 
