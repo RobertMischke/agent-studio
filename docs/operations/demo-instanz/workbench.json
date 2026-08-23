@@ -2,11 +2,13 @@
   "schemaVersion": 1,
   "id": "demo-instanz",
   "title": "Public demo instance with no execution authority",
-  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670. Implementation state in section 14: S1 (seed and gallery), S2 (hard execution profile), S3 (replay-only Runner), and S5 (scrub, bundle, reset contract) are delivered; S4 (public read-only edge) and S6 (launch rehearsal) are not started, so the launch invariant is not met yet.]",
+  "summary": "Decision dossier for a publicly browsable, execution-locked Agent Studio demo built from completed and deployed scenario snapshots. In addition to the pinned two-project seed, Dossier lifecycle, replay, security, hosting, and reset decisions, it defines a six-case scenario pool, recommends SVG Pelican, Shift Ledger, and The Deep Blue as the first benchmark wave, specifies scripted Orchestrator context-chat runs, a four-category TokenEconomy ledger, immutable Result Dossiers and run history, per-case token caps, staged model comparisons, and clear ownership across the demo, Token Economy, the Agent Studio website, and independently deployed outputs. [Operator approved 2026-08-17: implement as recommended; slices S1-S5 cut as AGT-2666..2670. Implementation state in section 14, refreshed 2026-08-23: S1 (seed and gallery), S2 (hard execution profile), S3 (replay-only Runner), and S5 (scrub, bundle, reset contract) are delivered and archived; S4 (public read-only edge, AGT-2669) is now actively in progress (3-progress); S6 (launch rehearsal) has no task card yet, so the launch invariant is not met.]",
   "entrypoint": "index.html",
-  "status": "accepted",
-  "phase": "in-progress",
-  "updatedAt": "2026-08-20T00:00:00Z",
+  "status": "decided",
+  "phase": "testing",
+  "updatedAt": "2026-08-23T00:00:00Z",
+  "editedBy": "Operator dossier curation sweep / AGT-2671",
+  "statusReason": "Normalized non-schema status/phase values (\"accepted\"/\"in-progress\") to the valid WorkbenchCatalogueService enum (\"decided\"/\"testing\"); semantics unchanged, still the Accepted/In-progress bucket. S4 confirmed actively in progress (AGT-2669, 3-progress) as of 2026-08-23, S6 not yet cut. Stays decided, not documented, until S4 and S6 both reach a terminal lane and the launch invariant is met.",
   "sourceTaskKeys": [
     "AGT-2582"
   ],

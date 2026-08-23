@@ -4,9 +4,11 @@
   "title": "status.md Finalization for Concept and Planning Cards",
   "summary": "Decision dossier based on 1,782 unique task records and 485 Result scaffolds. It separates 341 operator backfills from 144 transition-path scaffolds, identifies the remote V1 finalization contract gap as the primary cause, distinguishes the MKT-21 terminal-signal reissue defect, and recommends an awaited application-owned Result-finalization gate with a typed degraded fallback.",
   "entrypoint": "index.html",
-  "status": "decided",
+  "status": "documented",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-10T09:30:00Z",
+  "updatedAt": "2026-08-23T00:00:00Z",
+  "editedBy": "Operator dossier curation sweep / AGT-2671",
+  "statusReason": "Source card AGT-2555 and its recommended implementation AGT-2585 are both terminal in 7-archive (confirmed via live Task API on 2026-08-23); the index.html header already records \"recommendation implemented by AGT-2585\". relatedTaskKeys AGT-2514, AGT-2355, and MKT-21 are case-evidence citations used by the root-cause analysis (see index.html case-evidence section), not delivery dependencies of this dossier, so their open lane state does not block closure. Moved decided -> documented.",
   "sourceTaskKeys": [
     "AGT-2555"
   ],

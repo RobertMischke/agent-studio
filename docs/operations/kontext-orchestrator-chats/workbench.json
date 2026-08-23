@@ -6,9 +6,9 @@
   "entrypoint": "index.html",
   "status": "decided",
   "phase": "testing",
-  "updatedAt": "2026-08-11T14:45:00Z",
-  "editedBy": "Operator bookkeeping via AGT-2621",
-  "statusReason": "Slices 1 through 5 were approved on 2026-08-10; AGT-2575 and AGT-2577 remain open, so this Dossier stays decided rather than documented.",
+  "updatedAt": "2026-08-23T00:00:00Z",
+  "editedBy": "Operator dossier curation sweep / AGT-2671",
+  "statusReason": "All six delivery slices (AGT-2572-2577) and both related fixes (AGT-2506, AGT-2512) are terminal in 7-archive as of 2026-08-23. The source decision card AGT-2514 itself remains parked in 5-human-review awaiting operator sight-review acceptance (a successful concept-delivery state, not an escalation, per the Tasks domain map). This Dossier stays decided, not documented, until AGT-2514 reaches a terminal lane.",
   "sourceTaskKeys": [
     "AGT-2514",
     "AGT-2572",

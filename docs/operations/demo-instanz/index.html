@@ -975,15 +975,15 @@ scrubReportDigest: &lt;sha256&gt;</code></pre>
     <tr><td><b>S1</b> Seed content and gallery</td><td><b>Delivered</b></td><td>Wiki trees, the six-document Dossier gallery, and the canonical <code>references.workbenches</code> card edges regenerate byte-identically from the pinned seed. See <a href="#delivered-slices">below</a>.</td></tr>
     <tr><td><b>S2</b> Hard public-demo execution profile</td><td><b>Delivered</b></td><td>Startup-only <code>public-demo-readonly</code> profile, shared pure deny policy, forged-caller admission checks, and a route-inventory gate. See <a href="#s2-hard-execution-boundary">below</a>.</td></tr>
     <tr><td><b>S3</b> Replay-only Runner</td><td><b>Delivered</b></td><td>Signed trace schema with per-frame seals, the narrow <code>demo.replay</code> server scope and its typed denial matrix, a claim-free replay service image, Simulated labelling end to end, and compromise tests. See the <a href="replay-only-runner.md">operator contract</a> and <a href="#s3-replay-only-runner">below</a>.</td></tr>
-    <tr><td><b>S4</b> Public read-only edge</td><td>Not started</td><td>No TLS edge, viewer boundary, endpoint allowlist, or rate limiting has been added.</td></tr>
+    <tr><td><b>S4</b> Public read-only edge</td><td>In progress (AGT-2669)</td><td>Actively being built as of 2026-08-23 (task in 3-progress). Not yet merged: no TLS edge, viewer boundary, endpoint allowlist, or rate limiting is in <code>develop</code> yet.</td></tr>
     <tr><td><b>S5</b> Scrub, bundle, and reset contract</td><td><b>Delivered</b></td><td>Content-bound scrub attestation, immutable release manifest, compatibility gate, and the six-hour replacement and rollback job. Accepts the S3 replay trace as a release input. See <a href="#s5-release-boundary">below</a>.</td></tr>
-    <tr><td><b>S6</b> Dedicated-VM launch rehearsal</td><td>Not started</td><td>No hosting, DNS, or infrastructure change has been made by any delivered slice.</td></tr>
+    <tr><td><b>S6</b> Dedicated-VM launch rehearsal</td><td>Not started</td><td>No hosting, DNS, or infrastructure change has been made by any delivered slice. No task card has been cut for S6 yet.</td></tr>
   </tbody>
 </table>
 
 <div class="box warn">
   <h4>The launch invariant is not met yet</h4>
-  <p>S1, S2, S3, and S5 are delivered, but S4 is not: the server itself now refuses execution and a replay credential cannot claim or mutate tasks, yet there is still no TLS edge, viewer boundary, endpoint allowlist, or rate limiting in front of it. The public demo does not start until S4 closes the edge and S6's launch rehearsal passes.</p>
+  <p>S1, S2, S3, and S5 are delivered, and S4 is now actively in progress (AGT-2669, confirmed via live Task API on 2026-08-23): the server itself refuses execution and a replay credential cannot claim or mutate tasks, but there is still no TLS edge, viewer boundary, endpoint allowlist, or rate limiting merged in front of it. The public demo does not start until S4 closes the edge and S6's launch rehearsal passes.</p>
 </div>
 
 <h3 id="s2-hard-execution-boundary">S2 hard execution boundary</h3>

@@ -4,9 +4,11 @@
   "title": "Admin Surface Design Guideline",
   "summary": "Binding admin-surface standard: flat full-bleed composition, compact disclosure-first headers, one grid for stream entries, non-redundant sober copy, project identity, operator-grade density, bounded prose width, theme tokens, and locally hosted fonts. Includes a fully specified Activity reference, a screenshot-backed violation audit, an incremental adoption contract, an explicit prohibition on nested outcome-summary boxes, the details-panel addendum, the append-only Navigation citizenship chapter with three light/dark Tree variants, a neutral waiting-decision counter recommendation, state rules, a follow-up slice boundary, visual Dos and Don'ts pairs, and an append-only Applied surfaces register.",
   "entrypoint": "index.html",
-  "status": "living-standard",
-  "phase": "accepted",
-  "updatedAt": "2026-08-16T00:00:00Z",
+  "status": "decided",
+  "phase": "informational",
+  "updatedAt": "2026-08-23T00:00:00Z",
+  "editedBy": "Operator dossier curation sweep / AGT-2671",
+  "statusReason": "Normalized non-schema status/phase values (\"living-standard\"/\"accepted\") to the valid WorkbenchCatalogueService enum (\"decided\"/\"informational\"); semantics unchanged (Accepted/In-progress bucket). This is a binding, perpetually-adopted standard with an append-only Applied surfaces register, not a one-shot decided-to-documented pipeline, so it has no terminal state and stays decided indefinitely. Source AGT-2583 archived; relatedTaskKeys are surfaces that have adopted or are adopting the standard, not blocking deliverables - AGT-2579 (chronological Activity + global status) is open in 5-human-review and will update the Applied surfaces register on delivery, the rest are archived.",
   "pages": [
     { "title": "Visual dos and don'ts", "path": "pages/dos-and-donts.html" },
     { "title": "Applied surfaces", "path": "pages/applied-surfaces.html" }

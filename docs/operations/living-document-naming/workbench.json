@@ -2,12 +2,13 @@
   "schemaVersion": 1,
   "id": "living-document-naming",
   "title": "Naming the Living Decision-to-Documentation Artifact",
-  "summary": "Accepted naming decision for the artifact that moves from exploration through decisions and live implementation tracking into permanent documentation. The stable product noun remains Dossier, \u0027living dossier\u0027 is explanatory copy, and Living Dossier remains the runner-up. Implementation tracking stays open until every consequence card is terminal.",
+  "summary": "Accepted naming decision for the artifact that moves from exploration through decisions and live implementation tracking into permanent documentation. The stable product noun remains Dossier, 'living dossier' is explanatory copy, and Living Dossier remains the runner-up. All five consequence cards (AGT-2539, AGT-2580, AGT-2537, AOW-13, WEB-18) reached 7-archive, WEB-18 last on 2026-08-16. Documented via the AGT-2537 guarded transition on 2026-08-23.",
   "entrypoint": "index.html",
-  "status": "decided",
+  "status": "documented",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-11T12:38:23Z",
-  "editedBy": "Operator",
+  "updatedAt": "2026-08-23T00:00:00Z",
+  "editedBy": "Operator dossier curation sweep / AGT-2671",
+  "statusReason": "All five relatedTaskKeys are terminal in 7-archive (confirmed via live Task API on 2026-08-23). The dossier's own documented gate (section 06) is satisfied; moved decided -> documented.",
   "sourceTaskKeys": [
     "AGT-2584"
   ],
