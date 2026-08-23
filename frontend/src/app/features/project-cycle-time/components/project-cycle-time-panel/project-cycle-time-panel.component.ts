@@ -205,15 +205,21 @@ export class ProjectCycleTimePanelComponent {
     return parts.join(' · ');
   }
 
+  /** Sequence of the latest request; a response from an older request (window switched meanwhile) is dropped. */
+  private requestSeq = 0;
+
   private refresh(name: string, window: CycleTimeWindow): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
     this.error.set(null);
     this.api.load(name, window).subscribe({
       next: response => {
+        if (seq !== this.requestSeq) return;
         this.data.set(response);
         this.loading.set(false);
       },
       error: (err: HttpErrorResponse) => {
+        if (seq !== this.requestSeq) return;
         this.data.set(null);
         this.error.set(err?.error?.error ?? err?.message ?? 'Could not load cycle time.');
         this.loading.set(false);

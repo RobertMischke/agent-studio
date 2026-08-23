@@ -145,6 +145,29 @@ describe('ProjectCycleTimePanelComponent', () => {
     expect(root.querySelector('[data-testid="cycle-time-error"]')?.textContent).toContain('boom');
     http.verify();
   });
+
+  it('drops a late response of a superseded window request', async () => {
+    const { fixture, http } = await mount();
+    const first = http.expectOne(r => r.url === '/api/projects/Demo/cycle-time');
+    const root: HTMLElement = fixture.nativeElement;
+
+    // Switch to 30d before the 7d response arrives, then let the 30d response land first.
+    (root.querySelector('[data-testid="cycle-time-window-30d"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const second = http.expectOne(r => r.url === '/api/projects/Demo/cycle-time' && r.params.get('window') === '30d');
+    second.flush({ ...response(), window: '30d', coverage: { ...response().coverage, tasksInWindow: 9 } });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(root.querySelector('[data-testid="cycle-time-summary"]')?.textContent).toContain('9 tasks completed');
+
+    first.flush(response());
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(root.querySelector('[data-testid="cycle-time-summary"]')?.textContent).toContain('9 tasks completed');
+    expect(fixture.componentInstance.loading()).toBe(false);
+    http.verify();
+  });
 });
 
 function response(): ProjectCycleTimeResponse {

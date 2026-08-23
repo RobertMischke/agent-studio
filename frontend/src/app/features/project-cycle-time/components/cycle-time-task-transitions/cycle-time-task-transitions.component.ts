@@ -50,15 +50,21 @@ export class CycleTimeTaskTransitionsComponent {
     return cause.replace(/-/g, ' ');
   }
 
+  /** Sequence of the latest request; a response from an older request (inputs changed meanwhile) is dropped. */
+  private requestSeq = 0;
+
   private load(project: string, key: string): void {
+    const seq = ++this.requestSeq;
     this.loading.set(true);
     this.error.set(null);
     this.api.loadTask(project, key).subscribe({
       next: response => {
+        if (seq !== this.requestSeq) return;
         this.transitions.set(response.task.transitions ?? []);
         this.loading.set(false);
       },
       error: (err: HttpErrorResponse) => {
+        if (seq !== this.requestSeq) return;
         this.transitions.set([]);
         this.error.set(err?.error?.error ?? err?.message ?? 'Could not load transitions.');
         this.loading.set(false);
