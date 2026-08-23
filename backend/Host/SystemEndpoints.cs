@@ -27,7 +27,9 @@ public static class SystemEndpoints
 
         // Returns flags that vary by per-checkout local config (appsettings.Local.json).
         // The frontend reads this before bootstrap to decide whether to show the DEV
-        // banner and swap the PWA icon / favicon to the dev variants.
+        // banner and swap the PWA icon / favicon to the dev variants. It is also the
+        // first request a public-demo browser makes, so the edge allowlists it
+        // unconditionally - see PublicDemoReadAllowlist.
         app.MapGet("/api/environment", (IConfiguration config) =>
         {
             var isDev = config.GetValue<bool>("Environment:IsDev");
@@ -36,7 +38,12 @@ public static class SystemEndpoints
                 updateStableEnabled = config.GetValue<bool>("DevTools:UpdateStableEnabled"),
                 deleteE2EJobsEnabled = config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled")
             };
-            return Results.Ok(new { isDev, devTools });
+            var publicDemo = new
+            {
+                active = SecurityProfiles.IsPublicDemo(config),
+                profile = SecurityProfiles.ActiveProfile(config),
+            };
+            return Results.Ok(new { isDev, devTools, publicDemo });
         });
 
         // Runtime identity comes only from the immutable manifest copied beside
