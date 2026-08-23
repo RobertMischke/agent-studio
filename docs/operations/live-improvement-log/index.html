@@ -128,6 +128,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v covered">covered-by (measurement for 2648 + 2662)</td>
   <td>Numbers feed the batch-gate decision (2648) and the steer-automation scenarios (2662). Gap: cause is inferred from neighbouring ledger rows; writing cause/reason onto lane_changed rows would make the taxonomy exact (candidate small ledger card after operator review).</td>
 </tr>
+<tr>
+  <td class="meta">08-23 19:0x</td>
+  <td>Two findings from the operator's board screenshot: (1) "Waiting for Claude sign-in" banner again - the probe-latch fix AGT-2660 was integrated days ago but the RUNNER BINARY on the host dated from 08-13 (no runner release deploy since agt-2646). Deployed agt-2660-20260823T165926Z-8f34e8914 (full 12-file publish). (2) Token popovers (2656) stack and never dismiss - card AGT-2675. During the deploy the tunnel died AGAIN and the keeper could not rebuild: the 08-23 keeper hardening had introduced a regression - `ss -lnt | grep -c 15031` exits 1 when the port is FREE (0 matches), which the guard read as "remote unreachable" and aborted before rebuilding. Patched live (`|| true`), keeper rebuilt the tunnel within one run ("Tunnel wieder gesund"), services recovered.</td>
+  <td class="v action">operator-action (done)</td>
+  <td>Lesson: runner-side fixes are not live until a runner release is deployed - add "runner deploy due?" to the tick checklist whenever runner/ files integrate. Keeper regression fixed; the repo copy of the keeper (deploy/windows/agent-runner-tunnel) must get the same `|| true` via AGT-2664. AGT-2675 cut for the popover bug.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
