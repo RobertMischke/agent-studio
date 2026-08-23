@@ -5,7 +5,7 @@ import * as path from 'node:path';
 const resultsDir = process.env.RESULTS_DIR ?? path.join(process.cwd(), 'test-results');
 const projectName = 'Micro Dashboard';
 
-function job(id: string, state: string, order: number) {
+function job(id: string, state: string, order: number, opts: { kind?: 'epic' } = {}) {
   return {
     id, taskKey: id, jobKey: `C:/fixtures/${projectName}::${id}`, title: id,
     state, order, projectName, watchPath: `C:/fixtures/${projectName}`,
@@ -14,6 +14,7 @@ function job(id: string, state: string, order: number) {
     sessionName: null, model: null, useOwnSession: null, lastUsage: null,
     execution: null, commit: null, commits: [], ownerClientId: 'local-default',
     tags: [], pendingIntent: null, autoLoop: null, summaryState: null,
+    kind: opts.kind,
   };
 }
 
@@ -29,15 +30,24 @@ function grouped() {
   return lanes;
 }
 
-function allJobs() {
+// AGT-2676 fixture: an epic parked in Human Review, like the reported TE-8
+// sighting. Board lanes never render epic cards (`excludeEpics`), so the
+// Explorer's per-lane dot/number must not count it either.
+function groupedWithEpicInReview() {
   const lanes = grouped();
+  lanes['humanReview'].push(job('TE-8', '5-human-review', 12, { kind: 'epic' }));
+  return lanes;
+}
+
+function allJobs(groupedFn: typeof grouped) {
+  const lanes = groupedFn();
   return Object.values(lanes).flat();
 }
 
-async function installRoutes(page: Page): Promise<void> {
+async function installRoutes(page: Page, groupedFn: typeof grouped = grouped): Promise<void> {
   await page.route('**/api/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
-  await page.route('**/api/tasks/grouped**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(grouped()) }));
-  await page.route('**/api/tasks', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(allJobs()) }));
+  await page.route('**/api/tasks/grouped**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(groupedFn()) }));
+  await page.route('**/api/tasks', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(allJobs(groupedFn)) }));
   await page.route('**/api/tasks/archive**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [], total: 0, offset: 0, limit: 50 }) }));
   await page.route('**/api/workspaces**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
     id: 'WS-MICRO', displayName: 'Experiments', sortOrder: 0, isDefault: true, color: null,
@@ -56,7 +66,7 @@ async function installRoutes(page: Page): Promise<void> {
   await page.route(/\/api\/runner\/status(\?|$)/, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projects: {} }) }));
 }
 
-async function openStudio(page: Page): Promise<void> {
+async function openStudio(page: Page, groupedFn: typeof grouped = grouped): Promise<void> {
   await page.addInitScript(name => {
     localStorage.setItem('atp.studio.explorer.expanded', JSON.stringify([name]));
     localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
@@ -64,7 +74,7 @@ async function openStudio(page: Page): Promise<void> {
     }));
     localStorage.removeItem('atp.studio.explorer.metrics');
   }, projectName);
-  await installRoutes(page);
+  await installRoutes(page, groupedFn);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   const counts = page.getByTestId(`studio-explorer-project-board-counts-${projectName}`);
@@ -97,5 +107,34 @@ test('numbers default, dots toggle, cap, order, a11y, and both themes', async ({
   for (const theme of ['light', 'dark'] as const) {
     await page.evaluate(value => { document.documentElement.dataset['studioTheme'] = value; }, theme);
     await sidebar.screenshot({ path: path.join(resultsDir, `tree-dots-${theme}--mocked.png`) });
+  }
+});
+
+// AGT-2676 regression: an epic sitting in a lane must never inflate the
+// Explorer's dot/number past what the board itself renders for that lane
+// (epics are containers, not board work-items - `excludeEpics`), and the
+// Human Review dot must not read as a second Delivered/green indicator.
+test('epic in a lane is excluded from the dot count and stays parity with the visible board lane, both themes', async ({ page }) => {
+  await openStudio(page, groupedWithEpicInReview);
+
+  const counts = page.getByTestId(`studio-explorer-project-board-counts-${projectName}`);
+  await expect(counts).toHaveAttribute('aria-label', '6 ready, 4 in progress, 12 human review');
+  const humanReviewCount = page.getByTestId(`studio-explorer-project-board-count-human-review-${projectName}`);
+  await expect(humanReviewCount).toHaveText('12');
+
+  const boardLaneCount = page.getByTestId('lane-count-5-human-review').locator('span').first();
+  await expect(boardLaneCount).toHaveText('12');
+  await expect(page.getByTestId('lane-5-human-review').getByText('TE-8')).toHaveCount(0);
+
+  // The Human Review dot must read as the board's own violet Review hue
+  // (`--lane-human-review`), not the green reserved for Delivered
+  // (`--studio-accent-success-strong`, formerly aliased here by mistake).
+  const expectedPurple = { light: 'rgb(124, 58, 237)', dark: 'rgb(197, 134, 192)' };
+  const bannedGreen = { light: 'rgb(21, 128, 61)', dark: 'rgb(134, 239, 172)' };
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(value => { document.documentElement.dataset['studioTheme'] = value; }, theme);
+    const color = await humanReviewCount.evaluate(node => getComputedStyle(node).color);
+    expect(color).not.toBe(bannedGreen[theme]);
+    expect(color).toBe(expectedPurple[theme]);
   }
 });

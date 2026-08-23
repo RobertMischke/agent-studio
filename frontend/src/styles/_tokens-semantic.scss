@@ -296,7 +296,11 @@
   --studio-board-nav-lane-progress-fg:     var(--studio-accent-warn-strong);
   --studio-board-nav-lane-progress-bg:     color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 12%, transparent);
   --studio-board-nav-lane-progress-border: color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 24%, transparent);
-  --studio-board-nav-lane-human-review-fg: var(--studio-accent-success-strong);
+  // Reuses the kanban board's own `--lane-human-review` hue (violet), not the
+  // success/green accent: green is reserved for the Delivered lane, and this
+  // token used to alias success-strong, which made the Human Review dot read
+  // as a second Delivered indicator (AGT-2676).
+  --studio-board-nav-lane-human-review-fg: var(--lane-human-review);
   --studio-board-nav-lane-human-review-bg: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 12%, transparent);
   --studio-board-nav-lane-human-review-border: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 24%, transparent);
 
@@ -793,7 +797,9 @@
   --studio-board-nav-lane-progress-fg:     var(--color-amber-700);
   --studio-board-nav-lane-progress-bg:     color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 10%, transparent);
   --studio-board-nav-lane-progress-border: color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 22%, transparent);
-  --studio-board-nav-lane-human-review-fg: var(--color-green-700);
+  // See dark-theme comment above: reuse the board's own `--lane-human-review`
+  // hue instead of green, which is reserved for Delivered (AGT-2676).
+  --studio-board-nav-lane-human-review-fg: var(--lane-human-review);
   --studio-board-nav-lane-human-review-bg: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 10%, transparent);
   --studio-board-nav-lane-human-review-border: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 22%, transparent);
 

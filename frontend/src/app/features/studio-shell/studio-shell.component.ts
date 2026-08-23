@@ -37,7 +37,7 @@ import {
   type ProjectRailItem,
 } from '../project-detail/components/project-shell/project-shell.config';
 import type { StudioIconName } from '../../components/studio-icon/studio-icon.component';
-import { BoardFiltersService, flattenGrouped } from '../board';
+import { BoardFiltersService, excludeEpics, flattenGrouped } from '../board';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { NotificationService } from '../../services/notification.service';
 import { copyTextToClipboard } from '../../services/clipboard.util';
@@ -527,7 +527,10 @@ export class StudioShellComponent {
    *  `TaskService.getWatchPaths()` via the shell's `projectNames` input
    *  the host passes in app.html. */
   readonly projectRows = computed<ProjectSidebarRow[]>(() => {
-    return buildProjectSidebarRows(this.grouped(), this.knownProjectNames(), this.currentProjectName());
+    // Board lanes never render epic cards (`excludeEpics`, see board's epic-grouping.util) -
+    // the Explorer's per-lane dots must count the exact same set so the tree never shows a
+    // lane as occupied while the board renders it empty (AGT-2676).
+    return buildProjectSidebarRows(excludeEpics(this.grouped()), this.knownProjectNames(), this.currentProjectName());
   });
 
   /** Row name → resolved storage path for the tree's rename-stable join. */
