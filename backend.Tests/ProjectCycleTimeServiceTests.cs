@@ -523,6 +523,13 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
             Lane(created.AddDays(-28), TaskStates.Completed, TaskStates.Archive),
         ], null);
         SeedJob(watchPath, TaskStates.Ready, "open-task", created, created, [Created(created, TaskStates.Ready)], null);
+        // Archived ten days ago without a recorded 6-completed entry: examined by
+        // the 30d window (and counted as excluded), skipped by the 7d window.
+        SeedJob(watchPath, TaskStates.Archive, "ghost-task", created.AddDays(-11), created.AddDays(-10),
+        [
+            Created(created.AddDays(-11), TaskStates.Ready),
+            Lane(created.AddDays(-10), TaskStates.HumanReview, TaskStates.Archive),
+        ], null);
 
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -551,9 +558,22 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
         Assert.Equal(2 * 60, row.Stages.ReviewWait);
         Assert.Equal(5 * 60, row.Stages.TestGate);
         Assert.Equal(8 * 60, row.Stages.ReviewOther);
-        Assert.Equal(3, week.Coverage.TasksInProject);
-        Assert.Equal(2, week.Coverage.TasksTerminal);
+        Assert.Equal(4, week.Coverage.TasksInProject);
+        Assert.Equal(3, week.Coverage.TasksTerminal);
         Assert.Equal(1, week.Coverage.ExcludedInFlight);
+        Assert.Equal(0, week.Coverage.ExcludedNoCompletionTimestamp); // ghost-task lies before the 7d window
+
+        var month = service.Build("Demo", "30d");
+        Assert.NotNull(month);
+        Assert.Equal(2, month!.Tasks.Count);
+        Assert.Equal(1, month.Coverage.ExcludedNoCompletionTimestamp);
+        Assert.Equal(3, month.Coverage.TasksTerminal);
+
+        // The 7d coverage must not change because a 30d run is cached.
+        var weekAgain = service.Build("Demo", "7d");
+        Assert.NotNull(weekAgain);
+        Assert.Equal(0, weekAgain!.Coverage.ExcludedNoCompletionTimestamp);
+        Assert.Single(weekAgain.Tasks);
 
         var all = service.Build("Demo", "all");
         Assert.NotNull(all);
@@ -561,6 +581,7 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
         Assert.Equal(new[] { "done-task", "old-task" }, all.Tasks.Select(t => t.TaskId));
         Assert.Equal(0, all.Coverage.TasksWithoutLedger);
         Assert.Equal(0, all.Coverage.TasksWithLaneEntryCompletion);
+        Assert.Equal(1, all.Coverage.ExcludedNoCompletionTimestamp);
 
         // Second read of the same window is served from the memo and stays identical.
         var again = service.Build("demo", "all");

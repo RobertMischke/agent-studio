@@ -132,7 +132,7 @@ public sealed class ProjectCycleTimeService
         DateTime? since = span is null ? null : now - span.Value;
 
         var tasks = ProjectTasks(entry);
-        var analyses = AnalyzeProject(entry.Name, tasks, since);
+        var analyses = AnalyzeProject(entry.Name, normalizedWindow, tasks, since);
         var includeTransitions = string.Equals(detail?.Trim(), TransitionsDetail, StringComparison.OrdinalIgnoreCase);
         return BuildResponse(entry.Name, project?.Id, project?.ShortCode, normalizedWindow, now, since, analyses, includeTransitions);
     }
@@ -246,20 +246,24 @@ public sealed class ProjectCycleTimeService
         return entries.FirstOrDefault(e => WatchPathComparison.PathsEqual(e.Path, handle));
     }
 
-    private IReadOnlyList<TaskCycleAnalysis> AnalyzeProject(string projectName, List<TaskInfo> tasks, DateTime? since)
+    private IReadOnlyList<TaskCycleAnalysis> AnalyzeProject(string projectName, string window, List<TaskInfo> tasks, DateTime? since)
     {
         // A bounded window only needs tasks that could have completed inside
         // it. A task enters its terminal lane after completion, so
         // EnteredLaneAt is a safe lower bound for the completion time; older
         // terminal tasks are skipped without touching their files. Non-terminal
         // tasks are classified without any file read.
-        var memoKey = $"{projectName}|{(since is null ? "all" : "window")}";
+        //
+        // The memo is keyed by the exact window: the coverage block counts the
+        // examined candidates, so serving a 7d request from a 30d run would
+        // make those counts depend on cache state instead of the window.
+        var memoKey = $"{projectName}|{window}";
         if (_projectMemo.TryGetValue(memoKey, out var cached)
             && DateTime.UtcNow - cached.At < ProjectCacheTtl
             && cached.TaskCount == tasks.Count
             && (since is null || (cached.Since is not null && cached.Since <= since)))
         {
-            // A slightly older window start is a superset; BuildResponse
+            // A window start up to the TTL older is a superset; BuildResponse
             // applies the exact window to the rows.
             return cached.Analyses;
         }
@@ -280,7 +284,7 @@ public sealed class ProjectCycleTimeService
                 results.Add(new TaskCycleAnalysis(null, TaskCycleAnalysis.ExcludedNotCompleted));
                 continue;
             }
-            if (since is not null && task.EnteredLaneAt != default && task.EnteredLaneAt.ToUniversalTime() < since.Value)
+            if (since is not null && task.EnteredLaneAt != default && Utc(task.EnteredLaneAt) < since.Value)
             {
                 // Completed before the window started: counts as completed for
                 // coverage, never enters the rows. Keep the cheap classification.
@@ -340,6 +344,18 @@ public sealed class ProjectCycleTimeService
         _taskMemo[folder] = new TaskMemo(timelineStamp, pipelineStamp, task.State, task.EnteredLaneAt, analysis);
         return analysis;
     }
+
+    /// <summary>
+    /// Same timestamp normalization as the analyzer: an unspecified kind is
+    /// UTC (the task.json writers stamp UTC, offsets deserialize as Local), so
+    /// the window prefilter and the row timestamps agree.
+    /// </summary>
+    private static DateTime Utc(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Utc => value,
+        DateTimeKind.Local => value.ToUniversalTime(),
+        _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+    };
 
     private static (long Length, long Ticks) Stamp(string path)
     {
