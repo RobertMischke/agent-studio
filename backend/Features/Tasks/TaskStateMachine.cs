@@ -89,6 +89,18 @@ public class TaskStateMachine
     /// decision, runner pickup); the default keeps every existing call site
     /// compiling.
     /// </param>
+    /// <param name="transitionCause">
+    /// Why the lane changed, as one of <see cref="LaneChangeCauses"/>; written
+    /// to <c>lane_changed.details.cause</c> so the cycle-time analysis reads the
+    /// taxonomy exactly instead of inferring it from neighbouring rows. Null
+    /// for a human actor derives the operator cause from the lane pair; null
+    /// for any other actor leaves the field absent (legacy row, inferred).
+    /// </param>
+    /// <param name="transitionDetail">
+    /// Short qualifier for the cause (quality-loop cause id, integration
+    /// outcome, escalation category, retry counter); written to
+    /// <c>lane_changed.details.causeDetail</c>.
+    /// </param>
     public MoveJobOutcome MoveJob(
         string jobId,
         string targetState,
@@ -96,7 +108,9 @@ public class TaskStateMachine
         string? cause = null,
         AttemptWriteReference? authorityWrite = null,
         string? expectedSourceState = null,
-        string? reason = null)
+        string? reason = null,
+        string? transitionCause = null,
+        string? transitionDetail = null)
     {
         if (!TaskStates.All.Contains(targetState))
             return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
@@ -195,7 +209,8 @@ public class TaskStateMachine
                 {
                     TaskJsonFile.UpdateField(recheck.FolderPath, "enteredLaneAt", DateTime.UtcNow.ToString("o"), _logger);
                     ClearIncompatiblePhase(recheck.FolderPath, targetState);
-                    RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause, authorityWrite, reason);
+                    RecordLaneChange(recheck.FolderPath, recheck.State, targetState, cause, authorityWrite, reason,
+                        transitionCause, transitionDetail);
                     RecordParkedBlocker(recheck.FolderPath, targetState, reason);
                     _scanner.InvalidateCache();
                     EnqueueEvidence(recheck.WatchPath, recheck.ProjectName, recheck.Id, recheck.State, targetState);
@@ -258,7 +273,8 @@ public class TaskStateMachine
             ClearIncompatiblePhase(targetDir, targetState);
             // T2b: write the lane-change ledger row to the *new* folder (the
             // source folder is gone after the move above).
-            RecordLaneChange(targetDir, recheck.State, targetState, cause, authorityWrite, reason);
+            RecordLaneChange(targetDir, recheck.State, targetState, cause, authorityWrite, reason,
+                transitionCause, transitionDetail);
             RecordParkedBlocker(targetDir, targetState, reason);
             // Keep the canonical id in lockstep with the (possibly suffixed)
             // folder name so FindJob resolves the moved folder immediately,
@@ -317,15 +333,24 @@ public class TaskStateMachine
     /// queued intents are not overtaken. Plain queued jobs (no pending
     /// intent) shuffle down by one.</para>
     /// </summary>
+    /// <param name="cause">Ledger actor of the lane change when the task is not yet in <c>2-ready</c> (see <see cref="MoveJob"/>).</param>
+    /// <param name="transitionCause">Ledger cause id of that lane change, one of <see cref="LaneChangeCauses"/>.</param>
+    /// <param name="transitionDetail">Short qualifier for <paramref name="transitionCause"/>.</param>
     /// <returns>The 1-based position of the target in the new <c>2-ready</c> ordering, or 0 on failure.</returns>
-    public int PromoteToReadyTop(string jobId, string? watchPath = null)
+    public int PromoteToReadyTop(
+        string jobId,
+        string? watchPath = null,
+        string? cause = null,
+        string? transitionCause = null,
+        string? transitionDetail = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return 0;
 
         if (info.State != TaskStates.Ready)
         {
-            var moved = MoveJob(jobId, TaskStates.Ready, watchPath);
+            var moved = MoveJob(jobId, TaskStates.Ready, watchPath, cause,
+                transitionCause: transitionCause, transitionDetail: transitionDetail);
             if (moved.Status != MoveJobStatus.Success) return 0;
         }
 
@@ -376,7 +401,9 @@ public class TaskStateMachine
     /// callers never write to the state folders directly.
     /// </remarks>
     public MoveJobOutcome ArchiveFolder(string sourceFolder, string newSlug)
-        => MoveFolderToState(sourceFolder, newSlug, TaskStates.Archive);
+        => MoveFolderToState(
+            sourceFolder, newSlug, TaskStates.Archive,
+            transitionCause: LaneChangeCauses.Archived, transitionDetail: "stale-folder-archive");
 
     /// <summary>
     /// Move a stale <c>3-progress</c> folder into <c>3a-failed-pickup</c> with
@@ -392,7 +419,9 @@ public class TaskStateMachine
     /// can render a card and the state-field invariant holds.
     /// </remarks>
     public MoveJobOutcome MoveFolderToFailedPickup(string sourceFolder, string newSlug)
-        => MoveFolderToState(sourceFolder, newSlug, TaskStates.FailedPickup, writePlaceholderJobJson: true);
+        => MoveFolderToState(
+            sourceFolder, newSlug, TaskStates.FailedPickup, writePlaceholderJobJson: true,
+            transitionCause: LaneChangeCauses.SystemMove, transitionDetail: "dead-letter-failed-pickup");
 
     /// <summary>
     /// Inverse of <see cref="MoveFolderToFailedPickup"/>: lift a folder
@@ -495,7 +524,9 @@ public class TaskStateMachine
                          "Retry with keepDeadLetterSlug=true to restore without a rename.");
         }
 
-        var outcome = MoveFolderToState(info.FolderPath, restoredSlug, resolvedTargetState);
+        var outcome = MoveFolderToState(
+            info.FolderPath, restoredSlug, resolvedTargetState,
+            transitionCause: LaneChangeCauses.OperatorMove, transitionDetail: "restore-from-failed-pickup");
         return outcome.Status switch
         {
             MoveJobStatus.Success => new RestoreFromFailedPickupOutcome(
@@ -522,7 +553,13 @@ public class TaskStateMachine
         };
     }
 
-    private MoveJobOutcome MoveFolderToState(string sourceFolder, string newSlug, string targetState, bool writePlaceholderJobJson = false)
+    private MoveJobOutcome MoveFolderToState(
+        string sourceFolder,
+        string newSlug,
+        string targetState,
+        bool writePlaceholderJobJson = false,
+        string? transitionCause = null,
+        string? transitionDetail = null)
     {
         if (string.IsNullOrWhiteSpace(newSlug))
             return new MoveJobOutcome(MoveJobStatus.Failure, "Slug must not be empty");
@@ -577,7 +614,8 @@ public class TaskStateMachine
                 // T2b: archive / dead-letter / restore are real lane crossings;
                 // record them in the ledger like a normal move. From-lane is the
                 // source folder's parent directory name.
-                RecordLaneChange(targetDir, Path.GetFileName(stateDir) ?? "", targetState, cause: null);
+                RecordLaneChange(targetDir, Path.GetFileName(stateDir) ?? "", targetState, cause: null,
+                    transitionCause: transitionCause, transitionDetail: transitionDetail);
             }
             else if (writePlaceholderJobJson)
             {
@@ -740,6 +778,13 @@ public class TaskStateMachine
     /// work-branch-head anchors are recorded alongside in <c>task.json.provenance</c>
     /// and meshed back in at read time by the unified task reader. Best-effort and
     /// fully guarded - a ledger write must never undo the move that already landed.
+    ///
+    /// <para>The row also names WHY the lane changed (<c>details.cause</c>, one of
+    /// <see cref="LaneChangeCauses"/>, plus an optional <c>details.causeDetail</c>
+    /// qualifier) when the caller knows; a human actor without an explicit cause
+    /// gets the operator cause derived from the lane pair. Rows without the
+    /// field are legacy rows, which the analysis still classifies from the
+    /// neighbouring rows. Additive: readers tolerate absence.</para>
     /// </summary>
     private void RecordLaneChange(
         string jobFolderPath,
@@ -747,7 +792,9 @@ public class TaskStateMachine
         string toState,
         string? cause,
         AttemptWriteReference? authorityWrite = null,
-        string? reason = null)
+        string? reason = null,
+        string? transitionCause = null,
+        string? transitionDetail = null)
     {
         if (_timeline == null) return;
         try
@@ -760,6 +807,11 @@ public class TaskStateMachine
             };
             if (!string.IsNullOrWhiteSpace(reason))
                 details["reason"] = reason.Trim();
+            var resolvedCause = ResolveTransitionCause(actor, fromState, toState, transitionCause);
+            if (resolvedCause is not null)
+                details[LaneChangeCauses.DetailKey] = resolvedCause;
+            if (!string.IsNullOrWhiteSpace(transitionDetail))
+                details[LaneChangeCauses.DetailQualifierKey] = transitionDetail.Trim();
             if (authorityWrite is not null)
             {
                 details["attemptId"] = authorityWrite.AttemptId;
@@ -780,6 +832,23 @@ public class TaskStateMachine
             _logger.LogWarning(ex, "Failed to record lane-change ledger row for {Folder}", jobFolderPath);
         }
     }
+
+    /// <summary>
+    /// The cause id written onto the ledger row: the explicit one when the
+    /// transition site supplied it, the lane-pair derived operator cause for a
+    /// human actor, and nothing for an automatic move whose site does not (yet)
+    /// name its cause - that row stays inferable by the analysis instead of
+    /// carrying a generic id that would hide the real cause.
+    /// </summary>
+    internal static string? ResolveTransitionCause(string actor, string? fromState, string? toState, string? transitionCause)
+    {
+        if (!string.IsNullOrWhiteSpace(transitionCause)) return transitionCause.Trim();
+        return IsHumanActor(actor) ? LaneChangeCauses.ForOperatorMove(fromState, toState) : null;
+    }
+
+    private static bool IsHumanActor(string actor)
+        => actor.StartsWith("human", StringComparison.OrdinalIgnoreCase)
+           && (actor.Length == 5 || actor[5] == ':');
 
     /// <summary>
     /// AGT-2492: keep the machine-readable park marker in step with the lane.

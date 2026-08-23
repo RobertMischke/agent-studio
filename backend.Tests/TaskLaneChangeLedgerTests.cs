@@ -110,6 +110,167 @@ public class TaskLaneChangeLedgerTests : IDisposable
     }
 
     [Fact]
+    public void MoveJob_ExplicitTransitionCause_WritesCauseAndQualifier()
+    {
+        SeedJob(TaskStates.Ready, "claim-me");
+
+        var (machine, _, timeline) = BuildMachine();
+        var outcome = machine.MoveJob(
+            "claim-me",
+            TaskStates.Progress,
+            _watchPath,
+            cause: "remote-runner:agent-runner-01",
+            transitionCause: LaneChangeCauses.Claimed,
+            transitionDetail: "claim-replay");
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var laneChange = Assert.Single(timeline.ReadAll(outcome.NewFolderPath!), r => r.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal(LaneChangeCauses.Claimed, laneChange.Details![LaneChangeCauses.DetailKey]);
+        Assert.Equal("claim-replay", laneChange.Details![LaneChangeCauses.DetailQualifierKey]);
+        Assert.Equal("remote-runner:agent-runner-01", laneChange.Actor);
+    }
+
+    [Fact]
+    public void MoveJob_SystemActorWithoutTransitionCause_LeavesCauseAbsent()
+    {
+        SeedJob(TaskStates.Progress, "legacy-row");
+
+        var (machine, _, timeline) = BuildMachine();
+        var outcome = machine.MoveJob("legacy-row", TaskStates.Ready, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var laneChange = Assert.Single(timeline.ReadAll(outcome.NewFolderPath!), r => r.Kind == TimelineEventKinds.LaneChanged);
+        // An automatic move whose site does not name its cause stays a legacy
+        // row for the analysis to infer, instead of carrying a generic id.
+        Assert.False(laneChange.Details!.ContainsKey(LaneChangeCauses.DetailKey));
+        Assert.False(laneChange.Details!.ContainsKey(LaneChangeCauses.DetailQualifierKey));
+    }
+
+    [Theory]
+    [InlineData(TaskStates.HumanReview, TaskStates.Ready, LaneChangeCauses.OperatorRequeue)]
+    [InlineData(TaskStates.AutoReview, TaskStates.Ready, LaneChangeCauses.OperatorRequeue)]
+    [InlineData(TaskStates.Escalated, TaskStates.Ready, LaneChangeCauses.EscalationRequeue)]
+    [InlineData(TaskStates.Completed, TaskStates.Backlog, LaneChangeCauses.CompletedReopen)]
+    [InlineData(TaskStates.Progress, TaskStates.Ready, LaneChangeCauses.OperatorMove)]
+    [InlineData(TaskStates.Backlog, TaskStates.Ready, LaneChangeCauses.Promoted)]
+    [InlineData(TaskStates.Backlog, TaskStates.Preparation, LaneChangeCauses.Promoted)]
+    [InlineData(TaskStates.Ready, TaskStates.Progress, LaneChangeCauses.OperatorMove)]
+    [InlineData(TaskStates.Progress, TaskStates.AutoReview, LaneChangeCauses.OperatorMove)]
+    [InlineData(TaskStates.HumanReview, TaskStates.Escalated, LaneChangeCauses.Escalated)]
+    [InlineData(TaskStates.Escalated, TaskStates.HumanReview, LaneChangeCauses.OperatorDecision)]
+    [InlineData(TaskStates.AutoReview, TaskStates.HumanReview, LaneChangeCauses.OperatorMove)]
+    [InlineData(TaskStates.HumanReview, TaskStates.Completed, LaneChangeCauses.Accepted)]
+    [InlineData(TaskStates.Completed, TaskStates.Archive, LaneChangeCauses.Archived)]
+    [InlineData(TaskStates.Archive, TaskStates.Completed, LaneChangeCauses.OperatorMove)]
+    public void MoveJob_HumanActorWithoutTransitionCause_DerivesOperatorCauseFromLanePair(
+        string from, string to, string expectedCause)
+    {
+        SeedJob(from, "operator-move");
+
+        var (machine, _, timeline) = BuildMachine();
+        var outcome = machine.MoveJob(
+            "operator-move",
+            to,
+            _watchPath,
+            cause: TimelineActors.Human("alice@example.com"),
+            reason: "Operator decision.");
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var laneChange = Assert.Single(timeline.ReadAll(outcome.NewFolderPath!), r => r.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal(expectedCause, laneChange.Details![LaneChangeCauses.DetailKey]);
+        Assert.Equal("Operator decision.", laneChange.Details!["reason"]);
+        Assert.False(laneChange.Details!.ContainsKey(LaneChangeCauses.DetailQualifierKey));
+    }
+
+    [Fact]
+    public void MoveJob_HumanActorWithExplicitTransitionCause_KeepsTheExplicitCause()
+    {
+        SeedJob(TaskStates.HumanReview, "explicit-wins");
+
+        var (machine, _, timeline) = BuildMachine();
+        var outcome = machine.MoveJob(
+            "explicit-wins",
+            TaskStates.Ready,
+            _watchPath,
+            cause: TimelineActors.Human("alice@example.com"),
+            transitionCause: LaneChangeCauses.IntegrationRecovery,
+            transitionDetail: "Conflict");
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        var laneChange = Assert.Single(timeline.ReadAll(outcome.NewFolderPath!), r => r.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal(LaneChangeCauses.IntegrationRecovery, laneChange.Details![LaneChangeCauses.DetailKey]);
+        Assert.Equal("Conflict", laneChange.Details![LaneChangeCauses.DetailQualifierKey]);
+    }
+
+    [Fact]
+    public void PromoteToReadyTop_StampsTheTransitionCauseOnTheLaneRow()
+    {
+        SeedJob(TaskStates.HumanReview, "recover-me");
+
+        var (machine, _, timeline) = BuildMachine();
+        var position = machine.PromoteToReadyTop(
+            "recover-me",
+            _watchPath,
+            transitionCause: LaneChangeCauses.IntegrationRecovery,
+            transitionDetail: "conflict-skipped");
+
+        Assert.Equal(1, position);
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "recover-me");
+        var laneChange = Assert.Single(timeline.ReadAll(folder), r => r.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal(TaskStates.HumanReview, laneChange.Details!["from"]);
+        Assert.Equal(TaskStates.Ready, laneChange.Details!["to"]);
+        Assert.Equal(LaneChangeCauses.IntegrationRecovery, laneChange.Details![LaneChangeCauses.DetailKey]);
+        Assert.Equal("conflict-skipped", laneChange.Details![LaneChangeCauses.DetailQualifierKey]);
+    }
+
+    [Fact]
+    public void PromoteToReadyTop_HumanActor_DerivesTheOperatorCause()
+    {
+        SeedJob(TaskStates.Backlog, "do-next");
+
+        var (machine, _, timeline) = BuildMachine();
+        var position = machine.PromoteToReadyTop("do-next", _watchPath, cause: TimelineActors.Human("bob@example.com"));
+
+        Assert.Equal(1, position);
+        var folder = Path.Combine(_watchPath, TaskStates.Ready, "do-next");
+        var laneChange = Assert.Single(timeline.ReadAll(folder), r => r.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal("human:bob@example.com", laneChange.Actor);
+        Assert.Equal(LaneChangeCauses.Promoted, laneChange.Details![LaneChangeCauses.DetailKey]);
+    }
+
+    [Fact]
+    public void ArchiveFolder_AndFailedPickupMoves_NameTheirCause()
+    {
+        SeedJob(TaskStates.Progress, "stale-one");
+        SeedJob(TaskStates.Progress, "stale-two");
+        var (machine, _, timeline) = BuildMachine();
+
+        var archived = machine.ArchiveFolder(Path.Combine(_watchPath, TaskStates.Progress, "stale-one"), "stale-one");
+        var deadLettered = machine.MoveFolderToFailedPickup(Path.Combine(_watchPath, TaskStates.Progress, "stale-two"), "stale-two-pickup-failed-2026-08-23");
+
+        Assert.Equal(MoveJobStatus.Success, archived.Status);
+        Assert.Equal(MoveJobStatus.Success, deadLettered.Status);
+        var archiveRow = Assert.Single(
+            timeline.ReadAll(Path.Combine(_watchPath, TaskStates.Archive, "stale-one")),
+            r => r.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal(LaneChangeCauses.Archived, archiveRow.Details![LaneChangeCauses.DetailKey]);
+        Assert.Equal("stale-folder-archive", archiveRow.Details![LaneChangeCauses.DetailQualifierKey]);
+        var deadLetterRow = Assert.Single(
+            timeline.ReadAll(Path.Combine(_watchPath, TaskStates.FailedPickup, "stale-two-pickup-failed-2026-08-23")),
+            r => r.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal(LaneChangeCauses.SystemMove, deadLetterRow.Details![LaneChangeCauses.DetailKey]);
+        Assert.Equal("dead-letter-failed-pickup", deadLetterRow.Details![LaneChangeCauses.DetailQualifierKey]);
+
+        var restored = machine.RestoreFromFailedPickup("stale-two-pickup-failed-2026-08-23", _watchPath, keepDeadLetterSlug: false);
+        Assert.Equal(RestoreFromFailedPickupStatus.Success, restored.Status);
+        var restoreRow = timeline.ReadAll(Path.Combine(_watchPath, TaskStates.Ready, "stale-two"))
+            .Last(r => r.Kind == TimelineEventKinds.LaneChanged);
+        Assert.Equal(TaskStates.Ready, restoreRow.Details!["to"]);
+        Assert.Equal(LaneChangeCauses.OperatorMove, restoreRow.Details![LaneChangeCauses.DetailKey]);
+        Assert.Equal("restore-from-failed-pickup", restoreRow.Details![LaneChangeCauses.DetailQualifierKey]);
+    }
+
+    [Fact]
     public void MoveJob_MultipleCrossings_AccumulateAppendOnlyHistory()
     {
         SeedJob(TaskStates.Ready, "round-trip");

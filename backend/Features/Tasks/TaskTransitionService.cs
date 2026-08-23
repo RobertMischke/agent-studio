@@ -110,6 +110,11 @@ public sealed class TaskTransitionService
     /// review-decision pass then decides whether to promote to
     /// 5-human-review.)
     /// </summary>
+    /// <param name="transitionCause">
+    /// Why the lane changes, one of <see cref="LaneChangeCauses"/>; stamped onto
+    /// the <c>lane_changed</c> ledger row (see <see cref="TaskStateMachine.MoveJob"/>).
+    /// </param>
+    /// <param name="transitionDetail">Short qualifier for <paramref name="transitionCause"/>.</param>
     public async Task<MoveJobOutcome> MoveAsync(
         string jobId,
         string targetState,
@@ -122,7 +127,9 @@ public sealed class TaskTransitionService
         bool suppressProductExecution = false,
         string? expectedSourceState = null,
         bool suppressIntegrationTrigger = false,
-        bool operatorOverride = false)
+        bool operatorOverride = false,
+        string? transitionCause = null,
+        string? transitionDetail = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -150,6 +157,10 @@ public sealed class TaskTransitionService
                 settledRunRecovery.Run.AuthorityEpoch,
                 $"settled-run-recovery:{settledRunRecovery.Run.AttemptId}");
             reason = $"Recovered completed RunAttempt {settledRunRecovery.Run.AttemptId} from its immutable result envelope; requeue was suppressed.";
+            // The requested requeue became a delivery hand-off: the ledger names
+            // the hand-off, not the cause the caller had in mind for the requeue.
+            transitionCause = LaneChangeCauses.Delivered;
+            transitionDetail = "settled-run-recovery";
         }
 
         var settings = _settings.Get(info.ProjectName);
@@ -244,7 +255,9 @@ public sealed class TaskTransitionService
                 cause,
                 authorityWrite,
                 expectedSourceState,
-                reason);
+                reason,
+                transitionCause,
+                transitionDetail);
         var outcome = _reviewAttemptLifecycle is not null
                       && targetState is TaskStates.Completed or TaskStates.Archive
             ? _reviewAttemptLifecycle.ExecuteTerminalTransition(info, targetState, MoveCore)

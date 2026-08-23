@@ -230,7 +230,9 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             request.WatchPath,
             ct,
             cause: request.Cause,
-            reason: request.Reason);
+            reason: request.Reason,
+            transitionCause: request.TransitionCause,
+            transitionDetail: request.TransitionDetail);
         if (outcome.Status == MoveJobStatus.NotFound)
             return new TaskMutationResult { Status = TaskMutationStatus.NotFound, Message = outcome.Message };
         if (outcome.Status == MoveJobStatus.TargetFolderExists)

@@ -65,8 +65,13 @@ public record TaskTransitionRequest
     public string JobId { get; init; } = "";
     public string? WatchPath { get; init; }
     public string TargetLane { get; init; } = "";
+    /// <summary>Ledger actor of the lane change (who triggered it).</summary>
     public string? Cause { get; init; }
     public string? Reason { get; init; }
+    /// <summary>Ledger cause id of the lane change (why), one of <see cref="LaneChangeCauses"/>.</summary>
+    public string? TransitionCause { get; init; }
+    /// <summary>Short qualifier for <see cref="TransitionCause"/>.</summary>
+    public string? TransitionDetail { get; init; }
     public TaskAccessVersion? ExpectedVersion { get; init; }
 }
 
