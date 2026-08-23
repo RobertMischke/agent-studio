@@ -93,11 +93,13 @@ public sealed class ReviewAttemptTaskLifecycleService
         {
             var tasks = BuildTaskIndex(_scanner.ScanAllJobsWithArchive());
             SupersedeUnclaimableLocked(tasks, "claim-guard");
-            return _authority.ClaimNextReview(
+            var claimed = _authority.ClaimNextReview(
                 executorId,
                 hostId,
                 instanceId,
                 requestedTtlSeconds);
+            AppendClaimEntry(claimed, tasks);
+            return claimed;
         }
     }
 
@@ -201,14 +203,63 @@ public sealed class ReviewAttemptTaskLifecycleService
         {
             var tasks = BuildTaskIndex(_scanner.ScanAllJobsWithArchive());
             SupersedeUnclaimableLocked(tasks, "claim-guard");
-            return _authority.ClaimReview(
+            var claimed = _authority.ClaimReview(
                 attemptId,
                 executorId,
                 hostId,
                 requestedTtlSeconds,
                 idempotencyKey,
                 instanceId);
+            AppendClaimEntry(claimed, tasks);
+            return claimed;
         }
+    }
+
+    /// <summary>
+    /// Ledger row for a granted review claim: the lease acquisition is the exact
+    /// end of the review queue wait, so the cycle-time analysis no longer has to
+    /// approximate it by the first projected step row of the attempt. A replayed
+    /// (duplicate) claim writes nothing; the original claim already did.
+    /// </summary>
+    private void AppendClaimEntry(AttemptWriteResult claimed, IReadOnlyDictionary<string, TaskInfo> tasks)
+    {
+        if (claimed.Status != AttemptWriteStatus.Accepted
+            || claimed.ReviewAttempt is not { Lease: { } lease } review)
+            return;
+        if (!tasks.TryGetValue(review.TaskKey, out var task))
+        {
+            _logger.LogWarning(
+                "review-attempt-claimed-journal-missing-task attempt={AttemptId} task={TaskKey} executor={ExecutorId}",
+                review.AttemptId,
+                review.TaskKey,
+                lease.ExecutorId);
+            return;
+        }
+
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        _timeline.Append(task.FolderPath, new TimelineEvent
+        {
+            Ts = lease.AcquiredAt,
+            Kind = TimelineEventKinds.ReviewAttemptClaimed,
+            Actor = $"remote-review:{lease.ExecutorId}",
+            Summary = $"ReviewAttempt {review.AttemptId} claimed by {lease.ExecutorId} on {lease.HostId}.",
+            RunId = review.AttemptId,
+            Details = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["attemptId"] = review.AttemptId,
+                ["leaseId"] = lease.LeaseId,
+                ["executorId"] = lease.ExecutorId,
+                ["hostId"] = lease.HostId,
+                ["executionLocation"] = "remote",
+                ["fence"] = lease.Fence.ToString(invariant),
+                ["authorityEpoch"] = lease.AuthorityEpoch.ToString(invariant),
+                ["subjectId"] = review.Subject.SubjectId,
+                ["sourceRunAttemptId"] = review.SourceRunAttemptId,
+                ["expectedResultSha"] = review.Subject.ExpectedResultSha,
+                ["acquiredAt"] = lease.AcquiredAt.ToString("O", invariant),
+                ["expiresAt"] = lease.ExpiresAt.ToString("O", invariant),
+            },
+        });
     }
 
     private IReadOnlyList<ReviewAttemptDto> SupersedeUnclaimableLocked(

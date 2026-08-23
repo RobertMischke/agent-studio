@@ -382,6 +382,9 @@ public sealed class RemoteDeliveryIntegrationCoordinator
         }
     }
 
+    /// <summary>Value of <c>details.stage</c> on the integration rows of integrate-on-delivery.</summary>
+    public const string PreHumanReviewStage = "pre-human-review";
+
     private static async Task<MergeIntoIntegrationResult> IntegrateAndRecordAsync(
         RemoteDeliveryIntegrationRequest request,
         MergeIntoDevelopRunner runner,
@@ -389,6 +392,23 @@ public sealed class RemoteDeliveryIntegrationCoordinator
         TaskProvenanceService provenance,
         TimelineLog timeline)
     {
+        // The start row pairs with the outcome row below, so the integration
+        // span is read from the ledger instead of from the merge step whose
+        // end happens to lie near the outcome. Written to the folder the
+        // request names: the card does not move while the merge runs.
+        timeline.Append(
+            request.JobFolderPath,
+            TimelineEventKinds.IntegrationStarted,
+            TimelineActors.System,
+            $"Remote delivery integration into {request.IntegrationBranch} started before Human Review.",
+            details: new Dictionary<string, string>
+            {
+                ["integrationBranch"] = request.IntegrationBranch,
+                ["integrationStrategy"] = request.IntegrationStrategy,
+                ["pipelineType"] = request.PipelineType,
+                ["stage"] = PreHumanReviewStage,
+            });
+
         var result = await runner.RunAsync(
             request.Project,
             request.JobId,
@@ -424,7 +444,7 @@ public sealed class RemoteDeliveryIntegrationCoordinator
                 ["outcome"] = result.Outcome.ToString(),
                 ["integrationBranch"] = request.IntegrationBranch,
                 ["detail"] = result.Error ?? string.Empty,
-                ["stage"] = "pre-human-review",
+                ["stage"] = PreHumanReviewStage,
             });
         return result;
     }
@@ -460,7 +480,7 @@ public sealed class RemoteDeliveryIntegrationCoordinator
                 ["outcome"] = failureCode,
                 ["integrationBranch"] = request.IntegrationBranch,
                 ["detail"] = detail,
-                ["stage"] = "pre-human-review",
+                ["stage"] = PreHumanReviewStage,
             });
     }
 }
