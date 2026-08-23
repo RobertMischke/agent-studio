@@ -19,6 +19,13 @@ describe('cycle-time formatting', () => {
     expect(formatDuration(1800)).toBe('30m');
     expect(formatDuration(7560)).toBe('2.1h');
     expect(formatDuration(86_400 * 1.25)).toBe('1.3d');
+    // Unit thresholds apply after rounding: no "60s", "60m", or "24h".
+    expect(formatDuration(59.4)).toBe('59s');
+    expect(formatDuration(59.6)).toBe('1m');
+    expect(formatDuration(3599)).toBe('1h');
+    expect(formatDuration(3570)).toBe('59.5m');
+    expect(formatDuration(86_399)).toBe('1d');
+    expect(formatDuration(86_040)).toBe('23.9h');
     expect(formatDuration(null)).toBeNull();
     expect(formatDuration(undefined)).toBeNull();
     expect(formatDuration(Number.NaN)).toBeNull();

@@ -12,14 +12,19 @@ import type {
 export function formatDuration(seconds: number | null | undefined): string | null {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return null;
   const s = Math.max(0, seconds);
-  if (s < 60) return `${Math.round(s)}s`;
-  if (s < 3600) return `${trim(s / 60)}m`;
-  if (s < 86_400) return `${trim(s / 3600)}h`;
+  // Pick the unit after rounding: 59.6 s reads "1m", not "60s"; 23.97 h reads "1d", not "24h".
+  if (Math.round(s) < 60) return `${Math.round(s)}s`;
+  if (round1(s / 60) < 60) return `${trim(s / 60)}m`;
+  if (round1(s / 3600) < 24) return `${trim(s / 3600)}h`;
   return `${trim(s / 86_400)}d`;
 }
 
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
 function trim(value: number): string {
-  const rounded = Math.round(value * 10) / 10;
+  const rounded = round1(value);
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
