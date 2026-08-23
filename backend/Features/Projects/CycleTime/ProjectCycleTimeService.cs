@@ -7,11 +7,16 @@ namespace AgentStudio.Projects;
 public sealed record ProjectCycleTimeCoverage(
     /// <summary>Non-fixture tasks of the project, archive-inclusive.</summary>
     int TasksInProject,
-    /// <summary>Tasks with a usable completion timestamp (any time).</summary>
-    int TasksCompleted,
+    /// <summary>Terminal tasks (6-completed or 7-archive) at any time, regardless of completion evidence.</summary>
+    int TasksTerminal,
     /// <summary>Tasks whose completion falls into the window; these form the aggregates and rows.</summary>
     int TasksInWindow,
-    /// <summary>Terminal tasks without a completion timestamp (archived without a recorded 6-completed entry).</summary>
+    /// <summary>
+    /// Terminal tasks examined for this window whose completion time is unknown
+    /// (archived without a recorded 6-completed entry). A bounded window skips
+    /// tasks that were terminal before the window, so this counts only the
+    /// examined candidates; the <c>all</c> window counts every terminal task.
+    /// </summary>
     int ExcludedNoCompletionTimestamp,
     /// <summary>Tasks not yet terminal; cycle time is defined on completion.</summary>
     int ExcludedInFlight,
@@ -139,7 +144,9 @@ public sealed class ProjectCycleTimeService
 
         var coverage = new ProjectCycleTimeCoverage(
             analyses.Count,
-            completed.Count + analyses.Count(a => a.ExclusionReason == TaskCycleAnalysis.ExcludedBeforeWindow),
+            completed.Count
+                + analyses.Count(a => a.ExclusionReason is TaskCycleAnalysis.ExcludedBeforeWindow
+                    or TaskCycleAnalysis.ExcludedNoCompletion),
             rows.Count,
             analyses.Count(a => a.ExclusionReason == TaskCycleAnalysis.ExcludedNoCompletion),
             analyses.Count(a => a.ExclusionReason == TaskCycleAnalysis.ExcludedNotCompleted),
@@ -217,13 +224,16 @@ public sealed class ProjectCycleTimeService
         var work = new List<TaskInfo>();
         foreach (var task in tasks)
         {
+            if (string.Equals(task.Kind, TaskKinds.Epic, StringComparison.OrdinalIgnoreCase))
+            {
+                results.Add(new TaskCycleAnalysis(null, TaskCycleAnalysis.ExcludedEpic));
+                continue;
+            }
             var terminal = string.Equals(task.State, TaskStates.Completed, StringComparison.Ordinal)
                            || string.Equals(task.State, TaskStates.Archive, StringComparison.Ordinal);
             if (!terminal)
             {
-                results.Add(new TaskCycleAnalysis(null, string.Equals(task.Kind, TaskKinds.Epic, StringComparison.OrdinalIgnoreCase)
-                    ? TaskCycleAnalysis.ExcludedEpic
-                    : TaskCycleAnalysis.ExcludedNotCompleted));
+                results.Add(new TaskCycleAnalysis(null, TaskCycleAnalysis.ExcludedNotCompleted));
                 continue;
             }
             if (since is not null && task.EnteredLaneAt != default && task.EnteredLaneAt.ToUniversalTime() < since.Value)

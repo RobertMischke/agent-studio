@@ -376,7 +376,7 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
 
         Assert.Equal(new[] { "recent", "older" }, response.Tasks.Select(t => t.TaskId));
         Assert.Equal(7, response.Coverage.TasksInProject);
-        Assert.Equal(4, response.Coverage.TasksCompleted);
+        Assert.Equal(5, response.Coverage.TasksTerminal);
         Assert.Equal(2, response.Coverage.TasksInWindow);
         Assert.Equal(1, response.Coverage.ExcludedNoCompletionTimestamp);
         Assert.Equal(1, response.Coverage.ExcludedInFlight);
@@ -463,7 +463,7 @@ public sealed class ProjectCycleTimeServiceTests : IDisposable
         Assert.Equal(5 * 60, row.Stages.TestGate);
         Assert.Equal(8 * 60, row.Stages.ReviewOther);
         Assert.Equal(3, week.Coverage.TasksInProject);
-        Assert.Equal(2, week.Coverage.TasksCompleted);
+        Assert.Equal(2, week.Coverage.TasksTerminal);
         Assert.Equal(1, week.Coverage.ExcludedInFlight);
 
         var all = service.Build("Demo", "all");
