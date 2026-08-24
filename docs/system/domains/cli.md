@@ -27,6 +27,26 @@ CLI execution tests.
 
 ## Key Code
 
+- `backend/Features/Cli/Execution/NpmShimHealer.cs`: in-process repair of a
+  half-installed/half-vanished `claude` npm-shim install on Windows (orphan
+  atomic-rename shims, stub/missing wrapper binary, staging orphans, and -
+  AGT-2673 - a shim that vanished entirely with the package still present,
+  via a bounded `npm install -g @anthropic-ai/claude-code` fallback). Wired
+  only through the legacy rollback (`BuiltInCliBehaviors.cs`) and the
+  non-agent Claude one-shot (`ClaudeOneShot.cs`); CAR owns shim healing for
+  CAR-backed runs (`LegacyNpmShimRepairContractTests` pins this).
+- `backend/Features/Cli/Execution/CliRepairGate.cs` /
+  `CliRepairCooldownPolicy.cs` / `CliRepairLog.cs`: bounds the whole
+  `NpmShimHealer` pass to one attempt per backend process per hour under a
+  lock (so concurrent callers cannot both pass the check-then-act race; the
+  state is process-static, so a restart resets the window), and journals
+  every real attempt - success or failure, with the `package.json` version
+  read immediately before and after the repair - to
+  `<workspace>/logs/cli-repairs.jsonl`. A repair cut short by host shutdown
+  is not journaled and does not consume the window.
+  `WorkspaceSummaryService.ReadFailedCliRepairs` folds FAILED rows into the
+  executive summary's crash list; a successful repair is deliberately not
+  alarmed on, only logged and journaled ("alarm only if repair fails").
 - [Model Routing Policy](./model-routing-policy.md) is the canonical selection
   policy above the live model catalog and quota fallback machinery.
 - `backend/Services/Cli/`: CLI drivers and shared execution base.

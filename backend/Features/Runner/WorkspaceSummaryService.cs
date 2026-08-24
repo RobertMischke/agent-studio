@@ -294,16 +294,82 @@ public sealed class WorkspaceSummaryService
         return list;
     }
 
+    /// <summary>
+    /// Folds FAILED rows from <c>logs/cli-repairs.jsonl</c> (written by
+    /// <see cref="AgentStudio.Cli.CliRepairGate"/>) into the crash list - the
+    /// alarm surface. A successful repair is intentionally not surfaced
+    /// here: "alarm only if repair fails" per the local CLI self-heal
+    /// design; a success is still visible via the structured log line and
+    /// the durable journal row, just not paraded as a workspace incident.
+    /// </summary>
+    private List<ExecutiveSummaryCrash> ReadFailedCliRepairs(string workspaceRoot, DateTime start, DateTime end)
+    {
+        var list = new List<ExecutiveSummaryCrash>();
+        var path = Path.Combine(workspaceRoot, "logs", "cli-repairs.jsonl");
+        if (!File.Exists(path)) return list;
+
+        try
+        {
+            foreach (var line in File.ReadAllLines(path))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+                    if (!root.TryGetProperty("at", out var atEl)) continue;
+                    if (!atEl.TryGetDateTime(out var at)) continue;
+                    var atUtc = at.ToUniversalTime();
+                    if (atUtc < start || atUtc >= end) continue;
+
+                    var available = root.TryGetProperty("available", out var a) && a.GetBoolean();
+                    if (available) continue;
+
+                    // packagePresent=false means NpmShimHealer found nothing on
+                    // disk to repair (the CLI was never installed on this host,
+                    // not merely broken) - HealOutcome's own contract says this
+                    // must not read as a failed repair ATTEMPT. Kind still
+                    // distinguishes it below so it stays visible without being
+                    // mislabeled as "we tried to fix it and couldn't".
+                    var packagePresent = root.TryGetProperty("packagePresent", out var pp) && pp.GetBoolean();
+
+                    var cli = root.TryGetProperty("cli", out var c) ? c.GetString() ?? "cli" : "cli";
+                    var error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
+                    var versionBefore = root.TryGetProperty("versionBefore", out var vb) ? vb.GetString() : null;
+                    var versionAfter = root.TryGetProperty("versionAfter", out var va) ? va.GetString() : null;
+
+                    var summary = packagePresent
+                        ? $"{cli} repair failed ({versionBefore ?? "unknown"} -> {versionAfter ?? "unknown"}): {error ?? "unavailable after repair pass"}"
+                        : $"{cli} unavailable and no npm package found to repair on this host: {error ?? "not installed"}";
+
+                    list.Add(new ExecutiveSummaryCrash(
+                        At: atUtc,
+                        Kind: packagePresent ? "cli-repair-failed" : "cli-not-installed",
+                        Path: "logs/cli-repairs.jsonl",
+                        Summary: summary));
+                }
+                catch (JsonException __ex) { SilentCatch.Note(__ex, "WorkspaceSummaryService: skip malformed cli-repairs line"); }
+            }
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "Could not read cli-repairs.jsonl");
+        }
+        return list;
+    }
+
     private List<ExecutiveSummaryCrash> ReadCrashes(string? workspaceRoot, DateTime start, DateTime end)
     {
-        // Today crashes are surfaced via two paths: orphan-recoveries.jsonl
-        // (already counted as job moves) and the backend file logger's
-        // last-crash.json under the backend's log folder. The latter is a
-        // single file per process, not a window; we surface it when its
-        // timestamp falls inside the window so the executive summary can
-        // call out a recent backend crash.
+        // Today crashes are surfaced via three paths: orphan-recoveries.jsonl
+        // (already counted as job moves), the backend file logger's
+        // last-crash.json under the backend's log folder (a single file per
+        // process, not a window; surfaced when its timestamp falls inside
+        // the window), and cli-repairs.jsonl FAILURE rows (a successful
+        // repair is a quiet note, not an alarm - see ReadFailedCliRepairs).
         var list = new List<ExecutiveSummaryCrash>();
         if (string.IsNullOrWhiteSpace(workspaceRoot)) return list;
+
+        list.AddRange(ReadFailedCliRepairs(workspaceRoot, start, end));
 
         // Orphan recoveries are crash evidence too: they only fire when a
         // 3-progress folder did not write a completion sentinel, which means
