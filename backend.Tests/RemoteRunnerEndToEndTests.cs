@@ -3626,10 +3626,10 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         // The detached review worker is a separate dotnet process; its cold
         // boot alone can take several seconds on a loaded host, so this first
-        // observation gets triple the usual budget.
+        // observation gets triple the usual budget. The poll may collide with
+        // the writer's open handle for an instant; that read simply retries.
         await WaitUntilAsync(
-            () => File.Exists(marker)
-                  && File.ReadAllLines(marker).SequenceEqual(["first"]),
+            () => TryReadAllLines(marker) is { } lines && lines.SequenceEqual(["first"]),
             () => "first review command did not complete; daemon log:\n"
                   + string.Join("\n", firstLogs),
             attempts: 600);
@@ -4060,6 +4060,23 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         PollSeconds = 1,
         ClaimMaxLoadPerCore = claimMaxLoadPerCore,
     };
+
+    /// <summary>
+    /// Reads all lines, or null while another process still holds the file
+    /// (the marker writer's own handle, for the instant of the append).
+    /// </summary>
+    private static string[]? TryReadAllLines(string path)
+    {
+        if (!File.Exists(path)) return null;
+        try
+        {
+            return File.ReadAllLines(path);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
 
     private static Task WaitUntilAsync(
         Func<bool> condition,
