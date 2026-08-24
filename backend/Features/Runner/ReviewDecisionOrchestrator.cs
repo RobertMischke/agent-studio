@@ -3799,7 +3799,41 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             result.RanBackendBuild, result.RanFrontendBuild,
             changedFiles?.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown");
 
+        RecordBuildProfileRemoteVerification(entry, current, result);
         return result;
+    }
+
+    /// <summary>
+    /// A green gate that ran the profile's own build commands in the project's
+    /// real checkout proves exactly what the onboarding dry-run tries to prove
+    /// (AGT-2677). Recording it lets the pickup gate reopen for a project whose
+    /// local dry-run can never go green, because the Studio backend has no copy
+    /// of the sources. Verification is fingerprinted against the declared
+    /// commands, so a later edit invalidates it on its own.
+    /// </summary>
+    private void RecordBuildProfileRemoteVerification(
+        WatchPathEntry entry,
+        TaskInfo current,
+        BuildTestGateResult result)
+    {
+        if (_projectSettings is null) return;
+        if (result.Verdict != BuildTestGateVerdict.Ok) return;
+        var profile = _projectSettings.Get(entry.Name).BuildProfile;
+        if (!VerifyCommandPlanner.HasProfileBuildCommands(profile)) return;
+
+        try
+        {
+            _projectSettings.MarkBuildProfileRemotelyVerified(
+                entry.Name,
+                result.Executor,
+                current.Key ?? current.TaskKey ?? current.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: could not record build-profile remote verification for {Project}/{JobId}",
+                entry.Name, current.Id);
+        }
     }
 
     private IReadOnlyList<string>? ResolveLatestRunChangedFiles(TaskInfo job, string? watchPath)

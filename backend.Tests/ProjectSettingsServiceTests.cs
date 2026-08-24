@@ -708,8 +708,12 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public void ReDeclaringBuildProfile_ResetsAnyPriorGreenValidation()
+    public void ReDeclaringBuildProfile_EntersTheBoundedRevalidationGrace()
     {
+        // AGT-2677 replaced the previous "an edit always resets to declared"
+        // rule: that reset is what let one card silently close a whole
+        // project's pickup gate. The edit now revalidates under a bounded
+        // grace instead of stopping the queue outright.
         var svc = Build();
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
         svc.MarkBuildProfileValidated("runbook");
@@ -717,7 +721,22 @@ public sealed class ProjectSettingsServiceTests : IDisposable
 
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
 
+        var profile = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.RevalidationPending, profile.Status);
+        Assert.Equal(BuildProfileGate.DefaultRevalidationGraceRuns, profile.RevalidationRunsRemaining);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(profile));
+    }
+
+    [Fact]
+    public void ReDeclaringAnUnprovenBuildProfile_StaysDeclared()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
+
         Assert.Equal(BuildProfileStatuses.Declared, svc.Get("runbook").BuildProfile!.Status);
+        Assert.False(BuildProfileGate.AllowsAutoPickup(svc.Get("runbook").BuildProfile));
     }
 
     [Fact]

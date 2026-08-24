@@ -103,6 +103,71 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Evaluate_CountsBuildProfileGatedCardsInsteadOfHidingThem()
+    {
+        // AGT-2677: the gate used to be part of the eligibility filter, so 25
+        // starved Quality Studio cards were invisible to this alarm for five
+        // days. A gated card is acute at once - waiting cannot make it
+        // claimable - even while other projects keep claiming normally.
+        var task = ReadyTask(4);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings() with { BuildProfile = DeclaredProfile() },
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0, lastClaimMinutesAgo: 1)]);
+
+        Assert.True(snapshot.Active);
+        Assert.False(snapshot.ClaimProgressStalled);
+        Assert.Equal(1, snapshot.BuildProfileBlockedCount);
+        Assert.Equal(["demo"], snapshot.BuildProfileBlockedProjects);
+        Assert.Contains("not yet validated", Assert.Single(snapshot.Items).BuildProfileGateReason);
+    }
+
+    [Fact]
+    public void Evaluate_LeavesGateReasonNullWhileTheProfileIsProven()
+    {
+        var task = ReadyTask(40);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings() with
+            {
+                BuildProfile = DeclaredProfile() with { Status = BuildProfileStatuses.PipelineReady },
+            },
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0)]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal(0, snapshot.BuildProfileBlockedCount);
+        Assert.Empty(snapshot.BuildProfileBlockedProjects);
+        Assert.Null(Assert.Single(snapshot.Items).BuildProfileGateReason);
+    }
+
+    [Fact]
+    public void Evaluate_ReportsNoStarvationWhenNoRunnerHasCapacity()
+    {
+        // Naming a gated card is worthwhile only against free capacity; an idle
+        // fleet is a different (and quieter) story.
+        var task = ReadyTask(4);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings() with { BuildProfile = DeclaredProfile() },
+            TaskReferenceIndex.Build([task]),
+            [Runner(0, 0, lastClaimMinutesAgo: 1)]);
+
+        Assert.False(snapshot.Active);
+        Assert.Equal(1, snapshot.BuildProfileBlockedCount);
+    }
+
+    [Fact]
     public void Watchdog_LogsWarningOnceForAnAcuteQueueAndRecoveryWhenItClears()
     {
         var logger = new CapturingLogger();
@@ -148,6 +213,12 @@ public sealed class RemoteQueueStarvationPolicyTests
     {
         PickupMode = PickupModes.Auto,
         ExecutionLocation = "runner-01",
+    };
+
+    private static BuildProfile DeclaredProfile() => new()
+    {
+        BuildCmds = ["dotnet build QualityStudio.slnx"],
+        Status = BuildProfileStatuses.Declared,
     };
 
     private static ClientIdentity Runner(

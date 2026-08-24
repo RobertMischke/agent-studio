@@ -71,6 +71,22 @@ const rejectedReadyTask = task(
   '2-ready',
 );
 
+// AGT-2677: the build-profile gate used to drop a card out of claim selection
+// before anything was recorded, so the board showed "queued-remote" with an
+// empty lastRejection. The refusal is now durable card state like any other.
+const buildProfileGatedTask = task(
+  'build-profile-gated',
+  'Build profile gate blocks pickup',
+  location('queued-remote', 'agent-runner-01', 'remote', false, {
+    code: 'build-profile-gate',
+    runnerId: 'agent-runner-01',
+    runnerName: 'agent-runner-01',
+    reason: 'project build profile blocks auto-pickup: build profile declared but not yet validated (no green dry-run)',
+    rejectedAtUtc: '2026-08-18T08:01:00Z',
+  }),
+  '2-ready',
+);
+
 const stalledAcceptedTask = {
   ...task(
     'accepted-stalled',
@@ -202,6 +218,10 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
           enteredLaneAt: '2026-08-08T07:30:00Z',
           waitingMinutes: 330,
           lastRejection: item.executionLocation.lastRejection,
+          buildProfileGateReason:
+            item.executionLocation.lastRejection?.code === 'build-profile-gate'
+              ? 'build profile declared but not yet validated (no green dry-run)'
+              : null,
         })),
       });
     }
@@ -309,6 +329,41 @@ test('shows a durable remote refusal on the card and the starvation banner', asy
     await expect(rejection).toBeVisible();
     await page.screenshot({
       path: join(RESULTS, `notice-bar-after-starvation-narrow-${theme}--mocked.png`),
+      fullPage: false,
+    });
+  }
+});
+
+test('names the build-profile gate on the card and in the starvation banner', async ({ page }) => {
+  // AGT-2677 regression: this is the pair of surfaces that stayed blank while
+  // 25 Quality Studio cards waited five days behind a shut gate.
+  mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 720, height: 800 });
+  await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
+  })));
+  await installRoutes(page, () => [buildProfileGatedTask]);
+  await page.goto('/?includeFixtures=true');
+  await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
+
+  const card = page.getByTestId('task-card').filter({ hasText: buildProfileGatedTask.title });
+  const rejection = card.getByTestId('remote-dispatch-rejection');
+  await expect(rejection).toHaveAttribute('data-rejection-code', 'build-profile-gate');
+  await expect(rejection).toContainText('build profile declared but not yet validated');
+
+  const banner = page.getByTestId('remote-queue-starvation-banner');
+  const gate = banner.getByTestId('notice-bar-build-profile-gate');
+  await expect(gate).toContainText('1 ready card is not claimable: build profile not validated');
+  await expect(gate).toContainText(`(${PROJECT})`);
+  await expect(banner).not.toContainText('Open a task to inspect its latest rejection');
+  await expectFlatFullBleedNoticeBar(banner);
+
+  for (const theme of ['dark', 'light'] as const) {
+    await setTheme(page, theme);
+    await dismissDevErrorDialog(page);
+    await expect(gate).toBeVisible();
+    await page.screenshot({
+      path: join(RESULTS, `agt-2677--build-profile-gate-banner-${theme}--mocked.png`),
       fullPage: false,
     });
   }

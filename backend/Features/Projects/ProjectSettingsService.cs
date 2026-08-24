@@ -315,25 +315,96 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Slice P (ASS-1663): declares (or re-declares) the project's build profile.
-    /// Normalizes blank command/path entries away and always resets onboarding to
-    /// <see cref="BuildProfileStatuses.Declared"/> - changing how the project
-    /// builds invalidates any prior green dry-run, so the project must re-validate
-    /// before the runner picks it up. Pass a null <paramref name="profile"/> to
-    /// clear the profile entirely (revert to legacy "no gate" behaviour).
+    /// Normalizes blank command/path entries away, then applies
+    /// <see cref="BuildProfileEditPolicy"/> so a re-declaration cannot silently
+    /// close the pickup gate (AGT-2677). Pass a null <paramref name="profile"/>
+    /// to clear the profile entirely (revert to legacy "no gate" behaviour).
     /// </summary>
     public void SetBuildProfile(string projectName, BuildProfile? profile)
     {
         EnsureLoaded();
+        BuildProfile? stored;
         lock (_lock)
         {
             var key = ResolveAliasLocked(projectName);
             var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
-            _cache[key] = current with { BuildProfile = NormalizeProfile(profile) };
+            var declared = NormalizeProfile(profile);
+            stored = declared is null
+                ? null
+                : BuildProfileEditPolicy.Apply(current.BuildProfile, declared);
+            _cache[key] = current with { BuildProfile = stored };
             Persist();
         }
         _logger.LogInformation(
-            "Build profile {Action} for project {Project}",
-            profile is null ? "cleared" : "declared", projectName);
+            "Build profile {Action} for project {Project} (status {Status})",
+            profile is null ? "cleared" : "declared",
+            projectName,
+            stored?.Status ?? "none");
+    }
+
+    /// <summary>
+    /// Records that the project's build/test gate went green while running this
+    /// profile's own commands on the host that executes the project (AGT-2677).
+    /// The proof is fingerprinted against the declared commands, so a later edit
+    /// invalidates it. No-op when the project has no declared profile.
+    /// </summary>
+    public void MarkBuildProfileRemotelyVerified(
+        string projectName,
+        string? verifiedBy,
+        string? taskKey,
+        DateTime? verifiedAtUtc = null)
+    {
+        EnsureLoaded();
+        var verifiedAt = (verifiedAtUtc ?? DateTime.UtcNow).ToUniversalTime();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            if (current.BuildProfile is null) return;
+            _cache[key] = current with
+            {
+                BuildProfile = current.BuildProfile with
+                {
+                    LastRemoteVerification = new BuildProfileRemoteVerification
+                    {
+                        VerifiedAtUtc = verifiedAt,
+                        VerifiedBy = string.IsNullOrWhiteSpace(verifiedBy) ? "remote gate" : verifiedBy.Trim(),
+                        TaskKey = string.IsNullOrWhiteSpace(taskKey) ? null : taskKey.Trim(),
+                        CommandFingerprint = BuildProfileCommandFingerprint.Create(current.BuildProfile),
+                    },
+                }
+            };
+            Persist();
+        }
+        _logger.LogInformation(
+            "Build profile remotely verified for project {Project} by {VerifiedBy} at {VerifiedAt:o}",
+            projectName, verifiedBy, verifiedAt);
+    }
+
+    /// <summary>
+    /// Spends one run of the revalidation grace granted by
+    /// <see cref="BuildProfileEditPolicy"/>. Safe to call on every granted
+    /// pickup: it is a no-op unless the profile is actually inside the grace
+    /// window. Returns the remaining runs, or null when nothing was spent.
+    /// </summary>
+    public int? ConsumeBuildProfileRevalidationRun(string projectName)
+    {
+        EnsureLoaded();
+        int? remaining;
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
+            var next = BuildProfileEditPolicy.ConsumeRevalidationRun(current.BuildProfile);
+            if (ReferenceEquals(next, current.BuildProfile)) return null;
+            _cache[key] = current with { BuildProfile = next };
+            remaining = next?.RevalidationRunsRemaining;
+            Persist();
+        }
+        _logger.LogInformation(
+            "Build profile revalidation grace spent for project {Project}; {Remaining} run(s) left",
+            projectName, remaining);
+        return remaining;
     }
 
     /// <summary>
@@ -375,6 +446,13 @@ public class ProjectSettingsService
                     Status = status,
                     LastValidatedAt = validatedAt ?? current.BuildProfile.LastValidatedAt,
                     LastValidationError = status == BuildProfileStatuses.ValidationFailed ? error : null,
+                    // Every local attempt, green or red, is newer evidence about
+                    // the declared commands than any earlier remote verification.
+                    LastValidationAttemptAt = DateTime.UtcNow,
+                    // A local verdict supersedes the revalidation grace in both
+                    // directions; leaving stale grace behind would let a red
+                    // dry-run keep handing out runs.
+                    RevalidationRunsRemaining = null,
                 }
             };
             Persist();
@@ -384,7 +462,10 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Trims blank command/path entries, clamps a non-positive pool size to null,
-    /// and forces the onboarding status to <see cref="BuildProfileStatuses.Declared"/>.
+    /// and reduces the profile to a bare declaration: status
+    /// <see cref="BuildProfileStatuses.Declared"/> and no evidence. Carrying any
+    /// evidence forward is <see cref="BuildProfileEditPolicy"/>'s decision, not
+    /// the caller's - a request body can never assert its own green status.
     /// Returns null when the input is null.
     /// </summary>
     private static BuildProfile? NormalizeProfile(BuildProfile? profile)
@@ -412,6 +493,9 @@ public class ProjectSettingsService
             Status = BuildProfileStatuses.Declared,
             LastValidatedAt = null,
             LastValidationError = null,
+            LastValidationAttemptAt = null,
+            RevalidationRunsRemaining = null,
+            LastRemoteVerification = null,
         };
     }
 

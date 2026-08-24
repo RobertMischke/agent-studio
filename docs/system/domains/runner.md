@@ -950,17 +950,86 @@ generation cannot inherit it. Missing repository registration is also projected
 as a failed project preflight in Execution Hosts before a Runner polls.
 
 `RemoteQueueStarvationWatchdog` independently detects remotely routed Ready
-cards while a live Runner reports free slots. A durable claim rejection is
-acute evidence immediately. Without a rejection, a card must be older than
-`RemoteQueueStarvation:ThresholdMinutes` (30 by default) and the live Runner
-fleet's latest successful claim must also be at least that old. This claim
-progress window debounces normal serial queue processing, including snapshots
-between claim polls. The snapshot published by
+cards while a live Runner reports free slots. A durable claim rejection and a
+closed build-profile gate are both acute evidence immediately. Without either, a
+card must be older than `RemoteQueueStarvation:ThresholdMinutes` (30 by default)
+and the live Runner fleet's latest successful claim must also be at least that
+old. This claim progress window debounces normal serial queue processing,
+including snapshots between claim polls. The snapshot published by
 `GET /api/runner/queue-starvation` includes the latest successful claim time,
-the stalled-progress verdict, and whether any returned card has rejection
-evidence. The board mentions a latest rejection only when that evidence exists.
+the stalled-progress verdict, whether any returned card has rejection evidence,
+and `buildProfileBlockedCount` / `buildProfileBlockedProjects`. The board
+mentions a latest rejection only when that evidence exists.
 The watchdog emits the rate-limited `remote-ready-starvation` warning event and
 clears the acute signal when claim progress, the queue, or capacity recovers.
+
+## Build-profile pickup gate
+
+`BuildProfileGate` decides whether a project may be auto-picked at all. A
+project that never declared a build profile carries no gate. A declared profile
+opens the gate on evidence, and the gate is the single source of that decision
+for local pickup, remote claim selection, the starvation watchdog, and the
+project payloads.
+
+Two pieces of evidence open it, plus one bounded allowance:
+
+- **A green local validation dry-run** (`status: pipeline-ready`). The dry-run
+  runs in the project's repository path - the same root the verify planner and
+  the build/test gate use - never in the task-board watch path. A project with
+  no local checkout has nothing to validate locally: the endpoint answers with
+  that explanation instead of recording a red verdict, because a dry-run in an
+  empty directory disproves nothing.
+- **A green build/test gate that ran the profile's own build commands** on the
+  host that executes the project, recorded as
+  `buildProfile.lastRemoteVerification`. The record carries a fingerprint of the
+  exact command set it proved, so an edit invalidates it without extra
+  bookkeeping, and the gate honours it only while it is not older than the last
+  local dry-run attempt. The newer piece of evidence wins in both directions.
+- **The bounded revalidation grace** below, which buys an edited profile time to
+  re-prove itself rather than opening the gate on evidence.
+
+### An edit must not silently close the gate
+
+A profile edit re-declares the profile; what that does to the gate is
+`BuildProfileEditPolicy`, not the request body. A request can never assert its
+own green status.
+
+| Previous profile | Edit touches | Result |
+|---|---|---|
+| none | anything | `declared`, gate closed (first declaration) |
+| any | only metadata the dry-run cannot disprove (pool size, preserve globs, lockfiles, test commands, stack label) | unchanged: status and evidence carry over verbatim |
+| passing the gate | install or build commands | `revalidation-pending` with 3 runs of grace; pickup continues |
+| not passing the gate | install or build commands | `declared`, gate closed |
+
+Each granted auto-pickup, local or remote, spends one run of grace. When it runs
+out the gate closes with the distinct `revalidation-grace-exhausted` cause. In
+practice the project revalidates inside the window on its own: the first green
+build/test gate under the new commands records a matching remote verification
+and the gate stays open. The grace is what makes an edit cost a bounded number
+of runs instead of an unbounded silence.
+
+### A closed gate is never silent
+
+Before AGT-2677 the gate was part of the claim eligibility filter, so a refused
+card was dropped before any rejection was recorded: 25 Quality Studio cards
+showed `queued-remote` with an empty `lastRejection` for five days, with no
+banner and no lane hint. Every closed decision is now operator-visible:
+
+- The claim endpoint records the refusal on the card as
+  `remoteDispatchRejection` with code `build-profile-gate` and the gate's cause,
+  so `executionLocation.lastRejection` renders it like any other refusal.
+  Refusals that are merely "not this Runner's business" (wrong project, wrong
+  agent, blocked reference) stay silent, because recording them would rewrite
+  every card in the workspace on every poll.
+- The starvation watchdog counts gate-blocked cards instead of filtering them
+  out, and the workspace banner names the cause: "N ready cards are not
+  claimable: build profile not validated".
+- Project Settings shows the same sentence for the project, plus a quiet notice
+  while the revalidation grace is counting down.
+- `GET /api/projects/settings` carries `buildProfileGateReason` and
+  `buildProfileGateReasonCode`; `GET /api/projects/{project}/build-profile`
+  adds `validationWorkspace`, `revalidationRunsRemaining`,
+  `lastRemoteVerification`, and `remoteVerificationCurrent`.
 
 ## Verification
 

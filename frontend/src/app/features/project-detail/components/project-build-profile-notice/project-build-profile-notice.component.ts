@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
+/** Response shape of `GET /api/projects/{name}/build-profile`. */
 export interface BuildProfileGateSummary {
   profile: unknown | null;
   gateApplicable: boolean;
@@ -7,6 +8,15 @@ export interface BuildProfileGateSummary {
     source: string;
     commands: readonly unknown[];
   };
+  /** Auto-pickup admission and its cause (AGT-2677). */
+  pickupAllowed?: boolean;
+  gateReason?: string;
+  gateReasonCode?: string;
+  /** Ready cards a shut gate is holding back; 0 while the gate is open. */
+  readyCardCount?: number;
+  /** Directory the validation dry-run runs in; null when the project has no local checkout. */
+  validationWorkspace?: string | null;
+  revalidationRunsRemaining?: number | null;
 }
 
 @Component({

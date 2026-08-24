@@ -7,6 +7,12 @@ export type ProjectAutoPickupState = 'active' | 'paused' | 'manual' | 'blocked';
 export interface ProjectPickupGate {
   pickupAllowed: boolean;
   buildProfileStatus?: string | null;
+  /**
+   * Sentence the backend's build-profile gate produced. Preferred over the
+   * status mapping below: the gate owns the wording, and it covers causes a
+   * bare status cannot express (an exhausted revalidation grace, AGT-2677).
+   */
+  buildProfileGateReason?: string | null;
 }
 
 export interface ProjectAutoPickupIndicator {
@@ -21,6 +27,7 @@ export interface ExplorerAutoPickupAggregate {
 }
 
 function blockReason(gate: ProjectPickupGate): string {
+  if (gate.buildProfileGateReason) return gate.buildProfileGateReason;
   switch (gate.buildProfileStatus) {
     case 'validating':
       return 'build profile validation in progress';

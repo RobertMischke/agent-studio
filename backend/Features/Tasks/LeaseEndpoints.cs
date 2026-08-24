@@ -550,19 +550,23 @@ public static class LeaseEndpoints
                         admission.ReasonCode));
                 }
 
+                // A card the build-profile gate refuses used to disappear here
+                // without a trace: it was filtered out before any rejection was
+                // recorded, so the board showed "queued-remote" with an empty
+                // lastRejection for as long as the gate stayed shut (AGT-2677).
+                // The shared policy now names that refusal and it is recorded on
+                // the card like every other claim-time refusal. OrderBy buffers,
+                // so every gate-blocked card is recorded on the first poll and
+                // not only the ones ahead of the winning candidate.
                 var eligible = liveSnapshot
                     .Where(t => !t.Fixture && t.State == TaskStates.Ready)
                     .Where(t =>
                     {
-                        var project = settings.Get(t.ProjectName);
-                        return ProjectExecutionPolicy.AllowsAutomaticPickup(project)
-                               && ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName)
-                               && AgentTypes.IsAutoPickupEligible(t.Agent)
-                               && !TaskSlugs.IsHumanDecisionNeeded(t.Id)
-                               && BuildProfileGate.AllowsAutoPickup(project.BuildProfile)
-                               && (!project.IntakeEnabled.GetValueOrDefault()
-                                   || t.Phase == LifecyclePhases.IntakePassed)
-                               && !waitsOn.EvaluateWaitsOn(t).Blocked;
+                        var admission = RemoteDispatchEligibility.Evaluate(
+                            t, settings.Get(t.ProjectName), req.RunnerId, req.RunnerName, waitsOn);
+                        if (!admission.Eligible && admission.RejectionCode is not null)
+                            RecordRejection(t, admission.RejectionCode, admission.RejectionReason);
+                        return admission.Eligible;
                     })
                     .OrderBy(t => t.Order)
                     .ThenBy(t => t.CreatedAt);
@@ -825,6 +829,9 @@ public static class LeaseEndpoints
                         RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome)));
 
                 dispatchRejections.Clear(candidate);
+                // A granted pickup is exactly the "run" the revalidation grace is
+                // counted in, so it is spent once the lease is held.
+                settings.ConsumeBuildProfileRevalidationRun(candidate.ProjectName);
                 var move = await transitions.MoveAsync(
                     candidate.Id, TaskStates.Progress, candidate.WatchPath, ct,
                     cause: $"remote-runner:{req.RunnerName.Trim()}",

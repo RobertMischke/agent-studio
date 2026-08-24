@@ -145,6 +145,18 @@ Three things describe one project and should be decided in the same sitting. Ski
    commands are the override and take precedence over the derivation. See
    [onboard-a-project.md](./onboard-a-project.md) for the build-profile fields.
 
+   A declared build profile also gates auto-pickup: the project is only picked
+   up once the profile is proven. `POST
+   /api/projects/{project}/build-profile/validate` runs the dry-run in the
+   project's repository path, and a green build/test gate running the profile's
+   own commands proves it too, which is the only route for a project the Studio
+   host has no checkout of. Editing the install or build commands of an already
+   proven profile does not stop the queue: it keeps pickup open for a bounded
+   number of runs while the project revalidates. Editing anything the dry-run
+   cannot disprove changes nothing at all. A project that is not picking up says
+   so on its Settings page and in the workspace banner; the rule is specified in
+   [runner.md](../../system/domains/runner.md#build-profile-pickup-gate).
+
 ## 4. Run your first task
 
 Full walkthrough, including what to queue and what to watch for: [your-first-task.md](./your-first-task.md). Short version:

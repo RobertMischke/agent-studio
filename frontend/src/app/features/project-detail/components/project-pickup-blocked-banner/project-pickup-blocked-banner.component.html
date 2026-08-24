@@ -1,0 +1,19 @@
+@if (blocked()) {
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="project-pickup-blocked-banner">
+    <strong data-testid="notice-bar-headline">@if (readyCardCount() > 0) {<span class="notification__number">{{ readyCardCount() }}</span> ready {{ readyCardCount() === 1 ? 'card is' : 'cards are' }} not claimable: build profile not validated.} @else {Auto-pickup is blocked: build profile not validated.}</strong>
+    <span class="notification__detail" data-testid="notice-bar-detail">Gate reason: {{ gate().gateReason }}. @if (gate().validationWorkspace) { Validate the build profile below; the dry-run runs in <code>{{ gate().validationWorkspace }}</code>. } @else { A project with no local checkout is proven instead by its own green build/test gate. }</span>
+  </app-notification>
+} @else if (graceRunsLeft() > 0) {
+  <app-notification
+    kind="info"
+    layout="banner"
+    ariaLive="polite"
+    testid="project-pickup-revalidation-banner">
+    <strong data-testid="notice-bar-headline">Build profile edited: revalidation pending.</strong>
+    <span class="notification__detail" data-testid="notice-bar-detail">Auto-pickup continues for <span class="notification__number">{{ graceRunsLeft() }}</span> more {{ graceRunsLeft() === 1 ? 'run' : 'runs' }}. Validate the profile, or let the next green build/test gate prove it, before the grace runs out.</span>
+  </app-notification>
+}

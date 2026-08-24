@@ -1054,8 +1054,9 @@ public class ProjectRunner
             if (!string.Equals(_lastBuildGateBlockReason, buildGate.Reason, StringComparison.Ordinal))
             {
                 _lastBuildGateBlockReason = buildGate.Reason;
-                _logger.LogInformation(
-                    "[build-profile] auto-pickup gated for {Project}: {Reason}", ProjectName, buildGate.Reason);
+                _logger.LogWarning(
+                    "[build-profile] auto-pickup gated for {Project}: code={ReasonCode} reason={Reason}",
+                    ProjectName, buildGate.ReasonCode, buildGate.Reason);
             }
             return;
         }
@@ -1092,6 +1093,9 @@ public class ProjectRunner
                 break;
             }
 
+            // An auto-picked run is the "run" the revalidation grace counts
+            // (AGT-2677). Local and remote pickup spend it the same way.
+            _projectSettings.ConsumeBuildProfileRevalidationRun(ProjectName);
             await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
         }
     }

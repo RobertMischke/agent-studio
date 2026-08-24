@@ -10,6 +10,8 @@ interface RemoteQueueStarvationItem {
   title: string;
   enteredLaneAt: string;
   lastRejection?: RemoteDispatchRejection | null;
+  /** Set when the project's build-profile gate refuses the card; null when the gate is open. */
+  buildProfileGateReason?: string | null;
 }
 
 interface RemoteQueueStarvationSnapshot {
@@ -20,6 +22,8 @@ interface RemoteQueueStarvationSnapshot {
   claimProgressStalled: boolean;
   lastSuccessfulClaimAt: string | null;
   hasRejections: boolean;
+  buildProfileBlockedCount: number;
+  buildProfileBlockedProjects: string[];
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
@@ -51,6 +55,20 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
   readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 0);
   readonly hasRejections = computed(() =>
     this.visibleItems().some(item => item.lastRejection != null));
+
+  /**
+   * Cards no runner can claim because their project's build profile is not
+   * validated. Counted from the visible items so the number always equals the
+   * rows the operator can actually reach. A closed build-profile gate is a
+   * configuration problem, not a busy queue, so it gets its own sentence and
+   * outranks the generic wording.
+   */
+  private readonly buildProfileBlockedItems = computed(() =>
+    this.visibleItems().filter(item => item.buildProfileGateReason != null));
+  readonly buildProfileBlockedCount = computed(() => this.buildProfileBlockedItems().length);
+  readonly buildProfileBlockedProjects = computed(() =>
+    [...new Set(this.buildProfileBlockedItems().map(item => item.projectName))]
+      .sort((a, b) => a.localeCompare(b)));
 
   ngOnInit(): void {
     this.refresh();

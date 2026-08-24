@@ -10,6 +10,10 @@
     </p>
   </header>
 
+  @if (buildProfileGate(); as gate) {
+    <app-project-pickup-blocked-banner [gate]="gate" />
+  }
+
   <section class="ps-settings__section" aria-label="Project basics">
     <app-project-basics-card [projectName]="projectName()" />
     @if (buildProfileGate(); as gate) {

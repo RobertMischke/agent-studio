@@ -822,7 +822,17 @@ public static class BuildProfileStatuses
     /// <summary>The dry-run failed (install or build red). Pickup is blocked until re-validated.</summary>
     public const string ValidationFailed = "validation-failed";
 
-    public static readonly string[] All = [Declared, Validating, PipelineReady, ValidationFailed];
+    /// <summary>
+    /// The commands of an already proven profile were edited (AGT-2677). The
+    /// previous green evidence is kept and pickup stays open for
+    /// <see cref="BuildProfile.RevalidationRunsRemaining"/> more runs, so a card
+    /// that rewrites its own project's build profile cannot silently starve the
+    /// whole project. Blocked once the grace is used up.
+    /// </summary>
+    public const string RevalidationPending = "revalidation-pending";
+
+    public static readonly string[] All =
+        [Declared, Validating, PipelineReady, ValidationFailed, RevalidationPending];
 
     /// <summary>
     /// Canonicalizes a status token. A null/blank/unknown value collapses to
@@ -915,6 +925,55 @@ public record BuildProfile
 
     /// <summary>Short reason from the last failed validation dry-run, or null.</summary>
     public string? LastValidationError { get; init; }
+
+    /// <summary>
+    /// UTC instant of the last local validation dry-run attempt, green or red
+    /// (AGT-2677). The gate compares it with
+    /// <see cref="LastRemoteVerification"/> so the newer piece of evidence wins:
+    /// a stale local red does not outrank a fresh green runner verification, and
+    /// a fresh local red does outrank an older remote one.
+    /// </summary>
+    public DateTime? LastValidationAttemptAt { get; init; }
+
+    /// <summary>
+    /// Remaining auto-pickup runs granted while the profile is
+    /// <see cref="BuildProfileStatuses.RevalidationPending"/>. Null or
+    /// non-positive outside that status.
+    /// </summary>
+    public int? RevalidationRunsRemaining { get; init; }
+
+    /// <summary>
+    /// Last time the project's own build/test gate went green while running this
+    /// profile's commands on the host that actually executes the project
+    /// (AGT-2677). A profile proven that way counts as validated even when the
+    /// local dry-run cannot go green, which is the case whenever the Studio
+    /// backend has no checkout of the project sources.
+    /// </summary>
+    public BuildProfileRemoteVerification? LastRemoteVerification { get; init; }
+}
+
+/// <summary>
+/// Durable proof that a build profile's own install/build commands ran green on
+/// the host that executes the project (AGT-2677). Recorded from a passing
+/// build/test gate, never written by hand.
+/// </summary>
+public sealed record BuildProfileRemoteVerification
+{
+    /// <summary>UTC instant the gate went green.</summary>
+    public DateTime VerifiedAtUtc { get; init; }
+
+    /// <summary>Executor / runner that produced the green gate; free-form label for the UI.</summary>
+    public string VerifiedBy { get; init; } = "";
+
+    /// <summary>Task key whose gate produced the proof, for the audit trail.</summary>
+    public string? TaskKey { get; init; }
+
+    /// <summary>
+    /// Fingerprint of the exact command set that was proven. The gate only
+    /// honours the proof while it still matches the declared commands, so an
+    /// edit invalidates it without any extra bookkeeping.
+    /// </summary>
+    public string CommandFingerprint { get; init; } = "";
 }
 
 /// <summary>Stable test levels used in settings, evidence, and gate logs.</summary>

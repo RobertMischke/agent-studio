@@ -32,6 +32,7 @@ import {
   ProjectBuildProfileNoticeComponent,
   type BuildProfileGateSummary,
 } from '../project-build-profile-notice/project-build-profile-notice.component';
+import { ProjectPickupBlockedBannerComponent } from '../project-pickup-blocked-banner/project-pickup-blocked-banner.component';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -97,6 +98,7 @@ interface WorkspaceListItemLite {
     ProjectBasicsCardComponent,
     ProjectUrlsPanelComponent,
     ProjectBuildProfileNoticeComponent,
+    ProjectPickupBlockedBannerComponent,
   ],
   templateUrl: './project-settings-panel.component.html',
   styleUrl: './project-settings-panel.component.scss',

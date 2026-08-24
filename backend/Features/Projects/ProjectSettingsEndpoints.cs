@@ -61,6 +61,14 @@ public static class ProjectSettingsEndpoints
             var all = settings.GetAll().AsEnumerable();
             if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
                 all = all.Where(kv => ProjectAccessAuthorization.Allows(human.User, kv.Key, projects));
+            var buildProfileGates = new Dictionary<string, BuildProfileGate.Decision>(
+                StringComparer.OrdinalIgnoreCase);
+            BuildProfileGate.Decision Gate(string project, ProjectSettings value)
+            {
+                if (!buildProfileGates.TryGetValue(project, out var decision))
+                    buildProfileGates[project] = decision = BuildProfileGate.Evaluate(value.BuildProfile);
+                return decision;
+            }
             var projected = all.ToDictionary(
                 kv => kv.Key,
                 kv => new
@@ -100,7 +108,12 @@ public static class ProjectSettingsEndpoints
                     // BuildProfileGate so the UI can show why a declared-but-
                     // unvalidated project is not being picked up.
                     buildProfile = kv.Value.BuildProfile,
-                    buildProfilePickupAllowed = BuildProfileGate.AllowsAutoPickup(kv.Value.BuildProfile),
+                    buildProfilePickupAllowed = Gate(kv.Key, kv.Value).AllowsPickup,
+                    // The server owns the sentence and the cause code so the UI
+                    // never has to re-derive "why is this project not picking
+                    // up" from the raw status (AGT-2677).
+                    buildProfileGateReason = Gate(kv.Key, kv.Value).Reason,
+                    buildProfileGateReasonCode = Gate(kv.Key, kv.Value).ReasonCode,
                     // F35: resolved per-lane strategy map (defaults filled in).
                     // The board uses this for the lane-header icon + the
                     // drag-disabled hint without a per-project round-trip.
@@ -770,6 +783,17 @@ public static class ProjectSettingsEndpoints
                 status = profile is null ? null : BuildProfileStatuses.Normalize(profile.Status),
                 pickupAllowed = gate.AllowsPickup,
                 gateReason = gate.Reason,
+                gateReasonCode = gate.ReasonCode,
+                // What a shut gate is actually holding back. Counted here
+                // because the scanner already owns the cached lane snapshot; the
+                // banner stays a presentational component (AGT-2677).
+                readyCardCount = gate.AllowsPickup ? 0 : ReadyCardCount(scanner, project.Name),
+                // Where the dry-run would actually run, so an operator staring at
+                // a red validation can tell "wrong workspace" from "broken build".
+                validationWorkspace = repositoryPath,
+                revalidationRunsRemaining = profile?.RevalidationRunsRemaining,
+                lastRemoteVerification = profile?.LastRemoteVerification,
+                remoteVerificationCurrent = BuildProfileGate.HasCurrentRemoteVerification(profile),
                 plannedDryRun = BuildProfileDryRunPlanner.Plan(profile),
                 gateApplicable = !verifyPlan.IsEmpty,
                 verifyPlan = new
@@ -780,9 +804,11 @@ public static class ProjectSettingsEndpoints
             });
         });
 
-        // PUT declares (or re-declares) the build profile. Always resets
-        // onboarding to "declared" - the project must re-run a green validation
-        // dry-run before the runner picks it up again.
+        // PUT declares (or re-declares) the build profile. What the edit does to
+        // the pickup gate is BuildProfileEditPolicy's decision: an untouched
+        // command set keeps its evidence, an edit to an already proven profile
+        // enters the bounded revalidation grace, and only a first declaration or
+        // an edit with nothing to carry over lands in "declared" (AGT-2677).
         app.MapPut("/api/projects/{projectName}/build-profile", (string projectName, SetBuildProfileRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
@@ -799,7 +825,14 @@ public static class ProjectSettingsEndpoints
                 PoolSize = req.PoolSize,
             });
             var profile = settings.Get(projectName).BuildProfile;
-            return Results.Ok(new { profile, pickupAllowed = BuildProfileGate.AllowsAutoPickup(profile) });
+            var gate = BuildProfileGate.Evaluate(profile);
+            return Results.Ok(new
+            {
+                profile,
+                pickupAllowed = gate.AllowsPickup,
+                gateReason = gate.Reason,
+                gateReasonCode = gate.ReasonCode,
+            });
         });
 
         app.MapPut("/api/projects/{projectName}/test-execution", (string projectName, TestExecutionPolicy req, ProjectSettingsService settings, TaskScannerService scanner) =>
@@ -843,16 +876,36 @@ public static class ProjectSettingsEndpoints
             if (settings.Get(projectName).BuildProfile is null)
                 return Results.BadRequest(new { error = "no build profile declared for this project" });
 
-            var result = await validator.ValidateAsync(projectName, entry.Path, ct);
+            // The dry-run used to execute in entry.Path, the task-board watch
+            // path, which holds lane folders and no project sources - so
+            // `dotnet build` could only ever fail with "no solution here" and the
+            // gate could never go green (AGT-2677). Validate where the code is,
+            // the same root the verify planner and the build/test gate use.
+            var repositoryPath = string.IsNullOrWhiteSpace(entry.RepositoryPath)
+                ? entry.RootPath
+                : entry.RepositoryPath;
+            if (string.IsNullOrWhiteSpace(repositoryPath) || !Directory.Exists(repositoryPath))
+                return Results.BadRequest(new
+                {
+                    error = "the project has no local checkout to validate in; " +
+                            "a remote-executed project is proven by its own green build/test gate instead",
+                    repositoryPath,
+                });
+
+            var result = await validator.ValidateAsync(projectName, repositoryPath, ct);
             var profile = settings.Get(projectName).BuildProfile;
+            var gate = BuildProfileGate.Evaluate(profile);
             return Results.Ok(new
             {
                 green = result.Green,
                 status = result.Status,
                 summary = result.Summary,
                 failedCommand = result.FailedCommand,
+                repositoryPath,
                 profile,
-                pickupAllowed = BuildProfileGate.AllowsAutoPickup(profile),
+                pickupAllowed = gate.AllowsPickup,
+                gateReason = gate.Reason,
+                gateReasonCode = gate.ReasonCode,
             });
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
@@ -1012,6 +1065,15 @@ public static class ProjectSettingsEndpoints
             }
         });
     }
+
+    /// <summary>
+    /// Ready cards of one project. Fixtures are excluded: they never wait on a
+    /// runner, so counting them would inflate the "not claimable" banner.
+    /// </summary>
+    private static int ReadyCardCount(TaskScannerService scanner, string projectName) =>
+        scanner.ScanAllAutomationJobs().Count(task =>
+            task.State == TaskStates.Ready
+            && string.Equals(task.ProjectName, projectName, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsKnownPipelineStep(string? stepId, string pipelineType = PipelineTypes.Task)
     {
