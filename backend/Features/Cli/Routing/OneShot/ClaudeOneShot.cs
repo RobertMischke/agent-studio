@@ -70,13 +70,10 @@ public sealed class ClaudeOneShot : ICliOneShot
         {
             _logger.LogWarning(
                 "claude --version failed pre-OneShot at '{Path}'; running rollback NpmShimHealer", executable);
-            var outcome = await NpmShimHealer.TryHealClaudeAsync(_logger, ct);
-            if (outcome.Actions.Count > 0)
-            {
-                _logger.LogInformation(
-                    "Rollback NpmShimHealer (one-shot) actions for claude: {Actions}",
-                    string.Join("; ", outcome.Actions));
-            }
+            // CliRepairGate logs the outcome (actions, versions, success/failure)
+            // centrally - no need to duplicate that here.
+            await CliRepairGate.TryHealWithCooldownAsync(
+                "claude", h => NpmShimHealer.TryHealClaudeAsync(_logger, h), _configuration, _logger, DateTime.UtcNow, ct);
             // Preserve the established one-shot contract: a failed repair does
             // not abort here. The spawn below returns the existing SpawnFailure
             // result and its callers apply their own fallback policy.
