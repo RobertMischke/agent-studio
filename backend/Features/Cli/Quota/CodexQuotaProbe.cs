@@ -61,35 +61,46 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
     public override string CliType => CliTypes.Codex;
 
+    private const int InitialIdleMs = 8000;
+
+    private static readonly Regex TrustPattern   = new(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
+    private static readonly Regex WelcomePattern = new(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
+    private static readonly Regex StatusPattern  = new(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// The interactive sequence that walks codex from spawn to a rendered
+    /// <c>/status</c> panel. Static so <see cref="BudgetMs"/> can measure it: the
+    /// caller's deadline must cover the worst case, or a run where two pattern
+    /// waits time out gets killed and reports a bare cancellation (AGT-2679).
+    /// </summary>
+    private static readonly ProbeStep[] Steps =
+    [
+        // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
+        // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
+        // stray "1" in the chat input box, which then prefixes the next slash
+        // command and turns "/status" into a chat message instead of a command.
+        new ProbeStep("await-trust",   WaitForPattern: TrustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
+        // Clear the buffer so the await-welcome match only sees post-trust content.
+        new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: WelcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
+        // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
+        // Enter while it's still parsing the slash command.
+        new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
+        new ProbeStep("await-status",  WaitForPattern: StatusPattern,  WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
+    ];
+
+    /// <summary>Worst-case duration of <see cref="Steps"/>; exposed statically so the
+    /// budget-vs-deadline invariant is testable without spawning a CLI.</summary>
+    public static int StepBudgetMs => WorstCaseDurationMs(Steps, InitialIdleMs);
+
+    public override int BudgetMs => StepBudgetMs;
+
     public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
     {
         try
         {
-            var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
-            var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
-            var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
+            var snap = await ProbeWithStepsAsync(Steps, InitialIdleMs, ct);
 
-            var snap = await ProbeWithStepsAsync(
-            [
-                // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
-                // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
-                // stray "1" in the chat input box, which then prefixes the next slash
-                // command and turns "/status" into a chat message instead of a command.
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
-                // Clear the buffer so the await-welcome match only sees post-trust content.
-                new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
-                // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
-                // Enter while it's still parsing the slash command.
-                new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
-                new ProbeStep("await-status",  WaitForPattern: statusPattern,  WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
-            ],
-            initialIdleMs: 8000,
-            ct);
-
-            string? plan = PlanRegex.Match(snap) is { Success: true } pm
-                ? pm.Groups["plan"].Value.Trim()
-                : null;
-
+            var plan = ParsePlan(snap);
             var windows = ParseStatusWindows(snap);
 
             // Log the parsed windows next to the raw sample so a future false
@@ -98,29 +109,41 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             // quota probe is a low-frequency, high-value observability surface.
             var sparkSeen = SparkHeaderRegex.IsMatch(snap);
             _logger.LogInformation(
-                "codex_quota_probe_parsed plan={Plan} sparkBlock={Spark} windows=[{Windows}]",
+                "codex_quota_probe_parsed cliVersion={Version} plan={Plan} sparkBlock={Spark} windows=[{Windows}]",
+                LastCliVersion ?? "<unknown>",
                 plan ?? "<none>",
                 sparkSeen,
                 string.Join(", ", windows.Select(w => $"{w.Label}={w.UsedPct}%")));
 
             return new QuotaSnapshot
             {
-                CliType   = CliType,
-                Plan      = plan,
-                Source    = "/status",
-                RawSample = TruncateForDebug(snap),
-                Windows   = windows,
-                Error     = (plan == null && windows.Count == 0)
-                    ? "Could not parse Codex /status output."
+                CliType    = CliType,
+                Plan       = plan,
+                Source     = "/status",
+                RawSample  = TruncateForDebug(snap),
+                Windows    = windows,
+                CliVersion = LastCliVersion,
+                Error      = (plan == null && windows.Count == 0)
+                    ? $"Could not parse the Codex /status panel ({LastCliVersion ?? "unknown version"})."
                     : null
             };
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Codex quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
+            _logger.LogWarning(ex, "Codex quota probe failed (cliVersion={Version})", LastCliVersion ?? "<unknown>");
+            return new QuotaSnapshot
+            {
+                CliType    = CliType,
+                Source     = "/status",
+                CliVersion = LastCliVersion,
+                Error      = QuotaDegradationPolicy.DescribeFailure(ex, CliType, LastCliVersion)
+            };
         }
     }
+
+    /// <summary>Plan name from the "Account: ... (Pro)" line, or null when absent.</summary>
+    public static string? ParsePlan(string snap)
+        => PlanRegex.Match(snap) is { Success: true } m ? m.Groups["plan"].Value.Trim() : null;
 
     public static List<QuotaWindow> ParseStatusWindows(string snap)
     {

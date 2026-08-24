@@ -5,6 +5,42 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory, "Fixtures", "quota", "codex", name));
+
+    /// <summary>
+    /// AGT-2679 drift guard. Live PTY captures of the real <c>/status</c> panel,
+    /// one file per codex-cli version (see the fixtures README for how they were
+    /// taken). Both versions must parse identically; when a future codex build
+    /// moves the panel around, the new fixture fails here instead of surfacing as
+    /// "A task was canceled." in the operator's quota display.
+    /// </summary>
+    [Theory]
+    [InlineData("codex-status-v0.144.1.txt")]
+    [InlineData("codex-status-v0.149.0.txt")]
+    public void ParseStatusWindows_ReadsRealBoxedStatusPanel(string fixture)
+    {
+        var windows = CodexQuotaProbe.ParseStatusWindows(ReadFixture(fixture));
+
+        // The account these captures were taken on had no active 5-hour window,
+        // so codex omits the standard "5h limit:" row entirely - the standard
+        // block is Weekly-only. That is account state, not drift: both versions
+        // render it the same way.
+        Assert.Contains(windows, w => w.Label == "Weekly" && w.UsedPct == 0);
+        Assert.Contains(windows, w => w.Label == "Spark 5-hour" && w.UsedPct == 0);
+        Assert.Contains(windows, w => w.Label == "Spark Weekly" && w.UsedPct == 0);
+        Assert.DoesNotContain(windows, w => w.Label == "5-hour");
+    }
+
+    [Theory]
+    [InlineData("codex-status-v0.144.1.txt")]
+    [InlineData("codex-status-v0.149.0.txt")]
+    public void ParsePlan_ReadsAccountLineFromRealStatusPanel(string fixture)
+    {
+        Assert.Equal("Pro", CodexQuotaProbe.ParsePlan(ReadFixture(fixture)));
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {

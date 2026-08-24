@@ -27,6 +27,43 @@ public abstract class QuotaProbeBase : IQuotaProbe
     public abstract string CliType { get; }
     public abstract Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Default: no interactive step sequence, so the snapshot-style probe's own
+    /// idle waits bound it. Step-driven probes override with
+    /// <see cref="WorstCaseDurationMs"/> over their step list.
+    /// </remarks>
+    public virtual int BudgetMs => 45_000;
+
+    /// <summary>
+    /// Version reported by the CLI's <c>--version</c> during the most recent
+    /// probe, or null before the first probe / when the CLI was unavailable.
+    /// Recorded onto the snapshot so CLI-version drift is attributable (AGT-2679).
+    /// </summary>
+    public string? LastCliVersion { get; private set; }
+
+    /// <summary>
+    /// Upper bound on how long a <see cref="ProbeStep"/> sequence can take when
+    /// every optional wait runs to its full timeout. Pure so the budget can be
+    /// asserted against the caller's deadline in a unit test rather than
+    /// discovered in production as a mid-probe cancellation.
+    ///
+    /// Deliberately pessimistic: <see cref="ProbeStep.RequirePattern"/> can cut the
+    /// sequence short, which only makes a real run faster than this bound.
+    /// </summary>
+    public static int WorstCaseDurationMs(IEnumerable<ProbeStep> steps, int initialIdleMs)
+    {
+        var total = initialIdleMs;
+        foreach (var step in steps)
+        {
+            if (step.WaitForPattern != null) total += step.WaitTimeoutMs;
+            total += step.PreSendDelayMs;
+            // Only a step that actually sends keys pays the post-send settle wait.
+            if (!string.IsNullOrEmpty(step.SendKeys)) total += step.SettleTimeoutMs;
+        }
+        return total;
+    }
+
     /// <summary>
     /// Spawn the CLI, optionally send a slash-command sequence, wait for output to settle,
     /// return the ANSI-stripped snapshot. Always sends two Esc presses at the end so
@@ -39,7 +76,8 @@ public abstract class QuotaProbeBase : IQuotaProbe
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, version, resolvedPath) = cli.TestCliPath();
+        NoteCliVersion(version);
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 
@@ -80,7 +118,8 @@ public abstract class QuotaProbeBase : IQuotaProbe
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, version, resolvedPath) = cli.TestCliPath();
+        NoteCliVersion(version);
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 
@@ -158,6 +197,31 @@ public abstract class QuotaProbeBase : IQuotaProbe
         /// never reappear: blindly sending the dismissal keys after the timeout leaks them
         /// into the chat input as a stray message and corrupts the next slash command.</summary>
         bool SendKeysOnlyIfMatched = false);
+
+    /// <summary>
+    /// Record the version this probe is talking to and log the transition when it
+    /// changes. The log line is the drift tripwire: a CLI that silently upgrades
+    /// under the orchestrator is the first thing to check when a probe starts
+    /// failing or a panel stops parsing (AGT-2679, and the CLI self-heal work in
+    /// AGT-2673).
+    /// </summary>
+    private void NoteCliVersion(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version)) return;
+        var trimmed = version.Trim();
+        var previous = LastCliVersion;
+        LastCliVersion = trimmed;
+        if (previous == null)
+        {
+            _logger.LogInformation("cli_version_observed cli={Cli} version={Version}", CliType, trimmed);
+        }
+        else if (!string.Equals(previous, trimmed, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "cli_version_changed cli={Cli} from={From} to={To}: quota panel parsing may drift, check the per-version fixtures",
+                CliType, previous, trimmed);
+        }
+    }
 
     /// <summary>Truncate snapshots before storing them on a QuotaSnapshot to keep payloads small.</summary>
     protected static string TruncateForDebug(string? snapshot, int max = 1500)

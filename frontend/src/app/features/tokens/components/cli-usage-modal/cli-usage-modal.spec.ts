@@ -43,6 +43,8 @@ describe('CliUsageModalComponent', () => {
     stale: false,
     source: 'pty',
     error: null,
+    probeFailed: false,
+    staleMarker: null,
     windows: [
       { label: 'Current session (5h)', usedPct: 11, used: null, limit: null, unit: null, resetAt: null, resetLabel: '3h' },
       { label: 'Weekly (all models)', usedPct: 47, used: null, limit: null, unit: null, resetAt: null, resetLabel: '4d' },
@@ -89,6 +91,8 @@ describe('CliUsageModalComponent', () => {
     stale: false,
     source: '/status',
     error: null,
+    probeFailed: false,
+    staleMarker: null,
     windows: [
       { label: 'Current session (5h)', usedPct: 66, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '02:33' },
       { label: 'Weekly', usedPct: 12, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '21:33 on 3 May' },

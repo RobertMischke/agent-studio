@@ -402,11 +402,17 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     ww: QuotaWindowDisplay | undefined,
     primary: QuotaPrimaryDisplay,
   ): QuotaCardState {
-    if (hasError) return 'error';
-    if (!sw && !ww && !primary.hasValue) return 'unavailable';
+    const hasNumbers = !!sw || !!ww || primary.hasValue;
+    // 'error' means "nothing to show". Since a failed probe now keeps the
+    // last-good windows (AGT-2679), a card that still has numbers must keep
+    // reporting them: swallowing a 95%-used window into a generic error state
+    // would mute exactly the signal the operator needs. Such a card reads as
+    // 'stale' instead, and the tooltip carries the failure.
+    if (hasError && !hasNumbers) return 'error';
+    if (!hasNumbers) return 'unavailable';
     if (tone === 'hot') return 'hot';
     if (tone === 'warn') return 'warn';
-    if (stale) return 'stale';
+    if (stale || hasError) return 'stale';
     return 'idle';
   }
 

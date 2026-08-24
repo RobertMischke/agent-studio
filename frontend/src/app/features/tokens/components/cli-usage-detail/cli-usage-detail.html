@@ -123,8 +123,17 @@
           </button>
         </header>
 
-        @if (row.error) {
-          <div class="cud__error">{{ row.error }}</div>
+        @if (row.staleMarker) {
+          <!-- The probe failed but the numbers below are real, just older. Show an
+               explicit stale marker and keep the raw failure in the tooltip. -->
+          <div class="cud__stale"
+               [cacTooltip]="row.error ?? ''"
+               [attr.data-testid]="'cli-usage-detail-stale-' + row.cliType">
+            {{ row.staleMarker }}
+          </div>
+        } @else if (row.error) {
+          <div class="cud__error"
+               [attr.data-testid]="'cli-usage-detail-error-' + row.cliType">{{ row.error }}</div>
         }
 
         <div class="cud__grid">

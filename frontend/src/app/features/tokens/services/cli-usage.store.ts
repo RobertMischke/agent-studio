@@ -28,6 +28,18 @@ export interface CliUsageQuotaRow {
   stale: boolean;
   source: string | null;
   error: string | null;
+  /**
+   * The last probe failed and `windows` are carried over from an earlier good
+   * reading (AGT-2679). Never blank the numbers on a failed probe: old-but-real
+   * beats an error string where a percentage used to be.
+   */
+  probeFailed: boolean;
+  /**
+   * Short operator-facing marker for a failed probe, e.g.
+   * "probe failed 21:07, codex-cli 0.149.0". Null while the probe is healthy.
+   * The full error text belongs in the tooltip, not on the surface.
+   */
+  staleMarker: string | null;
   windows: QuotaWindow[];
   primary: QuotaWindow | null;
   primaryPct: number | null;
@@ -256,7 +268,13 @@ export class CliUsageStore {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
     const stale = !s.fetchedAt || ageMs > ttlMs;
-    const freshness = !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
+    const probeFailed = s.stale === true;
+    // A degraded row reports the age of the numbers it is actually showing,
+    // not the age of the failed probe that replaced them.
+    const goodMs = s.lastGoodAt ? Date.parse(s.lastGoodAt) : NaN;
+    const freshness = probeFailed && Number.isFinite(goodMs)
+      ? 'measured ' + this.formatAgo(Math.max(0, now - goodMs))
+      : !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
     const primary = s.windows.length > 0
       ? [...s.windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1))[0]
       : null;
@@ -271,11 +289,28 @@ export class CliUsageStore {
       freshness,
       source: s.source,
       error: s.error,
+      probeFailed,
+      staleMarker: probeFailed ? this.staleMarkerFor(s) : null,
       windows: s.windows,
       primary,
       primaryPct,
       primaryTone: this.toneFor(primaryPct),
     };
+  }
+
+  /**
+   * "probe failed 21:07, codex-cli 0.149.0" - when the probe failed, in the
+   * operator's own timezone, and which CLI build it was talking to. Naming the
+   * version here is what makes CLI-version drift visible at a glance instead of
+   * only in the backend log (AGT-2679).
+   */
+  private staleMarkerFor(s: QuotaSnapshot): string {
+    const failedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
+    const at = Number.isFinite(failedMs)
+      ? new Date(failedMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : null;
+    const when = at ? `probe failed ${at}` : 'probe failed';
+    return s.cliVersion ? `${when}, ${s.cliVersion}` : when;
   }
 
   private toneFor(pct: number | null): 'ok' | 'warn' | 'hot' | 'unknown' {

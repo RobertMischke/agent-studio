@@ -293,6 +293,18 @@
   font-size: 12px;
 }
 
+/* Failed probe, but the windows below still hold real (older) numbers. Warning
+   tone rather than error: the data is usable, it is just not current. */
+.cud__stale {
+  margin-top: 10px;
+  padding: 8px 10px;
+  color: var(--notify-warning-icon-fg);
+  background: var(--notify-warning-tint);
+  border: 1px solid var(--notify-warning-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
 .cud__empty {
   font-size: 12px;
 }

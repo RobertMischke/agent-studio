@@ -63,6 +63,32 @@ public record QuotaSnapshot
 
     /// <summary>Human-readable reason a snapshot was flagged <see cref="Suspicious"/>.</summary>
     public string? SuspiciousReason { get; init; }
+
+    /// <summary>
+    /// Version string of the CLI that produced this snapshot ("codex-cli 0.149.0"),
+    /// as reported by <c>--version</c> at probe time. Recorded so CLI-version drift
+    /// is attributable: when a probe starts failing or a panel stops parsing, the
+    /// snapshot itself says which build it was talking to (AGT-2679).
+    /// </summary>
+    public string? CliVersion { get; init; }
+
+    /// <summary>
+    /// True when <see cref="Windows"/>/<see cref="Plan"/> are carried over from an
+    /// earlier successful probe because the most recent probe failed. The numbers
+    /// are real but old; <see cref="LastGoodAt"/> says how old and <see cref="Error"/>
+    /// says why the refresh failed.
+    ///
+    /// Distinct from <see cref="Suspicious"/>: suspicious means "these numbers may be
+    /// wrong", stale means "these numbers were right at <see cref="LastGoodAt"/> and we
+    /// could not get newer ones".
+    /// </summary>
+    public bool Stale { get; init; }
+
+    /// <summary>
+    /// When the carried-over <see cref="Windows"/> were actually measured. Null on a
+    /// fresh snapshot (then <see cref="FetchedAt"/> is the measurement time).
+    /// </summary>
+    public DateTime? LastGoodAt { get; init; }
 }
 
 public record QuotaReport

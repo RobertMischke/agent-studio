@@ -91,47 +91,61 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
 
     public override string CliType => CliTypes.Claude;
 
+    private const int InitialIdleMs = 8000;
+
+    private static readonly Regex TrustPattern  = new(@"trust\s*this\s*folder|Quick\s*safety\s*check", RegexOptions.IgnoreCase);
+    private static readonly Regex ThemePattern  = new(@"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|match\s*terminal", RegexOptions.IgnoreCase);
+    private static readonly Regex UpsellPattern = new(@"fullscreen\s*renderer|Flicker-?free|Try\s*the\s*new|What'?s\s*new|Not\s*now|Esc\s*to\s*cancel", RegexOptions.IgnoreCase);
+    private static readonly Regex ReadyPattern  = new(@"\?\s*for\s*shortcuts|for\s*shortcuts|esc\s*to\s*interrupt", RegexOptions.IgnoreCase);
+    private static readonly Regex UsagePattern  = new(
+        @"Current\s*session|Current\s*week|Settings\s*Status\s*Config\s*Usage\s*Stats",
+        RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Drive claude past its startup gates, THEN run <c>/usage</c>. Claude Code 2.1.x can
+    /// interpose several interactive screens between spawn and the ready REPL:
+    /// folder-trust dialog -> first-run THEME picker -> feature/what's-new upsells
+    /// (e.g. "Try the new fullscreen renderer?") -> ready prompt.
+    /// The old flow fired /usage on the WELCOME BANNER, but the banner is already on
+    /// screen during onboarding, so /usage leaked into the wizard and windows came back
+    /// empty. Instead we dismiss each known gate with a guarded step (no-op + no key-leak
+    /// when that gate isn't showing) and only send /usage once the READY affordance
+    /// ("? for shortcuts", which no wizard renders) appears.
+    /// <list type="bullet">
+    ///   <item>Trust / theme steps are SendKeysOnlyIfMatched: once accepted, Claude persists
+    ///   the choice (~/.claude.json) and the dialog never returns; blindly sending keys
+    ///   would leak them into the chat input and corrupt the following /usage.</item>
+    ///   <item>Upsells are declined with Esc (never Enter: the highlighted default may be
+    ///   "Yes", and switching on the fullscreen/alt-screen renderer would break the PTY
+    ///   snapshot we scrape). Two passes because the CLI can stack more than one.</item>
+    ///   <item>send-usage is NOT guarded: if the ready-affordance text shifts in a future
+    ///   release we still fire /usage after the wait rather than hang forever.</item>
+    /// </list>
+    /// Static so <see cref="BudgetMs"/> can measure the sequence - every gate that does
+    /// not appear costs its full wait timeout, and those add up well past the flat
+    /// deadline the caller used to impose (AGT-2679).
+    /// </summary>
+    private static readonly ProbeStep[] Steps =
+    [
+        new ProbeStep("await-trust",      WaitForPattern: TrustPattern,  WaitTimeoutMs: 4000, SendKeys: "1<Enter>",      SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
+        new ProbeStep("dismiss-theme",    WaitForPattern: ThemePattern,  WaitTimeoutMs: 3500, SendKeys: "<Enter>",       SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
+        new ProbeStep("dismiss-upsell-1", WaitForPattern: UpsellPattern, WaitTimeoutMs: 3500, SendKeys: "<Esc>",         SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
+        new ProbeStep("dismiss-upsell-2", WaitForPattern: UpsellPattern, WaitTimeoutMs: 2500, SendKeys: "<Esc>",         SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
+        new ProbeStep("send-usage",       WaitForPattern: ReadyPattern,  WaitTimeoutMs: 10000, SendKeys: "/usage<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
+        new ProbeStep("await-usage",      WaitForPattern: UsagePattern,  WaitTimeoutMs: 8000,  SettleIdleMs: 1200, SettleTimeoutMs: 5000)
+    ];
+
+    /// <summary>Worst-case duration of <see cref="Steps"/>; exposed statically so the
+    /// budget-vs-deadline invariant is testable without spawning a CLI.</summary>
+    public static int StepBudgetMs => WorstCaseDurationMs(Steps, InitialIdleMs);
+
+    public override int BudgetMs => StepBudgetMs;
+
     public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
     {
         try
         {
-            var trustPattern  = new Regex(@"trust\s*this\s*folder|Quick\s*safety\s*check", RegexOptions.IgnoreCase);
-            var themePattern  = new Regex(@"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|match\s*terminal", RegexOptions.IgnoreCase);
-            var upsellPattern = new Regex(@"fullscreen\s*renderer|Flicker-?free|Try\s*the\s*new|What'?s\s*new|Not\s*now|Esc\s*to\s*cancel", RegexOptions.IgnoreCase);
-            var readyPattern  = new Regex(@"\?\s*for\s*shortcuts|for\s*shortcuts|esc\s*to\s*interrupt", RegexOptions.IgnoreCase);
-            var usagePattern  = new Regex(
-                @"Current\s*session|Current\s*week|Settings\s*Status\s*Config\s*Usage\s*Stats",
-                RegexOptions.IgnoreCase);
-
-            // Drive claude past its startup gates, THEN run /usage. Claude Code 2.1.x can
-            // interpose several interactive screens between spawn and the ready REPL:
-            //   folder-trust dialog  →  first-run THEME picker  →  feature/what's-new upsells
-            //     (e.g. "Try the new fullscreen renderer?")  →  ready prompt.
-            // The old flow fired /usage on the WELCOME BANNER, but the banner is already on
-            // screen during onboarding, so /usage leaked into the wizard and windows came back
-            // empty. Instead we dismiss each known gate with a guarded step (no-op + no key-leak
-            // when that gate isn't showing) and only send /usage once the READY affordance
-            // ("? for shortcuts", which no wizard renders) appears.
-            //
-            //  - Trust / theme steps are SendKeysOnlyIfMatched: once accepted, Claude persists
-            //    the choice (~/.claude.json) and the dialog never returns; blindly sending keys
-            //    would leak them into the chat input and corrupt the following /usage.
-            //  - Upsells are declined with <Esc> (never <Enter>: the highlighted default may be
-            //    "Yes", and switching on the fullscreen/alt-screen renderer would break the PTY
-            //    snapshot we scrape). Two passes because the CLI can stack more than one.
-            //  - send-usage is NOT guarded: if the ready-affordance text shifts in a future
-            //    release we still fire /usage after the wait rather than hang forever.
-            var snap = await ProbeWithStepsAsync(
-            [
-                new ProbeStep("await-trust",      WaitForPattern: trustPattern,  WaitTimeoutMs: 4000, SendKeys: "1<Enter>",      SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
-                new ProbeStep("dismiss-theme",    WaitForPattern: themePattern,  WaitTimeoutMs: 3500, SendKeys: "<Enter>",       SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
-                new ProbeStep("dismiss-upsell-1", WaitForPattern: upsellPattern, WaitTimeoutMs: 3500, SendKeys: "<Esc>",         SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
-                new ProbeStep("dismiss-upsell-2", WaitForPattern: upsellPattern, WaitTimeoutMs: 2500, SendKeys: "<Esc>",         SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
-                new ProbeStep("send-usage",       WaitForPattern: readyPattern,  WaitTimeoutMs: 10000, SendKeys: "/usage<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
-                new ProbeStep("await-usage",      WaitForPattern: usagePattern,  WaitTimeoutMs: 8000,  SettleIdleMs: 1200, SettleTimeoutMs: 5000)
-            ],
-            initialIdleMs: 8000,
-            ct);
+            var snap = await ProbeWithStepsAsync(Steps, InitialIdleMs, ct);
 
             string? plan = PlanRegex.Match(snap) is { Success: true } pm
                 ? NormalizePlan(pm.Groups[1].Value)
@@ -185,22 +199,29 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
 
             return new QuotaSnapshot
             {
-                CliType   = CliType,
-                Plan      = plan,
-                Source    = "/usage",
-                RawSample = TruncateForDebug(snap),
-                Windows   = windows,
-                Error     = windows.Count == 0 && LooksLikeOnboardingWizard(snap)
+                CliType    = CliType,
+                Plan       = plan,
+                Source     = "/usage",
+                RawSample  = TruncateForDebug(snap),
+                Windows    = windows,
+                CliVersion = LastCliVersion,
+                Error      = windows.Count == 0 && LooksLikeOnboardingWizard(snap)
                     ? "Claude CLI is showing its first-run onboarding/feature wizard, so /usage never ran. Finish Claude Code onboarding, or update the quota probe's dismiss steps."
                     : (plan == null && windows.Count == 0)
-                        ? "Could not parse plan or quota info from Claude /usage panel."
+                        ? $"Could not parse the Claude /usage panel ({LastCliVersion ?? "unknown version"})."
                         : null
             };
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Claude quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/usage", Error = ex.Message };
+            _logger.LogWarning(ex, "Claude quota probe failed (cliVersion={Version})", LastCliVersion ?? "<unknown>");
+            return new QuotaSnapshot
+            {
+                CliType    = CliType,
+                Source     = "/usage",
+                CliVersion = LastCliVersion,
+                Error      = QuotaDegradationPolicy.DescribeFailure(ex, CliType, LastCliVersion)
+            };
         }
     }
 

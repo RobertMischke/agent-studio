@@ -84,12 +84,27 @@ public sealed class QuotaService
     /// Returns the cached snapshot for every probe immediately, kicking off a background
     /// re-probe for any entry that is missing or older than the TTL.
     /// </summary>
+    /// <remarks>
+    /// AGT-2679: the refresh deliberately does NOT observe the caller's
+    /// <paramref name="ct"/>. This is a GET-serving path, so that token is the
+    /// request's <c>RequestAborted</c>; wiring it into a fire-and-forget probe meant
+    /// every completed request cancelled the probe it had just started, and the
+    /// resulting <c>TaskCanceledException</c> was cached as the operator-facing
+    /// error "A task was canceled.". A background refresh outlives the request that
+    /// triggered it and is bounded by its own budget in <see cref="ProbeOnceAsync"/>.
+    ///
+    /// <c>Task.Run</c> is likewise load-bearing: <see cref="RefreshAsync"/> runs
+    /// synchronously until the PTY spawn, and that prefix includes
+    /// <c>TestCliPath()</c>, which shells out to <c>&lt;cli&gt; --version</c> and blocks
+    /// up to 5 s per CLI. On the request thread that turned a "serve from cache"
+    /// GET into a multi-second (worst case: multi-CLI) stall.
+    /// </remarks>
     public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
     {
         foreach (var k in _probes.Keys)
         {
             var stale = !_cache.TryGetValue(k, out var s) || (DateTime.UtcNow - s.FetchedAt) > _ttl;
-            if (stale) _ = RefreshAsync(k, ct);
+            if (stale) _ = Task.Run(() => RefreshAsync(k, CancellationToken.None), CancellationToken.None);
         }
         return GetCached();
     }
@@ -115,6 +130,21 @@ public sealed class QuotaService
         {
             _cache.TryGetValue(cliType, out var previous);
             var snap = await ProbeOnceAsync(probe, ct);
+
+            // A probe that came back empty-with-an-error did not throw, but it also
+            // learned nothing. Treat it exactly like a thrown failure so the
+            // operator keeps the last-good numbers instead of watching the display
+            // blank out (AGT-2679).
+            if (snap.Windows.Count == 0 && !string.IsNullOrEmpty(snap.Error))
+            {
+                var degraded = QuotaDegradationPolicy.Degrade(
+                    previous, cliType, snap.Error, snap.CliVersion ?? ProbeVersion(probe), DateTime.UtcNow);
+                LogDegraded(cliType, degraded);
+                _cache[cliType] = degraded;
+                PersistCache();
+                return degraded;
+            }
+
             snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
             snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
             _cache[cliType] = snap;
@@ -124,17 +154,17 @@ public sealed class QuotaService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Quota probe for {Cli} threw", cliType);
-            // Latch a prior suspicious flag onto the error snapshot. A probe that
-            // fails right after a ground-truth invalidation (AGT-2064) must not
-            // silently drop the block and re-open the admission gate.
+            // Degrade rather than replace: the last-good windows are still the best
+            // information available, and a bare exception message is not an
+            // operator-facing sentence (AGT-2679). Degrade also latches a prior
+            // suspicious flag, so a probe that fails right after a ground-truth
+            // invalidation (AGT-2064) cannot silently re-open the admission gate.
             _cache.TryGetValue(cliType, out var prior);
-            var snap = new QuotaSnapshot
-            {
-                CliType = cliType,
-                Error = ex.Message,
-                Suspicious = prior?.Suspicious ?? false,
-                SuspiciousReason = prior?.Suspicious == true ? prior.SuspiciousReason : null
-            };
+            var version = ProbeVersion(probe);
+            var snap = QuotaDegradationPolicy.Degrade(
+                prior, cliType, QuotaDegradationPolicy.DescribeFailure(ex, cliType, version),
+                version, DateTime.UtcNow);
+            LogDegraded(cliType, snap);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -142,11 +172,45 @@ public sealed class QuotaService
         finally { sem.Release(); }
     }
 
+    /// <summary>
+    /// Run one probe under a hard deadline.
+    /// </summary>
+    /// <remarks>
+    /// AGT-2679: the deadline used to be a flat 45 s, but the codex step sequence
+    /// can legitimately take ~57 s when its pattern waits all run to timeout (a
+    /// slow CLI start, or a TUI that changed its startup screen). The probe was
+    /// therefore killed mid-step and reported a bare cancellation rather than a
+    /// parse result. Each probe now publishes its own worst case via
+    /// <see cref="IQuotaProbe.BudgetMs"/>; the grace factor covers PTY spawn and
+    /// scheduling overhead on top of the step waits themselves.
+    /// </remarks>
     private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(45));
+        cts.CancelAfter(TimeSpan.FromMilliseconds(probe.BudgetMs + ProbeGraceMs));
         return await probe.ProbeAsync(cts.Token);
+    }
+
+    /// <summary>Headroom over a probe's declared step budget for spawn + scheduling overhead.</summary>
+    private const int ProbeGraceMs = 10_000;
+
+    private static string? ProbeVersion(IQuotaProbe probe)
+        => probe is QuotaProbeBase b ? b.LastCliVersion : null;
+
+    private void LogDegraded(string cliType, QuotaSnapshot snap)
+    {
+        if (snap.Stale)
+        {
+            _logger.LogWarning(
+                "quota_probe_degraded cli={Cli} cliVersion={Version} lastGoodAt={LastGoodAt}: serving last-good windows, error={Error}",
+                cliType, snap.CliVersion ?? "<unknown>", snap.LastGoodAt, snap.Error);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "quota_probe_failed cli={Cli} cliVersion={Version}: no prior snapshot to fall back on, error={Error}",
+                cliType, snap.CliVersion ?? "<unknown>", snap.Error);
+        }
     }
 
     /// <summary>

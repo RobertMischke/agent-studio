@@ -44,7 +44,8 @@ describe('LoadDistributionComponent', () => {
     const component = TestBed.createComponent(LoadDistributionComponent).componentInstance;
     const projected = component.projection({
       cliType: 'codex', icon: '', label: 'Codex', plan: null, fetchedAt: null, freshness: '', stale: false,
-      source: null, error: null, primary: null, primaryPct: 20, primaryTone: 'ok',
+      source: null, error: null, probeFailed: false, staleMarker: null,
+      primary: null, primaryPct: 20, primaryTone: 'ok',
       windows: [{ label: '5h', usedPct: 20, used: null, limit: null, unit: null, resetAt: new Date(Date.now() + 2.5 * 3_600_000).toISOString(), resetLabel: 'in 2h 30m' }],
     }, '5h');
     expect(projected).toBeCloseTo(40, 0);

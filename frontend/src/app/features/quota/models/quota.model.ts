@@ -39,6 +39,22 @@ export interface QuotaSnapshot {
    */
   suspicious?: boolean;
   suspiciousReason?: string | null;
+  /**
+   * Version of the CLI the probe talked to ("codex-cli 0.149.0"). Lets the UI
+   * attribute a failure to a specific CLI build. Older backends omit the field.
+   */
+  cliVersion?: string | null;
+  /**
+   * True when `windows` / `plan` are carried over from an earlier successful
+   * probe because the latest probe failed (AGT-2679). The numbers are real but
+   * were measured at `lastGoodAt`; `error` says why the refresh failed.
+   *
+   * Distinct from the locally computed TTL staleness in
+   * `CliUsageQuotaRow.stale` - this one means "the probe itself failed".
+   */
+  stale?: boolean;
+  /** When the carried-over windows were actually measured. */
+  lastGoodAt?: string | null;
 }
 
 export interface QuotaReport {
