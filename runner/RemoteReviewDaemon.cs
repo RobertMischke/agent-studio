@@ -11,12 +11,27 @@ public sealed class RemoteReviewDaemon
     private readonly RunnerOptions _options;
     private readonly TaskServerClient _client;
     private readonly Action<string> _log;
+    private readonly Func<int, TaskServerConnectivitySnapshot?, HostTelemetrySample?>? _telemetryProbe;
 
-    public RemoteReviewDaemon(RunnerOptions options, TaskServerClient client, Action<string> log)
+    /// <param name="telemetryProbe">
+    /// Test seam: deterministic host telemetry (active slots, connectivity ->
+    /// sample) for the load-aware admission gate. The real
+    /// <see cref="HostTelemetrySampler"/> reads <c>/proc/loadavg</c>, so
+    /// admission genuinely depends on host state: on Windows there is no load
+    /// average at all (the gate stays closed), and on an idle Linux box Load1
+    /// can be exactly 0.00 (a gate that should close never does). Null keeps
+    /// the production sampler.
+    /// </param>
+    public RemoteReviewDaemon(
+        RunnerOptions options,
+        TaskServerClient client,
+        Action<string> log,
+        Func<int, TaskServerConnectivitySnapshot?, HostTelemetrySample?>? telemetryProbe = null)
     {
         _options = options;
         _client = client;
         _log = log;
+        _telemetryProbe = telemetryProbe;
     }
 
     public async Task RunAsync(CancellationToken shutdown)
@@ -60,6 +75,11 @@ public sealed class RemoteReviewDaemon
         {
             try
             {
+                if (_telemetryProbe is not null)
+                {
+                    latestTelemetry = _telemetryProbe(active.Count, connectivity.Snapshot);
+                    return latestTelemetry;
+                }
                 latestTelemetry = force
                     ? telemetry.SampleNow(active.Count, connectivity.Snapshot)
                     : telemetry.SampleIfDue(active.Count, connectivity.Snapshot) ?? latestTelemetry;
