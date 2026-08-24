@@ -84,6 +84,14 @@ The `ATP_ALLOW_DEV_BACKEND=1` flag is required. `api.sh` refuses to boot a check
 
 Other commands: `./api.sh stop`, `./api.sh restart`. Backend listens on `http://localhost:5030` by default (`PORT` env var overrides it; `api.sh` pins the default to 5031 automatically if your folder name ends in `-stable`, and refuses a mismatched inherited `PORT` unless you set `API_PORT_OVERRIDE=1`).
 
+Every command verifies its outcome and exits non-zero with a named reason when it cannot (AGT-2678). Concretely:
+
+- `stop` kills the whole process tree of the listener and of every backend process of this checkout on this port, then proves the port is free with a TCP connect probe. It does not depend on resolving a PID, so it stays honest when `lsof`/`ss`/`netstat` is missing or looking at a different process namespace.
+- `start` refuses to boot onto a port owned by a foreign process instead of launching a second bind that fails while the squatter keeps answering `/healthz`. After the health poll it proves the answering process is the one it just launched.
+- `restart` asserts the process was actually replaced, comparing the `X-Agent-Studio-Process-Id` and `X-Agent-Studio-Process-Start` headers that `/healthz` publishes.
+
+`bash tools/api-restart-selfcheck.sh` is the executable proof of that contract on your machine. It exercises the guards against stub processes on dynamic ports, then boots a real backend on a free port against an isolated temp workspace and proves a restart replaces the process. `--quick` runs the guards only (no .NET build, a few seconds). Run it after touching `api.sh` or when a restart looks suspicious; the failure mode it exists for is a restart that reports success while the old process keeps serving, which is documented in [troubleshooting.md](./troubleshooting.md#apish-restarted-successfully-but-the-old-process-is-still-serving).
+
 ### 2.5 Start the frontend
 
 ```sh
@@ -164,7 +172,8 @@ Scripting task creation instead of clicking through the dialog: the Task API ski
 | Claude quota panel is empty / plan shows unknown | Claude CLI never finished its first-run onboarding wizard | Run `claude` interactively once and click through to the ready prompt; see step 1. Full detail: [troubleshooting.md](./troubleshooting.md#claude-quota-panel-is-empty-plan-shows-unknown). |
 | `npm ci` fails while resolving `coding-agent-chat` | The npm registry is unavailable or the lock file and manifest have drifted | Restore registry access and verify `frontend/package.json` and `frontend/package-lock.json` agree. Do not add a relative `file:` dependency as a workaround. |
 | `claude` / `gemini` command is missing or broken on Windows after an interrupted npm update | Half-completed npm install left orphan shim files or a stub binary | `bash tools/check-cli-shims.sh` - self-heals and re-verifies with `claude --version`. |
-| Port 5030 / 4010 (or 5031 / 4011) already in use | A previous `dotnet run` or `ng serve` is still listening | `./api.sh stop` (kills anything on the pinned port, not just the tracked PID); for the frontend, stop the other `ng serve` or pass `--port <n>`. |
+| Port 5030 / 4010 (or 5031 / 4011) already in use | A previous `dotnet run` or `ng serve` is still listening | `./api.sh stop` (kills the whole tree on the pinned port, not just the tracked PID, and exits non-zero if the port is still occupied afterwards); for the frontend, stop the other `ng serve` or pass `--port <n>`. |
+| `./api.sh restart` reports success but the backend still serves old code or ignores config changes | Pre-AGT-2678 hollow restart: the old process never died and answered the health probe | Update to the current `api.sh` and run `bash tools/api-restart-selfcheck.sh`. Full detail: [troubleshooting.md](./troubleshooting.md#apish-restarted-successfully-but-the-old-process-is-still-serving). |
 | A newly-added project's mode toggle returns `400 Invalid project or mode` | Per-project runners are only created at backend startup | `./api.sh restart`. Full detail: [troubleshooting.md](./troubleshooting.md#put-apirunnerprojectmode-returns-400). |
 
 For anything not on this short list, the full FAQ is [troubleshooting.md](./troubleshooting.md), and CLI-specific quirks (Codex's Windows sandbox setting, Copilot's auth, Gemini's stdout buffering) are in [onboard-an-agent-cli.md](./onboard-an-agent-cli.md).

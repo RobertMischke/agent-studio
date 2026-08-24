@@ -2,6 +2,8 @@
 
 namespace AgentStudio.Host;
 
+using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using AgentStudio.Registry;
 using AgentStudio.Security;
@@ -47,6 +49,16 @@ public static class SystemEndpoints
         // code this process actually loaded.
         var buildIdentity = BuildIdentity.Load(app.Configuration);
         BuildIdentity ReadBuildIdentity() => buildIdentity;
+
+        // Identity of the OS process that answers, captured once at startup.
+        // External lifecycle scripts (api.sh) cannot always see the owning pid:
+        // a backend started on Windows is invisible from WSL, a container, or
+        // another user's session, and a health probe alone cannot tell a fresh
+        // process from an old one that never died. Publishing pid + start time
+        // on /healthz turns "did the restart replace the process" into an
+        // observable fact instead of an inference (AGT-2678).
+        var processStartedAt = ReadProcessStart();
+        var processId = Environment.ProcessId.ToString(CultureInfo.InvariantCulture);
         object About() {
             var identity = ReadBuildIdentity();
             return new {
@@ -203,6 +215,8 @@ public static class SystemEndpoints
             var identity = ReadBuildIdentity();
             context.Response.Headers["X-Agent-Studio-Tag"] = identity.Tag;
             context.Response.Headers["X-Agent-Studio-Commit"] = identity.Commit;
+            context.Response.Headers["X-Agent-Studio-Process-Id"] = processId;
+            context.Response.Headers["X-Agent-Studio-Process-Start"] = processStartedAt;
             return Results.Ok("ok");
         });
 
@@ -214,5 +228,27 @@ public static class SystemEndpoints
             Results.Text(
                 merge.IsMergeGateBusy ? "gate-busy" : "idle",
                 "text/plain"));
+    }
+
+    /// <summary>
+    /// Round-trip-safe process start timestamp. <see cref="Process.StartTime"/>
+    /// needs permissions the host may not have on every platform, so a failure
+    /// falls back to "now", which is still captured once at startup and
+    /// therefore still differs between two runs of the process.
+    /// </summary>
+    private static string ReadProcessStart()
+    {
+        DateTimeOffset startedAt;
+        try
+        {
+            using var current = Process.GetCurrentProcess();
+            startedAt = current.StartTime.ToUniversalTime();
+        }
+        catch (Exception)
+        {
+            startedAt = DateTimeOffset.UtcNow;
+        }
+
+        return startedAt.ToString("O", CultureInfo.InvariantCulture);
     }
 }

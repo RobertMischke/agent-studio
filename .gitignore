@@ -2,7 +2,7 @@ frontend/build_log.txt
 .api.pid
 .api.log*
 .api.*.pid
-.api.*.log
+.api.*.log*
 .frontend.*.pid
 .frontend.*.log
 # ASS-1715: isolated per-worktree test stack state (ports env, frontend pid/log,
@@ -20,6 +20,11 @@ tools/*
 # pre-flight before the backend boots. Tracked so stable picks it up via
 # update-stable.sh; everything else under tools/ stays local.
 !tools/check-cli-shims.sh
+# Whitelisted: proves that api.sh restart really replaces the backend process
+# (AGT-2678). Tracked because every checkout that operates a backend needs to
+# be able to verify its own lifecycle, and because stable picks it up through
+# update-stable.sh.
+!tools/api-restart-selfcheck.sh
 # Whitelisted: the ATB0001 silent-catch Roslyn analyzer. The backend csproj
 # references it as an Analyzer ProjectReference, so it must be tracked or the
 # build breaks on a fresh checkout.

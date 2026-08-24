@@ -81,7 +81,13 @@ cmd_stop() {
     exit 0
   fi
   log "stopping dev backend in ${DEV_CHECKOUT}"
-  ( cd "${DEV_CHECKOUT}" && PORT="${DEV_PORT}" ./api.sh stop ) || true
+  # api.sh stop exits non-zero when it could not free the port. Swallowing that
+  # is how a Playwright run proceeds against the backend it believes it stopped
+  # (AGT-2678), so the failure is propagated to the caller.
+  if ! ( cd "${DEV_CHECKOUT}" && PORT="${DEV_PORT}" ./api.sh stop ); then
+    log "ERROR: dev backend on :${DEV_PORT} is still serving after api.sh stop"
+    exit 1
+  fi
 }
 
 print_usage() {

@@ -93,12 +93,17 @@ printf '%s\n' patched > "$ATP_TEST_PACKAGE_FILE"
 EOF
 chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$fake_bin/npm"
 
+# A port nothing listens on, so the default rollout runs see a stopped backend.
+free_port=$(node -e 'const s=require("node:net").createServer();s.listen(0,"127.0.0.1",()=>{const p=s.address().port;s.close(()=>console.log(p))})')
+
 run_update() {
   env \
     ATP_DEVSPACE_DIR="$devspace" \
     ATP_STABLE_CHECKOUT="$stable_checkout" \
     ATP_STOP_SCRIPT="$devspace/stop-stable.sh" \
     ATP_START_SCRIPT="$devspace/start-stable.sh" \
+    ATP_STABLE_BACKEND_URL="http://127.0.0.1:$free_port" \
+    ATP_STABLE_STOP_TIMEOUT=2 \
     ATP_BOOT_PROBE_SCRIPT="$probe" \
     ATP_BOOT_PROBE_SETTLE_MS=0 \
     ATP_TEST_STOP_MARKER="$stop_marker" \
@@ -142,5 +147,46 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
+
+# A stop wrapper that reports success without stopping anything must not be
+# allowed to look like a rollout. Before AGT-2678 the updater fast-forwarded,
+# rebuilt against a live process holding the build output, and then reported
+# health from the backend that never went away.
+printf '%s\n' 'release after a hollow stop' > "$source_checkout/release.txt"
+git -C "$source_checkout" commit --quiet -am 'release after a hollow stop'
+git -C "$source_checkout" push --quiet origin main
+
+node -e '
+  const net = require("node:net");
+  const srv = net.createServer(() => {});
+  srv.listen(Number(process.argv[1]), "127.0.0.1", () => {
+    process.stdout.write("up\n");
+    setTimeout(() => { srv.close(); process.exit(0); }, 60000);
+  });
+' "$free_port" > "$test_root/squatter.log" &
+squatter_pid=$!
+trap 'kill "$squatter_pid" 2>/dev/null || true; rm -rf -- "$test_root"' EXIT HUP INT TERM
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  grep -q up "$test_root/squatter.log" 2>/dev/null && break
+  sleep 0.3
+done
+grep -q up "$test_root/squatter.log" || { printf '%s\n' 'fixture listener did not come up' >&2; exit 1; }
+
+head_before_hollow=$(git -C "$stable_checkout" rev-parse HEAD)
+set +e
+hollow_output=$(run_update)
+hollow_rc=$?
+set -e
+
+test "$hollow_rc" -ne 0
+printf '%s' "$hollow_output" | grep -q 'still accepts connections'
+if printf '%s' "$hollow_output" | grep -q 'Stable started and healthy'; then
+  printf '%s\n' 'updater reported health after a hollow stop' >&2
+  exit 1
+fi
+# It must refuse BEFORE touching the checkout, so nothing is rebuilt on top of
+# a process that still holds the previous build output.
+test "$(git -C "$stable_checkout" rev-parse HEAD)" = "$head_before_hollow"
+kill "$squatter_pid" 2>/dev/null || true
 
 printf '%s\n' 'update-stable tests passed'

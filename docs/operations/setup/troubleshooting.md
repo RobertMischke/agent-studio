@@ -67,6 +67,28 @@ Cause: `TaskRunnerService` only creates per-project runners at startup. Hot-relo
 
 Fix: restart the backend (`./api.sh restart`). Tracked for a durable fix as `fix-runner-mode-rejects-newly-added-projects`. Full context: [onboard-a-project.md](./onboard-a-project.md) Step 2.
 
+## "api.sh restarted successfully but the old process is still serving"
+
+Symptom: `./api.sh restart` prints `API stopped.` and then `API is successfully started and healthy!`, but the backend keeps serving the code and configuration it had before. Rollouts appear to succeed while old code stays live, edits to `project-settings.json` never take effect, and the stable restart watchdog reports healthy restarts that changed nothing. On 2026-08-23 a stable process from 12:34 survived two restarts this way; an earlier zombie (PID 28116) also kept the build output DLLs open, so the rebuild could not copy over them.
+
+Cause: before AGT-2678 the lifecycle script inferred success instead of verifying it, in three places.
+
+1. Stop killed a single PID and never re-checked. On POSIX, signalling the `dotnet run` wrapper leaves the OrchestratorApi child holding both the port and the DLLs.
+2. PID discovery was single-source. When `lsof`/`ss`/`netstat` was missing, unprivileged, or looking at a different process namespace (a Windows backend controlled from WSL, a container, another user's session), discovery returned nothing and the sweep silently did nothing.
+3. Start trusted an HTTP 200 from the port. After a hollow stop the new `dotnet run` died with "address already in use" while the old process answered `/healthz`, so the health poll passed and the script reported a successful start.
+
+Fix: this is fixed in [api.sh](../../../api.sh). Stop now kills whole process trees plus every backend process of this checkout on this port, then proves the port is free with a TCP connect probe that does not depend on resolving any PID. Start refuses to boot onto an occupied port and, after the health poll, proves the answering process is the one it just launched. Restart asserts the process identity actually changed and exits non-zero when it did not. Every command now ends in a verified state or a non-zero exit with a named reason.
+
+What to do when you hit the new failure output:
+
+- `stop could not free port <n> ... no owning PID is visible from this shell`: the process lives outside this shell's view. Stop it where it was started (a Windows-hosted backend cannot be killed from WSL or from a container), then re-run.
+- `port <n> is already owned by a process that is not this checkout's backend`: something else took the port. Free it or set `PORT` to a free one. Start deliberately does not kill processes it does not own.
+- `restart did NOT replace the process`: the old backend is still serving. Treat any rollout or config change you believed had gone live as not applied.
+
+How to verify the lifecycle on a machine: `bash tools/api-restart-selfcheck.sh`. It exercises the guards against stub processes on dynamic ports and then boots a real backend on a free port against an isolated temp workspace, restarts it, and proves the answering process changed (PID and process start time from the `X-Agent-Studio-Process-Id` / `X-Agent-Studio-Process-Start` headers on `/healthz`). Use `--quick` for the guards only.
+
+Related: orphan processes that hold file handles also block task folder moves; see [../common-problems/folder-move-lock-recurrence/](../common-problems/folder-move-lock-recurrence/).
+
 ## "Codex run lands as missing-terminal-sentinel"
 
 Symptom: a Codex job finishes the work cleanly but the run is marked `missing-terminal-sentinel` and lands in auto-review instead of `4-auto-review -> 5-human-review` with a clean Done.
