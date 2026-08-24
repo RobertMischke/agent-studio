@@ -1,3 +1,4 @@
+import { excludeEpics } from '../board';
 import type { GroupedJobs, TaskInfo } from '../../models/task.model';
 import { projectIdentity } from '../../services/project-identity.util';
 import type { StructuredTooltip } from 'coding-agent-chat/shared';
@@ -10,7 +11,7 @@ export interface ExplorerLaneCounts {
 
 /**
  * Hover help for the three Explorer board lane counters (grey Ready /
- * orange In Progress / green Human Review). Each entry feeds the canonical
+ * amber In Progress / purple Human Review). Each entry feeds the canonical
  * `[cacTooltip]` directive as a {@link StructuredTooltip} so the number says
  * which lane it counts and what that lane means. Prose mirrors the lane
  * concept docs (`docs/app/help/lane-guides/lane-{2-ready,3-progress,5-human-review}.md`).
@@ -73,7 +74,17 @@ export function buildProjectSidebarRows(
     return value;
   };
 
-  for (const [laneKey, lane] of Object.entries(grouped)) {
+  // Count exactly what the board lanes render. The board strips epic
+  // containers from every lane (`excludeEpics`, wired into `App.displayGrouped`)
+  // because an epic is a container, not a board work-item - it lives in the
+  // Epics view instead. Re-using that same function rather than re-deriving
+  // `kind !== 'epic'` here keeps the two surfaces in lockstep by construction:
+  // an operator saw a green lane dot on a project whose board lanes all showed
+  // 0 tasks, because the tree counted an epic parked in 5-human-review that no
+  // lane was allowed to draw (operator 2026-08-23).
+  const boardGrouped = excludeEpics(grouped);
+
+  for (const [laneKey, lane] of Object.entries(boardGrouped)) {
     // `review` is the legacy alias of `autoReview` (see GroupedJobs) - iterating
     // it would double-count every auto-review card. `archive` is terminal.
     // Neither feeds a visible board chip, so skip both outright.
@@ -86,8 +97,8 @@ export function buildProjectSidebarRows(
       if (laneKey === 'ready') project.laneCounts.ready++;
       else if (laneKey === 'progress') project.laneCounts.progress++;
       // Escalations wait on the human just like a plain human-review card
-      // (arguably more urgently), so they fold into the green Human Review
-      // chip rather than falling out of every counter.
+      // (arguably more urgently), so they fold into the Human Review chip
+      // rather than falling out of every counter.
       else if (laneKey === 'humanReview' || laneKey === 'escalated') project.laneCounts.humanReview++;
     }
   }

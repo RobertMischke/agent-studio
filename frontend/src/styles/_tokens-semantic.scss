@@ -296,7 +296,11 @@
   --studio-board-nav-lane-progress-fg:     var(--studio-accent-warn-strong);
   --studio-board-nav-lane-progress-bg:     color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 12%, transparent);
   --studio-board-nav-lane-progress-border: color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 24%, transparent);
-  --studio-board-nav-lane-human-review-fg: var(--studio-accent-success-strong);
+  // Review reads in the Review lane's own hue. It used to borrow the success
+  // green, which collided with Delivered/green and told the operator "done"
+  // about the one lane that means "needs you" (operator 2026-08-23). Green
+  // stays reserved for --lane-completed.
+  --studio-board-nav-lane-human-review-fg: var(--lane-human-review);
   --studio-board-nav-lane-human-review-bg: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 12%, transparent);
   --studio-board-nav-lane-human-review-border: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 24%, transparent);
 
@@ -793,7 +797,8 @@
   --studio-board-nav-lane-progress-fg:     var(--color-amber-700);
   --studio-board-nav-lane-progress-bg:     color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 10%, transparent);
   --studio-board-nav-lane-progress-border: color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 22%, transparent);
-  --studio-board-nav-lane-human-review-fg: var(--color-green-700);
+  // Review = the Review lane hue here too; green stays Delivered-only.
+  --studio-board-nav-lane-human-review-fg: var(--lane-human-review);
   --studio-board-nav-lane-human-review-bg: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 10%, transparent);
   --studio-board-nav-lane-human-review-border: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 22%, transparent);
 

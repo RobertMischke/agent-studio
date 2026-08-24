@@ -148,6 +148,25 @@ Regression coverage (run with `PW_TARGET=stable`):
 - `e2e/task-detail/detail-lane-dropdown.spec.ts` — dropdown pages without moving; orchestrator lanes absent from the nav options.
 - `e2e/task-detail/detail-view-lane-pager.spec.ts` — context-menu moves keep the pager anchored on the original lane with the count shrinking by one.
 
+## Explorer lane metrics mirror the board, and use the lane's own hue (AGT-2676)
+
+The Explorer tree's per-project Board metrics (`<app-explorer-lane-dashboard>`,
+numbers **and** dots) are a projection of the flat lane board, so they must count
+exactly what the board draws. `buildProjectSidebarRows` therefore runs the board's
+own `excludeEpics` over the grouped feed instead of re-deriving `kind !== 'epic'`;
+an epic is a container with its own Epics view, not a board work-item. Deriving the
+same number twice is what caused the reported bug: an epic parked in
+`5-human-review` lit a lane dot on a project whose every board lane read 0.
+
+Lane pigments come from the shared `--lane-*` palette. Human Review reads
+`--lane-human-review`; **green is reserved for Delivered** (`--lane-completed`).
+The Review counter briefly borrowed the success green and so signalled "done" for
+the one lane that means "needs you".
+
+Locked by `studio-shell.project-rows.spec.ts` (dot count == visible board lane
+count, with an epic in the fixture) and
+`e2e/workspace/explorer-lane-dots-match-board.spec.ts` (both themes).
+
 ## Feature folders + barrel imports (ADR-0034, Cycle 9h)
 
 The frontend is organised by **feature** under `app/features/<name>/` with a uniform shape: `models/`, `state/`, `components/`, `services/`, plus a top-level `index.ts` barrel. Cross-cutting capabilities (e.g. `polling/`) follow the same shape.
