@@ -230,7 +230,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     const comparison = telemetrySlots === null
       ? ' Fresh remote slot telemetry is unavailable.'
       : this.runningSourcesDiverge()
-        ? ` Warning: Board leases report ${truth.remote} remote but host telemetry only reports ${telemetrySlots} active slots — a runner may not be advertising.`
+        ? ` Warning: Board leases report ${truth.remote} remote but host telemetry only reports ${telemetrySlots} active slots; a runner may not be advertising.`
         : ` Board leases and host telemetry agree on ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
     const load = this.hostLoad();
     if (!load) return `Open execution hosts. ${execution}${comparison} Execution host load is unavailable.`;
