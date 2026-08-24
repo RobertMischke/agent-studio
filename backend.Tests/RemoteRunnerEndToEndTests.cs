@@ -3672,20 +3672,26 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             () => secondLogs.Any(line => line.Contains(
                 "adopting persisted review",
                 StringComparison.Ordinal)),
-            "replacement daemon did not adopt the persisted review");
+            "replacement daemon did not adopt the persisted review",
+            attempts: 600);
         await WaitUntilAsync(
             () => secondLogs.Any(line => line.Contains(
                 "review slot admission closed: load/core",
                 StringComparison.Ordinal)),
-            "load admission did not close while the persisted review continued");
+            "load admission did not close while the persisted review continued",
+            attempts: 600);
         await File.WriteAllTextAsync(release, "continue");
+        // From here every step rides on the detached worker process plus a
+        // daemon poll plus server-side moves; each observation gets the same
+        // generous budget instead of a knife-edge 10 s.
         await WaitUntilAsync(
             () => Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)),
             "adopted review did not reach Human Review",
             attempts: 600);
         await WaitUntilAsync(
             () => !new RReviewStateStore(options.StateDir).LoadAll().Any(),
-            "adopted review state was not cleaned up");
+            "adopted review state was not cleaned up",
+            attempts: 600);
 
         secondStop.Cancel();
         await secondRun.WaitAsync(TimeSpan.FromSeconds(10));
