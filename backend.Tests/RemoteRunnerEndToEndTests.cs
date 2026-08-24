@@ -2578,6 +2578,127 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     /// <summary>
+    /// AGT-2677 regression. A project whose build profile is declared but never
+    /// validated has an empty claim result - that part is intended. What is not
+    /// intended, and what starved 25 Quality Studio cards for five days, is that
+    /// the cards were filtered out before any rejection could be written, so they
+    /// sat in queued-remote with <c>lastRejection = null</c> and nothing anywhere
+    /// named the cause. Every offered ready card must now carry the gate decision.
+    /// </summary>
+    [Fact]
+    public async Task Cards_gated_by_an_unvalidated_build_profile_record_the_gate_as_their_rejection()
+    {
+        SeedTask(TaskStates.Ready, "AGT-GATE-A", "First", "Prompt.");
+        SeedTask(TaskStates.Ready, "AGT-GATE-B", "Second", "Prompt.", order: 2);
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await RegisterCodingRunnerAsync(client, http);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/example/build-profile-gate.git");
+
+        var declared = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/build-profile",
+            new { stack = "dotnet", installCmd = "dotnet restore", buildCmds = new[] { "dotnet build" } });
+        declared.EnsureSuccessStatusCode();
+
+        var claim = await client.ClaimAsync(
+            new RClaim(RunnerId, ProjectName, "host", 1, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, claim.Status);
+        foreach (var key in new[] { "AGT-GATE-A", "AGT-GATE-B" })
+        {
+            var rejection = ReadDispatchRejection(key);
+            Assert.NotNull(rejection);
+            Assert.Equal(RemoteDispatchRejectionCodes.BuildProfileGate, rejection!.Code);
+            Assert.Equal(
+                BuildProfileGate.Evaluate(new BuildProfile { Status = BuildProfileStatuses.Declared }).Reason,
+                rejection.Reason);
+        }
+
+        var starvation = await http.GetFromJsonAsync<JsonElement>("/api/runner/queue-starvation");
+        Assert.Equal(2, starvation.GetProperty("gateBlockedTaskCount").GetInt32());
+        Assert.True(starvation.GetProperty("active").GetBoolean());
+        var blockage = Assert.Single(starvation.GetProperty("gateBlockedProjects").EnumerateArray().ToList());
+        Assert.Equal(ProjectName, blockage.GetProperty("projectName").GetString());
+        Assert.Equal(2, blockage.GetProperty("readyTaskCount").GetInt32());
+
+        // Reopening the gate must clear the cards it was holding, including the
+        // ones the next claim does not pick. A stale "not validated" on 24 cards
+        // after the operator fixed the profile would be its own false alarm.
+        factory.Services.GetRequiredService<ProjectSettingsService>()
+            .MarkBuildProfileValidated(ProjectName);
+        var reopened = await ClaimWithSuccessfulPreflightAsync(
+            client, new RClaim(RunnerId, ProjectName, "host", 1, "remote-runner"));
+
+        Assert.Equal(RClaimStatus.Claimed, reopened.Status);
+        Assert.Null(ReadDispatchRejection("AGT-GATE-A"));
+        Assert.Null(ReadDispatchRejection("AGT-GATE-B"));
+        var healed = await http.GetFromJsonAsync<JsonElement>("/api/runner/queue-starvation");
+        Assert.Equal(0, healed.GetProperty("gateBlockedTaskCount").GetInt32());
+    }
+
+    /// <summary>
+    /// AGT-2677: the QS-92 path. A profile that is already proven and then edited
+    /// keeps its gate open for the documented grace pickups, so the edit cannot
+    /// silently stop the project the way it did during the outage.
+    /// </summary>
+    [Fact]
+    public async Task Editing_a_proven_build_profile_keeps_cards_claimable_on_revalidation_grace()
+    {
+        SeedTask(TaskStates.Ready, "AGT-GRACE-A", "First", "Prompt.");
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await RegisterCodingRunnerAsync(client, http);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/example/build-profile-grace.git");
+
+        var settings = factory.Services.GetRequiredService<ProjectSettingsService>();
+        var declared = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/build-profile",
+            new { stack = "dotnet", buildCmds = new[] { "dotnet build" } });
+        declared.EnsureSuccessStatusCode();
+        settings.MarkBuildProfileValidated(ProjectName);
+
+        // The QS-92 edit: same project, different build command.
+        var edited = await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/build-profile",
+            new { stack = "dotnet", buildCmds = new[] { "dotnet build QualityStudio.slnx" } });
+        edited.EnsureSuccessStatusCode();
+
+        var profile = settings.Get(ProjectName).BuildProfile!;
+        Assert.True(profile.RevalidationPending);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(profile));
+
+        var claim = await ClaimWithSuccessfulPreflightAsync(
+            client, new RClaim(RunnerId, ProjectName, "host", 1, "remote-runner"));
+
+        Assert.Equal(RClaimStatus.Claimed, claim.Status);
+        Assert.Null(ReadDispatchRejection("AGT-GRACE-A"));
+        Assert.Equal(
+            BuildProfileEditPolicy.DefaultGraceRuns - 1,
+            settings.Get(ProjectName).BuildProfile!.RevalidationRunsRemaining);
+    }
+
+    /// <summary>
+    /// Reads the durable <c>remoteDispatchRejection</c> a claim poll left on a card.
+    /// </summary>
+    private RemoteDispatchRejection? ReadDispatchRejection(string key)
+    {
+        var path = Directory
+            .EnumerateFiles(_watchPath, "task.json", SearchOption.AllDirectories)
+            .FirstOrDefault(candidate => Path.GetFileName(Path.GetDirectoryName(candidate)) == key);
+        if (path is null) return null;
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        return document.RootElement.TryGetProperty("remoteDispatchRejection", out var value)
+               && value.ValueKind == JsonValueKind.Object
+            ? value.Deserialize<RemoteDispatchRejection>(
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            : null;
+    }
+
+    /// <summary>
     /// Review fix (AGT-2302 / AGT-2376): a daemon that declares no capacity of
     /// its own is not capped from a project value alone. Without a declaration
     /// the server enforces nothing - the fleet keeps behaving exactly as before.

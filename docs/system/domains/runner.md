@@ -962,6 +962,61 @@ evidence. The board mentions a latest rejection only when that evidence exists.
 The watchdog emits the rate-limited `remote-ready-starvation` warning event and
 clears the acute signal when claim progress, the queue, or capacity recovers.
 
+## Build-profile pickup gate
+
+A project that declared a `buildProfile` is only auto-picked once
+`BuildProfileGate` opens. The gate is pure over the persisted profile and
+returns a stable code plus a readable reason: `no-profile`, `pipeline-ready`,
+`revalidation-pending`, `revalidation-exhausted`, `validating`,
+`validation-failed`, or `not-validated`. A project with no profile keeps the
+legacy no-gate behaviour.
+
+**A closed gate is never silent.** The claim loop evaluates the gate separately
+from the rest of the eligibility rules, so a ready card that is otherwise this
+Runner's business records the gate decision as a durable
+`remoteDispatchRejection` with code `build-profile-gate`. The starvation
+watchdog counts those cards in `gateBlockedTaskCount` and lists the affected
+projects in `gateBlockedProjects`; unlike a normal stalled queue they need
+neither free capacity nor the stall threshold to be reported, because no Runner
+will ever offer them. The workspace banner renders that as "N ready cards not
+claimable: build profile not validated", and the local pickup loop logs the
+block at warning level.
+
+**What counts as validated.** Two sources, both recorded on the profile:
+
+| Source | Field | Meaning |
+|---|---|---|
+| Local validation dry-run | `lastValidatedAt` | `POST /api/projects/{name}/build-profile/validate` ran install + build green |
+| Green run on the assigned Runner | `lastRemoteVerifiedAt`, `lastRemoteVerifiedBy` | The post-processing build/test gate executed the profile's own commands against the project's real checkout and passed |
+
+The dry-run executes in the repository checkout resolved by
+`BuildProfileValidationWorkspace` (repository path, then workspace root, then
+the task watch path), not in the task watch path. Running it where the task
+folders live, as it did before AGT-2677, means the commands never see the
+project sources and the profile can never go green locally even while the same
+profile builds fine on the Runner.
+
+**Profile edit semantics (the chosen rule).** An edit never closes an open gate
+on its own; only running out of grace does. `BuildProfileEditPolicy` decides:
+
+| Previous profile | Edit touches install/build commands | Result |
+|---|---|---|
+| None, or gate already closed | any | `declared`, gate closed, no grace |
+| Gate open | no | Status and validation timestamps carried over unchanged |
+| Gate open | yes | Status carried over, `revalidationPending = true`, `revalidationRunsRemaining = 3` |
+
+Only the install command and the ordered build commands are dry-run material,
+because those are what the dry-run executes. Editing test commands, lockfiles,
+preserve globs, pool size, or the stack label cannot invalidate a green
+install+build and leaves the gate untouched.
+
+Each granted pickup during grace consumes one run
+(`ConsumeBuildProfileRevalidationRun`). A green dry-run or a green Runner
+verification clears the grace early. Exhausting it drops the profile to
+`declared` and records why in `lastValidationError`, so the eventual closure is
+an explained event rather than the silent reset that starved 25 Quality Studio
+cards for five days.
+
 ## Verification
 
 - Outcome and grammar changes need focused unit tests for analyzer, policy,

@@ -315,25 +315,118 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Slice P (ASS-1663): declares (or re-declares) the project's build profile.
-    /// Normalizes blank command/path entries away and always resets onboarding to
-    /// <see cref="BuildProfileStatuses.Declared"/> - changing how the project
-    /// builds invalidates any prior green dry-run, so the project must re-validate
-    /// before the runner picks it up. Pass a null <paramref name="profile"/> to
-    /// clear the profile entirely (revert to legacy "no gate" behaviour).
+    /// Normalizes blank command/path entries away, then lets
+    /// <see cref="BuildProfileEditPolicy"/> decide what the edit does to onboarding.
+    /// An edit no longer resets an open gate to
+    /// <see cref="BuildProfileStatuses.Declared"/> outright (AGT-2677): a proven
+    /// profile keeps its status and, when the dry-run material changed, a bounded
+    /// re-validation grace. Pass a null <paramref name="profile"/> to clear the
+    /// profile entirely (revert to legacy "no gate" behaviour).
     /// </summary>
     public void SetBuildProfile(string projectName, BuildProfile? profile)
     {
         EnsureLoaded();
+        BuildProfile? persisted;
         lock (_lock)
         {
             var key = ResolveAliasLocked(projectName);
             var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
-            _cache[key] = current with { BuildProfile = NormalizeProfile(profile) };
+            var normalized = NormalizeProfile(profile);
+            persisted = normalized is null
+                ? null
+                : BuildProfileEditPolicy.Apply(current.BuildProfile, normalized);
+            _cache[key] = current with { BuildProfile = persisted };
+            Persist();
+        }
+        if (persisted is null)
+        {
+            _logger.LogInformation("Build profile cleared for project {Project}", projectName);
+            return;
+        }
+        _logger.LogInformation(
+            "Build profile declared for project {Project}: status={Status} revalidationPending={Pending} graceRuns={GraceRuns}",
+            projectName, persisted.Status, persisted.RevalidationPending, persisted.RevalidationRunsRemaining);
+    }
+
+    /// <summary>
+    /// Records that a real run on the assigned runner proved the profile green
+    /// (AGT-2677). The runner executes the profile's commands in the project's real
+    /// workspace, which is stronger evidence than a local dry-run - and the only
+    /// evidence available when the local review workspace has no project sources.
+    /// Clears any re-validation grace. No-op when the project has no declared profile.
+    /// </summary>
+    public void MarkBuildProfileRemotelyVerified(string projectName, string source)
+    {
+        EnsureLoaded();
+        var label = string.IsNullOrWhiteSpace(source) ? "remote run" : source.Trim();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            if (!_cache.TryGetValue(key, out var current) || current.BuildProfile is null) return;
+            // A single green run per profile generation is enough; rewriting the file
+            // on every review would churn project-settings.json for no new fact.
+            if (!current.BuildProfile.RevalidationPending
+                && BuildProfileStatuses.Normalize(current.BuildProfile.Status) == BuildProfileStatuses.PipelineReady
+                && current.BuildProfile.LastRemoteVerifiedAt is not null)
+                return;
+            _cache[key] = current with
+            {
+                BuildProfile = current.BuildProfile with
+                {
+                    Status = BuildProfileStatuses.PipelineReady,
+                    LastRemoteVerifiedAt = DateTime.UtcNow,
+                    LastRemoteVerifiedBy = label.Length <= 200 ? label : label[..200],
+                    LastValidationError = null,
+                    RevalidationPending = false,
+                    RevalidationRunsRemaining = 0,
+                }
+            };
             Persist();
         }
         _logger.LogInformation(
-            "Build profile {Action} for project {Project}",
-            profile is null ? "cleared" : "declared", projectName);
+            "Build profile verified by a green remote run for project {Project} ({Source})", projectName, label);
+    }
+
+    /// <summary>
+    /// Consumes one re-validation grace pickup after an edited profile was granted a
+    /// run. When the last grace pickup is used the gate closes: the profile falls
+    /// back to <see cref="BuildProfileStatuses.Declared"/> with a recorded reason, so
+    /// the closure is visible instead of silent. No-op when no grace is pending.
+    /// </summary>
+    public void ConsumeBuildProfileRevalidationRun(string projectName)
+    {
+        EnsureLoaded();
+        int remaining;
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            if (!_cache.TryGetValue(key, out var current) || current.BuildProfile is null) return;
+            if (!current.BuildProfile.RevalidationPending) return;
+
+            remaining = Math.Max(0, current.BuildProfile.RevalidationRunsRemaining - 1);
+            _cache[key] = current with
+            {
+                BuildProfile = current.BuildProfile with
+                {
+                    Status = remaining > 0
+                        ? current.BuildProfile.Status
+                        : BuildProfileStatuses.Declared,
+                    RevalidationPending = remaining > 0,
+                    RevalidationRunsRemaining = remaining,
+                    LastValidationError = remaining > 0
+                        ? current.BuildProfile.LastValidationError
+                        : "build profile was edited and the re-validation grace pickups are used up; run the validation dry-run again",
+                }
+            };
+            Persist();
+        }
+        if (remaining > 0)
+            _logger.LogInformation(
+                "Build profile re-validation grace for project {Project}: {Remaining} pickup(s) left", projectName, remaining);
+        else
+            _logger.LogWarning(
+                "Build profile re-validation grace exhausted for project {Project}; auto-pickup is gated until it re-validates",
+                projectName);
     }
 
     /// <summary>
@@ -375,6 +468,13 @@ public class ProjectSettingsService
                     Status = status,
                     LastValidatedAt = validatedAt ?? current.BuildProfile.LastValidatedAt,
                     LastValidationError = status == BuildProfileStatuses.ValidationFailed ? error : null,
+                    // A completed dry-run - green or red - settles the question the
+                    // grace window was buying time for, so the grace ends with it.
+                    RevalidationPending = status == BuildProfileStatuses.Validating
+                        && current.BuildProfile.RevalidationPending,
+                    RevalidationRunsRemaining = status == BuildProfileStatuses.Validating
+                        ? current.BuildProfile.RevalidationRunsRemaining
+                        : 0,
                 }
             };
             Persist();
@@ -383,9 +483,10 @@ public class ProjectSettingsService
     }
 
     /// <summary>
-    /// Trims blank command/path entries, clamps a non-positive pool size to null,
-    /// and forces the onboarding status to <see cref="BuildProfileStatuses.Declared"/>.
-    /// Returns null when the input is null.
+    /// Trims blank command/path entries and clamps a non-positive pool size to null.
+    /// Every onboarding field is stripped here because status is server-owned and
+    /// <see cref="BuildProfileEditPolicy.Apply"/> is the only place allowed to decide
+    /// it. Returns null when the input is null.
     /// </summary>
     private static BuildProfile? NormalizeProfile(BuildProfile? profile)
     {
@@ -412,6 +513,10 @@ public class ProjectSettingsService
             Status = BuildProfileStatuses.Declared,
             LastValidatedAt = null,
             LastValidationError = null,
+            LastRemoteVerifiedAt = null,
+            LastRemoteVerifiedBy = null,
+            RevalidationPending = false,
+            RevalidationRunsRemaining = 0,
         };
     }
 

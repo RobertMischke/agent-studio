@@ -1,29 +1,6 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import type { RemoteDispatchRejection } from '../../../../models/task.model';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input } from '@angular/core';
 import { NotificationComponent } from '../../../../components/notification/notification.component';
-
-interface RemoteQueueStarvationItem {
-  taskKey: string;
-  taskId: string;
-  projectName: string;
-  title: string;
-  enteredLaneAt: string;
-  lastRejection?: RemoteDispatchRejection | null;
-}
-
-interface RemoteQueueStarvationSnapshot {
-  active: boolean;
-  waitingTaskCount: number;
-  availableSlots: number;
-  thresholdMinutes: number;
-  claimProgressStalled: boolean;
-  lastSuccessfulClaimAt: string | null;
-  hasRejections: boolean;
-  oldestEnteredLaneAt: string | null;
-  observedAt: string;
-  items: RemoteQueueStarvationItem[];
-}
+import { RemoteQueueStarvationService } from '../../services/remote-queue-starvation.service';
 
 @Component({
   selector: 'app-remote-queue-starvation-banner',
@@ -34,18 +11,25 @@ interface RemoteQueueStarvationSnapshot {
   styleUrl: './remote-queue-starvation-banner.scss',
 })
 export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
-  private readonly http = inject(HttpClient);
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly starvation = inject(RemoteQueueStarvationService);
+  private detach: (() => void) | null = null;
 
   readonly projects = input<readonly string[]>([]);
-  readonly snapshot = signal<RemoteQueueStarvationSnapshot | null>(null);
+  readonly snapshot = this.starvation.snapshot;
   readonly visibleItems = computed(() => {
     const snapshot = this.snapshot();
     if (!snapshot?.active) return [];
     const projects = this.projects();
-    if (projects.length === 0) return snapshot.items;
-    const visible = new Set(projects.map(project => project.toLowerCase()));
-    return snapshot.items.filter(item => visible.has(item.projectName.toLowerCase()));
+    const items = projects.length === 0
+      ? snapshot.items
+      : (() => {
+          const visible = new Set(projects.map(project => project.toLowerCase()));
+          return snapshot.items.filter(item => visible.has(item.projectName.toLowerCase()));
+        })();
+    // Gate-blocked cards have their own banner with the one action that helps
+    // (validate the profile). Counting them here too would report the same
+    // starvation twice with the less useful of the two explanations.
+    return items.filter(item => !item.buildProfileGateBlocked);
   });
   readonly availableSlots = computed(() => this.snapshot()?.availableSlots ?? 0);
   readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 0);
@@ -53,18 +37,11 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
     this.visibleItems().some(item => item.lastRejection != null));
 
   ngOnInit(): void {
-    this.refresh();
-    this.pollTimer = setInterval(() => this.refresh(), 15_000);
+    this.detach = this.starvation.attach();
   }
 
   ngOnDestroy(): void {
-    if (this.pollTimer) clearInterval(this.pollTimer);
-  }
-
-  private refresh(): void {
-    this.http.get<RemoteQueueStarvationSnapshot>('/api/runner/queue-starvation').subscribe({
-      next: snapshot => this.snapshot.set(snapshot),
-      error: () => this.snapshot.set(null),
-    });
+    this.detach?.();
+    this.detach = null;
   }
 }

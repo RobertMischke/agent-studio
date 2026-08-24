@@ -591,6 +591,14 @@ export type TaskExecutionState =
   | 'recovering'
   | 'no-active-execution';
 
+/**
+ * The project's build profile is not validated, so the pickup gate refuses every
+ * ready card of the project (AGT-2677). Mirrors the backend
+ * `RemoteDispatchRejectionCodes.BuildProfileGate`; surfaces key their copy off it
+ * because the fix is a project setting, not a task-level retry.
+ */
+export const REJECTION_CODE_BUILD_PROFILE_GATE = 'build-profile-gate';
+
 export interface RemoteDispatchRejection {
   code: string;
   runnerId: string;

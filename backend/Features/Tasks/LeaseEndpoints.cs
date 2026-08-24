@@ -550,20 +550,46 @@ public static class LeaseEndpoints
                         admission.ReasonCode));
                 }
 
-                var eligible = liveSnapshot
+                // The build-profile gate is evaluated apart from the rest of the
+                // eligibility rules (AGT-2677). Folding it into the same filter made
+                // a gated card vanish before any rejection could be written, which is
+                // how 25 Quality Studio cards sat in queued-remote for five days with
+                // lastRejection=null and no banner. Ready cards that are this
+                // runner's business and fail only the gate get the gate decision
+                // recorded as their rejection, so the card, the banner, and the
+                // starvation alarm all name the same cause.
+                var runnerBusiness = liveSnapshot
                     .Where(t => !t.Fixture && t.State == TaskStates.Ready)
-                    .Where(t =>
+                    .Where(t => RemoteDispatchEligibility.IsAssignedAndRunnableApartFromBuildProfile(
+                        t, settings.Get(t.ProjectName), req.RunnerId, req.RunnerName, waitsOn))
+                    .ToList();
+
+                var gateOpen = new List<TaskInfo>();
+                foreach (var task in runnerBusiness)
+                {
+                    var gate = BuildProfileGate.Evaluate(settings.Get(task.ProjectName).BuildProfile);
+                    if (!gate.AllowsPickup)
                     {
-                        var project = settings.Get(t.ProjectName);
-                        return ProjectExecutionPolicy.AllowsAutomaticPickup(project)
-                               && ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName)
-                               && AgentTypes.IsAutoPickupEligible(t.Agent)
-                               && !TaskSlugs.IsHumanDecisionNeeded(t.Id)
-                               && BuildProfileGate.AllowsAutoPickup(project.BuildProfile)
-                               && (!project.IntakeEnabled.GetValueOrDefault()
-                                   || t.Phase == LifecyclePhases.IntakePassed)
-                               && !waitsOn.EvaluateWaitsOn(t).Blocked;
-                    })
+                        // The reason is the gate's own prose and nothing else. The
+                        // surfaces prefix it with their own lead-in ("Project build
+                        // profile not validated:"), so restating that here would
+                        // read back to the operator twice.
+                        RecordRejection(
+                            task,
+                            RemoteDispatchRejectionCodes.BuildProfileGate,
+                            gate.Reason);
+                        continue;
+                    }
+                    // Reopening the gate must clear the cards it was holding. Only
+                    // the card that actually gets claimed is cleared further down,
+                    // so without this the other 24 would keep showing a rejection
+                    // the operator already fixed.
+                    if (task.RemoteDispatchRejection?.Code == RemoteDispatchRejectionCodes.BuildProfileGate)
+                        dispatchRejections.Clear(task);
+                    gateOpen.Add(task);
+                }
+
+                var eligible = gateOpen
                     .OrderBy(t => t.Order)
                     .ThenBy(t => t.CreatedAt);
 
@@ -825,6 +851,10 @@ public static class LeaseEndpoints
                         RunnerClaimStatus.Empty, Message: acquire.Message ?? acquire.Outcome)));
 
                 dispatchRejections.Clear(candidate);
+                // A pickup granted on re-validation grace spends one of the grace
+                // runs (AGT-2677). Running the grace down is what eventually closes
+                // the gate on an edited profile that never gets re-validated.
+                settings.ConsumeBuildProfileRevalidationRun(candidate.ProjectName);
                 var move = await transitions.MoveAsync(
                     candidate.Id, TaskStates.Progress, candidate.WatchPath, ct,
                     cause: $"remote-runner:{req.RunnerName.Trim()}",

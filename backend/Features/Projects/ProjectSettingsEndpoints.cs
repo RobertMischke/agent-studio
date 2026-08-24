@@ -63,7 +63,10 @@ public static class ProjectSettingsEndpoints
                 all = all.Where(kv => ProjectAccessAuthorization.Allows(human.User, kv.Key, projects));
             var projected = all.ToDictionary(
                 kv => kv.Key,
-                kv => new
+                kv =>
+                {
+                    var buildProfileGate = BuildProfileGate.Evaluate(kv.Value.BuildProfile);
+                    return new
                 {
                     autoCommit = kv.Value.AutoCommit,
                     crashRecoveryEnabled = kv.Value.CrashRecoveryEnabled,
@@ -100,7 +103,12 @@ public static class ProjectSettingsEndpoints
                     // BuildProfileGate so the UI can show why a declared-but-
                     // unvalidated project is not being picked up.
                     buildProfile = kv.Value.BuildProfile,
-                    buildProfilePickupAllowed = BuildProfileGate.AllowsAutoPickup(kv.Value.BuildProfile),
+                    buildProfilePickupAllowed = buildProfileGate.AllowsPickup,
+                    // AGT-2677: the code and reason travel with the flag so every
+                    // surface names the same cause instead of re-deriving it from
+                    // the status string.
+                    buildProfileGateCode = buildProfileGate.Code,
+                    buildProfileGateReason = buildProfileGate.Reason,
                     // F35: resolved per-lane strategy map (defaults filled in).
                     // The board uses this for the lane-header icon + the
                     // drag-disabled hint without a per-project round-trip.
@@ -145,6 +153,7 @@ public static class ProjectSettingsEndpoints
                             return new { mode = r.Mode, source = r.Source, supported = r.Supported };
                         },
                         StringComparer.OrdinalIgnoreCase),
+                };
                 },
                 StringComparer.OrdinalIgnoreCase);
             return Results.Ok(projected);
@@ -760,16 +769,16 @@ public static class ProjectSettingsEndpoints
 
             var profile = settings.Get(projectName).BuildProfile;
             var gate = BuildProfileGate.Evaluate(profile);
-            var repositoryPath = string.IsNullOrWhiteSpace(project.RepositoryPath)
-                ? project.RootPath
-                : project.RepositoryPath;
+            var repositoryPath = BuildProfileValidationWorkspace.Resolve(project);
             var verifyPlan = VerifyCommandPlanner.Plan(repositoryPath, profile);
             return Results.Ok(new
             {
                 profile,
                 status = profile is null ? null : BuildProfileStatuses.Normalize(profile.Status),
                 pickupAllowed = gate.AllowsPickup,
+                gateCode = gate.Code,
                 gateReason = gate.Reason,
+                validationWorkspace = repositoryPath,
                 plannedDryRun = BuildProfileDryRunPlanner.Plan(profile),
                 gateApplicable = !verifyPlan.IsEmpty,
                 verifyPlan = new
@@ -843,16 +852,26 @@ public static class ProjectSettingsEndpoints
             if (settings.Get(projectName).BuildProfile is null)
                 return Results.BadRequest(new { error = "no build profile declared for this project" });
 
-            var result = await validator.ValidateAsync(projectName, entry.Path, ct);
+            // AGT-2677: the dry-run used to run in `entry.Path`, the task watch path.
+            // For a project whose tasks live outside the checkout that directory has
+            // no sources, so `dotnet build` could never go green no matter how sound
+            // the profile was - the operator was told to fix a profile the runner had
+            // already proven. It now runs where the project's code actually is.
+            var workingDir = BuildProfileValidationWorkspace.Resolve(entry);
+            var result = await validator.ValidateAsync(projectName, workingDir, ct);
             var profile = settings.Get(projectName).BuildProfile;
+            var gate = BuildProfileGate.Evaluate(profile);
             return Results.Ok(new
             {
                 green = result.Green,
                 status = result.Status,
                 summary = result.Summary,
                 failedCommand = result.FailedCommand,
+                workingDir,
                 profile,
-                pickupAllowed = BuildProfileGate.AllowsAutoPickup(profile),
+                pickupAllowed = gate.AllowsPickup,
+                gateCode = gate.Code,
+                gateReason = gate.Reason,
             });
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 

@@ -708,8 +708,11 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public void ReDeclaringBuildProfile_ResetsAnyPriorGreenValidation()
+    public void ReDeclaringBuildProfile_KeepsPickupOpenOnRevalidationGrace()
     {
+        // AGT-2677: an edit used to drop pipeline-ready to declared on the spot,
+        // which silently made every ready card of the project unclaimable. It now
+        // keeps the proven status and opens a bounded grace window instead.
         var svc = Build();
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
         svc.MarkBuildProfileValidated("runbook");
@@ -717,7 +720,60 @@ public sealed class ProjectSettingsServiceTests : IDisposable
 
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
 
-        Assert.Equal(BuildProfileStatuses.Declared, svc.Get("runbook").BuildProfile!.Status);
+        var edited = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, edited.Status);
+        Assert.True(edited.RevalidationPending);
+        Assert.Equal(BuildProfileEditPolicy.DefaultGraceRuns, edited.RevalidationRunsRemaining);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(edited));
+    }
+
+    [Fact]
+    public void ConsumingEveryGraceRun_ClosesTheGateWithARecordedReason()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+        svc.MarkBuildProfileValidated("runbook");
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
+
+        for (var run = 0; run < BuildProfileEditPolicy.DefaultGraceRuns; run++)
+            svc.ConsumeBuildProfileRevalidationRun("runbook");
+
+        var exhausted = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.Declared, exhausted.Status);
+        Assert.False(exhausted.RevalidationPending);
+        Assert.False(BuildProfileGate.AllowsAutoPickup(exhausted));
+        Assert.Contains("grace", exhausted.LastValidationError!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ConsumingGraceRun_IsANoOpWithoutAPendingRevalidation()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+        svc.MarkBuildProfileValidated("runbook");
+
+        svc.ConsumeBuildProfileRevalidationRun("runbook");
+
+        Assert.Equal(BuildProfileStatuses.PipelineReady, svc.Get("runbook").BuildProfile!.Status);
+    }
+
+    [Fact]
+    public void GreenRemoteRun_ValidatesTheProfileAndClearsTheGrace()
+    {
+        // A profile the runner just built green in the real workspace is proven,
+        // even though the local dry-run never ran (AGT-2677).
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+        Assert.False(BuildProfileGate.AllowsAutoPickup(svc.Get("runbook").BuildProfile));
+
+        svc.MarkBuildProfileRemotelyVerified("runbook", "build/test gate for QS-92");
+
+        var verified = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, verified.Status);
+        Assert.NotNull(verified.LastRemoteVerifiedAt);
+        Assert.Equal("build/test gate for QS-92", verified.LastRemoteVerifiedBy);
+        Assert.False(verified.RevalidationPending);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(verified));
     }
 
     [Fact]

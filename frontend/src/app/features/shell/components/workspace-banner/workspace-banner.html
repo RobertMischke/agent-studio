@@ -1,3 +1,6 @@
 <!-- Review verdicts remain toasts; acute queue and integration alarms persist. -->
+<!-- The gate alarm leads: of the queue alarms it is the one with a single,
+     unambiguous operator action. -->
+<app-build-profile-gate-banner [projects]="projects()" />
 <app-remote-queue-starvation-banner [projects]="projects()" />
 <app-accepted-integration-alert-banner [projects]="projects()" />

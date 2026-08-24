@@ -103,6 +103,78 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Evaluate_CountsCardsHeldByAClosedBuildProfileGate()
+    {
+        // AGT-2677 regression: the gate used to be part of the eligibility filter,
+        // so 25 gate-blocked Quality Studio cards were dropped before the alarm
+        // could see them and starved for five days without a single signal.
+        var task = ReadyTask(4);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => GatedSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0, lastClaimMinutesAgo: 1)]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal(1, snapshot.GateBlockedTaskCount);
+        Assert.Equal(1, snapshot.WaitingTaskCount);
+        Assert.True(Assert.Single(snapshot.Items).BuildProfileGateBlocked);
+
+        var blockage = Assert.Single(snapshot.GateBlockedProjects);
+        Assert.Equal("demo", blockage.ProjectName);
+        Assert.Equal(1, blockage.ReadyTaskCount);
+        Assert.Equal(BuildProfileGateCodes.NotValidated, blockage.GateCode);
+        Assert.Equal(BuildProfileStatuses.Declared, blockage.BuildProfileStatus);
+    }
+
+    [Fact]
+    public void Evaluate_ReportsGateBlockedCardsEvenWithoutFreeSlots()
+    {
+        // Free capacity is the evidence a normal queue is stuck. A gate-blocked card
+        // is unclaimable regardless, so a busy fleet must not hide it.
+        var task = ReadyTask(4);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => GatedSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(0, 0, lastClaimMinutesAgo: 1)]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal(0, snapshot.AvailableSlots);
+        Assert.Equal(1, snapshot.GateBlockedTaskCount);
+    }
+
+    [Fact]
+    public void Evaluate_LeavesAnOpenGateOutOfTheGateBlockedCount()
+    {
+        var task = ReadyTask(90);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings() with
+            {
+                BuildProfile = new BuildProfile
+                {
+                    InstallCmd = "npm ci",
+                    Status = BuildProfileStatuses.PipelineReady,
+                },
+            },
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0, lastClaimMinutesAgo: 1)]);
+
+        Assert.Equal(0, snapshot.GateBlockedTaskCount);
+        Assert.Empty(snapshot.GateBlockedProjects);
+    }
+
+    [Fact]
     public void Watchdog_LogsWarningOnceForAnAcuteQueueAndRecoveryWhenItClears()
     {
         var logger = new CapturingLogger();
@@ -148,6 +220,16 @@ public sealed class RemoteQueueStarvationPolicyTests
     {
         PickupMode = PickupModes.Auto,
         ExecutionLocation = "runner-01",
+    };
+
+    /// <summary>Remote project whose declared build profile never went green.</summary>
+    private static ProjectSettings GatedSettings() => RemoteSettings() with
+    {
+        BuildProfile = new BuildProfile
+        {
+            InstallCmd = "dotnet restore",
+            Status = BuildProfileStatuses.Declared,
+        },
     };
 
     private static ClientIdentity Runner(

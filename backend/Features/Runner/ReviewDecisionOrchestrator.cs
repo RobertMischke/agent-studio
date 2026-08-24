@@ -3793,6 +3793,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         };
         RecordBuildTestGateStep(current.FolderPath, status, result.DurationMs, verdictToken, result.Reason);
 
+        // AGT-2677: this gate just ran the build profile's own commands against the
+        // project's real checkout and they were green. That is the proof the local
+        // validation dry-run is trying to produce, obtained where the sources
+        // actually are - so it counts as a validation and reopens the pickup gate.
+        // Three conditions, each load-bearing: the verdict must be a real Ok
+        // (skipped / not-applicable / warn prove nothing), a build must actually
+        // have run, and the commands must have come from the profile itself -
+        // a convention-discovered build says nothing about the declared profile.
+        if (result.Verdict == BuildTestGateVerdict.Ok
+            && (result.RanBackendBuild || result.RanFrontendBuild)
+            && VerifyCommandPlanner.HasProfileBuildCommands(settings?.BuildProfile))
+            _projectSettings?.MarkBuildProfileRemotelyVerified(
+                entry.Name, $"build/test gate for {current.Key ?? current.TaskKey ?? current.Id}");
+
         _logger.LogInformation(
             "ReviewDecisionOrchestrator: build-test gate {Verdict} for {Project}/{JobId} in {DurationMs}ms (backend={Backend} frontend={Frontend} changedFiles={ChangedFiles})",
             result.Verdict, entry.Name, current.Id, result.DurationMs,

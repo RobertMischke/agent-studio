@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, input, output, signal } from '@angular/core';
 import type { AutoLoopSnapshot, TaskExecutionLocation, TaskInfo, PendingIntent, EpicRollup } from '../../../../models/task.model';
-import { TaskState } from '../../../../models/task.model';
+import { REJECTION_CODE_BUILD_PROFILE_GATE, TaskState } from '../../../../models/task.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { TaskService } from '../../../../services/task.service';
 import { ClientService } from '../../../../services/client.service';
@@ -242,6 +242,18 @@ export class TaskCardComponent implements OnInit, OnDestroy {
       leaseState: 'active',
       trustReason: 'The task server holds the fenced run lease.',
     };
+  });
+
+  /**
+   * Lead-in for the card's rejection line. A closed build-profile gate is a
+   * project setting, not a runner verdict, so it must not read as one (AGT-2677).
+   */
+  readonly rejectionLead = computed(() => {
+    const rejection = this.displayedExecutionLocation()?.lastRejection;
+    if (!rejection) return '';
+    return rejection.code === REJECTION_CODE_BUILD_PROFILE_GATE
+      ? 'Project build profile not validated:'
+      : `Runner ${rejection.runnerName || rejection.runnerId} rejected:`;
   });
 
   readonly reviewBadge = computed(() => buildReviewBadge(this.job().summaryState));

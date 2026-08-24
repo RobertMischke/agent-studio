@@ -1054,8 +1054,12 @@ public class ProjectRunner
             if (!string.Equals(_lastBuildGateBlockReason, buildGate.Reason, StringComparison.Ordinal))
             {
                 _lastBuildGateBlockReason = buildGate.Reason;
-                _logger.LogInformation(
-                    "[build-profile] auto-pickup gated for {Project}: {Reason}", ProjectName, buildGate.Reason);
+                // Warning, not information (AGT-2677): this stops every ready card
+                // of the project until an operator re-validates the profile, and an
+                // information-level line is exactly what nobody read for five days.
+                _logger.LogWarning(
+                    "[build-profile] auto-pickup gated for {Project}: code={Code} reason={Reason}",
+                    ProjectName, buildGate.Code, buildGate.Reason);
             }
             return;
         }
@@ -1092,6 +1096,10 @@ public class ProjectRunner
                 break;
             }
 
+            // A pickup granted while the profile is on re-validation grace spends
+            // one grace run (AGT-2677), mirroring the remote claim path.
+            if (buildGate.Code == BuildProfileGateCodes.RevalidationPending)
+                _projectSettings.ConsumeBuildProfileRevalidationRun(ProjectName);
             await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
         }
     }

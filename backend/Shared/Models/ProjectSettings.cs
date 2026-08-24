@@ -915,6 +915,36 @@ public record BuildProfile
 
     /// <summary>Short reason from the last failed validation dry-run, or null.</summary>
     public string? LastValidationError { get; init; }
+
+    /// <summary>
+    /// UTC instant at which a real run on the assigned remote runner last proved
+    /// this profile green (AGT-2677). The local dry-run is not the only source of
+    /// truth: a green build/test gate executed by the runner in the project's real
+    /// workspace is stronger evidence than a dry-run in a review workspace that may
+    /// not even hold the project sources. Null when no remote verification is known.
+    /// </summary>
+    public DateTime? LastRemoteVerifiedAt { get; init; }
+
+    /// <summary>
+    /// Short label of what produced <see cref="LastRemoteVerifiedAt"/> (for example
+    /// <c>build/test gate for QS-92</c>), so an operator can trace the evidence.
+    /// </summary>
+    public string? LastRemoteVerifiedBy { get; init; }
+
+    /// <summary>
+    /// True while an edit to the dry-run material of an already proven profile is
+    /// waiting for re-validation (AGT-2677). The gate stays open for
+    /// <see cref="RevalidationRunsRemaining"/> further pickups so a profile edit
+    /// cannot silently starve every ready card of the project.
+    /// </summary>
+    public bool RevalidationPending { get; init; }
+
+    /// <summary>
+    /// Remaining grace pickups while <see cref="RevalidationPending"/> is set. Each
+    /// granted pickup consumes one; at zero the gate closes and the profile falls
+    /// back to <see cref="BuildProfileStatuses.Declared"/>.
+    /// </summary>
+    public int RevalidationRunsRemaining { get; init; }
 }
 
 /// <summary>Stable test levels used in settings, evidence, and gate logs.</summary>

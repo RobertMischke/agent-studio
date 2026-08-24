@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
-import type { TaskExecutionLocation } from '../../models/task.model';
+import { REJECTION_CODE_BUILD_PROFILE_GATE, type TaskExecutionLocation } from '../../models/task.model';
 
 @Component({
   selector: 'app-execution-location-badge',
@@ -50,7 +50,9 @@ export class ExecutionLocationBadgeComponent {
       value.processId ? `Process: ${value.processId}` : null,
       value.sessionId ? `Session: ${value.sessionId}` : null,
       value.lastRejection
-        ? `Latest rejection: Runner ${value.lastRejection.runnerName || value.lastRejection.runnerId} rejected: ${value.lastRejection.reason}`
+        ? `Latest rejection: ${value.lastRejection.code === REJECTION_CODE_BUILD_PROFILE_GATE
+            ? 'Project build profile not validated'
+            : `Runner ${value.lastRejection.runnerName || value.lastRejection.runnerId} rejected`}: ${value.lastRejection.reason}`
         : null,
       `Connection: ${value.connectionState}; lease: ${value.leaseState}`,
       `Trusted because: ${value.trustReason}`,

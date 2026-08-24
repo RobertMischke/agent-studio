@@ -598,6 +598,25 @@ public record TaskExecutionLocation
     public RemoteDispatchRejection? LastRejection { get; init; }
 }
 
+/// <summary>
+/// Stable <see cref="RemoteDispatchRejection.Code"/> values. The UI keys copy and
+/// operator guidance off these, so they are wire contract. The list is not
+/// exhaustive - older claim-loop call sites still pass literals - but every code
+/// a surface special-cases belongs here.
+/// </summary>
+public static class RemoteDispatchRejectionCodes
+{
+    /// <summary>Fallback used when a caller records no code.</summary>
+    public const string Unspecified = "remote-dispatch-rejected";
+
+    /// <summary>
+    /// The project's build profile is not validated, so <c>BuildProfileGate</c>
+    /// refuses auto-pickup for every ready card of the project (AGT-2677). The
+    /// operator action is a build-profile re-validation, not a task-level retry.
+    /// </summary>
+    public const string BuildProfileGate = "build-profile-gate";
+}
+
 /// <summary>Durable reason why a remote runner did not claim an offered task.</summary>
 public sealed record RemoteDispatchRejection
 {

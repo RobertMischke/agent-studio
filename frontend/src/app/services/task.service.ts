@@ -339,6 +339,7 @@ export class TaskService {
   readonly projectPickupGates = signal<Record<string, {
     pickupAllowed: boolean;
     buildProfileStatus: string | null;
+    gateReason: string | null;
   }>>({});
   private laneSortStrategyTick = 0;
 
@@ -350,12 +351,14 @@ export class TaskService {
         const pickupGates: Record<string, {
           pickupAllowed: boolean;
           buildProfileStatus: string | null;
+          gateReason: string | null;
         }> = {};
         for (const [project, s] of Object.entries(all)) {
           if (s.laneSortStrategies) map[project] = s.laneSortStrategies;
           pickupGates[project] = {
             pickupAllowed: s.buildProfilePickupAllowed !== false,
             buildProfileStatus: s.buildProfile?.status ?? null,
+            gateReason: s.buildProfileGateReason ?? null,
           };
         }
         this.laneSortStrategies.set(map);
@@ -1964,7 +1967,15 @@ export class TaskService {
           executionLocation: string;
           orchestratorModel: string | null;
           buildProfilePickupAllowed?: boolean;
-          buildProfile?: { status?: string | null } | null;
+          buildProfileGateCode?: string | null;
+          buildProfileGateReason?: string | null;
+          buildProfile?: {
+            status?: string | null;
+            revalidationPending?: boolean;
+            revalidationRunsRemaining?: number;
+            lastRemoteVerifiedAt?: string | null;
+            lastRemoteVerifiedBy?: string | null;
+          } | null;
           // F35: resolved per-lane sort strategy map (every lane key present).
           laneSortStrategies?: Record<string, string>;
           pipelineSteps?: Record<string, PipelineStepSetting>;

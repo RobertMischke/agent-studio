@@ -293,7 +293,7 @@ test status on `task.json`. `TestRunService` reconciles these evidence classes:
 | Post-processing build/test gate | `post-steps/build-test-gate-*.log` | Yes | The tested SHA must equal or contain the current card anchor |
 | Pre-develop build gate and pre-main test gate | `post-steps/pre-develop-build-gate-*.log` and `pre-main-test-gate-*.log` | Yes | The tested merge SHA must equal or contain the current card anchor |
 | Review aspect `tests-and-evidence` | `aspect-tests-and-evidence.json` or Markdown twin | No green claim | This is an LLM review verdict, not proof that deterministic commands passed |
-| Build profile readiness | Project settings `buildProfile.status` | No | It controls pickup readiness. Evidence exists only after configured commands execute in a gate or recorded project test run |
+| Build profile readiness | Project settings `buildProfile.status`, `lastValidatedAt`, `lastRemoteVerifiedAt` | No | It controls pickup readiness, not card test evidence. A green post-processing build/test gate does record the profile as remotely verified and reopens the pickup gate; see the [build-profile pickup gate](../domains/runner.md#build-profile-pickup-gate) |
 | Agent-authored test output and Playwright screenshots | `status.md`, run logs, and `results/` | No automatic green claim | They remain inspectable task artifacts until a structured SHA-bound producer records them |
 
 A project test run is assigned only when the project Test Quality API has a

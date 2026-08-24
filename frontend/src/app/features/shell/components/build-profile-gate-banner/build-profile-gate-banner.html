@@ -1,0 +1,10 @@
+@if (blockedTaskCount() > 0) {
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="build-profile-gate-banner">
+    <strong data-testid="notice-bar-headline"><span class="notification__number">{{ blockedTaskCount() }}</span> ready {{ blockedTaskCount() === 1 ? 'card is' : 'cards are' }} not claimable: build profile not validated.</strong>
+    <span class="notification__detail" data-testid="notice-bar-detail">{{ projectSummary() }} @if (singleReason(); as reason) { · {{ reason }} } · Re-run the build-profile validation in project settings to reopen auto-pickup.</span>
+  </app-notification>
+}
