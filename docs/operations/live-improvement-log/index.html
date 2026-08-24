@@ -140,6 +140,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v candidate">new-candidates &rarr; 2 cards</td>
   <td>AGT-2677 (gate starvation must be visible; validate where it runs; edit semantics must not silently close the gate) and AGT-2678 (api.sh restart must replace the process; self-check). Lesson for the tick checklist: after every restart assert a NEW process start time; after every project-settings change verify the gate via GET build-profile.</td>
 </tr>
+<tr>
+  <td class="meta">08-24 09:3x</td>
+  <td><strong>Overnight fleet outage from the shared Claude session limit:</strong> operator limit hit ~22:00, runner claude runs share the account -> every claude card failed and ESCALATED (32 in 5e by morning), 0 claims 00:20-09:00; the flaky-test agent died mid-work (uncommitted changes lost). Morning recovery: mass requeue (33) on opus-5, rollout of release 193005Z with a verified process swap, runner handshake - 8 cards back in progress within minutes. The Claude-only fleet has a single-account failure mode.</td>
+  <td class="v candidate">new-candidate &rarr; card cut</td>
+  <td>AGT-2680: limit-aware runner behavior (detect account-level limits, pause claude claims with quotaWait + banner instead of escalation storm, auto-resume at reset). Related but separate: AGT-2679 (probe drift). Flaky-test agent resumed with fresh brief.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
