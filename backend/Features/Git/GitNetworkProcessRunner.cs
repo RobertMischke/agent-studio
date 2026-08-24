@@ -39,6 +39,7 @@ internal static class GitNetworkProcessRunner
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(startInfo);
+        ApplyWindowsLongPathConfig(startInfo);
         var boundedTimeout = timeout ?? DefaultTimeout;
         if (boundedTimeout <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(timeout), "Git process timeout must be positive.");
@@ -125,6 +126,7 @@ internal static class GitNetworkProcessRunner
         Func<ProcessStartInfo, Process?>? startProcess = null)
     {
         ArgumentNullException.ThrowIfNull(startInfo);
+        ApplyWindowsLongPathConfig(startInfo);
         if (timeout <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(timeout), "Git process timeout must be positive.");
         if (cancellationToken.IsCancellationRequested)
@@ -185,6 +187,39 @@ internal static class GitNetworkProcessRunner
         {
             process?.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Every backend git spawn on Windows runs with <c>core.longpaths=true</c>
+    /// (injected as command-line config via the <c>GIT_CONFIG_*</c> environment,
+    /// appended after any pairs the caller already set). Without it, Git for
+    /// Windows enforces MAX_PATH on every file it touches, and the runner's
+    /// long refs break real operations: fetching a collision branch
+    /// (<c>runner/&lt;host&gt;/&lt;key&gt;-collision-&lt;sha&gt;-&lt;sha&gt;</c>)
+    /// into <c>refs/remotes/origin/...</c> of an ordinary checkout dies with
+    /// "cannot lock ref ... Filename too long", and even reading such a ref back
+    /// fails - which turned a provably delivered AGT-2494 salvage into an
+    /// escalated "unverified delivery". The refs the flag lets git write are
+    /// long-path files that non-long-path tools on the same checkout may not
+    /// handle, which is the lesser evil against delivery verification failing
+    /// outright; retention prunes those refs. No-op off Windows.
+    /// </summary>
+    private static void ApplyWindowsLongPathConfig(ProcessStartInfo startInfo)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var count = 0;
+        if (startInfo.Environment.TryGetValue("GIT_CONFIG_COUNT", out var existing)
+            && int.TryParse(existing, out var parsed)
+            && parsed > 0)
+        {
+            count = parsed;
+        }
+
+        startInfo.Environment[$"GIT_CONFIG_KEY_{count}"] = "core.longpaths";
+        startInfo.Environment[$"GIT_CONFIG_VALUE_{count}"] = "true";
+        startInfo.Environment["GIT_CONFIG_COUNT"] =
+            (count + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static GitProcessResult Failed(GitProcessFailureKind kind, string error)

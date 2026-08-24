@@ -243,15 +243,20 @@ public sealed class RemoteCommitAttributionGuardTests
     }
 
     /// <summary>
-    /// Windows MAX_PATH regression behind the AGT-2494 fixture failure: git
-    /// disambiguates every revision argument against the working tree, and on
-    /// Windows the <c>lstat</c> of the literal <c>&lt;sha&gt;..&lt;ref&gt;</c>
-    /// fails with "Filename too long" instead of "not found" once checkout path
-    /// plus argument exceed 260 characters - <c>rev-list --count</c> then dies
-    /// with exit 128 on a perfectly valid range. The delivery ref below is sized
-    /// so that the range argument crosses that limit from this fixture's
-    /// checkout while every loose ref file stays below it; the range must still
-    /// resolve. On other platforms the test simply exercises a long ref.
+    /// Windows MAX_PATH regression behind the AGT-2494 fixture failures, in both
+    /// manifestations. First, git disambiguates every revision argument against
+    /// the working tree, and the <c>lstat</c> of the literal
+    /// <c>&lt;sha&gt;..&lt;ref&gt;</c> fails with "Filename too long" instead of
+    /// "not found" once checkout path plus argument exceed 260 characters -
+    /// <c>rev-list --count</c> then dies with exit 128 on a perfectly valid
+    /// range. Second, fetching the ref writes
+    /// <c>.git/refs/remotes/origin/&lt;branch&gt;.lock</c>, and once that path
+    /// crosses the same limit the fetch dies with "cannot lock ref" unless the
+    /// spawn runs with <c>core.longpaths=true</c>. The delivery ref below is
+    /// sized so that the range argument AND the remote-tracking loose ref cross
+    /// the limit from this fixture's checkout while the refs the fixture itself
+    /// writes stay below it; the delivery must still verify and attribute. On
+    /// other platforms the test simply exercises a long ref.
     /// </summary>
     [Fact]
     public void InspectRemoteDeliveryCommitRange_LongDeliveryRef_IsNotDisambiguatedAgainstTheWorkingTree()
@@ -266,17 +271,22 @@ public sealed class RemoteCommitAttributionGuardTests
         {
             // "<sha>..refs/remotes/origin/<branch>" is the argument git stats.
             const int rangeArgumentOverhead = 40 + 2 + 20;
-            // "\.git\refs\remotes\origin\<branch>.lock" is the longest loose-ref path git writes.
-            const int looseRefOverhead = 26 + 5;
+            // "\.git\refs\remotes\origin\<branch>.lock" is written by the product's fetch.
+            const int remoteTrackingRefOverhead = 26 + 5;
+            // "\.git\refs\heads\<branch>.lock" is written by the fixture's own git.
+            const int localHeadsRefOverhead = 17 + 5;
             const string prefix = "runner/agent-runner-01/AGT-2494-collision-";
-            var branchLength = Math.Max(prefix.Length + 8, 215 - repo.Length);
+            var branchLength = Math.Max(prefix.Length + 8, 233 - repo.Length);
             var branch = prefix + new string('f', branchLength - prefix.Length);
             Assert.True(
                 repo.Length + 1 + rangeArgumentOverhead + branch.Length > 260,
                 "the fixture must push the range argument past MAX_PATH");
             Assert.True(
-                repo.Length + looseRefOverhead + branch.Length <= 259,
-                "the fixture must keep git's own loose ref files below MAX_PATH");
+                repo.Length + remoteTrackingRefOverhead + branch.Length > 260,
+                "the fixture must push the fetched remote-tracking ref past MAX_PATH");
+            Assert.True(
+                repo.Length + localHeadsRefOverhead + branch.Length <= 259,
+                "the fixture must keep the refs its own git writes below MAX_PATH");
 
             RunGit(root, $"init -q --bare \"{remote}\"");
             RunGit(root, $"clone -q \"{remote}\" \"{repo}\"");
