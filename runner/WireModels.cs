@@ -375,7 +375,13 @@ public sealed record RemoteRunCompletionRequest(
     string? BaseSha = null,
     string? ImmutableResultRef = null,
     string? ArtifactManifestDigest = null,
-    string? IntegrationBranch = null);
+    string? IntegrationBranch = null,
+    // AGT-2680: additive account-limit facts, set only for the
+    // "providerlimited" outcome. See the server-side twin in
+    // backend/Shared/Lease/RunLeaseWireModels.cs.
+    string? ProviderLimitCli = null,
+    DateTime? ProviderLimitUntil = null,
+    string? ProviderLimitEvidence = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

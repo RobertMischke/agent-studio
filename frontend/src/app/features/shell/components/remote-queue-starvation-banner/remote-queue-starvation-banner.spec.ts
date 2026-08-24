@@ -88,4 +88,51 @@ describe('RemoteQueueStarvationBannerComponent', () => {
     fixture.destroy();
     http.verify();
   });
+
+  it('names a provider limit instead of reporting starvation', async () => {
+    // AGT-2680. A parked provider account is not a stalled queue: the operator
+    // needs the CLI, the reset, and an explicit "no action needed", not a
+    // warning about free capacity nobody can use.
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Demo']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: false,
+      waitingTaskCount: 0,
+      availableSlots: 8,
+      thresholdMinutes: 30,
+      claimProgressStalled: false,
+      lastSuccessfulClaimAt: '2026-08-23T21:58:00Z',
+      hasRejections: false,
+      oldestEnteredLaneAt: null,
+      observedAt: '2026-08-23T22:05:00Z',
+      items: [],
+      providerLimits: [{
+        cliType: 'claude',
+        resetAt: '2026-08-24T00:20:00Z',
+        waitingTaskCount: 12,
+        reason: "You've hit your session limit",
+      }],
+    });
+    fixture.detectChanges();
+
+    const limitBanner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-provider-limit-banner"]',
+    ) as HTMLElement;
+    expect(limitBanner.textContent).toContain('claude');
+    expect(limitBanner.textContent).toContain('limited until');
+    expect(limitBanner.textContent).toContain('12 cards are waiting');
+    expect(limitBanner.textContent).toContain('no action is needed');
+    // The starvation warning must stay silent: nothing is starved.
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="remote-queue-starvation-banner"]'),
+    ).toBeNull();
+    fixture.destroy();
+    http.verify();
+  });
 });

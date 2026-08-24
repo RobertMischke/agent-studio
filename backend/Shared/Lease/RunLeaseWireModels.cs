@@ -252,7 +252,14 @@ public sealed record RemoteRunCompletionRequest(
     string? BaseSha = null,
     string? ImmutableResultRef = null,
     string? ArtifactManifestDigest = null,
-    string? IntegrationBranch = null);
+    string? IntegrationBranch = null,
+    // AGT-2680: additive account-limit facts, set only for the
+    // "providerlimited" outcome. They carry the reset the board renders and the
+    // scheduler waits on, so the card can say "waiting for quota reset 00:20"
+    // instead of being escalated as an unexplained failure.
+    string? ProviderLimitCli = null,
+    DateTime? ProviderLimitUntil = null,
+    string? ProviderLimitEvidence = null);
 
 public sealed record RemoteRunCompletionResponse(
     string TaskKey,

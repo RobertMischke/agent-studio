@@ -116,6 +116,10 @@ public sealed class RemoteRunnerDaemon
         var handoffRecovery = new DurableHandoffRecovery(_options, _client, _log);
 
         var inventory = new RunnerProcessInventoryTracker();
+        // One gate for the whole daemon: a limit observed by any run withdraws
+        // that CLI from every subsequent advertisement and claim on this host.
+        // Durable, so a restart mid-outage does not forget the pause.
+        var providerLimits = new ProviderLimitGate(_options.StateDir, log: _log);
         var active = new List<ActiveSlot>();
         var recoveredHostWork = _client.UsesHostOrchestrator
             ? hostJournal.RecoverAcceptedWork()
@@ -129,7 +133,8 @@ public sealed class RemoteRunnerDaemon
                 _client,
                 _log,
                 state,
-                inventory);
+                inventory,
+                providerLimits);
             var observation = DurableAgentProcess.InspectForReattach(slot);
             var accepted = recoveredHostWork.FirstOrDefault(item =>
                 string.Equals(
@@ -299,7 +304,8 @@ public sealed class RemoteRunnerDaemon
                         gitCapability.CanPush,
                         gitCapability.CanPushWorkflows,
                         gitCapability.Detail,
-                        connectivity: connectivity.Snapshot),
+                        connectivity: connectivity.Snapshot,
+                        providerLimits: providerLimits),
                     RunnerCapabilityProbe.Telemetry(latestTelemetry),
                     capabilityGeneration,
                     ct);
@@ -336,6 +342,11 @@ public sealed class RemoteRunnerDaemon
             _options.ClaimMaxLoadPerCore,
             TimeSpan.FromSeconds(_options.LoadGateSustainedSeconds));
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+        // What the server was last told about parked CLIs, so an arming or a
+        // lifting limit can force an out-of-band advertisement.
+        var advertisedLimitSignature = string.Join(
+            ';',
+            providerLimits.Active().Select(hold => $"{hold.CliType}@{hold.LimitedUntil:o}"));
         HostTelemetrySample? TakeTelemetry(bool force = false)
         {
             try
@@ -369,6 +380,19 @@ public sealed class RemoteRunnerDaemon
             try
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
+                // A limit that arms (or lifts) must reach the server now, not on
+                // the next minute boundary. Up to 60s of stale "ready" is up to
+                // 60s of claims that spawn a CLI the account will reject, which
+                // is exactly how one limit became 32 escalated cards.
+                var limitSignature = string.Join(
+                    ';',
+                    providerLimits.Active().Select(hold => $"{hold.CliType}@{hold.LimitedUntil:o}"));
+                if (!string.Equals(limitSignature, advertisedLimitSignature, StringComparison.Ordinal))
+                {
+                    _log($"provider-limit-advertisement-due: [{advertisedLimitSignature}] -> [{limitSignature}]");
+                    advertisedLimitSignature = limitSignature;
+                    nextCapabilityAdvertisement = DateTime.MinValue;
+                }
                 if (DateTime.UtcNow >= nextCapabilityAdvertisement)
                 {
                     var capabilityTelemetry = TakeTelemetry();
@@ -381,7 +405,8 @@ public sealed class RemoteRunnerDaemon
                                 gitCapability.CanPush,
                                 gitCapability.CanPushWorkflows,
                                 gitCapability.Detail,
-                                connectivity: connectivity.Snapshot),
+                                connectivity: connectivity.Snapshot,
+                                providerLimits: providerLimits),
                             RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
                             generation,
                             ct),
@@ -488,6 +513,54 @@ public sealed class RemoteRunnerDaemon
                         }
                     }
                 }
+                // Every coding CLI this host offers is parked by an account-level
+                // limit, so there is nothing it can legitimately claim. Wait
+                // quietly instead of spawning CLIs the provider will reject. The
+                // server would refuse these claims anyway once the advertisement
+                // lands; stopping here makes the pause immediate and keeps the
+                // claim log honest about WHY the host is idle. A mixed host never
+                // reaches this branch while any of its CLIs is still ready.
+                if (RunnerCapabilityProbe.AllCodingClisLimited(_options, providerLimits))
+                {
+                    var resumeAt = RunnerCapabilityProbe.EarliestLimitReset(_options, providerLimits);
+                    _log(
+                        "claim-provider-limited: every coding CLI on this host is account-limited; " +
+                        $"claims resume at {resumeAt:o}. " +
+                        string.Join(" ", providerLimits.Active().Select(hold => hold.Describe())));
+                    inventorySnapshot = inventory.Snapshot();
+                    activeTaskKeys = inventorySnapshot.Processes
+                        .Select(process => process.TaskKey)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray();
+                    if (!_client.UsesHostOrchestrator)
+                    {
+                        var response = await _client.ClaimAsync(new RunnerClaimRequest(
+                            _options.RunnerId, _options.RunnerName, _options.Hostname,
+                            Environment.ProcessId, _options.BackendName, _options.TtlSeconds,
+                            TakeTelemetry(),
+                            AvailableSlots: 0,
+                            ActiveSlots: active.Count,
+                            IdempotencyKey: $"provider-limited:{_options.RunnerId}:{Guid.NewGuid():N}",
+                            ActiveTaskKeys: activeTaskKeys,
+                            Inventory: inventorySnapshot), shutdown);
+                        AcknowledgeInventory(inventory, inventorySnapshot, response);
+                    }
+                    // Poll cadence, never "sleep until reset": the hold may be
+                    // lifted early by an operator, and the loop still has to
+                    // reap finished slots and keep heartbeating.
+                    await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), shutdown);
+                    consecutiveFaults = 0;
+                    // Same recovery handling as the load gate: a connectivity
+                    // transition means the server may have lost this host's
+                    // capability rows, so re-advertise rather than wait out the
+                    // minute - otherwise the limit itself would go unreported.
+                    if (connectivity.RecordSuccess(DateTime.UtcNow, "claim poll"))
+                    {
+                        TakeTelemetry(force: true);
+                        nextCapabilityAdvertisement = DateTime.MinValue;
+                    }
+                    continue;
+                }
                 if (loadDecision.Throttle)
                 {
                     _log(
@@ -579,7 +652,8 @@ public sealed class RemoteRunnerDaemon
                             _client,
                             _log,
                             state,
-                            inventory);
+                            inventory,
+                            providerLimits);
                         claimedAny = true;
                         _log(
                             $"starting host permit {acceptance.PermitId} for " +
@@ -639,7 +713,8 @@ public sealed class RemoteRunnerDaemon
                         _client,
                         _log,
                         state,
-                        inventory);
+                        inventory,
+                        providerLimits);
                     if (shutdown.IsCancellationRequested)
                     {
                         var workspace = new GitWorkspace(

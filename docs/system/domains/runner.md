@@ -962,6 +962,49 @@ evidence. The board mentions a latest rejection only when that evidence exists.
 The watchdog emits the rate-limited `remote-ready-starvation` warning event and
 clears the acute signal when claim progress, the queue, or capacity recovers.
 
+A queue waiting on a provider window is **limited**, not **stalled**. Cards
+whose durable `quota-wait.json` marker has not yet expired are excluded from the
+starvation items and summarised per CLI in `providerLimits` on the same
+snapshot. That branch logs the informational `remote-ready-provider-limited` and
+`remote-ready-provider-limit-lifted` transitions instead of the warning, and the
+board renders an info banner naming the CLI and its reset rather than the
+free-capacity alarm. An expired marker stops excusing the queue, so a genuinely
+stuck fleet cannot hide behind a stale quota reason.
+
+### Account-level provider limits pause the fleet, they never escalate
+
+Every run on a host authenticates as the same operator account, so an exhausted
+session budget is a property of the HOST, not of the card. On 2026-08-23 the
+runner treated it as a card failure: the quota death fell through to the
+`unknown` outcome, which the completion endpoint maps to `5e-escalated`, and 32
+cards escalated overnight before anything claimable was left.
+
+The contract now is:
+
+- `ProviderLimitDetector` (in `contracts/`) separates an ACCOUNT-level session or
+  usage limit from an ordinary per-request throttle and resolves the reset when
+  the provider stated one it can resolve without guessing. Claude's
+  `rate_limit_event` frame is authoritative: `allowed` / `allowed_warning` are
+  informational and never pause anything, `rejected` is the hard stop. A reset
+  that is already elapsed, implausibly distant, or a bare wall-clock time with no
+  timezone stays unresolved rather than being guessed.
+- `ProviderLimitGate` (in `runner/`) holds the per-CLI pause, durable across a
+  daemon restart. A stated reset is used verbatim plus a small grace; an
+  unresolved one falls back to a bounded default and says so. A repeated
+  rejection inside an existing hold never shortens it.
+- The pause is expressed in the capability protocol, not a new lane: both
+  `cli-execution:<cli>` and `provider-auth:<cli>` are advertised as
+  `limited` with a `limited until <t>` detail. Admission requires exactly
+  `ready`, so claude claims stop while codex cards on the same host keep running
+  on their own, untouched keys. An arming or lifting hold forces an out-of-band
+  advertisement instead of waiting for the next minute boundary.
+- The card is reported with the `providerlimited` outcome, returns to `2-ready`,
+  and carries a `quota-wait.json` marker with the reset. It spends no
+  claim-failure budget and never reaches the escalation funnel.
+- Resume is a clock, not a handshake: when the hold expires the next
+  advertisement reports the CLI ready and the held cards are claimed again. No
+  operator action is required.
+
 ## Verification
 
 - Outcome and grammar changes need focused unit tests for analyzer, policy,

@@ -132,6 +132,93 @@ public sealed class RemoteQueueStarvationPolicyTests
             && entry.Message.Contains("recovered", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// AGT-2680. A card parked by an account-level provider limit is LIMITED,
+    /// not STALLED: the alarm must stay quiet, because nothing is broken and no
+    /// operator action shortens the wait. Firing it would have meant an alarm
+    /// every 30 minutes for the whole 2026-08-23 night.
+    /// </summary>
+    [Fact]
+    public void Evaluate_QuotaWaitingCards_AreReportedAsLimitedNotStarved()
+    {
+        var task = QuotaWaitingTask(waitingMinutes: 90, resetMinutesFromNow: 45);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0)]);
+
+        Assert.False(snapshot.Active);
+        Assert.Equal(0, snapshot.WaitingTaskCount);
+        Assert.True(snapshot.ProviderLimited);
+        var limit = Assert.Single(snapshot.ProviderLimits);
+        Assert.Equal("claude", limit.CliType);
+        Assert.Equal(1, limit.WaitingTaskCount);
+        Assert.Equal(Now.AddMinutes(45), snapshot.ProviderLimitResetAt);
+    }
+
+    /// <summary>
+    /// The converse guard: an expired marker must stop excusing the queue, or a
+    /// genuinely stuck fleet would hide behind a stale quota reason forever.
+    /// </summary>
+    [Fact]
+    public void Evaluate_ExpiredQuotaWait_NoLongerSuppressesTheAlarm()
+    {
+        var task = QuotaWaitingTask(waitingMinutes: 90, resetMinutesFromNow: -5);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0)]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal(1, snapshot.WaitingTaskCount);
+        Assert.False(snapshot.ProviderLimited);
+    }
+
+    /// <summary>
+    /// A mixed queue reports both facts at once: the codex card is genuinely
+    /// starved and must still raise the alarm, while the claude card is only
+    /// waiting for its window.
+    /// </summary>
+    [Fact]
+    public void Evaluate_MixedQueue_SeparatesLimitedFromStarved()
+    {
+        var limited = QuotaWaitingTask(waitingMinutes: 90, resetMinutesFromNow: 45);
+        var starved = ReadyTask(90) with { Id = "task-2", Key = "AGT-2" };
+        TaskInfo[] tasks = [limited, starved];
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            tasks,
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build(tasks),
+            [Runner(2, 0)]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal("task-2", Assert.Single(snapshot.Items).TaskId);
+        Assert.True(snapshot.ProviderLimited);
+        Assert.Equal(1, Assert.Single(snapshot.ProviderLimits).WaitingTaskCount);
+    }
+
+    private static TaskInfo QuotaWaitingTask(int waitingMinutes, int resetMinutesFromNow)
+        => ReadyTask(waitingMinutes) with
+        {
+            QuotaWait = new QuotaWaitStatus(
+                "claude",
+                Now.AddMinutes(-waitingMinutes),
+                Now.AddMinutes(resetMinutesFromNow),
+                0,
+                "You've hit your session limit"),
+        };
+
     private static TaskInfo ReadyTask(int waitingMinutes) => new()
     {
         Id = "task-1",

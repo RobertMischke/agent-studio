@@ -10,6 +10,15 @@ public sealed record RemoteQueueStarvationItem
     public RemoteDispatchRejection? LastRejection { get; init; }
 }
 
+/// <summary>One CLI the fleet is deliberately not claiming for, and until when.</summary>
+public sealed record RemoteQueueProviderLimit
+{
+    public string CliType { get; init; } = "";
+    public DateTime ResetAt { get; init; }
+    public int WaitingTaskCount { get; init; }
+    public string Reason { get; init; } = "";
+}
+
 public sealed record RemoteQueueStarvationSnapshot
 {
     public bool Active { get; init; }
@@ -22,6 +31,24 @@ public sealed record RemoteQueueStarvationSnapshot
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
+
+    /// <summary>
+    /// CLIs whose shared provider account is out of budget right now (AGT-2680).
+    /// A queue that is waiting for one of these is LIMITED, not STALLED: nothing
+    /// is broken, no operator action helps, and the cards resume on their own at
+    /// the reset. Keeping the two apart is what stops a night of quota waiting
+    /// from reading as a dead fleet, and stops a genuinely stuck queue from
+    /// hiding behind a quota excuse.
+    /// </summary>
+    public IReadOnlyList<RemoteQueueProviderLimit> ProviderLimits { get; init; } = [];
+
+    /// <summary>True while at least one CLI is parked on an account limit.</summary>
+    public bool ProviderLimited => ProviderLimits.Count > 0;
+
+    /// <summary>The soonest instant any parked CLI is due back.</summary>
+    public DateTime? ProviderLimitResetAt => ProviderLimits.Count == 0
+        ? null
+        : ProviderLimits.Min(limit => limit.ResetAt);
 }
 
 /// <summary>Pure policy for the ready-queue starvation watchdog.</summary>
@@ -78,7 +105,36 @@ public static class RemoteQueueStarvationPolicy
         var claimProgressStalled = progressReferenceAt is { } referenceAt
                                    && now - referenceAt >= threshold;
 
+        // AGT-2680. A card whose durable quota-wait marker has not yet expired is
+        // waiting on a provider window, not on a runner. Group those separately
+        // and keep them out of the starvation items entirely: they are the
+        // expected state of a healthy fleet during a session limit, and counting
+        // them as starved would fire the alarm all night for something no
+        // operator can fix.
+        var providerLimited = eligibleTasks
+            .Where(task => task.QuotaWait is { } wait && wait.ResetAt.ToUniversalTime() > now)
+            .ToList();
+        var providerLimits = providerLimited
+            .GroupBy(task => task.QuotaWait!.CliType, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new RemoteQueueProviderLimit
+            {
+                CliType = group.Key,
+                ResetAt = group.Min(task => task.QuotaWait!.ResetAt.ToUniversalTime()),
+                WaitingTaskCount = group.Count(),
+                Reason = group
+                    .OrderBy(task => task.QuotaWait!.ResetAt)
+                    .Select(task => task.QuotaWait!.Reason)
+                    .FirstOrDefault(reason => !string.IsNullOrWhiteSpace(reason))
+                    ?? "The provider account's session budget is exhausted.",
+            })
+            .OrderBy(limit => limit.CliType, StringComparer.Ordinal)
+            .ToList();
+        var limitedTaskIds = providerLimited
+            .Select(task => task.Id)
+            .ToHashSet(StringComparer.Ordinal);
+
         var items = eligibleTasks
+            .Where(task => !limitedTaskIds.Contains(task.Id))
             .Where(task => task.RemoteDispatchRejection is not null
                            || (claimProgressStalled
                                && now - task.EnteredLaneAt.ToUniversalTime() >= threshold))
@@ -107,6 +163,7 @@ public static class RemoteQueueStarvationPolicy
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
+            ProviderLimits = providerLimits,
         };
     }
 }
@@ -212,6 +269,23 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
         RemoteQueueStarvationSnapshot next,
         DateTime now)
     {
+        // A provider limit is informational, never a warning: the fleet is
+        // healthy and waiting on a window that reopens by itself. It is logged
+        // on transition only, so an overnight limit leaves one line rather than
+        // an hourly alarm nobody can act on.
+        if (next.ProviderLimited && !previous.ProviderLimited)
+        {
+            _logger.LogInformation(
+                "remote-ready-provider-limited clis={Clis} resetAt={ResetAt} waitingTasks={WaitingTaskCount}",
+                string.Join(",", next.ProviderLimits.Select(limit => limit.CliType)),
+                next.ProviderLimitResetAt,
+                next.ProviderLimits.Sum(limit => limit.WaitingTaskCount));
+        }
+        else if (!next.ProviderLimited && previous.ProviderLimited)
+        {
+            _logger.LogInformation("remote-ready-provider-limit-lifted; claims resume");
+        }
+
         if (!next.Active)
         {
             if (previous.Active)
@@ -254,6 +328,9 @@ public static class RemoteQueueStarvationEndpoints
             var visibleItems = snapshot.Items
                 .Where(item => ProjectAccessAuthorization.Allows(human.User, item.ProjectName, projects))
                 .ToList();
+            // The provider-limit summary is host-wide and names no task, so it
+            // stays whole for every viewer: hiding it per project would leave a
+            // user staring at an idle board with no explanation.
             return Results.Ok(snapshot with
             {
                 Active = visibleItems.Count > 0 && snapshot.AvailableSlots > 0,

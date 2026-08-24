@@ -12,6 +12,14 @@ interface RemoteQueueStarvationItem {
   lastRejection?: RemoteDispatchRejection | null;
 }
 
+/** One CLI whose shared provider account is out of budget until `resetAt`. */
+interface RemoteQueueProviderLimit {
+  cliType: string;
+  resetAt: string;
+  waitingTaskCount: number;
+  reason: string;
+}
+
 interface RemoteQueueStarvationSnapshot {
   active: boolean;
   waitingTaskCount: number;
@@ -23,6 +31,7 @@ interface RemoteQueueStarvationSnapshot {
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
+  providerLimits?: RemoteQueueProviderLimit[] | null;
 }
 
 @Component({
@@ -51,6 +60,31 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
   readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 0);
   readonly hasRejections = computed(() =>
     this.visibleItems().some(item => item.lastRejection != null));
+
+  /**
+   * A parked provider account is a different fact from a stalled queue: nothing
+   * is broken, no operator action helps, and the cards resume by themselves.
+   * The banner therefore names the limit and its reset instead of reporting
+   * free capacity nobody can use.
+   */
+  readonly providerLimits = computed(() => this.snapshot()?.providerLimits ?? []);
+  readonly providerLimited = computed(() => this.providerLimits().length > 0);
+  readonly limitedClis = computed(() =>
+    this.providerLimits().map(limit => limit.cliType).join(', '));
+  readonly limitedTaskCount = computed(() =>
+    this.providerLimits().reduce((total, limit) => total + limit.waitingTaskCount, 0));
+
+  /** The soonest reset across all parked CLIs, as a local wall-clock time. */
+  readonly limitResetLabel = computed(() => {
+    const resets = this.providerLimits()
+      .map(limit => Date.parse(limit.resetAt))
+      .filter(value => !Number.isNaN(value));
+    if (resets.length === 0) return '';
+    return new Date(Math.min(...resets)).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  });
 
   ngOnInit(): void {
     this.refresh();

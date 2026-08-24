@@ -62,6 +62,20 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- A provider limit has two scopes and they must not be conflated
+  (`ProviderLimitDetector`, `contracts/`). An ACCOUNT-level session or usage
+  limit is shared by every run on the host, so it pauses that CLI fleet-wide; a
+  per-request throttle (a bare 429 with no reset evidence, or one clearing inside
+  five minutes) stays on the ordinary retry path. Claude's `rate_limit_event`
+  frame is authoritative over prose: `allowed` and `allowed_warning` are
+  informational and must never pause anything, `rejected` is the hard stop. An
+  account limit is never a task failure, never escalates, and never writes a
+  per-card failure record. See the runner domain map for the gate, the
+  `limited` capability status, and the automatic resume.
+- Never guess a reset instant. An elapsed, implausibly distant, or timezone-less
+  wall-clock reset ("resets 12:20am") stays unresolved so the caller applies its
+  own bounded, re-probing default. Guessing is wrong in both directions: too
+  early restarts the storm, too late idles the fleet.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

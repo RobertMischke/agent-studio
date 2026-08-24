@@ -12,7 +12,8 @@ internal static class RunnerCapabilityProbe
         bool gitWorkflowPushReady = true,
         string? gitDetail = null,
         ProviderAuthProbe? providerAuth = null,
-        TaskServerConnectivitySnapshot? connectivity = null)
+        TaskServerConnectivitySnapshot? connectivity = null,
+        ProviderLimitGate? providerLimits = null)
     {
         var list = new List<AdvertisedCapabilityDto>
         {
@@ -46,7 +47,8 @@ internal static class RunnerCapabilityProbe
             AddCodingCliCapabilities(
                 list,
                 options,
-                providerAuth ?? ProviderAuthProbe.Shared);
+                providerAuth ?? ProviderAuthProbe.Shared,
+                providerLimits);
             list.Add(Capability(
                 CapabilityProtocol.GitPush,
                 "source",
@@ -82,7 +84,8 @@ internal static class RunnerCapabilityProbe
             AddCodingCliCapabilities(
                 list,
                 options,
-                providerAuth ?? ProviderAuthProbe.Shared);
+                providerAuth ?? ProviderAuthProbe.Shared,
+                providerLimits);
             list.Add(Capability(CapabilityProtocol.Vision, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.SemanticReview, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.GitMaterialization, "review", ToolVersion("git"), "git"));
@@ -230,29 +233,77 @@ internal static class RunnerCapabilityProbe
     private static void AddCodingCliCapabilities(
         ICollection<AdvertisedCapabilityDto> capabilities,
         RunnerOptions options,
-        ProviderAuthProbe providerAuth)
+        ProviderAuthProbe providerAuth,
+        ProviderLimitGate? providerLimits)
     {
         foreach (var (cliType, binary) in CodingCliBinaries(options))
         {
             var auth = providerAuth.Current(binary);
             var binaryAvailable = ProviderAuthProbe.ExecutableExists(binary);
+            // An account-level provider limit withdraws BOTH keys for this CLI.
+            // Admission requires every required capability to read exactly
+            // "ready", so withdrawing them is what pauses claude claims while
+            // leaving codex cards eligible - their keys are separate and
+            // untouched. This is the fleet-wide pause the 2026-08-23 outage
+            // needed, expressed in the protocol that already exists rather than
+            // in a new lane.
+            var hold = providerLimits?.Current(cliType);
             capabilities.Add(Capability(
                 CapabilityProtocol.CliExecution(cliType),
                 "cli-execution",
                 binaryAvailable ? "available" : null,
                 binary,
-                binaryAvailable ? ProviderAuthProbe.Ready : ProviderAuthProbe.Unavailable,
-                binaryAvailable
-                    ? $"CLI binary '{binary}' is available for {cliType} cards."
-                    : $"CLI binary '{binary}' was not found; {cliType} cards cannot execute."));
+                !binaryAvailable
+                    ? CapabilityAdvertisedStatuses.Unavailable
+                    : hold is not null
+                        ? CapabilityAdvertisedStatuses.Limited
+                        : CapabilityAdvertisedStatuses.Ready,
+                !binaryAvailable
+                    ? $"CLI binary '{binary}' was not found; {cliType} cards cannot execute."
+                    : hold is not null
+                        ? hold.Describe()
+                        : $"CLI binary '{binary}' is available for {cliType} cards."));
             capabilities.Add(Capability(
                 CapabilityProtocol.ProviderAuthentication(cliType),
                 "provider-auth",
                 binaryAvailable ? "available" : null,
                 cliType,
-                auth.Status,
-                auth.Detail));
+                // A parked account is not a broken credential. Only override a
+                // status that would otherwise be ready, so a genuine logout
+                // keeps saying "unavailable" and stays separately diagnosable.
+                hold is not null && auth.IsReady
+                    ? CapabilityAdvertisedStatuses.Limited
+                    : auth.Status,
+                hold is not null && auth.IsReady
+                    ? $"{hold.Describe()}. The credential is valid; the account's budget is spent."
+                    : auth.Detail));
         }
+    }
+
+    /// <summary>
+    /// True only when EVERY coding CLI this host offers is parked by an
+    /// account-level limit, which is the one situation where claiming at all is
+    /// pointless. A mixed host with a parked Claude account keeps claiming: its
+    /// codex cards require the codex keys, which are still advertised ready.
+    /// This is the "plane keeps other CLIs eligible" half of the pause.
+    /// </summary>
+    public static bool AllCodingClisLimited(RunnerOptions options, ProviderLimitGate? providerLimits)
+    {
+        if (providerLimits is null) return false;
+        var binaries = CodingCliBinaries(options);
+        return binaries.Count > 0
+               && binaries.All(item => providerLimits.IsLimited(item.CliType));
+    }
+
+    /// <summary>The soonest instant any parked CLI on this host is due back.</summary>
+    public static DateTimeOffset? EarliestLimitReset(RunnerOptions options, ProviderLimitGate? providerLimits)
+    {
+        if (providerLimits is null) return null;
+        var holds = CodingCliBinaries(options)
+            .Select(item => providerLimits.Current(item.CliType))
+            .OfType<ProviderLimitHold>()
+            .ToList();
+        return holds.Count == 0 ? null : holds.Min(hold => hold.LimitedUntil);
     }
 
     internal static IReadOnlyList<(string CliType, string Binary)> CodingCliBinaries(

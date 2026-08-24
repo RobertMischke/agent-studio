@@ -4,7 +4,26 @@ using System.Text.RegularExpressions;
 namespace AgentRunner;
 
 /// <summary>The terminal outcome an agent signs its run off with.</summary>
-public enum RunOutcomeKind { Done, Blocked, NeedsInput, NoOp, Unknown, EnvironmentFailure }
+public enum RunOutcomeKind
+{
+    Done,
+    Blocked,
+    NeedsInput,
+    NoOp,
+    Unknown,
+    EnvironmentFailure,
+
+    /// <summary>
+    /// The run never got to decide anything: the shared provider account was out
+    /// of budget, so the CLI was rejected before it could work the card. The card
+    /// is untouched and must go back to Ready to be claimed again when the window
+    /// resets - it is NOT blocked, NOT inconclusive, and above all not a failure
+    /// of this task. Typed distinctly because the absence of this case is what
+    /// escalated 32 cards on 2026-08-23: a quota death fell through to
+    /// <see cref="Unknown"/>, which the server maps straight to 5e-escalated.
+    /// </summary>
+    ProviderLimited,
+}
 
 public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
 {
@@ -12,14 +31,15 @@ public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
     /// Lane expected from the server's normal remote-run completion policy for
     /// a coding run. Environment failures return to Ready while the
     /// server-owned retry budget remains; the exhausted attempt is promoted to
-    /// Escalated by the server. An Epic planning run is not a coding run and
-    /// does not follow this mapping: it carries no Result-SHA and the server
-    /// completes it into 5-human-review.
+    /// Escalated by the server. A provider-limited run also returns to Ready, but
+    /// spends no retry budget at all, because nothing about the card failed. An
+    /// Epic planning run is not a coding run and does not follow this mapping: it
+    /// carries no Result-SHA and the server completes it into 5-human-review.
     /// </summary>
     public string TargetState => Kind switch
     {
         RunOutcomeKind.Done or RunOutcomeKind.NoOp => "4-auto-review",
-        RunOutcomeKind.EnvironmentFailure => "2-ready",
+        RunOutcomeKind.EnvironmentFailure or RunOutcomeKind.ProviderLimited => "2-ready",
         _ => "5-human-review",
     };
 
@@ -30,6 +50,7 @@ public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
         RunOutcomeKind.NeedsInput => "Remote run needs input",
         RunOutcomeKind.NoOp => "Remote run was a no-op",
         RunOutcomeKind.EnvironmentFailure => "Remote claim environment preparation failed",
+        RunOutcomeKind.ProviderLimited => "Remote run paused: the provider account is out of budget",
         _ => "Remote run ended without a terminal sentinel",
     };
 }

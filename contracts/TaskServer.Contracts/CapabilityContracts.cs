@@ -41,6 +41,32 @@ public static class CapabilityHealthStates
     public const string HalfOpen = "half-open";
 }
 
+/// <summary>
+/// The advertised status vocabulary. Claim admission requires exactly
+/// <see cref="Ready"/>, so every other value withdraws the capability; the value
+/// itself is what tells an operator WHY, and it is echoed verbatim in the
+/// admission-refusal message.
+/// </summary>
+public static class CapabilityAdvertisedStatuses
+{
+    /// <summary>Usable right now. The only value that admits a claim.</summary>
+    public const string Ready = "ready";
+
+    /// <summary>Structurally missing: no binary, no credential, no route.</summary>
+    public const string Unavailable = "unavailable";
+
+    /// <summary>
+    /// Present and authenticated, but the shared provider account is out of
+    /// budget until a known instant. Distinct from <see cref="Unavailable"/>
+    /// because nothing is broken and no operator action is required: the
+    /// capability returns on its own when the window resets. Keeping the two
+    /// apart is what lets the board say "limited until 00:20" instead of
+    /// reporting a dead host, and what lets the starvation alarm stay quiet
+    /// while a fleet is merely waiting.
+    /// </summary>
+    public const string Limited = "limited";
+}
+
 public sealed record AdvertisedCapabilityDto(
     string Key,
     string Category,

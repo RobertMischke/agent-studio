@@ -1,3 +1,13 @@
+@if (providerLimited()) {
+  <app-notification
+    kind="info"
+    layout="banner"
+    ariaLive="polite"
+    testid="remote-queue-provider-limit-banner">
+    <strong data-testid="notice-bar-headline">{{ limitedClis() }} {{ providerLimits().length === 1 ? 'is' : 'are' }} limited until {{ limitResetLabel() }}.</strong>
+    <span class="notification__detail" data-testid="notice-bar-detail">The provider account's session budget is spent, so <span class="notification__number">{{ limitedTaskCount() }}</span> {{ limitedTaskCount() === 1 ? 'card is' : 'cards are' }} waiting. They resume automatically at the reset; no action is needed.</span>
+  </app-notification>
+}
 @if (visibleItems().length > 0) {
   <app-notification
     kind="warning"

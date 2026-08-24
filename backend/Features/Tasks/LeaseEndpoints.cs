@@ -1022,13 +1022,21 @@ public static class LeaseEndpoints
             {
                 "done" or "noop" => TaskStates.AutoReview,
                 "blocked" or "needsinput" or "unknown" => TaskStates.Escalated,
+                // AGT-2680. The run never reached the card: the shared provider
+                // account was out of budget. The card is untouched, so it goes
+                // straight back to Ready to be claimed again when the window
+                // resets. Unlike "environmentfailure" this spends NO claim-failure
+                // budget (see the Record call below, which stays gated on
+                // environmentfailure) and unlike "unknown" it never escalates -
+                // that fall-through is what escalated 32 cards on 2026-08-23.
+                "providerlimited" => TaskStates.Ready,
                 "environmentfailure" => TaskStates.Ready,
                 _ => string.Empty,
             };
             if (targetState.Length == 0)
                 return Results.BadRequest(new RemoteRunCompletionResponse(
                     req.TaskKey, reportedOutcome, TaskStates.Progress,
-                    "Outcome must be Done, NoOp, Blocked, NeedsInput, Unknown, or EnvironmentFailure."));
+                    "Outcome must be Done, NoOp, Blocked, NeedsInput, Unknown, EnvironmentFailure, or ProviderLimited."));
 
             // AGT-2178: Epic planning is source-read-only - it produces no commit
             // and therefore no fenced ResultSha. The 2177 ResultSha gate only
@@ -1487,6 +1495,32 @@ public static class LeaseEndpoints
                 claimFailure = remoteClaimFailures.Record(task, reportedReason);
                 details["attempt"] = claimFailure.Attempt.ToString();
                 details["maximumAttempts"] = claimFailure.MaximumAttempts.ToString();
+            }
+            if (outcome == "providerlimited")
+            {
+                // Reuse the durable quota-wait sidecar rather than inventing a
+                // lane: the card sits in Ready and the marker is what makes the
+                // wait visible on the board and re-probeable by the pickup gate.
+                // A card that is merely waiting must never look like a failure,
+                // so no failure budget is charged above and no escalation runs.
+                var limitedUntil = (req.ProviderLimitUntil ?? DateTime.UtcNow.AddMinutes(30))
+                    .ToUniversalTime();
+                QuotaWaitMarker.Write(
+                    task.FolderPath,
+                    new QuotaWaitRecord
+                    {
+                        CliType = req.ProviderLimitCli ?? "unknown",
+                        StartedAt = DateTime.UtcNow,
+                        ResetAt = limitedUntil,
+                        ThresholdMinutes = 0,
+                        Reason = req.ProviderLimitEvidence
+                                 ?? reportedReason
+                                 ?? "The provider account's session budget is exhausted.",
+                    },
+                    loggerFactory.CreateLogger("RemoteRunCompletion.ProviderLimit"));
+                details["providerLimitCli"] = req.ProviderLimitCli ?? "unknown";
+                details["providerLimitUntil"] = limitedUntil.ToString("o");
+                details["providerLimitResetStated"] = (req.ProviderLimitUntil is not null).ToString();
             }
             if (reviewAttempt is not null)
             {

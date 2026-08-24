@@ -320,8 +320,17 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     this.job().state === TaskState.Progress ? this.job().pendingIntent ?? null : null);
   readonly currentAutoLoop = computed(() =>
     this.job().state === TaskState.Progress ? this.job().autoLoop ?? null : null);
+  /**
+   * A quota wait is legible in both lanes it can occur in: Progress (a run
+   * pausing mid-flight) and Ready (a card handed back because the provider
+   * account is out of budget, AGT-2680). Gating this on Progress alone hid the
+   * far more common Ready case, so a card parked overnight by a session limit
+   * looked like an ordinary idle card with no explanation.
+   */
   readonly currentQuotaWait = computed(() =>
-    this.job().state === TaskState.Progress ? this.job().quotaWait ?? null : null);
+    this.job().state === TaskState.Progress || this.job().state === TaskState.Ready
+      ? this.job().quotaWait ?? null
+      : null);
   /**
    * Card-level "code review running" flag. Reads the shared
    * {@link CodeReviewActivityStore} singleton the detail-pane panel marks

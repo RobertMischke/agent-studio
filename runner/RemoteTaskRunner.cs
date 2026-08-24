@@ -26,18 +26,27 @@ public sealed class RemoteTaskRunner
     private readonly RunnerStateStore _state;
     private readonly RunnerProcessInventoryTracker _inventory;
 
+    /// <summary>
+    /// Host-level account-limit gate. Shared with the daemon so a limit observed
+    /// while finishing one card immediately withdraws that CLI from the next
+    /// advertisement instead of letting the claim loop walk into it again.
+    /// </summary>
+    private readonly ProviderLimitGate _providerLimits;
+
     public RemoteTaskRunner(
         RunnerOptions options,
         TaskServerClient client,
         Action<string> log,
         RunnerStateStore? state = null,
-        RunnerProcessInventoryTracker? inventory = null)
+        RunnerProcessInventoryTracker? inventory = null,
+        ProviderLimitGate? providerLimits = null)
     {
         _options = options;
         _client = client;
         _log = log;
         _state = state ?? new RunnerStateStore(options.StateDir);
         _inventory = inventory ?? new RunnerProcessInventoryTracker();
+        _providerLimits = providerLimits ?? new ProviderLimitGate(options.StateDir, log: log);
     }
 
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
@@ -373,7 +382,8 @@ public sealed class RemoteTaskRunner
                     artifactManifest?.Digest,
                     outputLines,
                     sourceMutated,
-                    shutdown);
+                    shutdown,
+                    slot.RunSpec?.CliType);
             }
             handedBack = true;
             _log($"task '{taskKey}' handed back to the local board: {outcome.Kind}");
@@ -421,7 +431,8 @@ public sealed class RemoteTaskRunner
                     artifactManifestDigest: null,
                     outputLines,
                     sourceMutated: false,
-                    CancellationToken.None);
+                    CancellationToken.None,
+                    slot.RunSpec?.CliType);
                 handedBack = true;
             }
             return 1;
@@ -541,7 +552,8 @@ public sealed class RemoteTaskRunner
                                 artifactManifest?.Digest,
                                 outputLines,
                                 sourceMutated,
-                                CancellationToken.None);
+                                CancellationToken.None,
+                                slot.RunSpec?.CliType);
                             handedBack = true;
                         }
                     }
@@ -807,7 +819,8 @@ public sealed class RemoteTaskRunner
                             workspace,
                             processResult,
                             result.LaunchFailed,
-                            sameSessionResumeAttempts);
+                            sameSessionResumeAttempts,
+                            slot.RunSpec?.CliType);
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
                     {
@@ -919,7 +932,8 @@ public sealed class RemoteTaskRunner
         GitWorkspace workspace,
         ProcessResult result,
         bool launchFailed,
-        int sameSessionResumeAttempts)
+        int sameSessionResumeAttempts,
+        string? cliType = null)
     {
         var provider = ProviderOutputEvidenceExtractor.Extract(result.StdOut);
         // Resume stays gated on a configured RUNNER_CLI_RESUME_ARGS on BOTH
@@ -961,12 +975,56 @@ public sealed class RemoteTaskRunner
                 => new RunOutcome(
                     RunOutcomeKind.EnvironmentFailure,
                     DescribePreparationFailure(result.StdErr)),
+            // The case whose absence caused the 2026-08-23 escalation storm. A
+            // quota death used to fall through to the catch-all below and be
+            // reported as "unknown", which the server maps straight to
+            // 5e-escalated. It is neither unknown nor a property of the card:
+            // the shared account was out of budget before the agent could work.
+            ExecutionOutcomeKind.QuotaExceeded
+                => ClassifyProviderLimit(cliType, result, typed),
             _ => new RunOutcome(RunOutcomeKind.Unknown, typed.Outcome.ToString()),
         };
         return new RemoteExecutionResult(
             outcome,
             result.StdOut.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
             typed);
+    }
+
+    /// <summary>
+    /// Splits a quota rejection into the two cases that need opposite handling.
+    ///
+    /// <para>An ACCOUNT-level session/usage limit is shared by every run on this
+    /// host, so it arms the host gate (withdrawing this CLI from the next
+    /// capability advertisement) and returns the card to Ready untouched, with no
+    /// escalation and no failure record. A per-request throttle stays on the
+    /// existing path: it may well clear on the next attempt, and pausing the whole
+    /// CLI for it would trade the storm for an idle fleet.</para>
+    /// </summary>
+    private RunOutcome ClassifyProviderLimit(
+        string? requestedCliType,
+        ProcessResult result,
+        ExecutionOutcomeDecision typed)
+    {
+        var cliType = AgentCliProcess.NormalizeCliType(requestedCliType)
+                      ?? AgentCliProcess.ConfiguredCliType(_options);
+        var signal = ProviderLimitDetector.Detect(
+            string.Join('\n', result.StdErr, result.StdOut),
+            DateTimeOffset.UtcNow);
+
+        if (!signal.IsAccountLimit)
+        {
+            _log(
+                $"[runner] provider throttle on {cliType} without account-limit evidence; " +
+                $"leaving the card on the existing retry path. evidence: {signal.Evidence}");
+            return new RunOutcome(RunOutcomeKind.Unknown, typed.Outcome.ToString());
+        }
+
+        var hold = _providerLimits.Record(cliType, signal);
+        var reason = hold is null
+            ? $"{cliType}: the provider account is out of budget."
+            : $"{hold.Describe()}. {hold.Evidence}";
+        _log($"[runner] provider-limit hold armed for {cliType}: {reason}");
+        return new RunOutcome(RunOutcomeKind.ProviderLimited, reason);
     }
 
     private async Task<DurableArtifactManifest> UploadResultsAsync(
@@ -1164,10 +1222,20 @@ public sealed class RemoteTaskRunner
         string? artifactManifestDigest,
         IReadOnlyList<string> outputLines,
         bool sourceMutated,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? cliType = null)
     {
         var (envelopeBaseSha, envelopeResultRef, envelopeManifestDigest) =
             BuildEnvelopeCompletionFields(teardown, baseSha, artifactManifestDigest);
+        // For a provider-limited run the server needs the reset, not just prose:
+        // it is what the card's quota-wait marker renders and what the pickup
+        // gate re-probes on. Only populated for that outcome, so every other
+        // completion keeps its existing wire shape byte for byte.
+        var limitHold = outcome.Kind == RunOutcomeKind.ProviderLimited
+            ? _providerLimits.Current(
+                AgentCliProcess.NormalizeCliType(cliType)
+                ?? AgentCliProcess.ConfiguredCliType(_options))
+            : null;
         var resp = await _client.CompleteRunAsync(new RemoteRunCompletionRequest(
             taskKey, lease.LeaseId, lease.FencingToken, _options.RunnerId,
             outcome.Kind.ToString(), outcome.Reason, _options.RunnerName,
@@ -1193,7 +1261,10 @@ public sealed class RemoteTaskRunner
             BaseSha: envelopeBaseSha,
             ImmutableResultRef: envelopeResultRef,
             ArtifactManifestDigest: envelopeManifestDigest,
-            IntegrationBranch: integrationBranch), ct);
+            IntegrationBranch: integrationBranch,
+            ProviderLimitCli: limitHold?.CliType,
+            ProviderLimitUntil: limitHold?.LimitedUntil.UtcDateTime,
+            ProviderLimitEvidence: limitHold?.Evidence), ct);
         _log($"remote-runner-completion recorded: outcome {resp?.Outcome}, state {resp?.TargetState}, result-envelope {(envelopeResultRef is null ? "absent" : "attached")}");
     }
 
@@ -1209,7 +1280,8 @@ public sealed class RemoteTaskRunner
         string? artifactManifestDigest,
         IReadOnlyList<string> outputLines,
         bool sourceMutated,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? cliType = null)
     {
         var external = BuildVerifiedOutOfBandRequest(outcome, teardown, _options.RunnerName);
         if (external is not null)
@@ -1233,7 +1305,8 @@ public sealed class RemoteTaskRunner
             artifactManifestDigest,
             outputLines,
             sourceMutated,
-            ct);
+            ct,
+            cliType);
     }
 
     internal static ExternalCompletionRequest? BuildVerifiedOutOfBandRequest(
