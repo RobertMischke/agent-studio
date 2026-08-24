@@ -90,6 +90,19 @@ public sealed class RemoteReviewWorkspace
             ["GIT_TERMINAL_PROMPT"] = "0",
             ["GIT_OPTIONAL_LOCKS"] = "0",
         };
+        if (OperatingSystem.IsWindows())
+        {
+            // The hermetic set above is Linux-shaped. A Windows process tree is
+            // not functional without the OS plumbing variables (powershell.exe
+            // and most tools hard-require SystemRoot; cmd shims need ComSpec and
+            // PATHEXT), so on a Windows host they pass through - they carry no
+            // credentials and no per-project state.
+            foreach (var name in new[] { "SystemRoot", "windir", "SystemDrive", "ComSpec", "PATHEXT" })
+            {
+                var value = Environment.GetEnvironmentVariable(name);
+                if (!string.IsNullOrWhiteSpace(value)) environment[name] = value;
+            }
+        }
         foreach (var name in _options.ReviewCredentialEnvironment)
         {
             if (!SafeEnvironmentName(name))
