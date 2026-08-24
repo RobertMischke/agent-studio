@@ -308,7 +308,7 @@ test('each lane counter explains its lane via the canonical appTooltip', async (
   await expect(tip).toBeVisible({ timeout: 5_000 });
   await expect(tip).toHaveText(/In Progress.*actively running/);
 
-  // Green counter = Human Review (5-human-review).
+  // Review-hue counter = Human Review (5-human-review).
   await page.getByTestId(`studio-explorer-project-board-count-human-review-${PROJECT}`).hover();
   await expect(tip).toBeVisible({ timeout: 5_000 });
   await expect(tip).toHaveText(/Human Review.*waiting for your review/);
