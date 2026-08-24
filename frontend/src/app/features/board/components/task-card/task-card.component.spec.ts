@@ -7,6 +7,8 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskCardComponent } from './task-card.component';
 import { MODEL_IDS } from '../../../cli';
 import { ProviderAuthStatusService } from '../../../remote-hosts';
+import { TaskService } from '../../../../services/task.service';
+import { ModalStackService } from '../../../../services/modal-stack.service';
 import type { TaskInfo, ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
 import {
   buildEffectiveModelChip,
@@ -1206,6 +1208,120 @@ describe('TaskCardComponent (smoke)', () => {
     expect(footnote?.getAttribute('aria-label')).toContain('historical list prices');
 
     fixture.destroy();
+  });
+
+  // Regression (AGT-2675): operator screenshot showed several token popovers
+  // stacked open at once across cards in a lane, none dismissing, covering
+  // card content. Exactly one popover may be open at a time; it must also
+  // dismiss on outside click, Escape, and a wholesale board data refresh.
+  describe('token popover exclusivity + dismissal (AGT-2675)', () => {
+    function tokenSummary(overrides: Partial<NonNullable<TaskInfo['tokenSummary']>> = {}) {
+      return {
+        calls: 1,
+        inputTokens: 1_000,
+        outputTokens: 200,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        totalTokens: 1_200,
+        lastModel: 'claude-opus-4-7',
+        lastUpdate: '2026-06-09T08:30:00Z',
+        entries: [],
+        ...overrides,
+      };
+    }
+
+    async function renderTwoCards() {
+      await TestBed.configureTestingModule({
+        imports: [TaskCardComponent],
+        providers: [
+          provideZonelessChangeDetection(),
+          provideHttpClient(),
+          provideHttpClientTesting(),
+          provideRouter([]),
+        ],
+      }).compileComponents();
+
+      const fixtureA = TestBed.createComponent(TaskCardComponent);
+      fixtureA.componentRef.setInput('job', makeJob({
+        id: 'task-a', taskKey: 'test::task-a', folderPath: '/tmp/watch/3-progress/task-a',
+        tokenSummary: tokenSummary(),
+      }));
+      fixtureA.detectChanges();
+
+      const fixtureB = TestBed.createComponent(TaskCardComponent);
+      fixtureB.componentRef.setInput('job', makeJob({
+        id: 'task-b', taskKey: 'test::task-b', folderPath: '/tmp/watch/3-progress/task-b',
+        tokenSummary: tokenSummary(),
+      }));
+      fixtureB.detectChanges();
+
+      const wrapA = fixtureA.nativeElement.querySelector('[appTokenPopover]') as HTMLElement;
+      const popoverA = fixtureA.nativeElement.querySelector('[data-token-popover]') as HTMLElement;
+      const wrapB = fixtureB.nativeElement.querySelector('[appTokenPopover]') as HTMLElement;
+      const popoverB = fixtureB.nativeElement.querySelector('[data-token-popover]') as HTMLElement;
+
+      return { fixtureA, fixtureB, wrapA, popoverA, wrapB, popoverB };
+    }
+
+    it('opening a second card popover closes the first, then a board refresh closes it too', async () => {
+      const { fixtureA, fixtureB, wrapA, popoverA, wrapB, popoverB } = await renderTwoCards();
+
+      wrapA.dispatchEvent(new MouseEvent('mouseenter'));
+      fixtureA.detectChanges();
+      expect(popoverA.hidden, 'card A popover opens on hover').toBe(false);
+
+      wrapB.dispatchEvent(new MouseEvent('mouseenter'));
+      fixtureB.detectChanges();
+      fixtureA.detectChanges();
+      expect(popoverB.hidden, 'card B popover opens on hover').toBe(false);
+      expect(popoverA.hidden, 'opening card B must close card A — exactly one popover open at a time').toBe(true);
+
+      const taskService = TestBed.inject(TaskService);
+      taskService.boardRefreshedAt.update((v) => v + 1);
+      fixtureB.detectChanges();
+      expect(popoverB.hidden, 'a board data refresh must close the open popover').toBe(true);
+
+      fixtureA.destroy();
+      fixtureB.destroy();
+    });
+
+    it('closes on outside click', async () => {
+      const { fixtureA, wrapA, popoverA } = await renderTwoCards();
+
+      wrapA.dispatchEvent(new MouseEvent('mouseenter'));
+      fixtureA.detectChanges();
+      expect(popoverA.hidden).toBe(false);
+
+      // The outside-click listener arms after a short grace delay (it would
+      // otherwise catch a scroll/click that is itself part of the same
+      // interaction that opened the popover, e.g. scroll-into-view before a
+      // real hover — see `TokenPopoverDirective.attachDismissListeners`).
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      fixtureA.detectChanges();
+      expect(popoverA.hidden, 'a click outside the trigger and panel must close it').toBe(true);
+
+      fixtureA.destroy();
+    });
+
+    it('closes on Escape via the shared modal stack', async () => {
+      const { fixtureA, wrapA, popoverA } = await renderTwoCards();
+
+      wrapA.dispatchEvent(new MouseEvent('mouseenter'));
+      fixtureA.detectChanges();
+      expect(popoverA.hidden).toBe(false);
+
+      const modalStack = TestBed.inject(ModalStackService);
+      expect(modalStack.hasOpen(), 'the open popover must register an Escape handler').toBe(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      fixtureA.detectChanges();
+      expect(popoverA.hidden, 'Escape must close the popover').toBe(true);
+      expect(modalStack.hasOpen(), 'closing must unregister the Escape handler').toBe(false);
+
+      fixtureA.destroy();
+    });
   });
 
   // ── Canonical execution-location badge ─────────────────────────────────

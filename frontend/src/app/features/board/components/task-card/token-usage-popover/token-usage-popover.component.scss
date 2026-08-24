@@ -24,6 +24,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* AGT-2675: an unconditional `:host { display: block }` is an author rule,
+   and author rules always win over the UA stylesheet's `[hidden] { display:
+   none }` regardless of selector specificity or source order (CSS cascade
+   sorts by origin before specificity). Without this override the native
+   `hidden` attribute the directive toggles was purely cosmetic — the panel
+   kept a real fixed-position layout box at its default (in-DOM) static
+   position and intercepted pointer events even while "hidden", which is how
+   several of them ended up stacked and visible over card content at once. */
+:host([hidden]) {
+  display: none;
+}
+
 /* One quiet type hierarchy: a single uppercase micro-label for the panel
    title and every section head, one body size for every value. */
 .tup__title,
