@@ -67,6 +67,27 @@ Cause: `TaskRunnerService` only creates per-project runners at startup. Hot-relo
 
 Fix: restart the backend (`./api.sh restart`). Tracked for a durable fix as `fix-runner-mode-rejects-newly-added-projects`. Full context: [onboard-a-project.md](./onboard-a-project.md) Step 2.
 
+## "api.sh restart said it worked, but the old code is still being served"
+
+Symptom: `./api.sh restart` prints `API stopped.` and then `API is successfully started and healthy!`, but the deployed change is not live. A config edit (for example a `project-settings.json` patch) has no effect, the process start time in `./api.sh status` is older than the restart, or a rebuild fails to copy into `backend/bin` because a file is locked.
+
+Cause: this was a real defect, fixed on 2026-08-24 (AGT-2678). Before the fix, `stop` only signalled the one PID it happened to know about, and `start` only asked whether `/healthz` returned 200. Neither question can tell the new process from the old one:
+
+- `dotnet run` is a launcher whose *child* owns the port. Signalling one of the two left the other alive. A surviving child kept serving; a surviving launcher kept the build output locked, which is what produced the "zombie PID holds the DLLs" rebuild failure.
+- An orphaned backend answers `/healthz` exactly like a fresh one. When the old process still owned the port, the newly launched one died with an address-in-use error and `start` reported the *old* process as its own success.
+- Nothing ever compared the process before the restart with the process after it.
+
+Fix: nothing to do on a current checkout. `api.sh` now verifies each step and fails loudly instead of reporting a hollow success: `stop` sweeps the port listener and every `OrchestratorApi` process of that checkout, then proves the port is free; `start` refuses a port owned by a process it did not launch; `restart` asserts that the PID and the process start time both changed.
+
+To prove it on your own machine, or to check an older checkout:
+
+```sh
+bash tools/api-restart-selfcheck.sh                                    # hermetic, no .NET build needed
+bash tools/api-restart-selfcheck.sh --live ../agent-taskboard-stable   # restarts the real seat
+```
+
+The hermetic run reproduces both failure shapes (an orphan that outlived its launcher, and a healthy stranger on the port) and fails with a named check against any `api.sh` that does not satisfy the contract. Full analysis: [../common-problems/hollow-api-restart/](../common-problems/hollow-api-restart/).
+
 ## "Codex run lands as missing-terminal-sentinel"
 
 Symptom: a Codex job finishes the work cleanly but the run is marked `missing-terminal-sentinel` and lands in auto-review instead of `4-auto-review -> 5-human-review` with a clean Done.
