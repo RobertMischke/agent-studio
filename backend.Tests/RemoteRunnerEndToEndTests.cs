@@ -459,7 +459,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         var origin = await SeedOriginAsync();
         var repo = Path.Combine(_workspace, "token-economy-repo");
         await GitAsync(_workspace, "clone", origin, repo);
-        await GitAsync(repo, "checkout", "-b", "main", "origin/main");
+        // -B, not -b: the clone already checked out a local "main" (the bare
+        // origin's HEAD points at it), so creating it again must not fail.
+        await GitAsync(repo, "checkout", "-B", "main", "origin/main");
         await GitAsync(repo, "config", "user.email", "test@example.invalid");
         await GitAsync(repo, "config", "user.name", "Test");
         var baseSha = (await GitAsync(repo, "rev-parse", "HEAD")).StdOut.Trim();
@@ -1460,7 +1462,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         const string canonical = "runner/agent-runner-e2e/AGT-RUNNER-E2E";
         var origin = Path.Combine(_workspace, "collision-origin.git");
         var seed = Path.Combine(_workspace, "collision-seed");
-        await GitAsync(_workspace, "init", "--bare", origin);
+        await GitAsync(_workspace, "init", "--bare", "--initial-branch=main", origin);
         await GitAsync(_workspace, "init", seed);
         await GitAsync(seed, "config", "user.name", "Test");
         await GitAsync(seed, "config", "user.email", "test@example.invalid");
@@ -1608,6 +1610,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             new { executionRunner = ProjectName, remoteExecutionEnabled = true });
         assignment.EnsureSuccessStatusCode();
         await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+        // Since the blank-integration-branch semantics changed to "derive from
+        // the checkout's origin/HEAD" (there is no checkout here), the claim
+        // only carries a deterministic branch when the project declares one.
+        (await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/integration-branch",
+            new { branch = "develop" })).EnsureSuccessStatusCode();
 
         var wrongRunner = await client.ClaimAsync(new RClaim(
             "runner-other", "runner-other", "other-host", 1, "remote-runner"), CancellationToken.None);
@@ -2687,6 +2695,12 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             $"/api/projects/{ProjectName}/execution-runner",
             new { executionRunner = ProjectName, remoteExecutionEnabled = true });
         assignment.EnsureSuccessStatusCode();
+        // Declared so the preflight row can report the delivery target; blank
+        // would mean "derive from the checkout's origin/HEAD", and this fixture
+        // deliberately has no checkout.
+        (await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/integration-branch",
+            new { branch = "develop" })).EnsureSuccessStatusCode();
 
         // The registry invariant is visible in Remote Hosts before the Runner
         // ever polls. Operators do not need a failed claim to discover the
@@ -3053,6 +3067,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
+        // Warm the host first: the invariant under test is that the REPORT
+        // returns quickly at the authority boundary, not that a cold Kestrel
+        // pipeline JITs within the same budget - on a loaded Windows host the
+        // first request alone can eat the two seconds.
+        (await http.GetAsync("/healthz")).EnsureSuccessStatusCode();
         using var response = await http.PostAsJsonAsync(
                 "/api/v1/reviews/attempts/review_unknown_authority/report",
                 request)
@@ -3267,7 +3286,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     {
         var origin = Path.Combine(_workspace, "origin.git");
         var seed = Path.Combine(_workspace, "origin-seed");
-        await GitAsync(_workspace, "init", "--bare", origin);
+        // Pin the bare HEAD: without it the origin's default branch is whatever
+        // the host's init.defaultBranch says, and a clone then may or may not
+        // auto-check-out "main" (Git for Windows configures "main" system-wide,
+        // stock git still defaults to "master").
+        await GitAsync(_workspace, "init", "--bare", "--initial-branch=main", origin);
         await GitAsync(_workspace, "init", seed);
         await File.WriteAllTextAsync(Path.Combine(seed, "README.md"), "seed");
         await GitAsync(seed, "add", "--all");
@@ -3277,6 +3300,66 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         await GitAsync(seed, "push", "-u", "origin", "main");
         return origin;
     }
+
+    /// <summary>Idle host: the review-slot admission gate opens.</summary>
+    private static RTelemetry IdleHostTelemetry(int activeSlots) => new(
+        DateTime.UtcNow, 1, 0.0, 0.0, 0.0, 1_000_000_000, 64_000_000_000,
+        0, 0, 0, 0, Environment.ProcessorCount, activeSlots);
+
+    /// <summary>One full load per core: the admission gate closes.</summary>
+    private static RTelemetry BusyHostTelemetry(int activeSlots) => new(
+        DateTime.UtcNow, 100, Environment.ProcessorCount, Environment.ProcessorCount,
+        Environment.ProcessorCount, 32_000_000_000, 64_000_000_000,
+        0, 0, 0, 0, Environment.ProcessorCount, activeSlots);
+
+    /// <summary>
+    /// A review-plan command that appends one line to a file. The plan carries
+    /// a concrete executable, and the production plans name the Linux review
+    /// host's <c>/bin/sh</c> - which does not exist on the Windows dev host
+    /// this MachineBound class also runs on, where the always-present
+    /// <c>powershell.exe</c> stands in.
+    /// </summary>
+    private static Contract.ReviewCommandDto AppendLineCommand(
+        string stepId, string path, string line)
+        => OperatingSystem.IsWindows()
+            ? new Contract.ReviewCommandDto(
+                stepId,
+                "build-tests",
+                "powershell",
+                ["-NoProfile", "-Command", $"Add-Content -LiteralPath '{path}' -Value '{line}'"])
+            : new Contract.ReviewCommandDto(
+                stepId,
+                "build-tests",
+                "/bin/sh",
+                ["-c", $"printf '{line}\\n' >> '{path}'"]);
+
+    /// <summary>
+    /// Like <see cref="AppendLineCommand"/> but parks until
+    /// <paramref name="awaitedFile"/> exists first - the in-flight command a
+    /// daemon restart must adopt rather than repeat.
+    /// </summary>
+    private static Contract.ReviewCommandDto AwaitFileThenAppendLineCommand(
+        string stepId, string awaitedFile, string path, string line)
+        => OperatingSystem.IsWindows()
+            ? new Contract.ReviewCommandDto(
+                stepId,
+                "build-tests",
+                "powershell",
+                [
+                    "-NoProfile",
+                    "-Command",
+                    $"while (-not (Test-Path -LiteralPath '{awaitedFile}')) {{ Start-Sleep -Milliseconds 50 }}; "
+                    + $"Add-Content -LiteralPath '{path}' -Value '{line}'",
+                ])
+            : new Contract.ReviewCommandDto(
+                stepId,
+                "build-tests",
+                "/bin/sh",
+                [
+                    "-c",
+                    $"while [ ! -f '{awaitedFile}' ]; do sleep 0.05; done; "
+                    + $"printf '{line}\\n' >> '{path}'",
+                ]);
 
     [Fact]
     public async Task Review_host_runs_tool_and_agent_aspect_end_to_end_with_honest_step_location()
@@ -3511,20 +3594,9 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             ResultRef: "refs/heads/main",
             Plan: new Contract.ReviewPlanDto(
                 [
-                    new Contract.ReviewCommandDto(
-                        "completed-before-restart",
-                        "build-tests",
-                        "/bin/sh",
-                        ["-c", $"printf 'first\\n' >> '{marker}'"]),
-                    new Contract.ReviewCommandDto(
-                        "in-flight-during-restart",
-                        "build-tests",
-                        "/bin/sh",
-                        [
-                            "-c",
-                            $"while [ ! -f '{release}' ]; do sleep 0.05; done; " +
-                            $"printf 'second\\n' >> '{marker}'",
-                        ]),
+                    AppendLineCommand("completed-before-restart", marker, "first"),
+                    AwaitFileThenAppendLineCommand(
+                        "in-flight-during-restart", release, marker, "second"),
                 ],
                 ["build-tests"])));
         Assert.True(created.Accepted);
@@ -3541,13 +3613,26 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             options: options,
             runnerInstanceId: "review-host:generation-1");
         using var firstStop = new CancellationTokenSource();
-        var firstDaemon = new RReviewDaemon(options, firstClient, firstLogs.Enqueue);
+        // Deterministic idle-host telemetry: the real sampler reads
+        // /proc/loadavg, which does not exist on Windows (admission would stay
+        // closed forever) and reports whatever the host happens to be doing on
+        // Linux. This daemon must be admitted, so its host is idle by fiat.
+        var firstDaemon = new RReviewDaemon(
+            options,
+            firstClient,
+            firstLogs.Enqueue,
+            telemetryProbe: (activeSlots, _) => IdleHostTelemetry(activeSlots));
         var firstRun = firstDaemon.RunAsync(firstStop.Token);
 
+        // The detached review worker is a separate dotnet process; its cold
+        // boot alone can take several seconds on a loaded host, so this first
+        // observation gets triple the usual budget.
         await WaitUntilAsync(
             () => File.Exists(marker)
                   && File.ReadAllLines(marker).SequenceEqual(["first"]),
-            "first review command did not complete");
+            () => "first review command did not complete; daemon log:\n"
+                  + string.Join("\n", firstLogs),
+            attempts: 600);
         var firstSlot = Assert.Single(new RReviewStateStore(options.StateDir).LoadAll());
         var originalFence = firstSlot.Claim.Lease!.Fence;
         Assert.Equal("review-host:generation-1", firstSlot.Claim.Lease.InstanceId);
@@ -3571,10 +3656,16 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             options: replacementOptions,
             runnerInstanceId: "review-host:generation-2");
         using var secondStop = new CancellationTokenSource();
+        // Deterministic busy-host telemetry: this daemon must adopt the
+        // persisted review but keep NEW claims closed by the load gate. One
+        // full load per core is at or above the epsilon threshold on any host;
+        // the real sampler could report exactly 0.00 on an idle box and never
+        // close the gate.
         var secondDaemon = new RReviewDaemon(
             replacementOptions,
             secondClient,
-            secondLogs.Enqueue);
+            secondLogs.Enqueue,
+            telemetryProbe: (activeSlots, _) => BusyHostTelemetry(activeSlots));
         var secondRun = secondDaemon.RunAsync(secondStop.Token);
 
         await WaitUntilAsync(
@@ -3590,7 +3681,8 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         await File.WriteAllTextAsync(release, "continue");
         await WaitUntilAsync(
             () => Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)),
-            "adopted review did not reach Human Review");
+            "adopted review did not reach Human Review",
+            attempts: 600);
         await WaitUntilAsync(
             () => !new RReviewStateStore(options.StateDir).LoadAll().Any(),
             "adopted review state was not cleaned up");
@@ -3969,9 +4061,15 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
         ClaimMaxLoadPerCore = claimMaxLoadPerCore,
     };
 
-    private static async Task WaitUntilAsync(
+    private static Task WaitUntilAsync(
         Func<bool> condition,
         string failure,
+        int attempts = 200)
+        => WaitUntilAsync(condition, () => failure, attempts);
+
+    private static async Task WaitUntilAsync(
+        Func<bool> condition,
+        Func<string> failure,
         int attempts = 200)
     {
         for (var attempt = 0; attempt < attempts; attempt++)
@@ -3979,7 +4077,7 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             if (condition()) return;
             await Task.Delay(50);
         }
-        Assert.Fail(failure);
+        Assert.Fail(failure());
     }
 
     [Theory]
@@ -4632,6 +4730,11 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
 
         using var factory = BuildFactory();
         using var http = factory.CreateClient();
+        // The project truth the stale card must yield to: the configured
+        // integration branch (blank would mean the checkout's origin/HEAD,
+        // and this fixture has no checkout).
+        factory.Services.GetRequiredService<ProjectSettingsService>()
+            .SetIntegrationBranch(ProjectName, "develop");
         SeedReviewAttempt(factory.Services, includeResultEnvelope: true);
         await RegisterReviewExecutorAsync(http, reviewRunnerId, reviewInstance);
         using var reviewClient = new RClient(http, reviewRunnerId, usesDurableTaskServer: true);
