@@ -156,6 +156,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | API project identity / watchPath | [concepts/api-project-identity-and-watchpath.md](../concepts/api-project-identity-and-watchpath.md) |
 | Workflow arguments become unbounded fan-out | [common-problems/workflow-args-json-string-fanout/](../operations/common-problems/workflow-args-json-string-fanout/) |
 | Services killed by a harness sweep | [common-problems/services-killed-by-harness-sweep/](../operations/common-problems/services-killed-by-harness-sweep/) |
+| api.sh restart reports success while the old backend keeps serving | [common-problems/hollow-api-restart/](../operations/common-problems/hollow-api-restart/) |
 | Orchestrator drive-to-conclusion & CLI-crash resilience | [concepts/orchestrator-drive-to-conclusion.html](../concepts/orchestrator-drive-to-conclusion.html) |
 | Task integration & worktree/merge workflow | [concepts/task-integration-and-merge-workflow.md](../concepts/task-integration-and-merge-workflow.md) |
 | Merge config analysis (parallelism coupling) | [concepts/task-integration-merge-config-analysis.html](../concepts/task-integration-merge-config-analysis.html) |

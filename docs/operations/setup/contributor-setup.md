@@ -84,6 +84,14 @@ The `ATP_ALLOW_DEV_BACKEND=1` flag is required. `api.sh` refuses to boot a check
 
 Other commands: `./api.sh stop`, `./api.sh restart`. Backend listens on `http://localhost:5030` by default (`PORT` env var overrides it; `api.sh` pins the default to 5031 automatically if your folder name ends in `-stable`, and refuses a mismatched inherited `PORT` unless you set `API_PORT_OVERRIDE=1`).
 
+Each of those commands verifies its own outcome rather than reporting one, because a health check on its own cannot tell a new backend from an old one that never died (AGT-2678):
+
+- `stop` terminates the port listener **and** every `OrchestratorApi` process belonging to that checkout, including an orphan that outlived its launcher, then proves the port is free. If anything survives, it names the PID and exits non-zero instead of printing "API stopped".
+- `start` refuses to run when the port is owned by a process it did not launch, and only claims success once the process answering `/healthz` is provably the one it just started. `dotnet run` hands the port to a child, so the launcher PID and the listener PID differ by design; both are tracked.
+- `restart` asserts that the PID *and* the process start time changed. A restart that leaves the previous process serving fails.
+
+The sweep is scoped to one checkout and one port: a sibling checkout's backend, and a `dotnet test` run from your own checkout, are never touched. `bash tools/api-restart-selfcheck.sh` proves all of this in about a minute without needing a .NET build; add `--live <checkout>` to prove it against a running backend instead.
+
 ### 2.5 Start the frontend
 
 ```sh
@@ -164,8 +172,9 @@ Scripting task creation instead of clicking through the dialog: the Task API ski
 | Claude quota panel is empty / plan shows unknown | Claude CLI never finished its first-run onboarding wizard | Run `claude` interactively once and click through to the ready prompt; see step 1. Full detail: [troubleshooting.md](./troubleshooting.md#claude-quota-panel-is-empty-plan-shows-unknown). |
 | `npm ci` fails while resolving `coding-agent-chat` | The npm registry is unavailable or the lock file and manifest have drifted | Restore registry access and verify `frontend/package.json` and `frontend/package-lock.json` agree. Do not add a relative `file:` dependency as a workaround. |
 | `claude` / `gemini` command is missing or broken on Windows after an interrupted npm update | Half-completed npm install left orphan shim files or a stub binary | `bash tools/check-cli-shims.sh` - self-heals and re-verifies with `claude --version`. |
-| Port 5030 / 4010 (or 5031 / 4011) already in use | A previous `dotnet run` or `ng serve` is still listening | `./api.sh stop` (kills anything on the pinned port, not just the tracked PID); for the frontend, stop the other `ng serve` or pass `--port <n>`. |
+| Port 5030 / 4010 (or 5031 / 4011) already in use | A previous `dotnet run` or `ng serve` is still listening | `./api.sh stop` (sweeps the port owner and this checkout's backend processes, not just the tracked PID); for the frontend, stop the other `ng serve` or pass `--port <n>`. |
 | A newly-added project's mode toggle returns `400 Invalid project or mode` | Per-project runners are only created at backend startup | `./api.sh restart`. Full detail: [troubleshooting.md](./troubleshooting.md#put-apirunnerprojectmode-returns-400). |
+| `./api.sh restart` succeeds but the change is not live, or a rebuild cannot write `backend/bin` | Fixed in AGT-2678; an older `api.sh` left the previous process alive and reported success anyway | Update the checkout, then confirm with `bash tools/api-restart-selfcheck.sh`. Full detail: [troubleshooting.md](./troubleshooting.md#apish-restart-said-it-worked-but-the-old-code-is-still-being-served). |
 
 For anything not on this short list, the full FAQ is [troubleshooting.md](./troubleshooting.md), and CLI-specific quirks (Codex's Windows sandbox setting, Copilot's auth, Gemini's stdout buffering) are in [onboard-an-agent-cli.md](./onboard-an-agent-cli.md).
 
@@ -174,6 +183,12 @@ For anything not on this short list, the full FAQ is [troubleshooting.md](./trou
 ## Reference: dev + stable side-by-side (optional, advanced)
 
 Everything above gives you **one** working instance. The maintainers additionally run two checkouts side by side on the same machine - `-dev` for active development (backend `:5030` / frontend `:4010`) and `-stable` for the always-on orchestrator seat that actually manages projects (backend `:5031` / frontend `:4011`) - with small outer wrapper scripts (`start-dev.sh`, `start-stable.sh`, `stop-dev.sh`, `stop-stable.sh`) that live **one level above both checkouts**, not inside this repository. The Stable updater is versioned at [`scripts/update-stable.sh`](../../../scripts/update-stable.sh); invoke it there or copy it unchanged to the outer devspace root for compatibility with an existing caller. That pattern is only worth replicating if you are also developing agent-orchestrator itself against a live reference instance; it is not required to use the product. If you do want it, the shape is: two checkouts named so one ends in `-stable`, a shared workspace-root scripts folder that sets `PORT`/`--port` per checkout before delegating to each checkout's own `api.sh`, and the ADR-0044 gate described in step 2.4 left in place (the `-stable` checkout is exempt from it; the `-dev` one is not).
+
+The outer wrappers must **delegate** their process control to `api.sh` rather than reimplement it. `stop-stable.sh` in particular has to propagate `api.sh stop`'s exit code, because [`scripts/update-stable.sh`](../../../scripts/update-stable.sh) fast-forwards the checkout and reinstalls frontend dependencies immediately after calling it. A stop that returns 0 while the old backend is still running is how a rollout serves stale code and a rebuild fails to copy into `backend/bin` (AGT-2678). An outer wrapper that kills a bare PID, or that ends in `|| true`, throws away exactly the verification this depends on. After changing a wrapper, prove the seat still restarts honestly:
+
+```sh
+bash tools/api-restart-selfcheck.sh --live ../agent-taskboard-stable
+```
 
 The repository's development start path (`npm start`, which delegates to
 `ng serve`) does not install dependencies and does not run the postinstall
