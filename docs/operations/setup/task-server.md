@@ -345,9 +345,22 @@ remains in `Maintenance` until an operator explicitly resumes normal service.
 Legacy absolute paths and `watchPath` are migration inputs only. They never
 become resource identity.
 
+> **Blocked as of 2026-08-24 (AGT-2663). Do not run this procedure against the
+> current operations workspace.** The scanner enumerates `job.json`; the active
+> backend writes `task.json`. An inventory over a copy of the live layout
+> returns zero projects, tasks, events, and artifacts with an empty `warnings`
+> array, so step 1 below reports a clean success while seeing nothing. The
+> import also carries no identity, lease, fence, or review-attempt authority.
+> See the cutover gap list in
+> [remote Task Server with local Studio](../remote-task-server-local-studio.md).
+> Treat a zero inventory over a non-empty workspace as a defect, not an empty
+> source.
+
 1. Call `POST /api/v1/management/migrations/legacy/inventory` with the legacy
    root and workspace name. Save the project/task/event/artifact counts,
-   warnings, evidence-Git roots, and migration ID.
+   warnings, evidence-Git roots, and migration ID. Cross-check the task count
+   against the workspace before trusting it: a zero count with no warnings
+   currently means the scanner did not recognise the layout.
 2. Stop every legacy writer. Confirm Studio task mutations and the in-process
    runner are stopped. A delta replay is acceptable only if it ends with the
    same exclusive writer freeze.

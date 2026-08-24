@@ -241,10 +241,19 @@ These are Phase B work, not assumptions that operations can work around:
    only the versioned subset. Phase B must classify every Studio route as
    Task Server, local dev-seat helper, or retired, and prove all task,
    orchestration, host, file, event, and management paths remotely.
-2. **Current workspace migration.** `LegacyMigrationService` currently scans
-   `job.json`, while the active backend writes `task.json`. A production
-   inventory could therefore report a false zero. The migrator must consume the
-   current layout and add per-project and per-state counts before it is trusted.
+2. **Current workspace migration reports a silent false zero.**
+   `LegacyMigrationService` enumerates `job.json`, while the active backend
+   writes `task.json` (`backend/Features/Tasks/TaskJsonFile.cs`); no backend
+   path writes `job.json` any more. Measured on 2026-08-24 against develop
+   head `8eca9d6f5`, an inventory over a copy of the live layout returned
+   `projects:0, tasks:0, events:0, artifacts:0` with an empty `warnings`
+   array, while the identical tree with the metadata file renamed to
+   `job.json` returned `projects:1, tasks:2, events:1, artifacts:1`. Because
+   the miss produces no warning, an operator cannot tell a blind migrator from
+   an empty workspace, and the runbook step that says to save the counts reads
+   as success. The migrator must consume the current layout, fail loudly when a
+   scanned root holds task folders it did not recognise, and add per-project
+   and per-state counts before it is trusted.
 3. **Scoped credentials.** The packaged install defaults to one shared bearer.
    It must support separate hash-only Studio, Engine, and per-Runner
    credentials with route authorization and revocation.
@@ -256,9 +265,32 @@ These are Phase B work, not assumptions that operations can work around:
    `/hubs` forwarding, secret-file or Credential Manager integration, strict
    Origin checks, CSRF, protocol negotiation, health reporting, and an atomic
    remote/local upstream switch.
+6. **The claim-plane switch forks the board from the claim path.**
+   `TaskServer:BaseUrl` is a single switch: `EndpointMapping.MapAllEndpoints`
+   derives `mapsLocalV1` from it, proxies `/api/v1/{**path}` to the Task
+   Server, and unmaps the local v1 review plane and management endpoints. The
+   Task Server advertises `coding-plane`, and `runner/TaskServerClient.cs` sets
+   `_useV1` from exactly that capability, so coding runners then claim from the
+   Task Server store. The `/api/tasks` group, `MapRunnerEndpoints`,
+   `MapLeaseEndpoints`, and `MapAttemptAuthorityEndpoints` stay mapped
+   unconditionally and file-backed. Until gaps 1 and 2 close, flipping the
+   switch points the fleet at an unpopulated store while the board keeps
+   reading the workspace, and it removes the review plane the fleet uses today.
+7. **Attempt authority is never migrated.** The import writes exactly five
+   tables (workspaces, projects, tasks, events, artifacts). Verified on
+   2026-08-24 by importing a control fixture into a scratch store: `runners`,
+   `runner_capabilities`, `runner_telemetry_latest`, `runner_inventories`,
+   `runs`, `leases`, `fence_counters`, `work_permits`, `review_subjects`,
+   `review_attempts`, `review_fence_counters`, and `review_deliveries` all
+   stayed at zero rows, and every imported event and artifact carried
+   `run_id=''` and `fence=0`. Either the migration must carry identity, lease,
+   and fence authority, or the cutover needs a documented quiesce-to-zero
+   procedure that proves no attempt is live at the switch. Importing `fence=0`
+   beside a live fence counter forks attempt authority.
 
 No API listener may open on `wg0` until gaps 3 and 5 pass their negative
-authentication tests.
+authentication tests. No cutover may flip `TaskServer:BaseUrl` on the
+operations host until gaps 2, 6, and 7 close.
 
 ## Post-processing without an attached Studio
 
