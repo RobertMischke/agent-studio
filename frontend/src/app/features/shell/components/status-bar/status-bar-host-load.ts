@@ -1,4 +1,5 @@
 import type { HostTelemetryPoint, RemoteHost } from '../../../remote-hosts';
+import { hostExecutorRole } from '../../../remote-hosts';
 
 export type StatusBarLoadTone = 'unknown' | 'calm' | 'working' | 'hot' | 'mismatch';
 export type StatusBarLoadCorrelation = 'unknown' | 'consistent' | 'load-without-runs' | 'runs-without-load';
@@ -14,6 +15,20 @@ export interface StatusBarHostLoad {
 
 const MAX_TELEMETRY_AGE_MS = 5 * 60_000;
 
+/** A host qualifies for the live status-bar signal while it has stats and is neither offline nor retired. */
+function isLiveHost(host: RemoteHost): boolean {
+  return host.stats !== null && host.status !== 'offline' && host.status !== 'retired';
+}
+
+/** The host's freshest telemetry point, or null when it is missing or older than {@link MAX_TELEMETRY_AGE_MS}. */
+function freshPoint(host: RemoteHost, nowMs: number): HostTelemetryPoint | null {
+  const point = host.telemetry?.points.at(-1) ?? null;
+  if (point === null || point.load1 === null || point.cpuCores <= 0) return null;
+  const observedAt = Date.parse(point.timestamp);
+  if (!Number.isFinite(observedAt) || nowMs - observedAt > MAX_TELEMETRY_AGE_MS) return null;
+  return point;
+}
+
 /**
  * Fold fresh execution-host telemetry into the tiny status-bar signal.
  * `stats` and the point timestamp both guard freshness: the service clears
@@ -26,17 +41,9 @@ export function summarizeStatusBarHostLoad(
   nowMs = Date.now(),
 ): StatusBarHostLoad | null {
   const points = hosts
-    .filter(host =>
-      host.stats !== null
-      && host.status !== 'offline'
-      && host.status !== 'retired')
-    .map(host => host.telemetry?.points.at(-1) ?? null)
-    .filter((point): point is HostTelemetryPoint =>
-      point !== null
-      && point.load1 !== null
-      && point.cpuCores > 0
-      && Number.isFinite(Date.parse(point.timestamp))
-      && nowMs - Date.parse(point.timestamp) <= MAX_TELEMETRY_AGE_MS);
+    .filter(isLiveHost)
+    .map(host => freshPoint(host, nowMs))
+    .filter((point): point is HostTelemetryPoint => point !== null);
 
   if (points.length === 0) return null;
 
@@ -44,8 +51,12 @@ export function summarizeStatusBarHostLoad(
   const cpuCores = points.reduce((sum, point) => sum + point.cpuCores, 0);
   const activeSlots = points.reduce((sum, point) => sum + point.activeSlots, 0);
   const ratio = load1 / cpuCores;
+  // `activeSlots` covers both coding and review workers reported by all daemons.
+  // Only flag `load-without-runs` when no plane has any active work at all;
+  // review workers showing up in `activeSlots` but absent from the coding
+  // board lane must not trigger a false consistency hint.
   const correlation: StatusBarLoadCorrelation =
-    runningCount === 0 && ratio >= 0.5
+    runningCount === 0 && activeSlots === 0 && ratio >= 0.5
       ? 'load-without-runs'
       : runningCount >= 2 && ratio <= 0.1
         ? 'runs-without-load'
@@ -59,4 +70,60 @@ export function summarizeStatusBarHostLoad(
         : 'calm';
 
   return { load1, cpuCores, activeSlots, ratio, tone, correlation };
+}
+
+export interface StatusBarPlaneSlots {
+  active: number;
+  /**
+   * Sum of every contributing host's own configured slot ceiling
+   * (`runtimeCapacity.maxParallelism`, the daemon-reported
+   * `effectiveMaxParallelism`, or the active+available split - same priority
+   * order the host card uses). Null when no host in the plane reports one, so
+   * the footer never fabricates a fleet-wide maximum (AGT-2645).
+   */
+  ceiling: number | null;
+}
+
+export interface StatusBarSlotsByRole {
+  coding: StatusBarPlaneSlots;
+  review: StatusBarPlaneSlots;
+}
+
+function hostSlotCeiling(host: RemoteHost): number | null {
+  if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
+  if (host.effectiveMaxParallelism !== null && host.effectiveMaxParallelism !== undefined) {
+    return host.effectiveMaxParallelism;
+  }
+  if (host.activeTaskCount !== undefined && host.availableSlots !== undefined) {
+    return host.activeTaskCount + host.availableSlots;
+  }
+  return null;
+}
+
+/**
+ * Split active execution slots and configured ceilings by executor plane
+ * (coding vs review) so the footer can show "coding x/N - review y/M"
+ * instead of one merged figure that hides review-plane load (AGT-2645).
+ * Coding and review daemons register as separate RunnerIds even on a shared
+ * physical host, so each `RemoteHost` belongs to exactly one plane
+ * ({@link hostExecutorRole}) and this is a plain filter + reduce over the
+ * same host list {@link summarizeStatusBarHostLoad} already consumes.
+ */
+export function summarizeStatusBarSlotsByRole(
+  hosts: readonly RemoteHost[],
+  nowMs = Date.now(),
+): StatusBarSlotsByRole {
+  const result: StatusBarSlotsByRole = {
+    coding: { active: 0, ceiling: null },
+    review: { active: 0, ceiling: null },
+  };
+  for (const host of hosts) {
+    if (!isLiveHost(host)) continue;
+    const plane = result[hostExecutorRole(host)];
+    const point = freshPoint(host, nowMs);
+    if (point) plane.active += point.activeSlots;
+    const ceiling = hostSlotCeiling(host);
+    if (ceiling !== null) plane.ceiling = (plane.ceiling ?? 0) + ceiling;
+  }
+  return result;
 }

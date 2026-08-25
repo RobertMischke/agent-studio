@@ -4,6 +4,8 @@ export { RemoteHostCardComponent } from './components/remote-host-card/remote-ho
 export { AddHostWizardComponent } from './components/add-host-wizard/add-host-wizard';
 export { RunnerSetupDialogComponent } from './components/runner-setup-dialog/runner-setup-dialog';
 export { RemoteHostsService } from './services/remote-hosts.service';
+export { ReviewQueueService } from './services/review-queue.service';
+export type { ReviewQueueSnapshot } from './services/review-queue.service';
 export { ProviderAuthStatusService } from './services/provider-auth-status.service';
 export * from './models/provider-auth.model';
 export { seedRemoteHosts } from './services/remote-hosts.seed';
@@ -30,6 +32,7 @@ export type {
   HostTelemetrySeries,
   HostStatusTone,
   MeterTone,
+  HostExecutorRole,
 } from './models/remote-host.model';
 export type { RunnerSetupConfig, RunnerSetupConnectionMode } from './models/runner-setup.model';
 export { buildRunnerSetupRequest, runnerSetupIssues } from './models/runner-setup.model';
@@ -44,4 +47,5 @@ export {
   ramUsedPct,
   diskUsedPct,
   relativeHeartbeat,
+  hostExecutorRole,
 } from './models/remote-host.model';

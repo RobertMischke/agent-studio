@@ -371,6 +371,24 @@ export function hostRoleLabel(role: HostRole): string {
   return role === 'local' ? 'Local' : 'Remote';
 }
 
+/** Which execution plane a runner belongs to: the coding daemon or the review (auto-review post-processing) daemon. */
+export type HostExecutorRole = 'coding' | 'review';
+
+/**
+ * A runner advertises a distinct "executor" capability at registration
+ * (`executor:coding` / `executor:review`, AGT-2645) because the coding and
+ * review daemons register as separate RunnerIds even on the same physical
+ * host. That capability already flows to this registry unfiltered, so the
+ * plane a host belongs to is read from it rather than carried as a new wire
+ * field. The local host never registers a V1 capability set (the monolith
+ * runs local execution in-process, coding only), so it has no executor entry
+ * and is treated as coding by construction.
+ */
+export function hostExecutorRole(host: RemoteHost): HostExecutorRole {
+  const executor = host.capabilityHealth?.find(entry => entry.category === 'executor');
+  return executor?.key === 'executor:review' ? 'review' : 'coding';
+}
+
 /** Used RAM as a rounded 0-100 percentage, or null when stats are unknown. */
 export function ramUsedPct(stats: HostSystemStats | null | undefined): number | null {
   if (!stats || !stats.ramTotalMb) return null;
