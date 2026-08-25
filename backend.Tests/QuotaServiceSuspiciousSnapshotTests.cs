@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Diagnostics;
 
 using Xunit;
 
@@ -109,6 +110,64 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
         Assert.Equal(2, probe.Calls);             // did not wait for the TTL
     }
 
+    [Fact]
+    public async Task RefreshAsync_FailedProbe_PreservesLastGoodValuesAndAttributesFailureVersion()
+    {
+        var goodAt = DateTime.UtcNow.AddMinutes(-12);
+        var probe = new ScriptedProbe(call => call == 1
+            ? Snap(37) with
+            {
+                CliVersion = "codex-cli 0.144.1",
+                FetchedAt = goodAt,
+                Plan = "Pro"
+            }
+            : new QuotaSnapshot
+            {
+                CliType = "codex",
+                CliVersion = "codex-cli 0.149.0",
+                Error = "A task was canceled.",
+                ProbeFailedAt = DateTime.UtcNow
+            });
+        var svc = NewService(probe);
+
+        await svc.RefreshAsync("codex");
+        var failed = await svc.RefreshAsync("codex");
+
+        Assert.NotNull(failed);
+        Assert.Equal(goodAt, failed.FetchedAt);
+        Assert.Equal("Pro", failed.Plan);
+        Assert.Equal(37, Assert.Single(failed.Windows).UsedPct);
+        Assert.Equal("codex-cli 0.149.0", failed.CliVersion);
+        Assert.NotNull(failed.ProbeFailedAt);
+        Assert.Equal("codex quota probe timed out after 45 seconds.", failed.Error);
+        Assert.DoesNotContain("canceled", failed.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public void GetWithBackgroundRefresh_DoesNotRunSynchronousProbeWorkOnRequestThread()
+    {
+        using var release = new ManualResetEventSlim(false);
+        using var started = new ManualResetEventSlim(false);
+        var svc = NewService(new SynchronouslyBlockingProbe(started, release));
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            var report = svc.GetWithBackgroundRefresh(new CancellationToken(canceled: true));
+            sw.Stop();
+
+            Assert.NotNull(report);
+            Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(250),
+                $"cached quota GET path took {sw.Elapsed.TotalMilliseconds:F0} ms");
+            Assert.True(started.Wait(TimeSpan.FromSeconds(2)), "background probe did not start");
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
     private sealed class ScriptedProbe : IQuotaProbe
     {
         private readonly Func<int, QuotaSnapshot> _script;
@@ -139,6 +198,20 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
             if (Interlocked.Increment(ref _calls) == 1) return _first;
             await _gate;
             return _afterGate;
+        }
+    }
+
+    private sealed class SynchronouslyBlockingProbe(
+        ManualResetEventSlim started,
+        ManualResetEventSlim release) : IQuotaProbe
+    {
+        public string CliType => "codex";
+
+        public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
+        {
+            started.Set();
+            release.Wait(ct);
+            return Task.FromResult(Snap(42));
         }
     }
 }

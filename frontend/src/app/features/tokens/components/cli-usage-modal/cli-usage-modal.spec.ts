@@ -117,6 +117,27 @@ describe('CliUsageModalComponent', () => {
     expect(first.remainingLabel).toBe('34% left');
   });
 
+  it('shows an attributed stale marker while retaining last-good Codex windows', async () => {
+    const failedRow: CliUsageQuotaRow = {
+      ...codexRow,
+      cliVersion: 'codex-cli 0.149.0',
+      probeFailedAt: '2026-08-23T19:07:00Z',
+      fetchedAt: '2026-08-23T18:55:00Z',
+      freshness: 'updated 12 min ago',
+      stale: true,
+      error: 'codex quota probe timed out while waiting for /status.',
+    };
+
+    const fixture = await build(failedRow, 'codex');
+    const marker = document.querySelector('[data-testid="cli-usage-stale-marker"]') as HTMLElement;
+
+    expect(fixture.componentInstance.windows()).toHaveLength(4);
+    expect(fixture.componentInstance.probeFailure()).toMatch(/^probe failed .+, codex 0\.149\.0$/);
+    expect(marker.textContent).toContain('Last-good quota values shown');
+    expect(marker.textContent).not.toContain('timed out');
+    expect(marker.getAttribute('aria-label')).toContain('timed out while waiting for /status');
+  });
+
   it('labels a reported quota without a percentage as Unknown', async () => {
     const unknownRow: CliUsageQuotaRow = {
       ...row,

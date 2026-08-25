@@ -118,5 +118,9 @@ CLI execution tests.
   `claude-hello-world.spec.ts` or the equivalent for the affected CLI.
 - Quota/model UI changes need frontend tests plus Playwright when behavior or
   rendering changes.
+- Quota snapshots record the CLI version that produced them. Failed refreshes
+  retain last-good values with `probeFailedAt` and an error instead of replacing
+  the cache with an empty snapshot. `GET /api/cli/quota` serves cached data and
+  starts bounded probing outside the request lifetime.
 - For Codex changes, re-check current CLI behavior before relying on older
   recovery heuristics.

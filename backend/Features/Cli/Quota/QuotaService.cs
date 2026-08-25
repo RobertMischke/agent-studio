@@ -84,14 +84,29 @@ public sealed class QuotaService
     /// Returns the cached snapshot for every probe immediately, kicking off a background
     /// re-probe for any entry that is missing or older than the TTL.
     /// </summary>
-    public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
+    public QuotaReport GetWithBackgroundRefresh(CancellationToken _ = default)
     {
         foreach (var k in _probes.Keys)
         {
             var stale = !_cache.TryGetValue(k, out var s) || (DateTime.UtcNow - s.FetchedAt) > _ttl;
-            if (stale) _ = RefreshAsync(k, ct);
+            if (stale) QueueBackgroundRefresh(k);
         }
         return GetCached();
+    }
+
+    /// <summary>
+    /// Move the entire probe invocation off the request thread. ProbeAsync
+    /// implementations perform synchronous executable/version checks before
+    /// their first await, so merely discarding RefreshAsync's task can still
+    /// hold GET /api/cli/quota for seconds. Request cancellation is deliberately
+    /// not linked: the response returns cached data immediately while the probe
+    /// owns its independent 45-second timeout.
+    /// </summary>
+    private void QueueBackgroundRefresh(string cliType)
+    {
+        _ = Task.Run(
+            () => RefreshAsync(cliType, CancellationToken.None),
+            CancellationToken.None);
     }
 
     /// <summary>Force a re-probe of every CLI and await all of them.</summary>
@@ -115,6 +130,13 @@ public sealed class QuotaService
         {
             _cache.TryGetValue(cliType, out var previous);
             var snap = await ProbeOnceAsync(probe, ct);
+            if (!string.IsNullOrWhiteSpace(snap.Error))
+            {
+                snap = PreserveLastGood(cliType, previous, snap);
+                _cache[cliType] = snap;
+                PersistCache();
+                return snap;
+            }
             snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
             snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
             _cache[cliType] = snap;
@@ -124,22 +146,64 @@ public sealed class QuotaService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Quota probe for {Cli} threw", cliType);
-            // Latch a prior suspicious flag onto the error snapshot. A probe that
-            // fails right after a ground-truth invalidation (AGT-2064) must not
-            // silently drop the block and re-open the admission gate.
             _cache.TryGetValue(cliType, out var prior);
-            var snap = new QuotaSnapshot
+            var failure = new QuotaSnapshot
             {
                 CliType = cliType,
-                Error = ex.Message,
-                Suspicious = prior?.Suspicious ?? false,
-                SuspiciousReason = prior?.Suspicious == true ? prior.SuspiciousReason : null
+                Error = ex is OperationCanceledException
+                    ? $"{cliType} quota probe timed out after 45 seconds."
+                    : $"{cliType} quota probe failed: {ex.Message}",
+                ProbeFailedAt = DateTime.UtcNow
             };
+            var snap = PreserveLastGood(cliType, prior, failure);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
         }
         finally { sem.Release(); }
+    }
+
+    /// <summary>
+    /// Keep the last successful quota values when a refresh fails. The failure
+    /// metadata is overlaid while FetchedAt remains the age of the last-good
+    /// values, so admission and UI consumers never mistake an error-only record
+    /// for a fresh zero-usage snapshot.
+    /// </summary>
+    internal static QuotaSnapshot PreserveLastGood(
+        string cliType,
+        QuotaSnapshot? previous,
+        QuotaSnapshot failure)
+    {
+        var failedAt = failure.ProbeFailedAt ?? DateTime.UtcNow;
+        var error = NormalizeFailureMessage(cliType, failure.Error);
+        if (previous == null)
+        {
+            return failure with
+            {
+                CliType = cliType,
+                Error = error,
+                ProbeFailedAt = failedAt
+            };
+        }
+
+        return previous with
+        {
+            CliType = cliType,
+            CliVersion = failure.CliVersion ?? previous.CliVersion,
+            Error = error,
+            ProbeFailedAt = failedAt,
+            Suspicious = previous.Suspicious,
+            SuspiciousReason = previous.SuspiciousReason
+        };
+    }
+
+    private static string NormalizeFailureMessage(string cliType, string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error)) return $"{cliType} quota probe failed.";
+        return error.Contains("task was canceled", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("operation was canceled", StringComparison.OrdinalIgnoreCase)
+            ? $"{cliType} quota probe timed out after 45 seconds."
+            : error;
     }
 
     private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)

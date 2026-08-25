@@ -5,6 +5,44 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "codex",
+            name));
+
+    [Theory]
+    [InlineData("codex-status-v0.144.1.txt", 6)]
+    [InlineData("codex-status-v0.149.0.txt", 5)]
+    public void ParseStatusWindows_RealVersionedPtyFixture_ParsesContinuationLineResets(
+        string fixture,
+        double expectedWeeklyUsed)
+    {
+        var windows = CodexQuotaProbe.ParseStatusWindows(ReadFixture(fixture));
+
+        Assert.Equal(3, windows.Count);
+        var weekly = Assert.Single(windows, w => w.Label == "Weekly");
+        Assert.Equal(expectedWeeklyUsed, weekly.UsedPct);
+        Assert.Equal("17:12 on 1 Sep", weekly.ResetLabel);
+        Assert.Contains(windows, w => w.Label == "Spark 5-hour" && w.UsedPct == 0);
+        Assert.Contains(windows, w => w.Label == "Spark Weekly" && w.UsedPct == 0);
+        Assert.DoesNotContain(windows, w => w.Label == "5-hour");
+    }
+
+    [Fact]
+    public void ParseStatusWindows_PercentageSurvivesWhenContinuationResetIsClipped()
+    {
+        const string snapshot = "Weekly limit: [##################..] 91% left";
+
+        var weekly = Assert.Single(CodexQuotaProbe.ParseStatusWindows(snapshot));
+
+        Assert.Equal(9, weekly.UsedPct);
+        Assert.Null(weekly.ResetLabel);
+        Assert.Null(weekly.ResetAt);
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {

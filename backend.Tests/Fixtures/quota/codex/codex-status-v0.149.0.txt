@@ -1,0 +1,25 @@
+/status
+
+╭───────────────────────────────────────────────────────────────────────────╮
+│  >_ OpenAI Codex (v0.149.0)                                               │
+│                                                                           │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date              │
+│ information on rate limits and credits                                    │
+│                                                                           │
+│  Model:                       gpt-5.6-sol (reasoning low, summaries auto)  │
+│  Directory:                   /tmp/codex-quota-probe                       │
+│  Permissions:                 Workspace (Ask for approval)                 │
+│  Agents.md:                   <none>                                       │
+│  Account:                     fixture@example.invalid (Pro)                │
+│  Collaboration mode:          Default                                      │
+│  Session:                     00000000-0000-0000-0000-000000000000         │
+│                                                                           │
+│  Context window:              99% left (14.7K used / 258K)                 │
+│  Weekly limit:                [███████████████████░] 95% left              │
+│                               (resets 17:12 on 1 Sep)                       │
+│  GPT-5.3-Codex-Spark limit:                                               │
+│  5h limit:                    [████████████████████] 100% left             │
+│                               (resets 04:22 on 26 Aug)                      │
+│  Weekly limit:                [████████████████████] 100% left             │
+│                               (resets 23:22 on 1 Sep)                       │
+╰───────────────────────────────────────────────────────────────────────────╯

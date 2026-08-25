@@ -25,7 +25,9 @@ export interface QuotaWindow {
 
 export interface QuotaSnapshot {
   cliType: CliType;
+  cliVersion?: string | null;
   fetchedAt: string;
+  probeFailedAt?: string | null;
   plan: string | null;
   windows: QuotaWindow[];
   source: string | null;

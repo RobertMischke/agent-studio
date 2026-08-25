@@ -104,6 +104,17 @@
   font-size: 9px;
   line-height: 1;
 }
+.hquota__stale-badge {
+  padding: calc(var(--studio-spacing-1) / 2) var(--studio-spacing-1);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
+  color: var(--studio-accent-warn-strong);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
 
 .hquota__chips {
   display: inline-flex;
