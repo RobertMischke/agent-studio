@@ -10,6 +10,10 @@ interface RemoteQueueStarvationItem {
   title: string;
   enteredLaneAt: string;
   lastRejection?: RemoteDispatchRejection | null;
+  limited?: boolean;
+  limitedCliType?: string | null;
+  limitedUntil?: string | null;
+  limitReason?: string | null;
 }
 
 interface RemoteQueueStarvationSnapshot {
@@ -20,6 +24,7 @@ interface RemoteQueueStarvationSnapshot {
   claimProgressStalled: boolean;
   lastSuccessfulClaimAt: string | null;
   hasRejections: boolean;
+  limited?: boolean;
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
@@ -49,8 +54,19 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
   });
   readonly availableSlots = computed(() => this.snapshot()?.availableSlots ?? 0);
   readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 0);
+  readonly limitedItems = computed(() => this.visibleItems().filter(item => item.limited));
+  readonly stalledItems = computed(() => this.visibleItems().filter(item => !item.limited));
   readonly hasRejections = computed(() =>
-    this.visibleItems().some(item => item.lastRejection != null));
+    this.stalledItems().some(item => item.lastRejection != null));
+  readonly limitedCliType = computed(() => this.limitedItems()[0]?.limitedCliType ?? 'provider');
+  readonly limitedUntil = computed(() => {
+    const value = this.limitedItems()[0]?.limitedUntil;
+    if (!value) return 'the recovery probe succeeds';
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value));
+  });
 
   ngOnInit(): void {
     this.refresh();

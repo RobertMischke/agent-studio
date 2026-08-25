@@ -315,6 +315,58 @@ public sealed class RunnerCapabilityProbeTests
         Assert.Contains(GitPushProbe.TokenRequirementsPath, gate);
     }
 
+    [Fact]
+    public async Task Provider_limit_advertisement_pauses_only_claude_cards()
+    {
+        using var temp = new TempDirectory();
+        var claude = Path.Combine(temp.Path, "claude");
+        var codex = Path.Combine(temp.Path, "codex");
+        await File.WriteAllTextAsync(claude, "");
+        await File.WriteAllTextAsync(codex, "");
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = temp.Path,
+            StateDir = temp.Path,
+            BaseBranch = "main",
+            CliBin = codex,
+            ClaudeCliBin = claude,
+            CodexCliBin = codex,
+            CliArgs = "",
+        };
+        var auth = new ProviderAuthProbe(
+            (_, _, _) => Task.FromResult(new ProcessResult(0, "Logged in", "")),
+            File.Exists);
+        await auth.RefreshAsync(claude, CancellationToken.None);
+        await auth.RefreshAsync(codex, CancellationToken.None);
+        var limits = new ProviderLimitState(temp.Path);
+        limits.Observe(
+            "claude",
+            "You've hit your session limit · resets 12:20am",
+            new DateTime(2026, 8, 23, 22, 0, 0, DateTimeKind.Utc));
+
+        var advertised = RunnerCapabilityProbe.Advertise(
+            options,
+            gitPushReady: true,
+            providerAuth: auth,
+            providerLimits: limits);
+
+        var claudeAuth = Assert.Single(
+            advertised,
+            item => item.Key == CapabilityProtocol.ProviderAuthentication("claude"));
+        var codexAuth = Assert.Single(
+            advertised,
+            item => item.Key == CapabilityProtocol.ProviderAuthentication("codex"));
+        Assert.Equal(ProviderLimitState.LimitedStatus, claudeAuth.Status);
+        Assert.Contains("claude: limited until", claudeAuth.Detail);
+        Assert.Equal(ProviderAuthProbe.Ready, codexAuth.Status);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory()

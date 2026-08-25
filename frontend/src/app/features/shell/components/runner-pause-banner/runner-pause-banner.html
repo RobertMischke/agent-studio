@@ -1,0 +1,10 @@
+@for (pause of pauses(); track pause.projectName) {
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="runner-pause-banner">
+    <strong data-testid="runner-pause-headline">Pickup paused: infra breaker in {{ pause.projectName }}.</strong>
+    <span class="notification__detail" data-testid="runner-pause-detail">{{ pause.reason }} @if (pause.changedAt) { at {{ time(pause.changedAt) }}. } @if (pause.autoResumeAt) { Recovery is automatic after the provider probe succeeds, scheduled from {{ time(pause.autoResumeAt) }}. }</span>
+  </app-notification>
+}

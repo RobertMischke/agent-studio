@@ -384,6 +384,31 @@
       </thead>
       <tbody>
         <tr>
+          <td>2026-08-23/24</td>
+          <td><code>AGT-2680</code><br><span class="small">shared Claude session limit caused fleet outage and escalation storm</span></td>
+          <td>
+            The operator account reached its Claude session limit at about 22:00. Every Claude card shared that account, so
+            the runner treated the same provider rejection as a new card failure until 32 cards had reached
+            <span class="lane">5e-escalated</span>. By 00:20 every claimable card had been consumed and the fleet made no
+            claims until morning. The protective pickup breaker also changed Agent Studio and Quality Studio to paused, but
+            its reason was absent from the status and board, and the mode did not recover after the quota reset.
+          </td>
+          <td>
+            Quota detection terminated in the task outcome policy. The account-level fact had no durable provider state, no
+            provider-scoped capability advertisement, and no in-flight quota wait. The resulting task failures fed both
+            escalation and pickup breakers. Breaker mode was persisted as if it required operator intent, while the board's
+            starvation signal could only call the zero-claim period stalled.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> provider limits now pause only the affected CLI capability, retain the
+            current card as <code>quota-waiting</code>, record no task failure or escalation, and automatically restart that
+            same fenced run after the parsed reset time plus a successful recovery probe. Capability advertisement reads
+            <code>claude: limited until &lt;t&gt;</code>; Codex stays ready. Status and board banners name infrastructure-breaker
+            pauses with their failure count, CLI, and timestamp, manual pauses remain manual, and queue health distinguishes
+            provider-limited work from genuinely stalled claims.
+          </td>
+        </tr>
+        <tr>
           <td>2026-06-19<br><span class="small">(seed)</span></td>
           <td><code>ASS-1757</code><br><span class="small">feature-kontext-tab-gelesene-wissens-dokumente</span></td>
           <td>

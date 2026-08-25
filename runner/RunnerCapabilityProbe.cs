@@ -12,6 +12,7 @@ internal static class RunnerCapabilityProbe
         bool gitWorkflowPushReady = true,
         string? gitDetail = null,
         ProviderAuthProbe? providerAuth = null,
+        ProviderLimitState? providerLimits = null,
         TaskServerConnectivitySnapshot? connectivity = null)
     {
         var list = new List<AdvertisedCapabilityDto>
@@ -46,7 +47,8 @@ internal static class RunnerCapabilityProbe
             AddCodingCliCapabilities(
                 list,
                 options,
-                providerAuth ?? ProviderAuthProbe.Shared);
+                providerAuth ?? ProviderAuthProbe.Shared,
+                providerLimits);
             list.Add(Capability(
                 CapabilityProtocol.GitPush,
                 "source",
@@ -82,7 +84,8 @@ internal static class RunnerCapabilityProbe
             AddCodingCliCapabilities(
                 list,
                 options,
-                providerAuth ?? ProviderAuthProbe.Shared);
+                providerAuth ?? ProviderAuthProbe.Shared,
+                providerLimits);
             list.Add(Capability(CapabilityProtocol.Vision, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.SemanticReview, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.GitMaterialization, "review", ToolVersion("git"), "git"));
@@ -230,11 +233,13 @@ internal static class RunnerCapabilityProbe
     private static void AddCodingCliCapabilities(
         ICollection<AdvertisedCapabilityDto> capabilities,
         RunnerOptions options,
-        ProviderAuthProbe providerAuth)
+        ProviderAuthProbe providerAuth,
+        ProviderLimitState? providerLimits)
     {
         foreach (var (cliType, binary) in CodingCliBinaries(options))
         {
             var auth = providerAuth.Current(binary);
+            var providerLimit = providerLimits?.Current(cliType);
             var binaryAvailable = ProviderAuthProbe.ExecutableExists(binary);
             capabilities.Add(Capability(
                 CapabilityProtocol.CliExecution(cliType),
@@ -250,8 +255,10 @@ internal static class RunnerCapabilityProbe
                 "provider-auth",
                 binaryAvailable ? "available" : null,
                 cliType,
-                auth.Status,
-                auth.Detail));
+                providerLimit is null ? auth.Status : ProviderLimitState.LimitedStatus,
+                providerLimit is null
+                    ? auth.Detail
+                    : providerLimits!.AdvertisedDetail(cliType)));
         }
     }
 

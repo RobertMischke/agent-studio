@@ -1,10 +1,21 @@
-@if (visibleItems().length > 0) {
+@if (limitedItems().length > 0) {
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="provider-limit-banner">
+    <strong data-testid="provider-limit-headline">{{ limitedCliType() }} claims are limited until {{ limitedUntil() }}.</strong>
+    <span class="notification__detail" data-testid="provider-limit-detail"><span class="notification__number">{{ limitedItems().length }}</span> {{ limitedItems().length === 1 ? 'task is' : 'tasks are' }} waiting on the provider account limit. Other CLI claims remain eligible and recovery is automatic.</span>
+  </app-notification>
+}
+
+@if (stalledItems().length > 0) {
   <app-notification
     kind="warning"
     layout="banner"
     ariaLive="polite"
     testid="remote-queue-starvation-banner">
-    <strong data-testid="notice-bar-headline"><span class="notification__number">{{ visibleItems().length }}</span> {{ visibleItems().length === 1 ? 'task is' : 'tasks are' }} waiting despite free Runner capacity.</strong>
+    <strong data-testid="notice-bar-headline"><span class="notification__number">{{ stalledItems().length }}</span> {{ stalledItems().length === 1 ? 'task is' : 'tasks are' }} waiting despite free Runner capacity.</strong>
     <span class="notification__detail" data-testid="notice-bar-detail"><span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'slot is' : 'slots are' }} available. @if (hasRejections()) { Open a task to inspect its latest rejection. } @else { No successful claim has been recorded for at least <span class="notification__number">{{ thresholdMinutes() }}</span> minutes. }</span>
   </app-notification>
 }

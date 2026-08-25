@@ -77,6 +77,7 @@ using var sigterm = !OperatingSystem.IsWindows()
     : null;
 
 using var client = new TaskServerClient(options);
+var providerLimits = new ProviderLimitState(options.StateDir);
 
 // Readiness probe (--health-check): confirm the Task Server is reachable over the
 // tunnel and exit, without touching a task. This is the check the reverse-tunnel
@@ -109,12 +110,13 @@ try
     }
     if (daemonMode)
     {
-        await new RemoteRunnerDaemon(options, client, Log).RunAsync(shutdown.Token);
+        await new RemoteRunnerDaemon(options, client, Log, providerLimits).RunAsync(shutdown.Token);
         Log("daemon stopped");
         return 0;
     }
 
-    var exitCode = await new RemoteTaskRunner(options, client, Log).RunAsync(taskKey!, shutdown.Token);
+    var exitCode = await new RemoteTaskRunner(options, client, Log, providerLimits: providerLimits)
+        .RunAsync(taskKey!, shutdown.Token);
     Log($"done, exit code {exitCode}");
     return exitCode;
 }

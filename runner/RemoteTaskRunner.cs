@@ -25,19 +25,22 @@ public sealed class RemoteTaskRunner
     private readonly Action<string> _log;
     private readonly RunnerStateStore _state;
     private readonly RunnerProcessInventoryTracker _inventory;
+    private readonly ProviderLimitState _providerLimits;
 
     public RemoteTaskRunner(
         RunnerOptions options,
         TaskServerClient client,
         Action<string> log,
         RunnerStateStore? state = null,
-        RunnerProcessInventoryTracker? inventory = null)
+        RunnerProcessInventoryTracker? inventory = null,
+        ProviderLimitState? providerLimits = null)
     {
         _options = options;
         _client = client;
         _log = log;
         _state = state ?? new RunnerStateStore(options.StateDir);
         _inventory = inventory ?? new RunnerProcessInventoryTracker();
+        _providerLimits = providerLimits ?? new ProviderLimitState(options.StateDir);
     }
 
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
@@ -135,6 +138,15 @@ public sealed class RemoteTaskRunner
             restoredBaseSha: slot.BaseSha,
             sourceRunAttemptId: slot.RunId ?? slot.Lease.AttemptId ?? slot.AttemptId,
             fencingToken: slot.Lease.FencingToken);
+        if (string.Equals(slot.Phase, "quota-waiting", StringComparison.Ordinal))
+        {
+            return await RunPersistedAsync(
+                slot,
+                workspace,
+                stopRun,
+                reattach: false,
+                resumeQuotaWait: true);
+        }
         return await RunPersistedAsync(slot, workspace, stopRun, reattach: true);
     }
 
@@ -161,7 +173,8 @@ public sealed class RemoteTaskRunner
         PersistedRunnerSlot slot,
         GitWorkspace workspace,
         CancellationToken shutdown,
-        bool reattach)
+        bool reattach,
+        bool resumeQuotaWait = false)
     {
         var taskKey = slot.TaskKey;
         var lease = slot.Lease;
@@ -197,7 +210,7 @@ public sealed class RemoteTaskRunner
         var heartbeatTask = heartbeat.RunAsync(stopRun, shutdown);
 
         outbox?.Enqueue("status", JsonSerializer.Serialize(
-            new { phase = "claimed", taskKey },
+            new { phase = resumeQuotaWait ? "quota-waiting" : "claimed", taskKey },
             new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         var shipper = new LogShipper(
             _client,
@@ -223,6 +236,34 @@ public sealed class RemoteTaskRunner
         DurableArtifactManifest? artifactManifest = null;
         try
         {
+            if (resumeQuotaWait)
+            {
+                await WaitForProviderRecoveryAsync(slot, null, stopRun.Token);
+                var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                               ?? AgentCliProcess.ConfiguredCliType(_options);
+                await ReportQuotaWaitSafeAsync(
+                    new RemoteQuotaWaitRequest(
+                        slot.TaskKey,
+                        slot.Lease.LeaseId,
+                        slot.Lease.FencingToken,
+                        _options.RunnerId,
+                        provider,
+                        DateTime.UtcNow,
+                        DateTime.UtcNow,
+                        "provider recovery probe succeeded after runner restart",
+                        Active: false,
+                        AttemptId: slot.AttemptId),
+                    stopRun.Token);
+                slot = _state.Save(slot with
+                {
+                    ProcessId = null,
+                    ProcessStartedAtUtc = null,
+                    Phase = "launching",
+                });
+                shipper.Add(
+                    "system",
+                    $"[quota-wait] {provider} recovery probe succeeded after runner restart; restarting the current card");
+            }
             var execution = reattach
                 ? await AwaitDetachedAsync(slot, workspace, shipper, outbox, stopRun.Token)
                 : await ExecuteAsync(slot, workspace, shipper, outbox, stopRun, shutdown, epicPlanning);
@@ -747,7 +788,8 @@ public sealed class RemoteTaskRunner
         LogShipper shipper,
         DurableRunOutbox? outbox,
         CancellationToken stopRun,
-        int sameSessionResumeAttempts = 0)
+        int sameSessionResumeAttempts = 0,
+        int providerLimitRetries = 0)
     {
         var process = DurableAgentProcess.Attach(slot);
         var sequence = slot.LastOutputSequence;
@@ -808,6 +850,105 @@ public sealed class RemoteTaskRunner
                             processResult,
                             result.LaunchFailed,
                             sameSessionResumeAttempts);
+                    if (classified.Decision.Outcome == ExecutionOutcomeKind.QuotaExceeded)
+                    {
+                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                       ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var limitOutput = $"{result.StdErr}\n{result.StdOut}";
+                        var limit = _providerLimits.Observe(provider, limitOutput, DateTime.UtcNow);
+                        var waitLine =
+                            $"[quota-wait] {provider}: limited until {limit.LimitedUntil:O}; "
+                            + "current card is waiting and will retry automatically; no task failure was recorded";
+                        _log(waitLine);
+                        shipper.Add("system", waitLine);
+                        outbox?.Enqueue(
+                            "status",
+                            JsonSerializer.Serialize(
+                                new
+                                {
+                                    phase = "quota-waiting",
+                                    cliType = provider,
+                                    resetAt = limit.LimitedUntil,
+                                    reason = limit.Reason,
+                                },
+                                new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+                        slot = _state.Save(slot with
+                        {
+                            ProcessId = null,
+                            ProcessStartedAtUtc = null,
+                            Phase = "quota-waiting",
+                            LastOutputSequence = sequence,
+                        });
+                        await shipper.FlushAsync(stopRun);
+                        await ReportQuotaWaitSafeAsync(
+                            new RemoteQuotaWaitRequest(
+                                slot.TaskKey,
+                                slot.Lease.LeaseId,
+                                slot.Lease.FencingToken,
+                                _options.RunnerId,
+                                provider,
+                                limit.ObservedAt,
+                                limit.LimitedUntil,
+                                limit.Reason,
+                                Active: true,
+                                AttemptId: slot.AttemptId),
+                            stopRun);
+                        await WaitForProviderRecoveryAsync(slot, limit, stopRun);
+                        await ReportQuotaWaitSafeAsync(
+                            new RemoteQuotaWaitRequest(
+                                slot.TaskKey,
+                                slot.Lease.LeaseId,
+                                slot.Lease.FencingToken,
+                                _options.RunnerId,
+                                provider,
+                                limit.ObservedAt,
+                                limit.LimitedUntil,
+                                "provider recovery probe succeeded",
+                                Active: false,
+                                AttemptId: slot.AttemptId),
+                            stopRun);
+
+                        var retry = providerLimitRetries + 1;
+                        shipper.Add(
+                            "system",
+                            $"[quota-wait] {provider} recovery probe succeeded; restarting the current card (retry {retry})");
+                        var retrySlot = _state.Save(slot with
+                        {
+                            WorkerDirectory = Path.Combine(
+                                Path.GetDirectoryName(slot.WorkerDirectory)!,
+                                $"{Path.GetFileName(slot.WorkerDirectory)}-quota-{retry}"),
+                            ProcessId = null,
+                            ProcessStartedAtUtc = null,
+                            LastOutputSequence = 0,
+                            Phase = "launching",
+                        });
+                        var resumed = DurableAgentProcess.Start(
+                            _options,
+                            retrySlot.WorkerDirectory,
+                            workspace.RepoPath,
+                            "Continue the original task from the durable workspace state after the provider limit reset. Complete the requested work, verify it, and end with exactly one required [[TASK_*]] terminal sentinel.",
+                            ResultsDir(slot.TaskKey),
+                            runSpec: retrySlot.RunSpec,
+                            runId: retrySlot.AttemptId,
+                            cleanContextKey: retrySlot.TaskKey);
+                        retrySlot = _state.Save(retrySlot with
+                        {
+                            ProcessId = resumed.ProcessId,
+                            ProcessStartedAtUtc = resumed.ProcessStartedAtUtc,
+                            Phase = "running",
+                        });
+                        _inventory.AttachProcess(
+                            retrySlot.RunId ?? retrySlot.AttemptId,
+                            resumed.ProcessId);
+                        return await AwaitDetachedAsync(
+                            retrySlot,
+                            workspace,
+                            shipper,
+                            outbox,
+                            stopRun,
+                            sameSessionResumeAttempts,
+                            retry);
+                    }
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
                     {
@@ -861,7 +1002,8 @@ public sealed class RemoteTaskRunner
                             shipper,
                             outbox,
                             stopRun,
-                            sameSessionResumeAttempts + 1);
+                            sameSessionResumeAttempts + 1,
+                            providerLimitRetries);
                     }
 
                     shipper.Add(
@@ -891,6 +1033,55 @@ public sealed class RemoteTaskRunner
                 _log,
                 CancellationToken.None);
             throw;
+        }
+    }
+
+    private async Task WaitForProviderRecoveryAsync(
+        PersistedRunnerSlot slot,
+        ProviderLimitSnapshot? observed,
+        CancellationToken ct)
+    {
+        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                       ?? AgentCliProcess.ConfiguredCliType(_options);
+        var current = observed ?? _providerLimits.Current(provider);
+        if (current is null) return;
+        var binary = AgentCliProcess.Resolve(_options, slot.RunSpec).FileName;
+        while (!ct.IsCancellationRequested)
+        {
+            var recovered = await _providerLimits.ProbeRecoveryAsync(
+                provider,
+                DateTime.UtcNow,
+                async probeCt => (await ProviderAuthProbe.Shared.RefreshAsync(binary, probeCt)).IsReady,
+                ct);
+            if (recovered) return;
+
+            current = _providerLimits.Current(provider);
+            var delay = current is null
+                ? TimeSpan.Zero
+                : current.LimitedUntil - DateTime.UtcNow;
+            if (delay <= TimeSpan.Zero || delay > ProviderLimitState.RecoveryProbeInterval)
+                delay = ProviderLimitState.RecoveryProbeInterval;
+            await Task.Delay(delay, ct);
+        }
+    }
+
+    private async Task ReportQuotaWaitSafeAsync(
+        RemoteQuotaWaitRequest request,
+        CancellationToken ct)
+    {
+        try
+        {
+            await _client.ReportQuotaWaitAsync(request, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log(
+                $"[quota-wait] visibility report failed for {request.TaskKey}; "
+                + $"the provider pause remains active locally: {ex.Message}");
         }
     }
 

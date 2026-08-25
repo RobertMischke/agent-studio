@@ -1,5 +1,6 @@
 using Xunit;
 using Microsoft.Extensions.Logging;
+using AgentStudio.TaskServer.Contracts;
 
 namespace AgentStudio.Tests;
 
@@ -103,6 +104,41 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Evaluate_ReportsClaudeAsLimitedWithoutCallingTheMixedFleetStalled()
+    {
+        var claude = ReadyTask(4) with
+        {
+            Id = "claude-task",
+            Key = "AGT-CLAUDE",
+            CliType = CliTypes.Claude,
+        };
+        var codex = ReadyTask(4) with
+        {
+            Id = "codex-task",
+            Key = "AGT-CODEX",
+            CliType = CliTypes.Codex,
+        };
+        var limitedUntil = Now.AddHours(2);
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [claude, codex],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([claude, codex]),
+            [Runner(2, 0, lastClaimMinutesAgo: 1)],
+            [LimitedClaudeCapability(limitedUntil)]);
+
+        Assert.True(snapshot.Active);
+        Assert.True(snapshot.Limited);
+        Assert.False(snapshot.ClaimProgressStalled);
+        var item = Assert.Single(snapshot.Items);
+        Assert.Equal("AGT-CLAUDE", item.TaskKey);
+        Assert.Equal(CliTypes.Claude, item.LimitedCliType);
+        Assert.Equal(limitedUntil, item.LimitedUntil);
+    }
+
+    [Fact]
     public void Watchdog_LogsWarningOnceForAnAcuteQueueAndRecoveryWhenItClears()
     {
         var logger = new CapturingLogger();
@@ -165,6 +201,41 @@ public sealed class RemoteQueueStarvationPolicyTests
             ? Now.AddMinutes(-minutes)
             : null,
     };
+
+    private static RunnerCapabilitySnapshotDto LimitedClaudeCapability(DateTime limitedUntil) => new(
+        RunnerId: "runner-01",
+        Name: "Runner 01",
+        HostId: "host-01",
+        InstanceId: "instance-01",
+        RunnerVersion: "test",
+        ProtocolVersion: 1,
+        Status: "online",
+        RegisteredAt: Now.AddHours(-1),
+        LastSeenAt: Now,
+        HostAdmission: new RemoteHostAdmissionDto("host-01", "eligible", null, null, null, null),
+        Capabilities:
+        [
+            new CapabilityHealthDto(
+                Key: "provider-auth:claude",
+                Category: "provider-auth",
+                AdvertisedStatus: "limited",
+                HealthState: CapabilityHealthStates.Healthy,
+                Reason: null,
+                AdvertisedAt: Now,
+                FreshUntil: Now.AddMinutes(2),
+                IsFresh: true,
+                FirstFailureAt: null,
+                LastFailureAt: null,
+                CooldownUntil: limitedUntil,
+                CanaryClaimId: null,
+                ConsecutiveFailures: 0,
+                Version: null,
+                Identity: null,
+                Detail: $"claude: limited until {limitedUntil:O}. session limit",
+                AffectedClaims: [],
+                RecoveryHistory: [])
+        ],
+        Telemetry: null);
 
     private sealed class CapturingLogger : ILogger<RemoteQueueStarvationWatchdog>
     {

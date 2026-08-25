@@ -937,6 +937,75 @@ public static class LeaseEndpoints
             }
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Claim);
 
+        app.MapPost("/api/runner/quota-wait", (
+            RemoteQuotaWaitRequest req,
+            HttpContext context,
+            TaskScannerService scanner,
+            RunLeaseService leases,
+            TaskMutationService mutations,
+            TimelineLog timeline) =>
+        {
+            if (!RunnerMatches(context, req.RunnerId)) return Results.Unauthorized();
+            if (!leases.IsCurrent(req.TaskKey, req.LeaseId, req.FencingToken, req.RunnerId))
+            {
+                return Results.Conflict(new
+                {
+                    error = "Lease id, fencing token, or runner id does not match the current holder."
+                });
+            }
+
+            var task = scanner.ScanAllJobs().FirstOrDefault(t =>
+                string.Equals(t.TaskKey, req.TaskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Id, req.TaskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t.Key, req.TaskKey, StringComparison.OrdinalIgnoreCase));
+            if (task is null) return Results.NotFound();
+
+            if (req.Active)
+            {
+                QuotaWaitMarker.Write(task.FolderPath, new QuotaWaitRecord
+                {
+                    CliType = req.CliType.Trim().ToLowerInvariant(),
+                    StartedAt = req.StartedAt.ToUniversalTime(),
+                    ResetAt = req.ResetAt.ToUniversalTime(),
+                    ThresholdMinutes = 0,
+                    Reason = req.Reason,
+                });
+                mutations.SetJobPhase(task.FolderPath, LifecyclePhases.QuotaWaiting);
+                timeline.Append(
+                    task.FolderPath,
+                    TimelineEventKinds.QuotaAdmissionDecision,
+                    TimelineActors.System,
+                    $"{req.CliType}: limited until {req.ResetAt.ToUniversalTime():O}; current run is waiting",
+                    runId: req.AttemptId,
+                    details: new Dictionary<string, string>
+                    {
+                        ["outcome"] = "Wait",
+                        ["decision"] = "provider-limit-detected",
+                        ["cli"] = req.CliType,
+                        ["resetAt"] = req.ResetAt.ToUniversalTime().ToString("O"),
+                    });
+            }
+            else
+            {
+                QuotaWaitMarker.Clear(task.FolderPath);
+                mutations.SetJobPhase(task.FolderPath, LifecyclePhases.ExecutionRunning);
+                timeline.Append(
+                    task.FolderPath,
+                    TimelineEventKinds.QuotaAdmissionDecision,
+                    TimelineActors.System,
+                    $"{req.CliType} provider limit lifted; current run resumed automatically",
+                    runId: req.AttemptId,
+                    details: new Dictionary<string, string>
+                    {
+                        ["outcome"] = "Resume",
+                        ["decision"] = "provider-limit-recovered",
+                        ["cli"] = req.CliType,
+                    });
+            }
+
+            return Results.Ok(new { req.TaskKey, req.Active, req.ResetAt });
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
+
         app.MapPost("/api/runner/epic-planning-prompt", (
             RemoteEpicPlanningPromptRequest req,
             TaskScannerService scanner,

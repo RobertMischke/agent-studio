@@ -387,6 +387,22 @@ public sealed record RemoteRunCompletionResponse(
     string? ReviewSubjectId = null,
     string? FailureClassification = null);
 
+/// <summary>
+/// Runner to server projection of an account-level provider wait. This is an
+/// in-flight lifecycle update, not a run completion or task failure.
+/// </summary>
+public sealed record RemoteQuotaWaitRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string CliType,
+    DateTime StartedAt,
+    DateTime ResetAt,
+    string Reason,
+    bool Active,
+    string? AttemptId = null);
+
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);
 

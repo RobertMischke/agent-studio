@@ -21,12 +21,18 @@ public sealed class RemoteRunnerDaemon
     private readonly RunnerOptions _options;
     private readonly TaskServerClient _client;
     private readonly Action<string> _log;
+    private readonly ProviderLimitState _providerLimits;
 
-    public RemoteRunnerDaemon(RunnerOptions options, TaskServerClient client, Action<string> log)
+    public RemoteRunnerDaemon(
+        RunnerOptions options,
+        TaskServerClient client,
+        Action<string> log,
+        ProviderLimitState? providerLimits = null)
     {
         _options = options;
         _client = client;
         _log = log;
+        _providerLimits = providerLimits ?? new ProviderLimitState(options.StateDir);
     }
 
     /// <summary>
@@ -129,14 +135,19 @@ public sealed class RemoteRunnerDaemon
                 _client,
                 _log,
                 state,
-                inventory);
+                inventory,
+                _providerLimits);
             var observation = DurableAgentProcess.InspectForReattach(slot);
             var accepted = recoveredHostWork.FirstOrDefault(item =>
                 string.Equals(
                     item.Task.TaskKey,
                     slot.TaskKey,
                     StringComparison.OrdinalIgnoreCase));
-            if (observation.Result is not null || observation.IsLive)
+            var quotaWaiting = string.Equals(
+                slot.Phase,
+                "quota-waiting",
+                StringComparison.Ordinal);
+            if (observation.Result is not null || observation.IsLive || quotaWaiting)
             {
                 if (accepted is not null
                     && !string.Equals(
@@ -152,7 +163,7 @@ public sealed class RemoteRunnerDaemon
                 if (accepted is not null)
                     _client.RestoreHostWorkAuthority(accepted);
                 _log($"persisted attempt accepted task={slot.TaskKey} attempt={slot.AttemptId} " +
-                     $"pid={slot.ProcessId} verification={observation.Detail}");
+                     $"pid={slot.ProcessId} verification={(quotaWaiting ? "durable provider quota wait" : observation.Detail)}");
                 var execution = taskRunner.ReattachAsync(slot, CancellationToken.None);
                 active.Add(new ActiveSlot(
                     slot.TaskKey,
@@ -299,6 +310,7 @@ public sealed class RemoteRunnerDaemon
                         gitCapability.CanPush,
                         gitCapability.CanPushWorkflows,
                         gitCapability.Detail,
+                        providerLimits: _providerLimits,
                         connectivity: connectivity.Snapshot),
                     RunnerCapabilityProbe.Telemetry(latestTelemetry),
                     capabilityGeneration,
@@ -336,6 +348,7 @@ public sealed class RemoteRunnerDaemon
             _options.ClaimMaxLoadPerCore,
             TimeSpan.FromSeconds(_options.LoadGateSustainedSeconds));
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+        var advertisedProviderLimitVersion = _providerLimits.Version;
         HostTelemetrySample? TakeTelemetry(bool force = false)
         {
             try
@@ -369,7 +382,8 @@ public sealed class RemoteRunnerDaemon
             try
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
-                if (DateTime.UtcNow >= nextCapabilityAdvertisement)
+                if (DateTime.UtcNow >= nextCapabilityAdvertisement
+                    || _providerLimits.Version != advertisedProviderLimitVersion)
                 {
                     var capabilityTelemetry = TakeTelemetry();
                     var generation = ++capabilityGeneration;
@@ -381,6 +395,7 @@ public sealed class RemoteRunnerDaemon
                                 gitCapability.CanPush,
                                 gitCapability.CanPushWorkflows,
                                 gitCapability.Detail,
+                                providerLimits: _providerLimits,
                                 connectivity: connectivity.Snapshot),
                             RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
                             generation,
@@ -396,6 +411,7 @@ public sealed class RemoteRunnerDaemon
                         _log,
                         shutdown);
                     nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+                    advertisedProviderLimitVersion = _providerLimits.Version;
                 }
                 // Record the attempt before entering any claim-path HTTP call.
                 // A request which never returns must still count as the last
@@ -579,7 +595,8 @@ public sealed class RemoteRunnerDaemon
                             _client,
                             _log,
                             state,
-                            inventory);
+                            inventory,
+                            _providerLimits);
                         claimedAny = true;
                         _log(
                             $"starting host permit {acceptance.PermitId} for " +
@@ -639,7 +656,8 @@ public sealed class RemoteRunnerDaemon
                         _client,
                         _log,
                         state,
-                        inventory);
+                        inventory,
+                        _providerLimits);
                     if (shutdown.IsCancellationRequested)
                     {
                         var workspace = new GitWorkspace(

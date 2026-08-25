@@ -1039,6 +1039,30 @@ public sealed class TaskServerClient : IDisposable
             FromContract(response?.ReconciliationActions));
     }
 
+    public async Task ReportQuotaWaitAsync(RemoteQuotaWaitRequest request, CancellationToken ct)
+    {
+        if (!_useV1)
+        {
+            _ = await PostJsonAsync<RemoteQuotaWaitRequest, object>(
+                "/api/runner/quota-wait", request, ct);
+            return;
+        }
+
+        var authority = V1Authority(request.TaskKey);
+        var kind = request.Active ? "quota.wait.started" : "quota.wait.ended";
+        var key = $"{kind}:{authority.RunId}:{request.ResetAt:O}";
+        _ = await PostJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
+            $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
+            new Contract.EventIngestRequest(
+                $"evt_{Guid.NewGuid():N}",
+                kind,
+                JsonSerializer.Serialize(request, Json),
+                key,
+                authority.Lease.FencingToken,
+                DateTime.UtcNow),
+            ct);
+    }
+
     public async Task<Contract.LeaseDto> ReconcileOutboxAuthorityAsync(
         RunOutboxAuthority authority,
         int requestedTtlSeconds,

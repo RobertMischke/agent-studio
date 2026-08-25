@@ -6,6 +6,44 @@ import { describe, expect, it } from 'vitest';
 import { RemoteQueueStarvationBannerComponent } from './remote-queue-starvation-banner';
 
 describe('RemoteQueueStarvationBannerComponent', () => {
+  it('names a provider limit without calling the queue stalled', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Demo']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      limited: true,
+      waitingTaskCount: 1,
+      availableSlots: 2,
+      thresholdMinutes: 30,
+      claimProgressStalled: false,
+      lastSuccessfulClaimAt: '2026-08-24T00:19:00Z',
+      hasRejections: false,
+      oldestEnteredLaneAt: '2026-08-23T22:00:00Z',
+      observedAt: '2026-08-24T00:20:00Z',
+      items: [{
+        taskKey: 'AGT-1', taskId: 'one', projectName: 'Demo', title: 'One',
+        enteredLaneAt: '2026-08-23T22:00:00Z', limited: true,
+        limitedCliType: 'claude', limitedUntil: '2026-08-24T00:30:00Z',
+      }],
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="provider-limit-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('claude claims are limited until');
+    expect(banner.textContent).toContain('Other CLI claims remain eligible');
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-queue-starvation-banner"]')).toBeNull();
+    fixture.destroy();
+    http.verify();
+  });
+
   it('describes stalled claim progress without inventing a rejection', async () => {
     await TestBed.configureTestingModule({
       imports: [RemoteQueueStarvationBannerComponent],

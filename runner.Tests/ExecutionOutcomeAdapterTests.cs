@@ -36,6 +36,12 @@ public sealed class ExecutionOutcomeAdapterTests
             ExecutionRecoveryAction.WaitForCapabilityRecovery
         },
         {
+            "Claude session limit with reset time",
+            Coding(ExitCode: 1, StdErr: "You've hit your session limit · resets 12:20am (Europe/Berlin)"),
+            ExecutionOutcomeKind.QuotaExceeded,
+            ExecutionRecoveryAction.WaitForCapabilityRecovery
+        },
+        {
             "invalid model configuration",
             Coding(ExitCode: 1, StdErr: "invalid model configuration: model does not exist"),
             ExecutionOutcomeKind.InvalidModelOrConfiguration,

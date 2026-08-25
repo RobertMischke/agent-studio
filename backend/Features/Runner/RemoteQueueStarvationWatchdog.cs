@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace AgentStudio.Runner;
 
 public sealed record RemoteQueueStarvationItem
@@ -8,6 +10,10 @@ public sealed record RemoteQueueStarvationItem
     public string Title { get; init; } = "";
     public DateTime EnteredLaneAt { get; init; }
     public RemoteDispatchRejection? LastRejection { get; init; }
+    public bool Limited { get; init; }
+    public string? LimitedCliType { get; init; }
+    public DateTime? LimitedUntil { get; init; }
+    public string? LimitReason { get; init; }
 }
 
 public sealed record RemoteQueueStarvationSnapshot
@@ -19,6 +25,7 @@ public sealed record RemoteQueueStarvationSnapshot
     public bool ClaimProgressStalled { get; init; }
     public DateTime? LastSuccessfulClaimAt { get; init; }
     public bool HasRejections { get; init; }
+    public bool Limited { get; init; }
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
@@ -33,7 +40,8 @@ public static class RemoteQueueStarvationPolicy
         IEnumerable<TaskInfo> tasks,
         Func<string, ProjectSettings> projectSettings,
         TaskReferenceIndex references,
-        IEnumerable<ClientIdentity> runners)
+        IEnumerable<ClientIdentity> runners,
+        IEnumerable<AgentStudio.TaskServer.Contracts.RunnerCapabilitySnapshotDto>? capabilitySnapshots = null)
     {
         var liveRunners = runners
             .Where(runner => string.Equals(
@@ -53,6 +61,18 @@ public static class RemoteQueueStarvationPolicy
             .OrderByDescending(claimedAt => claimedAt)
             .Cast<DateTime?>()
             .FirstOrDefault();
+        var liveRunnerIds = liveRunners.Select(runner => runner.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var limitedProviders = (capabilitySnapshots ?? [])
+            .Where(snapshot => liveRunnerIds.Contains(snapshot.RunnerId))
+            .SelectMany(snapshot => snapshot.Capabilities)
+            .Where(capability => capability.IsFresh
+                                 && capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal)
+                                 && string.Equals(capability.AdvertisedStatus, "limited", StringComparison.Ordinal))
+            .GroupBy(capability => capability.Key["provider-auth:".Length..], StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(item => LimitUntil(item) ?? DateTime.MinValue).First(),
+                StringComparer.OrdinalIgnoreCase);
 
         var eligibleTasks = tasks
             .Where(task => task.State == TaskStates.Ready && !task.Fixture)
@@ -79,21 +99,34 @@ public static class RemoteQueueStarvationPolicy
                                    && now - referenceAt >= threshold;
 
         var items = eligibleTasks
-            .Where(task => task.RemoteDispatchRejection is not null
-                           || (claimProgressStalled
-                               && now - task.EnteredLaneAt.ToUniversalTime() >= threshold))
-            .OrderBy(task => task.EnteredLaneAt)
-            .Select(task => new RemoteQueueStarvationItem
+            .Select(task =>
             {
-                TaskKey = task.Key ?? task.TaskKey ?? task.Id,
-                TaskId = task.Id,
-                ProjectName = task.ProjectName,
-                Title = task.Title,
-                EnteredLaneAt = task.EnteredLaneAt,
-                LastRejection = task.RemoteDispatchRejection,
+                var cliType = CliTypes.Normalize(task.CliType);
+                limitedProviders.TryGetValue(cliType, out var limited);
+                return (Task: task, CliType: cliType, Limit: limited);
+            })
+            .Where(candidate => candidate.Limit is not null
+                           || candidate.Task.RemoteDispatchRejection is not null
+                           || (claimProgressStalled
+                               && now - candidate.Task.EnteredLaneAt.ToUniversalTime() >= threshold))
+            .OrderBy(candidate => candidate.Task.EnteredLaneAt)
+            .Select(candidate => new RemoteQueueStarvationItem
+            {
+                TaskKey = candidate.Task.Key ?? candidate.Task.TaskKey ?? candidate.Task.Id,
+                TaskId = candidate.Task.Id,
+                ProjectName = candidate.Task.ProjectName,
+                Title = candidate.Task.Title,
+                EnteredLaneAt = candidate.Task.EnteredLaneAt,
+                LastRejection = candidate.Task.RemoteDispatchRejection,
+                Limited = candidate.Limit is not null,
+                LimitedCliType = candidate.Limit is null ? null : candidate.CliType,
+                LimitedUntil = candidate.Limit is null ? null : LimitUntil(candidate.Limit),
+                LimitReason = candidate.Limit?.Detail,
             })
             .ToList();
         var hasRejections = items.Any(item => item.LastRejection is not null);
+        var limited = items.Any(item => item.Limited);
+        var stalled = claimProgressStalled && items.Any(item => !item.Limited);
 
         return new RemoteQueueStarvationSnapshot
         {
@@ -101,13 +134,27 @@ public static class RemoteQueueStarvationPolicy
             WaitingTaskCount = items.Count,
             AvailableSlots = availableSlots,
             ThresholdMinutes = Math.Max(1, (int)Math.Ceiling(threshold.TotalMinutes)),
-            ClaimProgressStalled = claimProgressStalled,
+            ClaimProgressStalled = stalled,
             LastSuccessfulClaimAt = lastSuccessfulClaimAt,
             HasRejections = hasRejections,
+            Limited = limited,
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
         };
+    }
+
+    private static DateTime? LimitUntil(AgentStudio.TaskServer.Contracts.CapabilityHealthDto capability)
+    {
+        var detail = capability.Detail;
+        if (string.IsNullOrWhiteSpace(detail)) return capability.CooldownUntil;
+        const string marker = "limited until ";
+        var index = detail.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0) return capability.CooldownUntil;
+        var value = detail[(index + marker.Length)..].Split(' ', 2)[0].TrimEnd('.');
+        return DateTime.TryParse(value, null, DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed.ToUniversalTime()
+            : capability.CooldownUntil;
     }
 }
 
@@ -126,6 +173,7 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
     private readonly ClientIdentityStore _clients;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RemoteQueueStarvationWatchdog> _logger;
+    private readonly V1ReviewExecutorRegistry? _capabilityRegistry;
     private readonly object _gate = new();
     private RemoteQueueStarvationSnapshot _current = new() { ObservedAt = DateTime.UtcNow };
     private string? _warningSignature;
@@ -136,13 +184,15 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
         ProjectSettingsService settings,
         ClientIdentityStore clients,
         IConfiguration configuration,
-        ILogger<RemoteQueueStarvationWatchdog> logger)
+        ILogger<RemoteQueueStarvationWatchdog> logger,
+        V1ReviewExecutorRegistry? capabilityRegistry = null)
     {
         _scanner = scanner;
         _settings = settings;
         _clients = clients;
         _configuration = configuration;
         _logger = logger;
+        _capabilityRegistry = capabilityRegistry;
     }
 
     public RemoteQueueStarvationSnapshot Current
@@ -165,7 +215,8 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
             snapshot.Live,
             _settings.Get,
             snapshot.References,
-            _clients.ListAll());
+            _clients.ListAll(),
+            _capabilityRegistry?.ListCapabilitySnapshots());
 
         lock (_gate)
         {
@@ -259,6 +310,7 @@ public static class RemoteQueueStarvationEndpoints
                 Active = visibleItems.Count > 0 && snapshot.AvailableSlots > 0,
                 WaitingTaskCount = visibleItems.Count,
                 HasRejections = visibleItems.Any(item => item.LastRejection is not null),
+                Limited = visibleItems.Any(item => item.Limited),
                 OldestEnteredLaneAt = visibleItems.FirstOrDefault()?.EnteredLaneAt,
                 Items = visibleItems,
             });

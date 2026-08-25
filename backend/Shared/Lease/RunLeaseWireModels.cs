@@ -263,3 +263,19 @@ public sealed record RemoteRunCompletionResponse(
     string? ReviewAttemptId = null,
     string? ReviewSubjectId = null,
     string? FailureClassification = null);
+
+/// <summary>
+/// Fenced in-flight lifecycle projection for an account-level provider wait.
+/// It does not settle the RunAttempt and cannot create a task failure record.
+/// </summary>
+public sealed record RemoteQuotaWaitRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string CliType,
+    DateTime StartedAt,
+    DateTime ResetAt,
+    string Reason,
+    bool Active,
+    string? AttemptId = null);

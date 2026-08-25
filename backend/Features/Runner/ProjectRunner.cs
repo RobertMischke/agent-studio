@@ -727,7 +727,8 @@ public class ProjectRunner
     private static string ClassifyModeSource(string reason)
     {
         if (string.IsNullOrWhiteSpace(reason)) return "system";
-        if (reason.Contains("circuit-breaker", StringComparison.OrdinalIgnoreCase))
+        if (reason.Contains("circuit-breaker", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("infra breaker", StringComparison.OrdinalIgnoreCase))
             return "circuit-breaker";
         if (reason.StartsWith("supervisor", StringComparison.OrdinalIgnoreCase))
             return "supervisor";
@@ -1153,6 +1154,12 @@ public class ProjectRunner
             // next reset (the scheduler re-ticks and wakes on its own). The
             // switch/throttle/wait decision is emitted (de-duplicated per job) so
             // the load-steering is never silent.
+            if (candidate.Info.QuotaWait is { } activeWait && activeWait.ResetAt > DateTime.UtcNow)
+            {
+                _lastPickReason = $"provider-limit-wait: {candidate.Info.Id}: {activeWait.CliType} limited until {activeWait.ResetAt:O}";
+                continue;
+            }
+
             if (candidate.Info.QuotaWait is { } dueWait && dueWait.ResetAt <= DateTime.UtcNow)
             {
                 _ = RefreshQuotaAfterResetAsync(candidate.Info, dueWait.CliType);
@@ -2139,6 +2146,13 @@ public class ProjectRunner
                     ProjectName, jobId, ui.Iteration, ui.MaxIterations, escalation.Status);
                 return RunOutcome.Reject(new RunRejection(
                     RunRejectReason.UiIterationCapReached, reason));
+            }
+
+            if (info.QuotaWait is { } activeWait && activeWait.ResetAt > DateTime.UtcNow)
+            {
+                return RunOutcome.Reject(new RunRejection(
+                    RunRejectReason.QuotaCapExceeded,
+                    $"{activeWait.CliType} is limited until {activeWait.ResetAt:O}; the task will resume automatically."));
             }
 
             if (info.QuotaWait is { } dueWait && dueWait.ResetAt <= DateTime.UtcNow)
@@ -5502,13 +5516,56 @@ public class ProjectRunner
             // wrong snapshot and takes the same fail. The re-probe is
             // fire-and-forget; admission is already conservative because the
             // snapshot is flagged suspicious the instant we invalidate it.
-            if (outcome.IssueKind == RunIssueKind.QuotaExhausted && !string.IsNullOrWhiteSpace(cliType))
+            if (ProviderLimitRunPolicy.Decide(outcome.IssueKind, cliType)
+                == ProviderLimitRunDisposition.WaitWithoutTaskFailure)
             {
                 _logger.LogWarning(
                     "quota_ground_truth_invalidate job={JobId} cli={Cli}: run hit a usage limit; invalidating cached quota snapshot and re-probing",
                     jobId, cliType);
                 _ = _quotaService.InvalidateForGroundTruthLimit(
                     cliType, $"launch {jobId} died with a usage-limit error");
+
+                // Provider limits are account capability state, not a task
+                // verdict. Keep the current card in Progress with the existing
+                // quotaWait projection and let the picker continue past it to
+                // cards for other CLIs. No outcome policy, escalation, per-task
+                // failure counter, or circuit-breaker receives this run.
+                if (activeInfo != null)
+                {
+                    var rawLimit = string.Join('\n', liveOutputSnapshot.Select(line => line.Text ?? string.Empty));
+                    var resetAt = ParseProviderLimitResetAt(rawLimit, DateTime.UtcNow)
+                                  ?? DateTime.UtcNow.AddMinutes(5);
+                    var reason = rawLimit.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                                     .Select(line => line.Trim())
+                                     .FirstOrDefault(line => line.Contains("limit", StringComparison.OrdinalIgnoreCase))
+                                 ?? $"{cliType} provider limit reached";
+                    QuotaWaitMarker.Write(activeInfo.FolderPath, new QuotaWaitRecord
+                    {
+                        CliType = cliType,
+                        StartedAt = DateTime.UtcNow,
+                        ResetAt = resetAt,
+                        ThresholdMinutes = 0,
+                        Reason = reason,
+                    }, _logger);
+                    _mutations.SetJobPhase(activeInfo.FolderPath, LifecyclePhases.QuotaWaiting);
+                    _chatLog.Append(
+                        activeInfo,
+                        OrchestratorMessageKind.QuotaExhausted,
+                        $"[quota-wait] {cliType}: limited until {resetAt:O}. The current card will resume automatically; other CLI cards remain eligible.");
+                    _timeline?.Append(
+                        activeInfo.FolderPath,
+                        TimelineEventKinds.QuotaAdmissionDecision,
+                        TimelineActors.System,
+                        $"{cliType}: limited until {resetAt:O}; current card is waiting",
+                        details: new()
+                        {
+                            ["outcome"] = "Wait",
+                            ["decision"] = "provider-limit-detected",
+                            ["cli"] = cliType,
+                            ["resetAt"] = resetAt.ToString("O"),
+                        });
+                }
+                return;
             }
 
             // Count the commits this run actually produced (HeadShaBefore..After).
@@ -8220,6 +8277,57 @@ public class ProjectRunner
         return false;
     }
 
+    internal static DateTime? ParseProviderLimitResetAt(string? output, DateTime observedAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return null;
+        var epoch = Regex.Match(
+            output,
+            "\\bresetsAt\\s*[=:]\\s*[\\\"']?(?<epoch>\\d{10})",
+            RegexOptions.IgnoreCase);
+        if (epoch.Success
+            && long.TryParse(epoch.Groups["epoch"].Value, out var seconds)
+            && seconds is >= -62135596800 and <= 253402300799)
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+        }
+
+        var relative = Regex.Match(
+            output,
+            @"\breset(?:s)?\s+in\s+(?<hours>\d+(?:[\.,]\d+)?)\s*h",
+            RegexOptions.IgnoreCase);
+        if (relative.Success
+            && double.TryParse(
+                relative.Groups["hours"].Value.Replace(',', '.'),
+                NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out var hours)
+            && hours > 0)
+        {
+            return observedAtUtc.ToUniversalTime().AddHours(hours);
+        }
+
+        var clock = Regex.Match(
+            output,
+            @"\breset(?:s)?\s+(?<clock>\d{1,2}:\d{2}\s*(?:am|pm)?)",
+            RegexOptions.IgnoreCase);
+        if (!clock.Success) return null;
+        var value = Regex.Replace(clock.Groups["clock"].Value, @"\s+", string.Empty);
+        if (!DateTime.TryParseExact(
+                value,
+                ["h:mmtt", "hh:mmtt", "H:mm", "HH:mm"],
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces,
+                out var parsed))
+        {
+            return null;
+        }
+
+        var localObserved = observedAtUtc.ToUniversalTime().ToLocalTime();
+        var localReset = localObserved.Date.Add(parsed.TimeOfDay);
+        if (localReset <= localObserved) localReset = localReset.AddDays(1);
+        return localReset.ToUniversalTime();
+    }
+
     private void ScheduleGlobalBreakerCooldown(string reason, TaskInfo? activeInfo)
     {
         if (!IsAutoMode(_mode)) return;
@@ -8943,7 +9051,7 @@ public class ProjectRunner
         if (IsAutoMode(_mode))
         {
             SetMode("manual",
-                $"cross-slug infra circuit-breaker on {cliType}: {string.Join(", ", trip.Slugs)}");
+                $"pickup paused: infra breaker, {trip.Slugs.Count} failures cliType={cliType} at {trip.TrippedAt:O}; tasks={string.Join(", ", trip.Slugs)}");
             return true;
         }
         return false;

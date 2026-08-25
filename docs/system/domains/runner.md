@@ -505,6 +505,16 @@ state.
   notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
   A recognized provider-auth run failure reports unavailability immediately so
   revocation between periodic probes is visible.
+- Provider session and account rate limits are capability waits, not task
+  failures. A Claude limit response records its reset time in durable
+  `provider-limits.json`, advertises `provider-auth:claude` as `limited`, and
+  leaves other CLI capabilities ready. The current fenced run stays in the
+  visible `quota-waiting` phase, keeps its lease heartbeat, and restarts from
+  the durable workspace only after the reset time and a successful recovery
+  probe. It does not settle, escalate, add a per-task failure, or feed a pickup
+  breaker. The same wait survives a daemon restart. Local pickup uses the same
+  `quota-wait.json` projection and skips the waiting Claude card while later
+  Codex cards remain eligible.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps
@@ -957,8 +967,11 @@ fleet's latest successful claim must also be at least that old. This claim
 progress window debounces normal serial queue processing, including snapshots
 between claim polls. The snapshot published by
 `GET /api/runner/queue-starvation` includes the latest successful claim time,
-the stalled-progress verdict, and whether any returned card has rejection
-evidence. The board mentions a latest rejection only when that evidence exists.
+the stalled-progress verdict, provider-limited cards and reset times, and
+whether any returned card has rejection evidence. Provider-limited work is
+reported as `limited`, not `stalled`; the board names the affected CLI and
+automatic recovery while preserving unrelated CLI eligibility. The board
+mentions a latest rejection only when that evidence exists.
 The watchdog emits the rate-limited `remote-ready-starvation` warning event and
 clears the acute signal when claim progress, the queue, or capacity recovers.
 
