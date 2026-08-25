@@ -39,6 +39,11 @@ CLI execution tests.
   and a guarded `DELETE /api/cli/{cliType}/session` (cleanup refused for any path
   outside the CLI's own session store). Both resolve/parse in
   `SessionRegistry.cs`; the `/usage` list report stays body-free.
+- `backend/Features/Cli/Execution/LocalCliSelfHealService.cs`: Windows local-host
+  `--version` monitoring and the narrow automatic repair for Claude or Codex
+  when the global npm package remains installed but the executable shim is gone.
+  It never installs a truly absent package. Attempts are journaled under the
+  backend log directory and limited to one per CLI per hour.
 - `backend/Services/Runner/OrchestratorSession.cs` and
   `OrchestratorRunner.cs`: runner-to-CLI orchestration boundary.
 - `backend/Features/Cli/Routing/OneShot/ClaudeOneShot.cs` and `CodexOneShot.cs`:
@@ -62,6 +67,11 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- Local CLI self-heal is package-presence gated. A missing shim plus a present
+  global package may run `npm install -g` automatically; a truly absent package
+  remains an operator install. Preserve the pre/post CLI and package versions,
+  npm activity snapshot, auto-update policy, one-hour durable attempt limit,
+  success note, and failure-only error event as one contract.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

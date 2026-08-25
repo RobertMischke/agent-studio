@@ -13,6 +13,7 @@ import {
 import { TaskService } from '../../../../services/task.service';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
 import type { CliType } from '../../../../models/task.model';
+import type { LocalCliRepairStatus } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import {
   clearVisibleInterval,
@@ -41,6 +42,20 @@ export function formatRunningLabel(local: number, remote: number): string {
   if (local > 0) return `${local} local`;
   if (remote > 0) return `${remote} remote`;
   return 'no runners';
+}
+
+export function latestCliRepair(
+  repairs: readonly LocalCliRepairStatus[] | undefined,
+): LocalCliRepairStatus | null {
+  if (!repairs?.length) return null;
+  return [...repairs].sort((a, b) => Date.parse(b.repairedAt) - Date.parse(a.repairedAt))[0] ?? null;
+}
+
+export function formatCliRepairTime(repairedAt: string): string {
+  const value = new Date(repairedAt);
+  return Number.isNaN(value.getTime())
+    ? repairedAt
+    : value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 @Component({
@@ -108,6 +123,18 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   readonly hostLoad = computed(() =>
     summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
+  readonly cliRepair = computed(() => latestCliRepair(this.jobService.runnerStatus().cliRepairs));
+  readonly cliRepairLabel = computed(() => {
+    const repair = this.cliRepair();
+    return repair ? `CLI repaired at ${formatCliRepairTime(repair.repairedAt)}` : '';
+  });
+  readonly cliRepairTooltip = computed(() => {
+    const repair = this.cliRepair();
+    if (!repair) return '';
+    const before = repair.cliVersionBefore ?? repair.packageVersionBefore ?? 'unknown';
+    const after = repair.cliVersionAfter ?? repair.packageVersionAfter ?? 'unknown';
+    return `${repair.cliType} shim was repaired automatically at ${repair.repairedAt}. Version ${before} to ${after}.`;
+  });
 
   readonly autoCount = computed(() => {
     const status = this.jobService.runnerStatus();

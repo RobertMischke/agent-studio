@@ -85,6 +85,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly AgentStudio.Clients.ClientIdentityStore? _clients;
     private readonly StartupExecutionAdmission? _executionAdmission;
+    private readonly LocalCliSelfHealService? _cliSelfHeal;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -152,7 +153,8 @@ public class TaskRunnerService : BackgroundService
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
         VisualQaService? visualQa = null,
-        StartupExecutionAdmission? executionAdmission = null)
+        StartupExecutionAdmission? executionAdmission = null,
+        LocalCliSelfHealService? cliSelfHeal = null)
     {
         _config = config;
         _logger = logger;
@@ -201,6 +203,7 @@ public class TaskRunnerService : BackgroundService
         _clients = clients;
         _quotaWaitPolicy = quotaWaitPolicy;
         _executionAdmission = executionAdmission;
+        _cliSelfHeal = cliSelfHeal;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -546,7 +549,11 @@ public class TaskRunnerService : BackgroundService
         {
             projects[name] = runner.GetStatus();
         }
-        return new RunnerStatus { Projects = projects };
+        return new RunnerStatus
+        {
+            Projects = projects,
+            CliRepairs = _cliSelfHeal?.LatestRepairs() ?? [],
+        };
     }
 
     public bool SetMode(string projectName, string mode, string? reason = null)

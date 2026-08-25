@@ -39,6 +39,53 @@ public sealed record HealOutcome(
 public static class NpmShimHealer
 {
     /// <summary>
+    /// Re-runs a known global npm package install through the existing shim
+    /// repair process boundary. Callers remain responsible for package
+    /// allowlisting and attempt throttling.
+    /// </summary>
+    internal static async Task<(int? ExitCode, string Output)> InstallGlobalPackageAsync(
+        string packageName,
+        TimeSpan timeout,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = GenericCliExecutionService.ResolveExecutable("npm"),
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                },
+            };
+            process.StartInfo.ArgumentList.Add("install");
+            process.StartInfo.ArgumentList.Add("-g");
+            process.StartInfo.ArgumentList.Add(packageName);
+            if (!process.Start()) return (null, "npm did not start");
+
+            var stdout = process.StandardOutput.ReadToEndAsync(ct);
+            var stderr = process.StandardError.ReadToEndAsync(ct);
+            using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            bounded.CancelAfter(timeout);
+            try { await process.WaitForExitAsync(bounded.Token); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception ex) { SilentCatch.Note(ex, "NpmShimHealer: best-effort npm timeout cleanup"); }
+                return (null, $"npm install timed out after {timeout.TotalMinutes:0} minutes");
+            }
+            return (process.ExitCode, $"{await stdout}\n{await stderr}");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return (null, $"{ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Repair the <c>claude</c> npm-shim install on Windows and smoke-test
     /// the resulting <c>claude.cmd</c>. No-op on non-Windows hosts (the
     /// failure mode is Windows-specific).

@@ -160,7 +160,20 @@ public static class TaskRunActivityClassifier
 public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
+    /// <summary>
+    /// Latest successful local npm-shim repair per CLI. Empty on hosts that
+    /// have not repaired a shim and on older or remote-only deployments.
+    /// </summary>
+    public IReadOnlyList<LocalCliRepairStatus> CliRepairs { get; init; } = [];
 }
+
+public sealed record LocalCliRepairStatus(
+    string CliType,
+    DateTimeOffset RepairedAt,
+    string? CliVersionBefore,
+    string? CliVersionAfter,
+    string? PackageVersionBefore,
+    string? PackageVersionAfter);
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);
 

@@ -1681,6 +1681,16 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
+  cliRepairs?: LocalCliRepairStatus[];
+}
+
+export interface LocalCliRepairStatus {
+  cliType: string;
+  repairedAt: string;
+  cliVersionBefore: string | null;
+  cliVersionAfter: string | null;
+  packageVersionBefore: string | null;
+  packageVersionAfter: string | null;
 }
 
 /**
