@@ -50,6 +50,25 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public async Task Management_mode_uses_the_documented_camel_case_string_contract()
+    {
+        using var temp = new TempDirectory();
+        await using var factory = new TaskServerFactory(temp.Path);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(
+            TaskServerProtocol.HeaderName,
+            TaskServerProtocol.Current.ToString());
+
+        var change = await client.PutAsJsonAsync(
+            "/api/v1/management/mode",
+            new { mode = "maintenance", reason = "wire contract test" });
+
+        Assert.Equal(HttpStatusCode.OK, change.StatusCode);
+        using var response = JsonDocument.Parse(await change.Content.ReadAsStreamAsync());
+        Assert.Equal("maintenance", response.RootElement.GetProperty("mode").GetString());
+    }
+
+    [Fact]
     public async Task Bearer_mode_protects_resources_but_keeps_handshake_available()
     {
         using var temp = new TempDirectory();

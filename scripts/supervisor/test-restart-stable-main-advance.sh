@@ -15,6 +15,9 @@ fake_bin="$test_root/bin"
 update="$test_root/update-stable.sh"
 update_count="$test_root/update-count"
 busy_file="$test_root/stable-busy"
+task_server_down="$test_root/task-server-down"
+task_server_control="$test_root/task-server-control"
+task_server_control_count="$test_root/task-server-control-count"
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
@@ -31,6 +34,7 @@ git clone --quiet "$remote" "$stable"
 
 mkdir -p "$fake_bin" "$workspace"
 printf '%s\n' 0 > "$update_count"
+printf '%s\n' 0 > "$task_server_control_count"
 
 cat > "$update" <<'EOF'
 #!/usr/bin/env sh
@@ -52,6 +56,11 @@ for arg in "$@"; do
   case "$arg" in http://*) url=$arg ;; esac
 done
 case "$url" in
+  http://task-server.invalid/readyz)
+    if [ -f "$ATP_TEST_TASK_SERVER_DOWN" ]; then
+      exit 22
+    fi
+    ;;
   */healthz/drain)
     printf '%s\n' idle
     ;;
@@ -76,6 +85,15 @@ esac
 EOF
 chmod +x "$fake_bin/curl"
 
+cat > "$task_server_control" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+count=$(cat "$ATP_TEST_TASK_SERVER_CONTROL_COUNT")
+printf '%s\n' $((count + 1)) > "$ATP_TEST_TASK_SERVER_CONTROL_COUNT"
+rm -f "$ATP_TEST_TASK_SERVER_DOWN"
+EOF
+chmod +x "$task_server_control"
+
 run_tick() {
   env \
     ATP_WORKSPACE="$workspace" \
@@ -89,6 +107,11 @@ run_tick() {
     ATP_HEALTHZ_TIMEOUT=1 \
     ATP_RESUME_MAX_ATTEMPTS=1 \
     ATP_TEST_BUSY_FILE="$busy_file" \
+    ATP_TASK_SERVER_REQUIRED=1 \
+    ATP_TASK_SERVER_URL=http://task-server.invalid \
+    ATP_TASK_SERVER_CONTROL_SCRIPT="$task_server_control" \
+    ATP_TEST_TASK_SERVER_DOWN="$task_server_down" \
+    ATP_TEST_TASK_SERVER_CONTROL_COUNT="$task_server_control_count" \
     PATH="$fake_bin:$PATH" \
     sh "$watcher" 2>&1
 }
@@ -97,6 +120,13 @@ run_tick() {
 output=$(run_tick)
 test "$(cat "$update_count")" = 0
 printf '%s' "$output" | grep -q 'stable already matches origin/main'
+
+# The watcher heals the independent Task Server through its supervisor even
+# when no Stable deployment is pending.
+touch "$task_server_down"
+output=$(run_tick)
+test "$(cat "$task_server_control_count")" = 1
+printf '%s' "$output" | grep -q 'Task Server recovered through its supervised service boundary'
 
 # A promoted main is deployed once and recorded with its exact target SHA.
 printf '%s\n' promoted > "$source_checkout/release.txt"
