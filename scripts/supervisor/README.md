@@ -44,6 +44,15 @@ runner-idle, merge-gate drain, update, logging, and verified-resume path. See th
 [promotion runbook](../../docs/operations/develop-main-promotion.md) for the
 complete command and cron entry.
 
+On Windows, the watcher also treats the standalone Task Server as a required
+supervised dependency. Before evaluating either deployment trigger it probes
+`ATP_TASK_SERVER_URL` (default `http://127.0.0.1:5071`) and asks the Scheduled
+Task service boundary to start it when `/readyz` is unavailable. A failed
+recovery skips the tick, so Stable is never deliberately restarted into a
+topology with no task authority. Tests and non-Windows installations can set
+`ATP_TASK_SERVER_REQUIRED=0`; a host wrapper can be supplied through
+`ATP_TASK_SERVER_START_SCRIPT`.
+
 Trigger conditions (both must hold on a tick):
 
 - At least N (default 3) **new** job folders have appeared in the watched project's `4-review` lane since the last restart (or since the watcher first booted and took its baseline snapshot).
@@ -123,9 +132,10 @@ merge gate delays the update call until it becomes idle, and that a gate which
 stays busy is released to the hard restart only after the configured bounded
 window.
 
-`./scripts/supervisor/test-restart-stable-main-advance.sh` proves that an
-unchanged remote `main` is a no-op, a new main SHA is deployed and logged, and
-an active Stable run defers deployment.
+`./scripts/supervisor/test-restart-stable-main-advance.sh` proves supervised
+Task Server recovery, that an unchanged remote `main` is a no-op, that a new
+main SHA is deployed and logged, and that an active Stable run defers
+deployment.
 
 #### How it relates to the system-review monitor
 

@@ -260,5 +260,6 @@ fi
 
 bash "$repo_root/scripts/release/promote-develop-to-main.test.sh"
 bash "$repo_root/scripts/supervisor/test-restart-stable-main-advance.sh"
+bash "$repo_root/scripts/test-task-server-windows-assets.sh"
 
 printf 'Release packaging and install/update/rollback tests passed.\n'

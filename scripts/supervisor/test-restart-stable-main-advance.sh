@@ -15,6 +15,8 @@ fake_bin="$test_root/bin"
 update="$test_root/update-stable.sh"
 update_count="$test_root/update-count"
 busy_file="$test_root/stable-busy"
+task_server_ready="$test_root/task-server-ready"
+task_server_start="$test_root/start-task-server.sh"
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
@@ -52,6 +54,9 @@ for arg in "$@"; do
   case "$arg" in http://*) url=$arg ;; esac
 done
 case "$url" in
+  */readyz)
+    test -f "$ATP_TEST_TASK_SERVER_READY"
+    ;;
   */healthz/drain)
     printf '%s\n' idle
     ;;
@@ -76,6 +81,13 @@ esac
 EOF
 chmod +x "$fake_bin/curl"
 
+cat > "$task_server_start" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+: > "$ATP_TEST_TASK_SERVER_READY"
+EOF
+chmod +x "$task_server_start"
+
 run_tick() {
   env \
     ATP_WORKSPACE="$workspace" \
@@ -84,6 +96,10 @@ run_tick() {
     ATP_STABLE_API=http://stable.invalid \
     ATP_RESTART_TRIGGER=main-advance \
     ATP_UPDATE_SCRIPT="$update" \
+    ATP_TASK_SERVER_REQUIRED=1 \
+    ATP_TASK_SERVER_URL=http://task-server.invalid \
+    ATP_TASK_SERVER_START_SCRIPT="$task_server_start" \
+    ATP_TEST_TASK_SERVER_READY="$task_server_ready" \
     ATP_TEST_UPDATE_COUNT="$update_count" \
     ATP_CLIENT_ID=deploy-cron-test \
     ATP_HEALTHZ_TIMEOUT=1 \
@@ -96,6 +112,8 @@ run_tick() {
 # No main movement is a clean cron no-op.
 output=$(run_tick)
 test "$(cat "$update_count")" = 0
+test -f "$task_server_ready"
+printf '%s' "$output" | grep -q 'Task Server recovered through its supervised service boundary'
 printf '%s' "$output" | grep -q 'stable already matches origin/main'
 
 # A promoted main is deployed once and recorded with its exact target SHA.
