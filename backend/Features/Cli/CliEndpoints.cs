@@ -165,9 +165,9 @@ public static class CliEndpoints
         });
 
         // ── Quota: per-CLI subscription quota for the right-hand sidesheet ──
-        cliGroup.MapGet("/quota", (QuotaService quota, CancellationToken ct) =>
+        cliGroup.MapGet("/quota", (QuotaService quota) =>
         {
-            return Results.Ok(quota.GetWithBackgroundRefresh(ct));
+            return Results.Ok(quota.GetWithBackgroundRefresh());
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         cliGroup.MapPost("/quota/refresh", async (QuotaService quota, CancellationToken ct) =>

@@ -40,6 +40,8 @@ public record QuotaSnapshot
 {
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
+    /// <summary>Normalized CLI version that produced the probe result (for example, "0.149.0").</summary>
+    public string? CliVersion { get; init; }
     /// <summary>"Pro" / "Pro+" / "Plus" / "Free" — null when unknown.</summary>
     public string? Plan { get; init; }
     public List<QuotaWindow> Windows { get; init; } = [];
@@ -49,6 +51,12 @@ public record QuotaSnapshot
     public string? RawSample { get; init; }
     /// <summary>Set when probing failed; <see cref="Plan"/>/<see cref="Windows"/> may still hold partial data.</summary>
     public string? Error { get; init; }
+    /// <summary>
+    /// UTC timestamp of the most recent failed probe. When last-good values are
+    /// retained, <see cref="FetchedAt"/> remains the time those values were
+    /// measured while this field explains why they are stale.
+    /// </summary>
+    public DateTime? ProbeFailedAt { get; init; }
 
     /// <summary>
     /// True when this snapshot is not yet trusted: either a single probe showed

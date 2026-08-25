@@ -765,6 +765,8 @@ builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddSingleton<CliQuotaWaitPolicyService>();
 builder.Services.AddSingleton<CliQuotaFallbackService>();
+if (!publicDemoExecutionProfile && !underTestHost && !builder.Environment.IsEnvironment("Test"))
+    builder.Services.AddHostedService<CliVersionMonitorHostedService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
 if (!publicDemoExecutionProfile)
     builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());

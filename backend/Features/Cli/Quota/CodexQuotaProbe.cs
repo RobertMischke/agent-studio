@@ -22,11 +22,11 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 {
     // "5h limit: [bar] NN% left (resets HH:MM[ on D Mon])"
     private static readonly Regex FiveHourRegex = new(
-        @"5h\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        @"(?:5h|5[- ]?hour)\s*limit\s*:?\s*(?:\[[^\]]*\]\s*)?(?<left>\d+)\s*%\s*(?:left|remaining)(?:(?:\s|│)*\(\s*resets\s*(?<reset>[^)]+?)\s*\))?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex WeeklyRegex = new(
-        @"Weekly\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        @"Weekly\s*limit\s*:?\s*(?:\[[^\]]*\]\s*)?(?<left>\d+)\s*%\s*(?:left|remaining)(?:(?:\s|│)*\(\s*resets\s*(?<reset>[^)]+?)\s*\))?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Header of the Spark sub-block: "<model>-Spark limit:". It is
@@ -50,7 +50,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
     // Fallback footer when /status couldn't render: "5h NN% · weekly NN%".
     // The footer values are also "% left", so we invert.
     private static readonly Regex FooterRegex = new(
-        @"5h\s*(?<h5left>\d+)\s*%\s*[·•]\s*weekly\s*(?<wkleft>\d+)\s*%",
+        @"5h\s*(?<h5left>\d+)\s*%\s*(?:left|remaining)?\s*[·•]\s*weekly\s*(?<wkleft>\d+)\s*%\s*(?:left|remaining)?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public CodexQuotaProbe(
@@ -63,19 +63,25 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
     public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
     {
+        string? cliVersion = null;
         try
         {
             var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
-            var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
+            var updatePattern  = new Regex(@"Update\s*available|Skip\s*until\s*next\s*version", RegexOptions.IgnoreCase);
+            var welcomePattern = new Regex(@"OpenAI\s*Codex|model:|Ask\s*Codex\s*to\s*do\s*anything", RegexOptions.IgnoreCase);
             var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
 
-            var snap = await ProbeWithStepsAsync(
+            var capture = await ProbeWithStepsAsync(
             [
                 // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
                 // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
                 // stray "1" in the chat input box, which then prefixes the next slash
                 // command and turns "/status" into a chat message instead of a command.
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
+                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 3000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300, SendKeysOnlyIfMatched: true),
+                // Codex 0.144+ can render an update chooser after the initial welcome
+                // frame. Move from the pre-selected "Update now" row to "Skip" so
+                // /status reaches the REPL without mutating the installed CLI.
+                new ProbeStep("dismiss-update", WaitForPattern: updatePattern, WaitTimeoutMs: 5000, SendKeys: "<Down><Enter>", SettleIdleMs: 1200, SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
                 // Clear the buffer so the await-welcome match only sees post-trust content.
                 new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
                 // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
@@ -85,6 +91,8 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             ],
             initialIdleMs: 8000,
             ct);
+            var snap = capture.Snapshot;
+            cliVersion = capture.CliVersion;
 
             string? plan = PlanRegex.Match(snap) is { Success: true } pm
                 ? pm.Groups["plan"].Value.Trim()
@@ -106,6 +114,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = cliVersion,
                 Plan      = plan,
                 Source    = "/status",
                 RawSample = TruncateForDebug(snap),
@@ -118,7 +127,14 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Codex quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = cliVersion ?? DetectCliVersion(),
+                Source = "/status",
+                Error = ex.Message,
+                ProbeFailedAt = DateTime.UtcNow
+            };
         }
     }
 
@@ -164,13 +180,13 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             return;
         }
 
-        var resetRaw = match.Groups["reset"].Value.Trim();
+        var resetRaw = match.Groups["reset"].Success ? match.Groups["reset"].Value.Trim() : null;
         windows.Add(new QuotaWindow
         {
             Label      = label,
             UsedPct    = 100 - left,
             Unit       = "%",
-            ResetAt    = ParseResetUtc(resetRaw),
+            ResetAt    = resetRaw == null ? null : ParseResetUtc(resetRaw),
             ResetLabel = resetRaw
         });
     }

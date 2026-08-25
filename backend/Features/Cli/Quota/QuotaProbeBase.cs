@@ -32,14 +32,14 @@ public abstract class QuotaProbeBase : IQuotaProbe
     /// return the ANSI-stripped snapshot. Always sends two Esc presses at the end so
     /// modal pickers close before the process is torn down.
     /// </summary>
-    protected async Task<string> ProbeWithSnapshotAsync(
+    protected async Task<ProbeCapture> ProbeWithSnapshotAsync(
         string? sendKeys,
         int initialIdleMs,
         int settleAfterSendMs,
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, rawVersion, resolvedPath) = cli.TestCliPath();
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 
@@ -66,7 +66,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
 
         var snap = pty.SnapshotStripped();
         try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:71"); }
-        return snap;
+        return new ProbeCapture(snap, CliVersionIdentity.Normalize(rawVersion));
     }
 
     /// <summary>
@@ -74,13 +74,13 @@ public abstract class QuotaProbeBase : IQuotaProbe
     /// optionally waits for a regex pattern to appear, sends keys, then waits for output to settle.
     /// Returns the final ANSI-stripped snapshot.
     /// </summary>
-    protected async Task<string> ProbeWithStepsAsync(
+    protected async Task<ProbeCapture> ProbeWithStepsAsync(
         IEnumerable<ProbeStep> steps,
         int initialIdleMs,
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, rawVersion, resolvedPath) = cli.TestCliPath();
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 
@@ -96,46 +96,57 @@ public abstract class QuotaProbeBase : IQuotaProbe
             _logger.LogDebug(ex, "Pre-probe environment setup failed (best-effort)");
         }
 
-        await using var pty = await PtySession.SpawnAsync(app: resolvedPath, cwd: scratch, ct: ct);
-        await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: initialIdleMs, ct);
-
-        foreach (var step in steps)
+        var currentStep = "startup";
+        try
         {
-            if (step.ClearBufferBefore) pty.ClearBuffer();
-            bool patternMatched = step.WaitForPattern == null;
-            if (step.WaitForPattern != null)
-            {
-                var match = await pty.WaitForPatternAsync(step.WaitForPattern, timeoutMs: step.WaitTimeoutMs, ct);
-                patternMatched = match != null;
-                if (match == null)
-                {
-                    _logger.LogDebug("Probe step '{Step}' did not see expected pattern within {Ms}ms",
-                        step.Name, step.WaitTimeoutMs);
-                    if (step.RequirePattern) break; // give up; downstream parser will report best-effort failure
-                }
-            }
-            if (step.PreSendDelayMs > 0)
-            {
-                try { await Task.Delay(step.PreSendDelayMs, ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:122"); }
-            }
-            if (!string.IsNullOrEmpty(step.SendKeys))
-            {
-                if (step.SendKeysOnlyIfMatched && !patternMatched)
-                {
-                    _logger.LogDebug("Probe step '{Step}' skipping SendKeys because pattern did not match",
-                        step.Name);
-                }
-                else
-                {
-                    await pty.SendKeysAsync(step.SendKeys, ct);
-                    await pty.WaitForIdleAsync(idleMs: step.SettleIdleMs, timeoutMs: step.SettleTimeoutMs, ct);
-                }
-            }
-        }
+            await using var pty = await PtySession.SpawnAsync(app: resolvedPath, cwd: scratch, ct: ct);
+            await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: initialIdleMs, ct);
 
-        var snap = pty.SnapshotStripped();
-        try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:140"); }
-        return snap;
+            foreach (var step in steps)
+            {
+                currentStep = step.Name;
+                if (step.ClearBufferBefore) pty.ClearBuffer();
+                bool patternMatched = step.WaitForPattern == null;
+                if (step.WaitForPattern != null)
+                {
+                    var match = await pty.WaitForPatternAsync(step.WaitForPattern, timeoutMs: step.WaitTimeoutMs, ct);
+                    patternMatched = match != null;
+                    if (match == null)
+                    {
+                        _logger.LogDebug("Probe step '{Step}' did not see expected pattern within {Ms}ms",
+                            step.Name, step.WaitTimeoutMs);
+                        if (step.RequirePattern) break; // give up; downstream parser will report best-effort failure
+                    }
+                }
+                if (step.PreSendDelayMs > 0)
+                {
+                    await Task.Delay(step.PreSendDelayMs, ct);
+                }
+                if (!string.IsNullOrEmpty(step.SendKeys))
+                {
+                    if (step.SendKeysOnlyIfMatched && !patternMatched)
+                    {
+                        _logger.LogDebug("Probe step '{Step}' skipping SendKeys because pattern did not match",
+                            step.Name);
+                    }
+                    else
+                    {
+                        await pty.SendKeysAsync(step.SendKeys, ct);
+                        await pty.WaitForIdleAsync(idleMs: step.SettleIdleMs, timeoutMs: step.SettleTimeoutMs, ct);
+                    }
+                }
+            }
+
+            var snap = pty.SnapshotStripped();
+            try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:140"); }
+            return new ProbeCapture(snap, CliVersionIdentity.Normalize(rawVersion));
+        }
+        catch (OperationCanceledException ex)
+        {
+            throw new TimeoutException(
+                $"{CliType} quota probe exceeded its bounded timeout during PTY step '{currentStep}'.",
+                ex);
+        }
     }
 
     public sealed record ProbeStep(
@@ -165,4 +176,12 @@ public abstract class QuotaProbeBase : IQuotaProbe
         if (string.IsNullOrEmpty(snapshot)) return "";
         return snapshot.Length <= max ? snapshot : snapshot[^max..];
     }
+
+    protected string? DetectCliVersion()
+    {
+        var (_, rawVersion, _) = _router.Get(CliType).TestCliPath();
+        return CliVersionIdentity.Normalize(rawVersion);
+    }
+
+    protected sealed record ProbeCapture(string Snapshot, string? CliVersion);
 }

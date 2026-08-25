@@ -1,0 +1,24 @@
+/status
+
+╭───────────────────────────────────────────────────────────────────────────╮
+│  >_ OpenAI Codex (v0.144.1)                                               │
+│                                                                           │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date             │
+│ information on rate limits and credits                                    │
+│                                                                           │
+│  Model:                       gpt-5.6-sol (reasoning low, summaries auto) │
+│  Directory:                   /tmp                                        │
+│  Permissions:                 Workspace (Ask for approval)                │
+│  Agents.md:                   <none>                                      │
+│  Account:                     <redacted> (Pro)                            │
+│  Collaboration mode:          Default                                     │
+│  Session:                     <redacted>                                  │
+│                                                                           │
+│  Weekly limit:                [████████████████████] 99% left             │
+│                               (resets 17:12 on 1 Sep)                     │
+│  GPT-5.3-Codex-Spark limit:                                               │
+│  5h limit:                    [████████████████████] 100% left            │
+│                               (resets 03:43 on 26 Aug)                    │
+│  Weekly limit:                [████████████████████] 100% left            │
+│                               (resets 22:43 on 1 Sep)                     │
+╰───────────────────────────────────────────────────────────────────────────╯

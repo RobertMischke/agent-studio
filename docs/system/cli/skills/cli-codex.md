@@ -373,6 +373,24 @@ locked by:
 
 The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
 
+**Versioned transcript contract (AGT-2679).** ANSI-stripped real PTY captures
+live under `backend.Tests/Fixtures/quota/codex/` with the CLI version in each
+filename. The 0.144.1 and 0.149.0 panels can put reset text on the next row and
+can omit the standard 5-hour row while still reporting Weekly and Spark
+windows. The parser accepts both those forms and the older inline-reset form.
+Codex can also place an update chooser in front of the ready prompt; the probe
+selects `Skip` before sending `/status` and never chooses the mutating update
+action.
+
+**Failure and version contract (AGT-2679).** `GET /api/cli/quota` returns the
+filesystem-backed cache immediately and schedules the whole PTY operation on a
+background worker with its own 45-second timeout. The HTTP request token never
+owns that probe. A failed probe retains the last-good values and `fetchedAt`,
+sets `probeFailedAt`, `error`, and normalized `cliVersion`, and therefore renders
+as explicitly stale instead of replacing useful values with `A task was
+canceled.` Startup and periodic version checks emit `CLI version changed` when
+Claude or Codex differs from the persisted or last observed version.
+
 **Spark-block split is version-agnostic (AGT-2064).** `/status` renders a
 `<model>-Spark limit:` sub-block with its own near-empty 5h/Weekly lines. The
 standard windows are read only from the region ABOVE that header, so the Spark

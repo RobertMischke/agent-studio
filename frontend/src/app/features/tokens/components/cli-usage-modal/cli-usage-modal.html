@@ -11,7 +11,17 @@
 
   <div class="cum" [attr.data-testid]="'cli-usage-modal-body-' + cliType()">
     @if (row()?.error; as err) {
-      <div class="cum__error" role="alert">{{ err }}</div>
+      @if (probeFailureMarker(); as marker) {
+        <div class="cum__stale"
+             role="status"
+             data-testid="cli-usage-probe-stale"
+             [appTooltip]="err">
+          <span class="cum__stale-badge">Stale</span>
+          <span>{{ marker }}</span>
+        </div>
+      } @else {
+        <div class="cum__error" role="alert">{{ err }}</div>
+      }
     }
 
     <section class="cum__panel">

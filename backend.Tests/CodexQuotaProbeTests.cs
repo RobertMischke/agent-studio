@@ -5,6 +5,34 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "codex",
+            name));
+
+    [Theory]
+    [InlineData("codex-status-v0.144.1.txt", "03:43 on 26 Aug", "22:43 on 1 Sep")]
+    [InlineData("codex-status-v0.149.0.txt", "03:42 on 26 Aug", "22:42 on 1 Sep")]
+    public void ParseStatusWindows_ReadsVersionedRealPtyTranscript(
+        string fixtureName,
+        string sparkFiveHourReset,
+        string sparkWeeklyReset)
+    {
+        var windows = CodexQuotaProbe.ParseStatusWindows(ReadFixture(fixtureName));
+
+        Assert.Equal(3, windows.Count);
+        Assert.DoesNotContain(windows, w => w.Label == "5-hour");
+        Assert.Contains(windows, w =>
+            w.Label == "Weekly" && w.UsedPct == 1 && w.ResetLabel == "17:12 on 1 Sep");
+        Assert.Contains(windows, w =>
+            w.Label == "Spark 5-hour" && w.UsedPct == 0 && w.ResetLabel == sparkFiveHourReset);
+        Assert.Contains(windows, w =>
+            w.Label == "Spark Weekly" && w.UsedPct == 0 && w.ResetLabel == sparkWeeklyReset);
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {
@@ -108,5 +136,30 @@ public class CodexQuotaProbeTests
         // They are correctly attributed to the Spark sub-windows instead.
         Assert.Contains(windows, w => w.Label == "Spark 5-hour" && w.UsedPct == 4);
         Assert.Contains(windows, w => w.Label == "Spark Weekly" && w.UsedPct == 1);
+    }
+
+    [Fact]
+    public void ParseStatusWindows_AcceptsFiveHourSpellingRemainingAndMissingReset()
+    {
+        const string snapshot =
+            "5-hour limit: 60% remaining\n" +
+            "Weekly limit: [###############.....] 75% left\n";
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+
+        Assert.Collection(
+            windows,
+            fiveHour =>
+            {
+                Assert.Equal("5-hour", fiveHour.Label);
+                Assert.Equal(40, fiveHour.UsedPct);
+                Assert.Null(fiveHour.ResetLabel);
+            },
+            weekly =>
+            {
+                Assert.Equal("Weekly", weekly.Label);
+                Assert.Equal(25, weekly.UsedPct);
+                Assert.Null(weekly.ResetLabel);
+            });
     }
 }

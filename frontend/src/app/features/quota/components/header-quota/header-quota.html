@@ -4,7 +4,7 @@
             class="hquota__card"
             [attr.data-testid]="'hquota-card-' + card.cliType"
             [attr.aria-label]="card.ariaLabel"
-            [class.hquota__card--error]="!!card.error"
+            [class.hquota__card--error]="card.errorWithoutValues"
             [class.hquota__card--stale]="card.stale"
             [attr.data-tone]="card.tone"
             [attr.data-state]="card.state"
@@ -31,7 +31,9 @@
       </span>
 
       @if (card.stale) {
-        <span class="hquota__stale-dot" aria-label="Stale snapshot">●</span>
+        <span class="hquota__stale-dot"
+              aria-label="Stale snapshot"
+              [appTooltip]="card.staleTooltip">stale</span>
       }
     </button>
   }

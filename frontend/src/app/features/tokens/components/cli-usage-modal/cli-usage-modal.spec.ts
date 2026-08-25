@@ -206,4 +206,22 @@ describe('CliUsageModalComponent', () => {
       c.limitText({ label: 'x', usedPct: null, used: null, limit: null, unit: null, resetAt: null, resetLabel: null }),
     ).toBe('n/a');
   });
+
+  it('keeps last-good windows and renders an attributable stale marker after probe failure', async () => {
+    const failedAt = new Date(2026, 7, 23, 21, 7).toISOString();
+    const fixture = await build({
+      ...codexRow,
+      cliVersion: '0.149.0',
+      probeFailedAt: failedAt,
+      error: "codex quota probe exceeded its bounded timeout during PTY step 'await-status'.",
+      freshness: 'updated 12 min ago',
+      stale: true,
+    }, 'codex');
+
+    expect(fixture.componentInstance.windows()).toHaveLength(4);
+    expect(fixture.componentInstance.probeFailureMarker()).toContain('probe failed 21:07, codex 0.149.0');
+    const marker = document.body.querySelector('[data-testid="cli-usage-probe-stale"]');
+    expect(marker?.textContent).toContain('Stale');
+    expect(marker?.textContent).not.toContain('bounded timeout');
+  });
 });

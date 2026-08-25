@@ -101,8 +101,11 @@
 }
 .hquota__stale-dot {
   color: var(--severity-warn);
-  font-size: 9px;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
   line-height: 1;
+  text-transform: uppercase;
 }
 
 .hquota__chips {

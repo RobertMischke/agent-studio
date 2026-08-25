@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import type { CliType } from '../../../../models/task.model';
-import type { QuotaWindow } from '../../../../features/quota';
+import { quotaProbeFailureLabel, type QuotaWindow } from '../../../../features/quota';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
@@ -97,6 +97,11 @@ export class CliUsageModalComponent {
   });
 
   readonly windows = computed<QuotaWindow[]>(() => this.row()?.windows ?? []);
+
+  readonly probeFailureMarker = computed<string | null>(() => {
+    const row = this.row();
+    return row ? quotaProbeFailureLabel(row) : null;
+  });
 
   /** Reshapes each reported window into its card projection (pct, tone,
    *  bar width, reset countdown). Pure derivation of the input row. */

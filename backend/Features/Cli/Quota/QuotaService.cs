@@ -84,12 +84,12 @@ public sealed class QuotaService
     /// Returns the cached snapshot for every probe immediately, kicking off a background
     /// re-probe for any entry that is missing or older than the TTL.
     /// </summary>
-    public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
+    public QuotaReport GetWithBackgroundRefresh()
     {
         foreach (var k in _probes.Keys)
         {
             var stale = !_cache.TryGetValue(k, out var s) || (DateTime.UtcNow - s.FetchedAt) > _ttl;
-            if (stale) _ = RefreshAsync(k, ct);
+            if (stale) QueueBackgroundRefresh(k);
         }
         return GetCached();
     }
@@ -115,6 +115,13 @@ public sealed class QuotaService
         {
             _cache.TryGetValue(cliType, out var previous);
             var snap = await ProbeOnceAsync(probe, ct);
+            if (!string.IsNullOrWhiteSpace(snap.Error))
+            {
+                snap = PreserveLastGoodAfterFailure(previous, snap);
+                _cache[cliType] = snap;
+                PersistCache();
+                return snap;
+            }
             snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
             snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
             _cache[cliType] = snap;
@@ -128,13 +135,16 @@ public sealed class QuotaService
             // fails right after a ground-truth invalidation (AGT-2064) must not
             // silently drop the block and re-open the admission gate.
             _cache.TryGetValue(cliType, out var prior);
-            var snap = new QuotaSnapshot
+            var failed = new QuotaSnapshot
             {
                 CliType = cliType,
-                Error = ex.Message,
+                CliVersion = prior?.CliVersion,
+                Error = ProbeFailureMessage(cliType, ex),
+                ProbeFailedAt = DateTime.UtcNow,
                 Suspicious = prior?.Suspicious ?? false,
                 SuspiciousReason = prior?.Suspicious == true ? prior.SuspiciousReason : null
             };
+            var snap = PreserveLastGoodAfterFailure(prior, failed);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -148,6 +158,44 @@ public sealed class QuotaService
         cts.CancelAfter(TimeSpan.FromSeconds(45));
         return await probe.ProbeAsync(cts.Token);
     }
+
+    private void QueueBackgroundRefresh(string cliType)
+    {
+        // A probe performs synchronous binary/version checks before its first
+        // await. Queue the whole operation so GET /api/cli/quota cannot inherit
+        // that work, and never couple its lifetime to the completed request's
+        // cancellation token.
+        _ = Task.Run(async () =>
+        {
+            try { await RefreshAsync(cliType, CancellationToken.None); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Background quota refresh for {Cli} failed", cliType); }
+        }, CancellationToken.None);
+    }
+
+    internal static QuotaSnapshot PreserveLastGoodAfterFailure(QuotaSnapshot? previous, QuotaSnapshot failed)
+    {
+        var failedAt = failed.ProbeFailedAt ?? failed.FetchedAt;
+        if (previous == null)
+        {
+            return failed with { ProbeFailedAt = failedAt };
+        }
+
+        return previous with
+        {
+            CliVersion = failed.CliVersion ?? previous.CliVersion,
+            Source = failed.Source ?? previous.Source,
+            RawSample = failed.RawSample ?? previous.RawSample,
+            Error = failed.Error,
+            ProbeFailedAt = failedAt,
+            Suspicious = previous.Suspicious || failed.Suspicious,
+            SuspiciousReason = previous.SuspiciousReason ?? failed.SuspiciousReason
+        };
+    }
+
+    private static string ProbeFailureMessage(string cliType, Exception ex)
+        => ex is OperationCanceledException
+            ? $"{cliType} quota probe exceeded its bounded 45-second timeout."
+            : ex.Message;
 
     /// <summary>
     /// AGT-2064 plausibility gate. A single probe that shows a window jumping

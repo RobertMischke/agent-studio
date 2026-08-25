@@ -16,6 +16,8 @@ import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../services/quota-api.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
+import { quotaProbeFailureLabel } from '../../models/quota-failure-label';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';
 
@@ -76,6 +78,8 @@ interface QuotaCardModel {
   windows: QuotaWindow[];
   error: string | null;
   source: string | null;
+  staleTooltip: string;
+  errorWithoutValues: boolean;
 }
 
 /**
@@ -93,6 +97,7 @@ interface QuotaCardModel {
 @Component({
   selector: 'app-header-quota',
   standalone: true,
+  imports: [AppTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './header-quota.html',
   styleUrl: './header-quota.scss'
@@ -171,7 +176,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
+    const failureLabel = quotaProbeFailureLabel(s);
+    const stale = !!failureLabel || !s.fetchedAt || ageMs > ttlMs;
     const freshness = !s.fetchedAt
       ? 'never refreshed'
       : 'updated ' + this.formatAgo(ageMs);
@@ -181,12 +187,13 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const primary = this.buildPrimaryDisplay(s.windows);
     const chips = this.buildChips(shortWindow, weekWindow, primary, s.windows);
     const tone = this.cardTone(shortWindow, weekWindow, !!s.error, primary);
-    const state = this.cardState(tone, stale, !!s.error, shortWindow, weekWindow, primary);
+    const errorWithoutValues = !!s.error && s.windows.length === 0;
+    const state = this.cardState(tone, stale, errorWithoutValues, shortWindow, weekWindow, primary);
     return {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, chips),
+      ariaLabel: [this.cardAriaLabel(label, chips), failureLabel].filter(Boolean).join('. '),
       chips,
       tone,
       state,
@@ -195,7 +202,11 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness,
       windows: s.windows,
       error: s.error,
-      source: s.source
+      source: s.source,
+      staleTooltip: failureLabel
+        ? `${failureLabel}${s.error ? `\n${s.error}` : ''}`
+        : freshness,
+      errorWithoutValues,
     };
   }
 
@@ -214,7 +225,9 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness: 'never refreshed',
       windows: [],
       error: null,
-      source: null
+      source: null,
+      staleTooltip: 'never refreshed',
+      errorWithoutValues: false,
     };
   }
 
