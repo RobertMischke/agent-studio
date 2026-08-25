@@ -27,6 +27,22 @@ short code. An invalid window returns `400`, an unknown project `404`.
   window this counter covers only the tasks whose terminal-lane entry lies inside
   the window, because older terminal tasks are skipped without reading their
   ledger.
+- Backfill sidecar: when the ledger has no completion and the lane-entry
+  fallback does not apply, the reader consults
+  `<watchPath>/.metadata/cycle-time-backfill.json` (written and committed in
+  the workspace repo by `scripts/backfill-cycle-time-completions.mjs`, which
+  reconstructs completion timestamps for tasks that predate the `lane_changed`
+  ledger from the workspace repo's git history, terminal `enteredLaneAt`, and
+  file mtimes - best evidence first, each entry carrying `source`,
+  `confidence`, and the evidencing commit). Such a row has
+  `completionSource = backfill`, a `backfilled:<source>` data gap, and a null
+  stage breakdown: the reconstructed timestamp dates the task but explains
+  none of its time, so backfilled rows enter the lead-time rollup only and
+  stay out of the stage, count, and outcome aggregates. Coverage reports them
+  as `tasksBackfilled`. The sidecar is keyed by task key, tolerantly parsed,
+  and cached against its file stamp, so re-running the tool takes effect on
+  the next uncached read without a restart. Precedence per task: ledger,
+  lane-entry, backfill.
 
 ## The stages
 
@@ -173,10 +189,16 @@ refreshing (read-through refresh, not a cost of this read model).
 ## Known gaps
 
 - Tasks that predate the `lane_changed` ledger kind (roughly the first half of
-  the Agent Studio archive) have no recoverable completion time and are excluded;
-  `provenance.transitions` only records pickup anchors. A one-time backfill that
-  derives completion from the archive entry or the last `status.md` write would
-  make them visible, at the cost of a less precise timestamp.
+  the Agent Studio archive) record no completion in the ledger;
+  `provenance.transitions` only records pickup anchors. Closed on 2026-08-25 by
+  the backfill sidecar (see "Which tasks count"): the reconstructed rows are
+  visible in lead time and coverage, but their stage breakdown stays null and a
+  backfilled timestamp is only as precise as its evidence (a
+  `git-terminal-first-seen` entry is an upper bound - the initial workspace
+  snapshot, not the actual move). 61 of the 950 Agent Studio backfills carry an
+  evidence date at or before `createdAt` (legacy timezone-less stamps); they
+  are clamped, flagged `clock-skew`, and skipped by the lead-time aggregate's
+  `> 0` filter.
 - The review claim is recorded since 2026-08-23: the claim routes write a
   `review_attempt_claimed` row whose `ts` is the lease acquisition
   (`AttemptLeaseDto.AcquiredAt`; `runId` = attempt id, details carry lease,
@@ -207,6 +229,20 @@ refreshing (read-through refresh, not a cost of this read model).
 
 ## Living knowledge log
 
+- 2026-08-25 (backfill): the legacy coverage gap closed reader-side. A
+  one-time, idempotent tool (`scripts/backfill-cycle-time-completions.mjs`)
+  reconstructed completion timestamps for the 950 Agent Studio terminal tasks
+  the ledger could not date, from the workspace repo's git history (the
+  Transition-Committer's lane-folder renames: 46 completed-moves, 245
+  archive-moves, 331 terminal-first-seen upper bounds) and terminal
+  `enteredLaneAt` (328), and wrote them to the per-project sidecar; Quality
+  Studio got its 3 the same way. The ledger was not touched. Agent Studio
+  `all` coverage moved from 686 of 1636 terminal tasks
+  (`excludedNoCompletionTimestamp` 950) to 1636 of 1636 (`tasksBackfilled`
+  950); the all-window lead-time median moved from 1.6 d to 3.6 d (count 686
+  to 1575) - the legacy archive sat much longer than the recent flow, and the
+  old median described only the ledger era. Stage medians are unchanged by
+  construction.
 - 2026-08-23 (recording): the three ledger gaps closed on the writer side.
   Every automatic lane change stamps `details.cause` and `details.causeDetail`
   on its `lane_changed` row (shared vocabulary `LaneChangeCauses`, human moves
