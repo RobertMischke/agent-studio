@@ -13,6 +13,7 @@ namespace AgentStudio.Cli;
 /// </summary>
 public abstract class QuotaProbeBase : IQuotaProbe
 {
+    private static readonly Regex DottedVersionRegex = new(@"\d+(?:\.\d+)+", RegexOptions.Compiled);
     protected readonly ILogger _logger;
     protected readonly CliRouter _router;
     protected readonly CliEnvironment _env;
@@ -26,6 +27,22 @@ public abstract class QuotaProbeBase : IQuotaProbe
 
     public abstract string CliType { get; }
     public abstract Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
+
+    public string? GetCliVersion()
+    {
+        try
+        {
+            var (available, version, _) = _router.Get(CliType).TestCliPath();
+            if (!available || string.IsNullOrWhiteSpace(version)) return null;
+            var match = DottedVersionRegex.Match(version);
+            return match.Success ? match.Value : version.Trim();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not read {Cli} CLI version", CliType);
+            return null;
+        }
+    }
 
     /// <summary>
     /// Spawn the CLI, optionally send a slash-command sequence, wait for output to settle,

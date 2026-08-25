@@ -10,5 +10,7 @@ namespace AgentStudio.Cli;
 public interface IQuotaProbe
 {
     string CliType { get; }
+    /// <summary>Fast CLI version check used for attribution and drift logging.</summary>
+    string? GetCliVersion() => null;
     Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
 }

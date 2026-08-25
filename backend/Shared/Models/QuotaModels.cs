@@ -39,6 +39,8 @@ public record QuotaWindow
 public record QuotaSnapshot
 {
     public string CliType { get; init; } = "";
+    /// <summary>CLI version that produced this snapshot, normalized to its dotted numeric form when available.</summary>
+    public string? CliVersion { get; init; }
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
     /// <summary>"Pro" / "Pro+" / "Plus" / "Free" — null when unknown.</summary>
     public string? Plan { get; init; }
@@ -49,6 +51,11 @@ public record QuotaSnapshot
     public string? RawSample { get; init; }
     /// <summary>Set when probing failed; <see cref="Plan"/>/<see cref="Windows"/> may still hold partial data.</summary>
     public string? Error { get; init; }
+    /// <summary>
+    /// UTC time of the most recent failed probe. When set alongside windows,
+    /// those windows are the last successful values retained for graceful degradation.
+    /// </summary>
+    public DateTime? ProbeFailedAt { get; init; }
 
     /// <summary>
     /// True when this snapshot is not yet trusted: either a single probe showed
