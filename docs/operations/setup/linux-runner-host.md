@@ -358,6 +358,12 @@ the files of a running daemon. The CLR can load metadata and method bodies
 lazily, so replacing only part of a live multi-file application can corrupt the
 running process even before systemd receives the planned restart.
 
+At startup, the runner resolves the final target of the `current` symlink and
+advertises that immutable release directory name to Studio. This deployment id,
+for example `agt-2681-20260825T102000Z-f678127b9`, is the Release value shown in
+Execution Hosts. `RUNNER_RELEASE_ID` is an explicit override for installations
+that do not use the standard release-directory layout.
+
 The root-owned deploy helper rejects an invalid or incomplete publish before
 changing `current`. It resolves the selected target in `agent-host.deps.json`
 and requires every managed runtime assembly by its flattened publish name. It

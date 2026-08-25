@@ -70,11 +70,14 @@
   flex: 0 0 auto;
   align-items: end;
   gap: var(--studio-spacing-2);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .capacity__form label {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: var(--studio-spacing-1);
   color: var(--studio-fg-dim);
   font-size: 11px;
@@ -82,6 +85,8 @@
 
 .capacity__form input,
 .capacity__form select {
+  box-sizing: border-box;
+  max-width: 100%;
   min-width: 72px;
   padding: var(--studio-spacing-1) var(--studio-spacing-2);
   border: 1px solid var(--studio-border-strong);
@@ -111,7 +116,7 @@
 .capacity__save:hover:not(:disabled) { filter: brightness(1.08); }
 .capacity__save:disabled { cursor: not-allowed; opacity: 0.55; }
 
-@media (max-width: 760px) {
+@container remote-host-table (max-width: 54rem) {
   .capacity {
     align-items: stretch;
     flex-direction: column;
@@ -120,5 +125,9 @@
   .capacity__form {
     align-items: end;
     flex-wrap: wrap;
+    width: 100%;
   }
+
+  .capacity__form label { flex: 1 1 7rem; }
+  .capacity__form [data-testid='remote-host-project-policy-ids'] { min-width: 0; width: 100%; }
 }

@@ -200,6 +200,11 @@ state.
   and sends one fenced evidence report plus cleanup proof. The original `--task <key>`
   one-shot remains for diagnostics. It owns no task state. Its Git writes to
   origin are generation-scoped salvage and immutable result refs described below.
+  Registration advertises the physical machine `HostId`, the role-local
+  `RUNNER_MAX_PARALLELISM`, and the immutable release directory selected by
+  `/opt/agent-host/current`. Management projections retain those per-runner
+  facts so Studio can group Coding and Review below one machine without
+  inventing capacity or displaying the assembly package version as a release.
   Every coding and review registration reports the exact fenced attempts whose
   detached process generation or durable terminal result is still positively
   present on the host. A restarted Task Server compares attempt, task, lease,

@@ -37,7 +37,7 @@ public sealed class RuntimeCapacitySettingsTests
     }
 
     [Fact]
-    public async Task Review_registration_does_not_seed_the_coding_capacity()
+    public async Task Review_registration_preserves_its_role_capacity_without_seeding_coding_capacity()
     {
         using var temp = new TempDirectory();
         var store = Store(temp.Path);
@@ -67,6 +67,7 @@ public sealed class RuntimeCapacitySettingsTests
             .Single(item => item.RunnerId == "review-a");
         Assert.Null(reviewSnapshot.EffectiveMaxParallelism);
         Assert.Null(reviewSnapshot.RuntimeCapacityAppliedAt);
+        Assert.Equal(9, reviewSnapshot.RoleMaxParallelism);
     }
 
     [Fact]

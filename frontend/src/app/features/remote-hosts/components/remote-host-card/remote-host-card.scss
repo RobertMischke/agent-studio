@@ -38,6 +38,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.host__role-count {
+  flex: 0 0 auto;
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
 
 .host__disclosure {
   display: grid;
@@ -94,6 +101,7 @@
   background: var(--studio-accent);
 }
 .host__activity { color: var(--studio-fg-dim) !important; white-space: nowrap; }
+.host__placeholder { color: var(--studio-fg-muted); }
 .host__release code {
   display: block;
   overflow: hidden;
@@ -125,28 +133,44 @@
 .host__detail-row > td {
   padding: 0;
   border-top: 1px solid var(--studio-border);
-  background: var(--studio-surface-muted);
+  background: var(--studio-bg);
 }
 .host__details {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--studio-spacing-5);
-  padding: var(--studio-spacing-4) var(--studio-spacing-5) var(--studio-spacing-5);
+  gap: 0;
+  padding: 0 var(--studio-spacing-3) var(--studio-spacing-2);
 }
-.detail { min-width: 0; }
-.detail--wide { grid-column: 1 / -1; }
-.detail h3 {
-  margin: 0 0 var(--studio-spacing-3);
+.detail {
+  min-width: 0;
+  border-bottom: 1px solid var(--studio-border);
+}
+.detail:last-child { border-bottom: 0; }
+.detail summary {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--studio-spacing-3);
+  min-height: 34px;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
   color: var(--studio-fg-strong);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
 }
-.detail--wide {
-  padding-top: var(--studio-spacing-4);
-  border-top: 1px solid var(--studio-border);
+.detail summary::-webkit-details-marker { display: none; }
+.detail summary:hover { background: var(--studio-bg-hover); }
+.detail summary:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -2px; }
+.detail summary > span:first-child { font-weight: 650; }
+.detail summary small {
+  overflow: hidden;
+  color: var(--studio-fg-dim);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.detail summary > span:last-child { color: var(--studio-fg-muted); transition: transform 0.16s ease; }
+.detail[open] summary > span:last-child { transform: rotate(90deg); }
+.detail__body { padding: var(--studio-spacing-2) var(--studio-spacing-2) var(--studio-spacing-4); }
 
 .detail__facts { display: grid; gap: var(--studio-spacing-2); margin: 0; }
 .detail__facts > div {
@@ -201,12 +225,19 @@
 .host__no-stats { margin: 0; color: var(--studio-fg-muted); font-size: 11px; }
 .host__delivery-failures {
   margin-top: var(--studio-spacing-3);
-  padding: var(--studio-spacing-3);
-  background: var(--notify-error-tint);
-  color: var(--notify-error-icon-fg);
+  padding: 0;
+  color: var(--studio-fg);
   font-size: 11px;
 }
-.host__delivery-failures p { margin: var(--studio-spacing-1) 0 0; }
+.host__delivery-failures strong { color: var(--studio-fg-dim); font-size: 10px; font-weight: 650; }
+.host__delivery-failures p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  margin: var(--studio-spacing-1) 0 0;
+}
+.host__delivery-failures a { color: var(--studio-accent-strong); font-weight: 650; }
+.host__delivery-failures span { color: var(--studio-fg-dim); }
 
 .meters { display: grid; gap: var(--studio-spacing-2); }
 .meter {
@@ -222,11 +253,21 @@
 .meter__track { position: relative; height: 4px; overflow: hidden; border-radius: 999px; background: var(--studio-border); }
 .meter__track span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--studio-accent); }
 
-@media (max-width: 760px) {
-  .host__details { grid-template-columns: 1fr; }
-  .detail--wide { grid-column: auto; }
+@container remote-host-table (max-width: 54rem) {
+  .host__activity { display: none; }
+}
+
+@container remote-host-table (max-width: 46rem) {
+  .host__release { display: none; }
+  .host__role-count { display: none; }
+}
+
+@container remote-host-table (max-width: 36rem) {
+  .host__load { display: none; }
+  .detail summary { grid-template-columns: minmax(7rem, auto) minmax(0, 1fr) auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .host__disclosure span { transition-duration: 0s; }
+  .host__disclosure span,
+  .detail summary > span:last-child { transition-duration: 0s; }
 }

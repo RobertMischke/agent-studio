@@ -63,6 +63,8 @@ function mount(host: RemoteHost, expanded = true) {
   });
   const fixture = TestBed.createComponent(RemoteHostCardComponent);
   fixture.componentRef.setInput('host', host);
+  fixture.componentRef.setInput('roles', [host]);
+  fixture.componentRef.setInput('roleActiveSlots', { [host.id]: 0 });
   fixture.componentRef.setInput('now', Date.parse('2026-07-10T12:00:00Z'));
   fixture.componentRef.setInput('expanded', expanded);
   fixture.detectChanges();
@@ -73,10 +75,22 @@ describe('RemoteHostCardComponent', () => {
   it('keeps the primary table row compact until its detail is disclosed', () => {
     const el: HTMLElement = mount(HOST, false).nativeElement;
     expect(el.querySelector('[data-testid="remote-host-detail-row"]')).toBeNull();
-    expect(el.querySelector('[data-testid="remote-host-slots-summary"]')?.textContent).toContain('0 / 20');
+    expect(el.querySelector('[data-testid="remote-host-role-slots"]')?.textContent).toContain('0 / 20');
     expect(el.querySelector('[data-testid="remote-host-load"]')?.textContent).toContain('54%');
     expect(el.querySelector('[data-testid="remote-host-release"]')?.textContent)
       .toContain('release-20260811.1');
+  });
+
+  it('reveals compact section summaries before any detail section', () => {
+    const el: HTMLElement = mount(HOST).nativeElement;
+    const sections = el.querySelectorAll('[data-testid^="remote-host-detail-section-"]');
+
+    expect(sections.length).toBe(5);
+    expect([...sections].every(section => !(section as HTMLDetailsElement).open)).toBe(true);
+    expect(el.querySelector('[data-testid="remote-host-detail-section-capabilities"] summary')?.textContent)
+      .toContain('2 capabilities ok');
+    expect(el.querySelector('[data-testid="remote-host-detail-section-capacity"] summary')?.textContent)
+      .toContain('0 active · 20 role slots');
   });
 
   it('renders name, status badge, role, and the three vitals meters', () => {
@@ -200,6 +214,7 @@ describe('RemoteHostCardComponent', () => {
     expect(failure?.textContent).toContain('Payments');
     expect(failure?.textContent).toContain('release');
     expect(failure?.textContent).toContain('permission denied');
+    expect(failure?.querySelector('a')?.getAttribute('href')).toBe('#/projects/PROJ-042');
   });
 
   it('emits an action event with the host id when a control is clicked', () => {

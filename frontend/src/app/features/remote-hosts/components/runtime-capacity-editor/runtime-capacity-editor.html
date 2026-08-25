@@ -6,7 +6,11 @@
       <span data-testid="remote-host-slots">{{ slotsLabel() }}</span>
       <span>
         Central ceiling {{ capacity.maxParallelism }} slots, policy version {{ capacity.version }}.
-        Daemon reports {{ h.effectiveMaxParallelism ?? 'not reported' }} slots.
+        @if (h.effectiveMaxParallelism) {
+          Daemon ceiling {{ h.effectiveMaxParallelism }} slots.
+        } @else {
+          No daemon ceiling sample.
+        }
         @if (h.runtimeCapacityAppliedVersion) {
           Confirmed version {{ h.runtimeCapacityAppliedVersion }}.
         } @else if (capacity.version >= 1) {

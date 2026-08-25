@@ -370,10 +370,14 @@ v1, and alert treatment follows the AGT-2410 acute-only status contract.
   Legacy CLI-admin and usage links resolve to the CLI Management section at
   `#/workspace/settings/caps`.
 - The Execution Hosts destination at `#/workspace/settings/execution-hosts`
-  uses one sortable table row per host for status, occupied and total slots,
-  load, activity, release, and lifecycle actions. A persisted row disclosure
-  keeps identity, connection, capability, authentication, capacity, lease, and
-  telemetry internals out of the primary operator scan path.
+  groups runner identities by the physical `hostId` advertised in the
+  capability contract. One machine row owns status, load, activity, and the
+  immutable release id; Coding and Review role sub-rows own role-local slots
+  and lifecycle actions. Retired identities are hidden behind a compact filter
+  by default, and narrow tables replace complete action buttons with an
+  overflow menu. A persisted machine disclosure first exposes one summary line
+  for identity, connection, capabilities, capacity, and load; each section then
+  expands independently for its full operational detail.
 - The System prompts destination is the prompt registry and observability
   surface. Its overview groups runtime-step, orchestrator, drift, and framing
   templates, explains application and project pipeline override precedence, and
