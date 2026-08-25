@@ -147,6 +147,17 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- On Windows, the capability refresh classifies a missing Claude or Codex shim
+  separately from an uninstalled CLI. When the matching global npm package is
+  still present, the host runs one bounded `npm install --global <package>`
+  repair per CLI per hour, re-probes the version and provider session, and
+  keeps the repaired capability ready. Attempts persist in
+  `<runner-state>/cli-repairs.jsonl` with package and shim timestamps, recent
+  npm log activity, redacted npm output, and package or CLI versions before and
+  after the attempt. Execution Hosts shows successful repair history as a calm
+  note. A failed repair remains an unavailable capability and therefore raises
+  the existing degraded-host signal; a successful repair does not create an
+  alarm.
 - Remote provider credentials use one protected host file,
   `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
   `root:agent` mode `640`, loaded by both Coding and Review units after their

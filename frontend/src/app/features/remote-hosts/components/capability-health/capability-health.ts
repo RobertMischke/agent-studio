@@ -15,6 +15,11 @@ export class CapabilityHealthComponent {
   readonly host = input.required<RemoteHost>();
   readonly routeStatus = computed(() => taskServerRouteStatus(this.host()));
   readonly routeDetail = computed(() => taskServerRouteDetail(this.host()));
+  readonly repairNotices = computed(() => (this.host().capabilityHealth ?? [])
+    .filter(capability => capability.category === 'cli-execution'
+      && capability.advertisedStatus === 'ready'
+      && capability.detail?.startsWith('CLI repaired at '))
+    .map(capability => ({ key: capability.key, detail: capability.detail! })));
 
   tone(capability: RemoteHostCapabilityHealth): 'ok' | 'warn' | 'error' | 'idle' {
     if (!capability.isFresh) return 'error';

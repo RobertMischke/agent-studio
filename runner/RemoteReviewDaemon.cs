@@ -165,20 +165,31 @@ public sealed class RemoteReviewDaemon
         idleWatchdog.RecordActiveSlots(active.Count);
         LogSlotHygiene(force: true);
 
+        var cliSelfRepair = new NpmCliSelfRepair(_options.StateDir, _log);
         var capabilityGeneration = DateTime.UtcNow.Ticks;
+        async Task AdvertiseCapabilitiesAsync(
+            HostTelemetrySample? sample,
+            long generation,
+            CancellationToken ct)
+        {
+            var repaired = await cliSelfRepair.ProbeAsync(
+                RunnerCapabilityProbe.CodingCliBinaries(_options),
+                ct);
+            foreach (var binary in repaired)
+                await ProviderAuthProbe.Shared.RefreshAsync(binary, ct);
+            await _client.AdvertiseCapabilitiesAsync(
+                RunnerCapabilityProbe.Advertise(
+                    _options,
+                    gitPushReady: false,
+                    connectivity: connectivity.Snapshot,
+                    cliRepairDetails: cliSelfRepair.CapabilityDetails),
+                RunnerCapabilityProbe.Telemetry(sample),
+                generation,
+                ct);
+        }
         await CapabilityAdvertisementRecovery.ExecuteAsync(
             "review capability advertisement",
-            async ct =>
-            {
-                await _client.AdvertiseCapabilitiesAsync(
-                    RunnerCapabilityProbe.Advertise(
-                        _options,
-                        gitPushReady: false,
-                        connectivity: connectivity.Snapshot),
-                    RunnerCapabilityProbe.Telemetry(TakeTelemetry(force: true)),
-                    capabilityGeneration,
-                    ct);
-            },
+            ct => AdvertiseCapabilitiesAsync(TakeTelemetry(force: true), capabilityGeneration, ct),
             async ct =>
             {
                 _ = await RegisterAsync(ct);
@@ -256,14 +267,7 @@ public sealed class RemoteReviewDaemon
                     var generation = ++capabilityGeneration;
                     await CapabilityAdvertisementRecovery.ExecuteAsync(
                         "review capability advertisement",
-                        ct => _client.AdvertiseCapabilitiesAsync(
-                            RunnerCapabilityProbe.Advertise(
-                                _options,
-                                gitPushReady: false,
-                                connectivity: connectivity.Snapshot),
-                            RunnerCapabilityProbe.Telemetry(admissionTelemetry),
-                            generation,
-                            ct),
+                        ct => AdvertiseCapabilitiesAsync(admissionTelemetry, generation, ct),
                         async ct =>
                         {
                             _ = await RegisterAsync(ct);

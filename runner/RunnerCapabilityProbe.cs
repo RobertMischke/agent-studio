@@ -12,7 +12,8 @@ internal static class RunnerCapabilityProbe
         bool gitWorkflowPushReady = true,
         string? gitDetail = null,
         ProviderAuthProbe? providerAuth = null,
-        TaskServerConnectivitySnapshot? connectivity = null)
+        TaskServerConnectivitySnapshot? connectivity = null,
+        IReadOnlyDictionary<string, string>? cliRepairDetails = null)
     {
         var list = new List<AdvertisedCapabilityDto>
         {
@@ -46,7 +47,8 @@ internal static class RunnerCapabilityProbe
             AddCodingCliCapabilities(
                 list,
                 options,
-                providerAuth ?? ProviderAuthProbe.Shared);
+                providerAuth ?? ProviderAuthProbe.Shared,
+                cliRepairDetails);
             list.Add(Capability(
                 CapabilityProtocol.GitPush,
                 "source",
@@ -82,7 +84,8 @@ internal static class RunnerCapabilityProbe
             AddCodingCliCapabilities(
                 list,
                 options,
-                providerAuth ?? ProviderAuthProbe.Shared);
+                providerAuth ?? ProviderAuthProbe.Shared,
+                cliRepairDetails);
             list.Add(Capability(CapabilityProtocol.Vision, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.SemanticReview, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.GitMaterialization, "review", ToolVersion("git"), "git"));
@@ -230,19 +233,24 @@ internal static class RunnerCapabilityProbe
     private static void AddCodingCliCapabilities(
         ICollection<AdvertisedCapabilityDto> capabilities,
         RunnerOptions options,
-        ProviderAuthProbe providerAuth)
+        ProviderAuthProbe providerAuth,
+        IReadOnlyDictionary<string, string>? cliRepairDetails)
     {
         foreach (var (cliType, binary) in CodingCliBinaries(options))
         {
             var auth = providerAuth.Current(binary);
             var binaryAvailable = ProviderAuthProbe.ExecutableExists(binary);
+            string? repairDetail = null;
+            cliRepairDetails?.TryGetValue(cliType, out repairDetail);
             capabilities.Add(Capability(
                 CapabilityProtocol.CliExecution(cliType),
                 "cli-execution",
                 binaryAvailable ? "available" : null,
                 binary,
                 binaryAvailable ? ProviderAuthProbe.Ready : ProviderAuthProbe.Unavailable,
-                binaryAvailable
+                !string.IsNullOrWhiteSpace(repairDetail)
+                    ? repairDetail
+                    : binaryAvailable
                     ? $"CLI binary '{binary}' is available for {cliType} cards."
                     : $"CLI binary '{binary}' was not found; {cliType} cards cannot execute."));
             capabilities.Add(Capability(
@@ -292,8 +300,11 @@ internal static class RunnerCapabilityProbe
     {
         var path = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrWhiteSpace(path)) return false;
-        var names = OperatingSystem.IsWindows()
-            ? new[] { executable, executable + ".exe", executable + ".cmd" }
+        // A Windows npm package also installs an extensionless POSIX shell
+        // script. Process.Start cannot execute that file, so it is not proof of
+        // an executable Windows capability. Require a PATHEXT-compatible shim.
+        var names = OperatingSystem.IsWindows() && !Path.HasExtension(executable)
+            ? new[] { executable + ".exe", executable + ".cmd", executable + ".bat", executable + ".com" }
             : new[] { executable };
         return path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
             .Any(directory => names.Any(name => File.Exists(Path.Combine(directory, name))));
@@ -740,8 +751,8 @@ public sealed class ProviderAuthProbe
         if (cliBinary.Contains(Path.DirectorySeparatorChar)
             || cliBinary.Contains(Path.AltDirectorySeparatorChar))
         {
-            var candidates = OperatingSystem.IsWindows()
-                ? new[] { cliBinary, cliBinary + ".exe", cliBinary + ".cmd" }
+            var candidates = OperatingSystem.IsWindows() && !Path.HasExtension(cliBinary)
+                ? new[] { cliBinary + ".exe", cliBinary + ".cmd", cliBinary + ".bat", cliBinary + ".com" }
                 : [cliBinary];
             return candidates.Any(File.Exists);
         }

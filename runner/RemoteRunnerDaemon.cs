@@ -269,6 +269,10 @@ public sealed class RemoteRunnerDaemon
         _log($"runner-git-capability status={gitCapability.Status} detail={gitCapability.Detail}");
         if (!gitCapability.CanPush)
             _log("Configured fallback Git remote is read-only; project claims remain eligible and are gated by their own delivery preflight.");
+        var cliSelfRepair = new NpmCliSelfRepair(_options.StateDir, _log);
+        await cliSelfRepair.ProbeAsync(
+            RunnerCapabilityProbe.CodingCliBinaries(_options),
+            shutdown);
         var providerAuthChecks = await Task.WhenAll(
             RunnerCapabilityProbe.CodingCliBinaries(_options)
                 .GroupBy(item => item.Binary, StringComparer.Ordinal)
@@ -289,21 +293,31 @@ public sealed class RemoteRunnerDaemon
         HostTelemetrySample? latestTelemetry = telemetry.SampleIfDue(
             active.Count,
             connectivity.Snapshot);
+        async Task AdvertiseCapabilitiesAsync(
+            HostTelemetrySample? sample,
+            long generation,
+            CancellationToken ct)
+        {
+            var repaired = await cliSelfRepair.ProbeAsync(
+                RunnerCapabilityProbe.CodingCliBinaries(_options),
+                ct);
+            foreach (var binary in repaired)
+                await ProviderAuthProbe.Shared.RefreshAsync(binary, ct);
+            await _client.AdvertiseCapabilitiesAsync(
+                RunnerCapabilityProbe.Advertise(
+                    _options,
+                    gitCapability.CanPush,
+                    gitCapability.CanPushWorkflows,
+                    gitCapability.Detail,
+                    connectivity: connectivity.Snapshot,
+                    cliRepairDetails: cliSelfRepair.CapabilityDetails),
+                RunnerCapabilityProbe.Telemetry(sample),
+                generation,
+                ct);
+        }
         await CapabilityAdvertisementRecovery.ExecuteAsync(
             "capability advertisement",
-            async ct =>
-            {
-                await _client.AdvertiseCapabilitiesAsync(
-                    RunnerCapabilityProbe.Advertise(
-                        _options,
-                        gitCapability.CanPush,
-                        gitCapability.CanPushWorkflows,
-                        gitCapability.Detail,
-                        connectivity: connectivity.Snapshot),
-                    RunnerCapabilityProbe.Telemetry(latestTelemetry),
-                    capabilityGeneration,
-                    ct);
-            },
+            ct => AdvertiseCapabilitiesAsync(latestTelemetry, capabilityGeneration, ct),
             async ct =>
             {
                 _ = await RegisterAsync(ct);
@@ -375,16 +389,7 @@ public sealed class RemoteRunnerDaemon
                     var generation = ++capabilityGeneration;
                     await CapabilityAdvertisementRecovery.ExecuteAsync(
                         "capability advertisement",
-                        ct => _client.AdvertiseCapabilitiesAsync(
-                            RunnerCapabilityProbe.Advertise(
-                                _options,
-                                gitCapability.CanPush,
-                                gitCapability.CanPushWorkflows,
-                                gitCapability.Detail,
-                                connectivity: connectivity.Snapshot),
-                            RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
-                            generation,
-                            ct),
+                        ct => AdvertiseCapabilitiesAsync(capabilityTelemetry, generation, ct),
                         async ct =>
                         {
                             _ = await RegisterAsync(ct);

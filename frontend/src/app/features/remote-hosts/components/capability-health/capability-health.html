@@ -30,6 +30,14 @@
   </section>
 }
 
+@if (repairNotices().length) {
+  <section class="repairs" data-testid="remote-host-cli-repairs" aria-label="CLI repair history">
+    @for (repair of repairNotices(); track repair.key) {
+      <span><strong>{{ repair.key }}</strong> · {{ repair.detail }}</span>
+    }
+  </section>
+}
+
 @if (h.capabilityHealth?.length) {
   <section class="health" data-testid="remote-host-capability-health" aria-label="Capability health">
     <header>

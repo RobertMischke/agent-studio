@@ -519,6 +519,46 @@ test.describe('Execution Hosts settings section', () => {
     await remote.screenshot({ path: join(SHOT_DIR, 'provider-auth-states-light--mocked.png') });
   });
 
+  test('shows a successful CLI self-repair as host history without degrading the host', async ({ page }) => {
+    const now = Date.now();
+    const capability = (key: string, detail: string) => ({
+      key, category: 'cli-execution', advertisedStatus: 'ready', healthState: 'healthy',
+      reason: null, advertisedAt: new Date(now - 30_000).toISOString(),
+      freshUntil: new Date(now + 120_000).toISOString(), isFresh: true,
+      firstFailureAt: null, lastFailureAt: null, cooldownUntil: null,
+      canaryClaimId: null, consecutiveFailures: 0, version: '2.1.234',
+      identity: 'claude', detail, affectedClaims: [], recoveryHistory: [],
+    });
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        runnerId: 'agent-runner-01', name: 'agent-runner-01', hostId: 'host-berlin',
+        instanceId: 'coding', runnerVersion: '1.2.0', protocolVersion: 2, status: 'active',
+        registeredAt: new Date(now - 86_400_000).toISOString(), lastSeenAt: new Date(now).toISOString(),
+        hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
+        capabilities: [capability(
+          'cli-execution:claude',
+          'CLI repaired at 2026-08-25 10:15:00Z; version before 2.1.231, after 2.1.234.',
+        )],
+        telemetry: null,
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expandHost(remote);
+    const note = remote.getByTestId('remote-host-cli-repairs');
+    await expect(note).toContainText('CLI repaired at 2026-08-25 10:15:00Z');
+    await expect(remote.getByTestId('remote-host-status')).toContainText(/online|idle/i);
+
+    await setTheme(page, 'dark');
+    await remote.screenshot({ path: join(SHOT_DIR, 'cli-self-repair-note-dark--mocked.png') });
+    await setTheme(page, 'light');
+    await remote.screenshot({ path: join(SHOT_DIR, 'cli-self-repair-note-light--mocked.png') });
+  });
+
   test('surfaces a failed startup push probe as a read-only host', async ({ page }) => {
     await page.unroute('**/api/clients');
     await page.route('**/api/clients', route => route.fulfill({

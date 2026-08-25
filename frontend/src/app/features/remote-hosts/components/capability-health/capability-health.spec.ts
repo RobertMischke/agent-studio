@@ -77,4 +77,29 @@ describe('CapabilityHealthComponent', () => {
     expect(capability.textContent).toContain('unavailable');
     expect(capability.textContent).not.toContain('healthy');
   });
+
+  it('surfaces a successful CLI repair as a quiet host note', () => {
+    TestBed.configureTestingModule({ imports: [CapabilityHealthComponent] });
+    const fixture = TestBed.createComponent(CapabilityHealthComponent);
+    fixture.componentRef.setInput('host', {
+      id: 'runner', name: 'Runner', role: 'remote', address: null, clientId: 'runner',
+      status: 'online', os: 'Windows', lastHeartbeatAt: new Date().toISOString(),
+      uptimeLabel: null, capabilities: [], cliQuotas: [], stats: null,
+      capabilityHealth: [{
+        key: 'cli-execution:claude', category: 'cli-execution', advertisedStatus: 'ready',
+        healthState: 'healthy', reason: null,
+        detail: 'CLI repaired at 2026-08-25 10:15:00Z; version before 2.1.231, after 2.1.234.',
+        advertisedAt: new Date().toISOString(), freshUntil: new Date().toISOString(),
+        isFresh: true, consecutiveFailures: 0, affectedClaims: [], recoveryHistory: [],
+      }],
+    } satisfies RemoteHost);
+    fixture.detectChanges();
+
+    const note: HTMLElement = fixture.nativeElement.querySelector(
+      '[data-testid="remote-host-cli-repairs"]',
+    );
+    expect(note.textContent).toContain('cli-execution:claude');
+    expect(note.textContent).toContain('CLI repaired at 2026-08-25 10:15:00Z');
+    expect(fixture.nativeElement.querySelector('[data-state="unavailable"]')).toBeNull();
+  });
 });

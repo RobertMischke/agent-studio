@@ -29,6 +29,18 @@
   font-size: 12px;
 }
 
+.repairs {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  margin-top: var(--studio-spacing-3);
+  padding: var(--studio-spacing-3);
+  border-top: 1px solid var(--studio-border);
+  background: var(--notify-success-icon-bg);
+  color: var(--studio-fg);
+  font-size: 12px;
+}
+.repairs strong { font-family: var(--font-mono, monospace); }
+
 .health {
   margin-top: var(--studio-spacing-4);
   padding-top: var(--studio-spacing-3);
