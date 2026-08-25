@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AgentStudio.Security;
@@ -60,6 +61,8 @@ public sealed class PublicDemoReadOnlyEdgeTests : IDisposable
     [InlineData("/api/workbenches/DEMO-W1", true)]
     [InlineData("/hubs/jobs", true)]
     [InlineData("/hubs/jobs/negotiate", true)]
+    [InlineData("/hubs/jobs/unknown", false)]
+    [InlineData("/hubs/jobs/negotiate/unknown", false)]
     [InlineData("/api/projects/demo-app/security", false)]
     [InlineData("/api/projects/demo-app/security/reviews", false)]
     [InlineData("/api/projects/demo-app/security/files/report.json", false)]
@@ -172,6 +175,81 @@ public sealed class PublicDemoReadOnlyEdgeTests : IDisposable
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
             var body = await response.Content.ReadFromJsonAsync<JsonElement>();
             Assert.Equal(PublicDemoEdgePolicy.ReadOnlyDeniedCode, body.GetProperty("error").GetString());
+        });
+    }
+
+    [Theory]
+    [InlineData("/", "POST")]
+    [InlineData("/not-an-api-route", "DELETE")]
+    [InlineData("/hubs/jobs", "DELETE")]
+    [InlineData("/hubs/jobs/unknown", "POST")]
+    public async Task Raw_unsafe_requests_outside_the_replay_and_negotiate_exceptions_get_typed_denial(
+        string path,
+        string method)
+    {
+        await WithPublicDemoProfile(async () =>
+        {
+            using var factory = BuildFactory();
+            using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("https://demo.test"),
+            });
+            using var request = new HttpRequestMessage(new HttpMethod(method), path);
+
+            var response = await client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(PublicDemoEdgePolicy.ReadOnlyDeniedCode, body.GetProperty("error").GetString());
+        });
+    }
+
+    [Fact]
+    public async Task Replay_ingest_requires_the_exclusive_replay_credential_in_public_demo_mode()
+    {
+        await WithPublicDemoProfile(async () =>
+        {
+            using var factory = BuildFactory();
+            using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                BaseAddress = new Uri("https://demo.test"),
+            });
+            var requestBody = new DemoReplayEventRequest(
+                "demo-trace",
+                new string('0', 64),
+                1,
+                "invalid-signature",
+                new DemoReplayFrame(
+                    1,
+                    0,
+                    "DEMO-1",
+                    DemoReplayFrameKinds.TurnStarted,
+                    "Simulated frame"),
+                DateTime.UtcNow);
+
+            var anonymous = await client.PostAsJsonAsync("/api/runner/replay/events", requestBody);
+            Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+            Assert.Equal("runner-authentication-required", await ErrorCodeAsync(anonymous));
+
+            var store = factory.Services.GetRequiredService<AccessSecurityStore>();
+            var (_, enrollmentCode) = store.CreateEnrollment(new RunnerEnrollmentRequest(
+                "demo-runner-replay",
+                [RunnerScopes.DemoReplay],
+                null,
+                null));
+            var (_, _, secret) = store.EnrollRunner(enrollmentCode);
+            using var authenticatedRequest = new HttpRequestMessage(
+                HttpMethod.Post,
+                "/api/runner/replay/events")
+            {
+                Content = JsonContent.Create(requestBody),
+            };
+            authenticatedRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", secret);
+
+            var authenticated = await client.SendAsync(authenticatedRequest);
+
+            Assert.Equal(HttpStatusCode.Forbidden, authenticated.StatusCode);
+            Assert.Equal(DemoReplayDenialCodes.Disabled, await ErrorCodeAsync(authenticated));
         });
     }
 
@@ -341,6 +419,12 @@ public sealed class PublicDemoReadOnlyEdgeTests : IDisposable
                 configuration.AddInMemoryCollection(values);
             });
         });
+
+    private static async Task<string?> ErrorCodeAsync(HttpResponseMessage response)
+    {
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return payload.TryGetProperty("error", out var error) ? error.GetString() : null;
+    }
 
     // WebApplicationFactory layers its ConfigureAppConfiguration override on
     // top of Program.cs's own configuration sources, but a handful of values

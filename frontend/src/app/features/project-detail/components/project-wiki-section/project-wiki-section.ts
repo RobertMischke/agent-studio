@@ -516,10 +516,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
 
   readonly canEditDoc = computed(() =>
     this.openedType() === 'md' && !this.revisionSha() && this.wikiWritable());
-
-  readonly wikiWritable = computed(() =>
-    !this.publicDemo.readOnly() && this.tree()?.source?.writable !== false);
-
+  readonly wikiWritable = computed(() => !this.publicDemo.readOnly() && this.tree()?.source?.writable !== false);
   readonly editDisabledReason = computed(() => {
     if (this.revisionSha()) return 'Old revisions are read-only.';
     if (!this.wikiWritable())

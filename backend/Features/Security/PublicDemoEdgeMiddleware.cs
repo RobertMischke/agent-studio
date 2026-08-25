@@ -8,10 +8,12 @@ namespace AgentStudio.Security;
 /// profile. Runs after <see cref="PublicDemoExecutionLockMiddleware"/>, so a
 /// route S2 already denies by identity keeps its specific
 /// <c>execution-disabled</c> code; this middleware is the broader net behind
-/// it - every remaining unsafe method is denied outright, and every safe
-/// method must match an explicit read allowlist. It also carries the edge's
-/// other visitor-facing duties: same-origin TLS, hardening response headers,
-/// the ephemeral viewer cookie, and an Origin check for cross-site callers.
+/// it. Every remaining unsafe visitor method is denied outright, apart from
+/// the exact SignalR negotiate and authenticated replay-ingest protocol
+/// exceptions, and every safe API method must match an explicit read
+/// allowlist. It also carries the edge's other visitor-facing duties:
+/// same-origin TLS, hardening response headers, the ephemeral viewer cookie,
+/// and an Origin check for cross-site callers.
 /// </summary>
 public sealed class PublicDemoEdgeMiddleware(
     RequestDelegate next,
@@ -40,6 +42,10 @@ public sealed class PublicDemoEdgeMiddleware(
         }
 
         var path = context.Request.Path.Value ?? "/";
+        var isReplayIngest = path.Equals(
+            "/api/runner/replay/events",
+            StringComparison.OrdinalIgnoreCase)
+            && HttpMethods.IsPost(context.Request.Method);
         if (IsHealthCheck(path))
         {
             await next(context);
@@ -52,7 +58,10 @@ public sealed class PublicDemoEdgeMiddleware(
             return Task.CompletedTask;
         });
 
-        if (!context.Request.IsHttps)
+        // The VM exposes only the TLS edge. The replay service reaches this
+        // one authenticated route over the private loopback/container network,
+        // where terminating TLS again would add no visitor protection.
+        if (!context.Request.IsHttps && !isReplayIngest)
         {
             await Deny(context, StatusCodes.Status426UpgradeRequired, "https-required", "The public demo requires HTTPS.");
             return;
@@ -68,34 +77,40 @@ public sealed class PublicDemoEdgeMiddleware(
             return;
         }
 
-        EnsureViewerSession(context);
+        if (!isReplayIngest) EnsureViewerSession(context);
 
-        var isHub = path.StartsWith("/hubs/", StringComparison.OrdinalIgnoreCase);
+        var isHub = path.Equals("/hubs", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith("/hubs/", StringComparison.OrdinalIgnoreCase);
         if (isHub)
         {
-            // SignalR's own handshake needs POST (negotiate) alongside GET
-            // (the WebSocket upgrade); the connection-level boundary lives in
-            // TaskHub.OnConnectedAsync (viewer-session + project-group scope),
-            // not in a blanket method check here.
-            if (!PublicDemoReadAllowlist.Allows(path))
+            // SignalR needs one narrowly identified POST for negotiate. Every
+            // other unsafe hub probe is still a raw visitor mutation and gets
+            // the same typed edge denial as an unsafe API request.
+            var allowedHubMethod = PublicDemoEdgePolicy.IsSafeMethod(context.Request.Method)
+                                   || PublicDemoReadAllowlist.AllowsJobsHubNegotiate(
+                                       path,
+                                       context.Request.Method);
+            if (!PublicDemoReadAllowlist.AllowsJobsHubPath(path) || !allowedHubMethod)
             {
                 await Deny(
                     context,
                     StatusCodes.Status403Forbidden,
                     PublicDemoEdgePolicy.ReadOnlyDeniedCode,
-                    "This hub route is not on the public demo allowlist.");
+                    "This hub route or method is not on the public demo allowlist.");
                 return;
             }
             await next(context);
             return;
         }
 
-        if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+        var isApi = path.Equals("/api", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase);
+        if (!isReplayIngest)
         {
             var decision = PublicDemoEdgePolicy.Decide(
                 admission.StartupProfile,
                 context.Request.Method,
-                PublicDemoReadAllowlist.Allows(path));
+                !isApi || PublicDemoReadAllowlist.Allows(path));
             if (!decision.Allowed)
             {
                 await Deny(context, StatusCodes.Status403Forbidden, decision.Code, decision.Message);

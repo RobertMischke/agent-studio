@@ -32,6 +32,36 @@ public sealed class AccessSecurityMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        if (SecurityProfiles.IsPublicDemo(_configuration))
+        {
+            // The browser edge admits no unsafe visitor method, but S3's one
+            // private service mutation must remain usable in the integrated
+            // public-demo profile. Authenticate that exclusive scope here;
+            // every other public-demo request continues to the ephemeral
+            // viewer boundary without acquiring a human session.
+            var publicDemoPath = NormalizePath(context.Request.Path.Value);
+            if (HttpMethods.IsPost(context.Request.Method)
+                && publicDemoPath.Equals("/api/runner/replay/events", StringComparison.OrdinalIgnoreCase))
+            {
+                var replayBearer = ReadBearer(context.Request.Headers.Authorization.FirstOrDefault());
+                var replayRunner = _store.AuthenticateRunner(replayBearer);
+                if (replayRunner is null)
+                {
+                    await Reject(context, 401, "runner-authentication-required", "A Runner service credential is required.");
+                    return;
+                }
+                if (!replayRunner.Scopes.Contains(RunnerScopes.DemoReplay))
+                {
+                    await Reject(context, 403, "runner-scope-denied", $"Runner credential lacks '{RunnerScopes.DemoReplay}'.");
+                    return;
+                }
+                context.Items[RunnerPrincipalItem] = replayRunner;
+                context.Items["ClientId"] = replayRunner.RunnerId;
+            }
+            await _next(context);
+            return;
+        }
+
         if (!SecurityProfiles.IsNetworked(_configuration))
         {
             await _next(context);

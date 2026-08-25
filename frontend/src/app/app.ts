@@ -129,7 +129,6 @@ import { buildRunActivityBadge, freshestRunInfo } from './services/run-activity.
 import { NowTickService } from './services/now-tick.service';
 import { PageContextService } from './services/page-context.service';
 import { DevToolsService } from './services/dev-tools.service';
-import { PublicDemoModeService } from './services/public-demo-mode.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { TaskCompletionSoundService } from './services/task-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
@@ -231,7 +230,6 @@ export class App implements OnInit, OnDestroy {
   readonly jobService = inject(TaskService);
   readonly errorDialog = inject(ErrorDialogService);
   readonly devTools = inject(DevToolsService);
-  readonly publicDemo = inject(PublicDemoModeService);
   readonly clientService = inject(ClientService);
   private readonly notifications = inject(NotificationService);
   readonly featureFlags = inject(FeatureFlagsService);
@@ -239,8 +237,6 @@ export class App implements OnInit, OnDestroy {
   private readonly orchestratorFeedStore = inject(OrchestratorFeedStore);
   private readonly _completionSound = inject(TaskCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
-  readonly mutationsBlocked = computed(() =>
-    this.updateClient.mutationsBlocked() || this.publicDemo.readOnly());
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
   readonly pageContext = inject(PageContextService);
@@ -1240,7 +1236,6 @@ export class App implements OnInit, OnDestroy {
     this.loadWatchPaths();
     this.jobService.refreshRunnerStatus();
     this.devTools.loadFlags();
-    this.publicDemo.loadFlags();
     this.clientService.refresh();
     this.jobSelection.restoreFromUrl();
 
@@ -1421,7 +1416,7 @@ export class App implements OnInit, OnDestroy {
     return this.selectedJob() !== null && !!this.jobDetailRef?.commitActionsAvailable();
   }
   studioTriageMenuItems(): MenuItem[] {
-    const blocked = this.mutationsBlocked();
+    const blocked = this.updateClient.mutationsBlocked();
     const items = this.studioTriageOverflow().map<MenuItem>(b => ({
       kind: 'row',
       id: b.id,
@@ -1462,11 +1457,10 @@ export class App implements OnInit, OnDestroy {
 
   toggleStudioTriageOverflow(event: MouseEvent): void {
     event.stopPropagation();
-    if (this.mutationsBlocked()) return;
+    if (this.updateClient.mutationsBlocked()) return;
     this.studioTriageOverflowAnchor.set(event.currentTarget as HTMLElement);
     this.studioTriageOverflowOpen.update(v => !v);
   }
-
   closeStudioTriageOverflow(): void {
     this.studioTriageOverflowOpen.set(false);
   }
@@ -1669,16 +1663,14 @@ export class App implements OnInit, OnDestroy {
       },
     });
   }
-
   openCreate(targetState?: string) {
-    if (this.mutationsBlocked()) return;
+    if (this.updateClient.mutationsBlocked()) return;
     this.createJobForm.open({
       watchPaths: this.watchPaths(),
       activeProjects: this.activeProjects(),
       targetState,
     });
   }
-
   onSearchInput(event: Event) {
     const value = (event.target as HTMLInputElement).value;
     this.boardFilters.setSearchQuery(value);

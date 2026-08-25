@@ -358,11 +358,9 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   private autoScrollTarget: HTMLElement | Window = window;
   private readonly onAutoScrollDragOver = (e: DragEvent) => this.updateAutoScrollVelocity(e);
   private readonly onAutoScrollEnd = () => { this.stopAutoScroll(); this.boardDrag.end(); };
-
   canAddTask(): boolean {
-    if (this.mutationsBlocked()) return false;
     const s = this.state();
-    return s === TaskState.Preparation || s === TaskState.Ready;
+    return !this.mutationsBlocked() && (s === TaskState.Preparation || s === TaskState.Ready);
   }
 
   isArchive(): boolean {
@@ -577,10 +575,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   onDragStart(event: DragEvent, job: TaskInfo) {
-    if (this.mutationsBlocked()) {
-      event.preventDefault();
-      return;
-    }
+    if (this.mutationsBlocked()) { event.preventDefault(); return; }
     this.boardDrag.start();
     event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, taskKey: job.taskKey }));
     event.dataTransfer?.setData('application/x-source-state', job.state);
