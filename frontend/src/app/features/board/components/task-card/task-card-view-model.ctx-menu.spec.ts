@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildCardCtxMenuItems, DELETE_ID } from './task-card-view-model';
+import {
+  buildCardCtxMenuItems,
+  DELETE_ID,
+  EPIC_ASSIGN_PREFIX,
+  EPIC_DETACH_ID,
+} from './task-card-view-model';
 import { TaskState } from '../../../../models/task.model';
 import type { TaskInfo, EpicRollup } from '../../../../models/task.model';
 import type { MenuItem, MenuRow } from '../../../../components/menu';
@@ -76,5 +81,17 @@ describe('buildCardCtxMenuItems — delete row (AGT-2020)', () => {
     // Delete is still last, after the epic section.
     expect(deleteRow(items)).toBeTruthy();
     expect(items[items.length - 1]).toBe(deleteRow(items));
+  });
+
+  it('disables mutation rows in read-only mode while copy rows stay available', () => {
+    const epics = [
+      { id: 'epic-9', title: 'Big Epic', watchPath: '/tmp/watch' } as EpicRollup,
+    ];
+    const rows = buildCardCtxMenuItems(makeJob(), false, epics, 'epic-9', true).filter(isRow);
+
+    expect(rows.find(item => item.id === 'copy-name')?.disabled).not.toBe(true);
+    expect(rows.find(item => item.id === `${EPIC_ASSIGN_PREFIX}epic-9`)?.disabled).toBe(true);
+    expect(rows.find(item => item.id === EPIC_DETACH_ID)?.disabled).toBe(true);
+    expect(rows.find(item => item.id === DELETE_ID)?.disabled).toBe(true);
   });
 });

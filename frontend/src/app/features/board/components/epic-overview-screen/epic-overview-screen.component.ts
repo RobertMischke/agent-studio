@@ -52,6 +52,7 @@ export class EpicOverviewScreenComponent implements OnInit {
    * read-only, since there is no single project to create into.
    */
   readonly scopedProject = input<EpicOverviewScope | null>(null);
+  readonly mutationsBlocked = input(false);
 
   /** Bubbles a click on an epic or sub-task so the host opens its detail. */
   readonly openTask = output<{ jobId: string; watchPath: string }>();
@@ -85,7 +86,7 @@ export class EpicOverviewScreenComponent implements OnInit {
   );
   readonly totalEpics = computed(() => this.activeEpics().length + this.completedCount());
   /** Create is only offered when a single project is in scope. */
-  readonly canCreate = computed(() => this.scopedProject() !== null);
+  readonly canCreate = computed(() => this.scopedProject() !== null && !this.mutationsBlocked());
 
   ngOnInit(): void {
     this.loadEpics();

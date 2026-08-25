@@ -1738,6 +1738,7 @@ export function buildCardCtxMenuItems(
   isEpic: boolean,
   epics: readonly EpicRollup[],
   currentEpicId: string | null,
+  mutationsBlocked = false,
 ): MenuItem[] {
   const items: MenuItem[] = [
     { kind: 'row', id: 'copy-name', label: 'Copy Name' },
@@ -1766,10 +1767,16 @@ export function buildCardCtxMenuItems(
           id: EPIC_ASSIGN_PREFIX + epic.id,
           label: epic.title || epic.id,
           active: epic.id === currentEpicId,
+          disabled: mutationsBlocked,
         });
       }
       if (currentEpicId) {
-        items.push({ kind: 'row', id: EPIC_DETACH_ID, label: 'Detach from epic' });
+        items.push({
+          kind: 'row',
+          id: EPIC_DETACH_ID,
+          label: 'Detach from epic',
+          disabled: mutationsBlocked,
+        });
       }
     }
   }
@@ -1783,6 +1790,7 @@ export function buildCardCtxMenuItems(
     id: DELETE_ID,
     label: isEpic ? 'Delete epic' : 'Delete task',
     danger: true,
+    disabled: mutationsBlocked,
   });
   return items;
 }

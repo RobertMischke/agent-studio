@@ -26,6 +26,7 @@ import {
   WorkbenchTaskDraft,
 } from '../../../../models/project-docs.model';
 import { TaskService } from '../../../../services/task.service';
+import { PublicDemoModeService } from '../../../../services/public-demo-mode.service';
 import {
   WorkbenchDecisionDraftCard,
   WorkbenchDecisionDraftStore,
@@ -66,6 +67,7 @@ export class WorkbenchDecisionPanelComponent {
   private readonly store = inject(WorkbenchDecisionStore);
   private readonly drafts = inject(WorkbenchDecisionDraftStore);
   private readonly tasks = inject(TaskService);
+  private readonly publicDemo = inject(PublicDemoModeService);
   private restoredDraftKey = '';
 
   readonly actor = signal('Operator');
@@ -95,8 +97,10 @@ export class WorkbenchDecisionPanelComponent {
     || this.persistedDecision() !== null
     || this.settled());
   readonly mutationBlocked = computed(() =>
-    this.document().workingTreeModified
+    this.publicDemo.readOnly()
+    || this.document().workingTreeModified
     || (!this.document().revision && !this.document().fingerprint));
+  readonly readOnly = this.publicDemo.readOnly;
   readonly stage = computed(() =>
     this.document().workbench.decisionStage
     ?? this.result()?.decisionStage
