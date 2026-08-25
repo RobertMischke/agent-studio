@@ -170,6 +170,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action</td>
   <td>Dossier is decision-pending for operator triage &mdash; deliberately NO card storm. Owned-up: the AllowedRoots widening is my own regression from the QS heal; the correct narrow fix belongs with QS-77. XSS fix in flight (public site, fix-now class). Path-leak + demo.replay-profile findings are directly relevant to the public-demo slices (AGT-2667/2668/2669) still in flight &mdash; fold into their review.</td>
 </tr>
+<tr>
+  <td class="meta">08-25 14:0x</td>
+  <td><strong>Big parallel block landed on stable</strong> (release 20260825-113901Z): six Windows product bugs (git MAX_PATH, backup SQLite lock, atomic-write race, /proc/loadavg review admission, bash resolution, review env), the cycle-time review fixes (inflated integration attempts corrected), and the LEGACY BACKFILL - excludedNoCompletionTimestamp 950 -> 0, all 1636 terminal tasks now covered, honest all-window lead-time median 3.6d (n=1575). Rollout again exposed the api.sh restart defect (AGT-2678): the 11:03 process kept serving until killed via the PowerShell tool; the fix is IN this release but only the NEXT restart runs it. Also flagged: workspace repo is 8.7GB with 1270 commits behind origin - evidence commits have not reached the remote in a long time.</td>
+  <td class="v action">operator-action (done)</td>
+  <td>AGT-2678 fix now live (next restart replaces cleanly). New-candidate: workspace-repo push backlog (8.7GB/1270 behind) - relates to the workspace-repo-log-bloat memory; needs a deliberate push/gc, own card after operator nod.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
