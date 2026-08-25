@@ -76,6 +76,11 @@ if (command.Kind == TaskServerCommandKind.Backup)
 }
 
 await store.InitializeAsync(app.Lifetime.ApplicationStopping);
+await LegacyFirstStartMigration.ExecuteAsync(
+    builder.Configuration,
+    store,
+    app.Services.GetRequiredService<LegacyMigrationService>(),
+    app.Lifetime.ApplicationStopping);
 app.UseRouting();
 app.UsePublicDemoExecutionLock();
 app.UseMiddleware<TaskServerAuthenticationMiddleware>();

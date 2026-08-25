@@ -47,7 +47,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
                 $"Its current migration id is '{scan.MigrationId}'. Inventory it again before import.");
         }
         var backup = await store.CreateBackupAsync(new BackupRequest("before-legacy-import"), actorId, ct);
-        await store.ImportLegacyBatchAsync(request.WorkspaceName, scan.Projects, actorId, ct);
+        await store.ImportLegacyBatchAsync(request.WorkspaceName, scan.Projects, scan.Authority, scan.MigrationId, actorId, ct);
 
         if (request.PreserveEvidenceGit)
             await PreserveEvidenceGitAsync(scan.MigrationId, scan.EvidenceGitRoots, ct);
@@ -81,6 +81,15 @@ public sealed class LegacyMigrationService(TaskServerStore store)
             .ToArray();
         var byProject = new Dictionary<string, List<LegacyTaskImport>>(StringComparer.OrdinalIgnoreCase);
         var sourceFiles = new HashSet<string>(taskFiles, StringComparer.Ordinal);
+        var authorityPath = Path.Combine(root, ".metadata", "attempt-authority.json");
+        if (File.Exists(authorityPath)) sourceFiles.Add(authorityPath);
+        var authorityArchives = Directory.Exists(Path.GetDirectoryName(authorityPath))
+            ? Directory.EnumerateFiles(
+                Path.GetDirectoryName(authorityPath)!,
+                "attempt-authority.archive-*.json",
+                SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal).ToArray()
+            : [];
+        foreach (var archive in authorityArchives) sourceFiles.Add(archive);
         var eventCount = 0;
         var artifactCount = 0;
 
@@ -133,6 +142,9 @@ public sealed class LegacyMigrationService(TaskServerStore store)
             return new LegacyProjectImport(TaskServerStore.DeterministicId("prj", pair.Key), pair.Key, prefix, next, pair.Value);
         }).OrderBy(project => project.Name, StringComparer.Ordinal).ToArray();
         var evidenceGitRoots = FindEvidenceGitRoots(root);
+        var authority = includeContent && File.Exists(authorityPath)
+            ? await ReadAuthorityAsync(authorityPath, authorityArchives, ct)
+            : null;
         var identity = new StringBuilder(root);
         foreach (var file in sourceFiles.Order(StringComparer.Ordinal))
         {
@@ -147,7 +159,141 @@ public sealed class LegacyMigrationService(TaskServerStore store)
                 .Append(Convert.ToHexString(digest));
         }
         var migrationId = TaskServerStore.DeterministicId("mig", identity.ToString());
-        return new LegacyScan(migrationId, projects, eventCount, artifactCount, evidenceGitRoots, warnings);
+        return new LegacyScan(migrationId, projects, eventCount, artifactCount, evidenceGitRoots, warnings, authority);
+    }
+
+    private static async Task<LegacyAuthorityImport> ReadAuthorityAsync(
+        string path,
+        IReadOnlyList<string> archivePaths,
+        CancellationToken ct)
+    {
+        await using var stream = File.OpenRead(path);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        var root = document.RootElement;
+        var fences = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        if (root.TryGetProperty("lastFenceByTask", out var fenceObject))
+            foreach (var property in fenceObject.EnumerateObject())
+                fences[property.Name.ToUpperInvariant()] = property.Value.GetInt64();
+
+        var runs = root.TryGetProperty("runAttempts", out var runArray)
+            ? runArray.EnumerateArray().Select(ReadRunAuthority).ToArray()
+            : [];
+        var reviews = root.TryGetProperty("reviewAttempts", out var reviewArray)
+            ? reviewArray.EnumerateArray().Select(ReadReviewAuthority).ToArray()
+            : [];
+        var allRuns = runs.ToDictionary(item => item.AttemptId, StringComparer.OrdinalIgnoreCase);
+        var allReviews = reviews.ToDictionary(item => item.AttemptId, StringComparer.OrdinalIgnoreCase);
+        foreach (var archivePath in archivePaths)
+        {
+            await using var archiveStream = File.OpenRead(archivePath);
+            using var archive = await JsonDocument.ParseAsync(archiveStream, cancellationToken: ct);
+            if (archive.RootElement.TryGetProperty("runAttempts", out var archivedRuns))
+                foreach (var item in archivedRuns.EnumerateArray().Select(ReadRunAuthority))
+                    allRuns.TryAdd(item.AttemptId, item);
+            if (archive.RootElement.TryGetProperty("reviewAttempts", out var archivedReviews))
+                foreach (var item in archivedReviews.EnumerateArray().Select(ReadReviewAuthority))
+                    allReviews.TryAdd(item.AttemptId, item);
+        }
+        return new LegacyAuthorityImport(
+            ReadLong(root, "authorityEpoch", 1),
+            fences,
+            allRuns.Values.OrderBy(item => item.CreatedAt).ToArray(),
+            allReviews.Values.OrderBy(item => item.CreatedAt).ToArray());
+    }
+
+    private static LegacyRunAuthority ReadRunAuthority(JsonElement item) => new(
+        Required(item, "attemptId"),
+        Required(item, "taskKey").ToUpperInvariant(),
+        ReadString(item, "repositoryId") ?? "legacy",
+        ReadState(item),
+        ReadLease(item),
+        ReadLong(item, "lastFence", 0),
+        ReadLong(item, "authorityEpoch", 1),
+        ReadDate(item, "createdAt") ?? DateTime.UnixEpoch,
+        ReadDate(item, "terminalAt"),
+        ReadString(item, "resultSha"),
+        ReadString(item, "terminalOutcome"));
+
+    private static LegacyReviewAuthority ReadReviewAuthority(JsonElement item)
+    {
+        var subject = item.TryGetProperty("subject", out var value) ? value : default;
+        JsonElement? plan = subject.ValueKind == JsonValueKind.Object
+                            && subject.TryGetProperty("plan", out var planValue)
+            ? planValue.Clone()
+            : null;
+        var reports = item.TryGetProperty("reports", out var reportArray)
+            ? reportArray.EnumerateArray().Select(report => new LegacyReviewReportAuthority(
+                ReadString(report, "idempotencyKey")
+                    ?? $"legacy-report-{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(report.GetRawText()))).ToLowerInvariant()}",
+                report.GetRawText(),
+                ReadDate(report, "receivedAt") ?? DateTime.UnixEpoch)).ToArray()
+            : [];
+        return new LegacyReviewAuthority(
+            Required(item, "attemptId"),
+            Required(item, "taskKey").ToUpperInvariant(),
+            ReadString(item, "repositoryId") ?? ReadString(subject, "repositoryId") ?? "legacy",
+            Required(item, "sourceRunAttemptId"),
+            ReadString(subject, "subjectId") ?? $"legacy-subject-{Required(item, "attemptId")}",
+            ReadString(subject, "expectedResultSha") ?? "unknown",
+            ReadString(subject, "reviewPolicyHash") ?? "legacy",
+            ReadString(subject, "repositoryUrl"),
+            ReadString(subject, "resultRef"),
+            plan,
+            ReadState(item),
+            ReadLease(item),
+            ReadLong(item, "lastFence", 0),
+            ReadLong(item, "authorityEpoch", 1),
+            ReadDate(item, "createdAt") ?? DateTime.UnixEpoch,
+            ReadDate(item, "terminalAt"),
+            ReadEnumText(item, "outcome"),
+            ReadString(item, "failureClassification"),
+            reports);
+    }
+
+    private static LegacyLeaseAuthority? ReadLease(JsonElement item)
+    {
+        if (!item.TryGetProperty("lease", out var lease) || lease.ValueKind != JsonValueKind.Object) return null;
+        return new LegacyLeaseAuthority(
+            Required(lease, "leaseId"),
+            ReadLong(lease, "fence", 0),
+            ReadLong(lease, "authorityEpoch", 1),
+            Required(lease, "executorId"),
+            ReadString(lease, "hostId") ?? "legacy-host",
+            ReadDate(lease, "acquiredAt") ?? DateTime.UnixEpoch,
+            ReadDate(lease, "expiresAt") ?? DateTime.UnixEpoch,
+            ReadString(lease, "leaseInstanceId") ?? ReadString(lease, "clientId") ?? "legacy-instance");
+    }
+
+    private static int ReadState(JsonElement item)
+    {
+        if (!item.TryGetProperty("state", out var state)) return 0;
+        if (state.ValueKind == JsonValueKind.Number) return state.GetInt32();
+        return (state.GetString() ?? string.Empty).ToLowerInvariant() switch
+        {
+            "leased" => 1,
+            "completed" => 2,
+            "failed" => 3,
+            "cancelled" => 4,
+            "superseded" => 5,
+            _ => 0,
+        };
+    }
+
+    private static long ReadLong(JsonElement item, string property, long fallback)
+        => item.ValueKind == JsonValueKind.Object
+           && item.TryGetProperty(property, out var value)
+           && value.TryGetInt64(out var result)
+            ? result
+            : fallback;
+
+    private static string Required(JsonElement item, string property)
+        => ReadString(item, property)
+           ?? throw new InvalidDataException($"Legacy authority field '{property}' is required.");
+
+    private static string? ReadEnumText(JsonElement item, string property)
+    {
+        if (!item.TryGetProperty(property, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
     }
 
     private static async Task<string?> ReadBodyAsync(JsonElement json, string taskDirectory, bool includeContent, CancellationToken ct)
@@ -296,7 +442,11 @@ public sealed class LegacyMigrationService(TaskServerStore store)
         => long.TryParse(taskKey.Split('-', 2).ElementAtOrDefault(1), out var value) ? value : 0;
 
     private static string? ReadString(JsonElement element, string property)
-        => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        => element.ValueKind == JsonValueKind.Object
+           && element.TryGetProperty(property, out var value)
+           && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     private static DateTime? ReadDate(JsonElement element, string property)
         => DateTime.TryParse(ReadString(element, property), out var value) ? value.ToUniversalTime() : null;
@@ -318,5 +468,6 @@ public sealed class LegacyMigrationService(TaskServerStore store)
         int EventCount,
         int ArtifactCount,
         IReadOnlyList<string> EvidenceGitRoots,
-        IReadOnlyList<string> Warnings);
+        IReadOnlyList<string> Warnings,
+        LegacyAuthorityImport? Authority);
 }

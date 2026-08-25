@@ -15,6 +15,9 @@ devspace=$test_root/devspace
 fake_bin=$test_root/bin
 stop_marker=$test_root/stop-ran
 start_marker=$test_root/start-ran
+order_marker=$test_root/start-order
+ensure_script=$test_root/ensure-task-server.ps1
+task_server_probe=$test_root/task-server-probe.mjs
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
@@ -80,11 +83,13 @@ cat > "$devspace/stop-stable.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 : > "$ATP_TEST_STOP_MARKER"
+printf '%s\n' stop >> "$ATP_TEST_ORDER_MARKER"
 EOF
 cat > "$devspace/start-stable.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 : > "$ATP_TEST_START_MARKER"
+printf '%s\n' api >> "$ATP_TEST_ORDER_MARKER"
 EOF
 cat > "$fake_bin/npm" <<'EOF'
 #!/usr/bin/env sh
@@ -92,6 +97,16 @@ set -eu
 printf '%s\n' patched > "$ATP_TEST_PACKAGE_FILE"
 EOF
 chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$fake_bin/npm"
+printf '%s\n' '# test ensure script' > "$ensure_script"
+printf '%s\n' 'console.log("task-server proxy probe passed")' > "$task_server_probe"
+cat > "$fake_bin/powershell.exe" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+test -f "$ATP_TEST_STOP_MARKER"
+test ! -f "$ATP_TEST_START_MARKER"
+printf '%s\n' task-server >> "$ATP_TEST_ORDER_MARKER"
+EOF
+chmod +x "$fake_bin/powershell.exe"
 
 run_update() {
   env \
@@ -101,8 +116,12 @@ run_update() {
     ATP_START_SCRIPT="$devspace/start-stable.sh" \
     ATP_BOOT_PROBE_SCRIPT="$probe" \
     ATP_BOOT_PROBE_SETTLE_MS=0 \
+    ATP_TASK_SERVER_ENABLED="${ATP_TEST_TASK_SERVER_ENABLED:-0}" \
+    ATP_TASK_SERVER_ENSURE="$ensure_script" \
+    ATP_TASK_SERVER_BOOT_PROBE_SCRIPT="$task_server_probe" \
     ATP_TEST_STOP_MARKER="$stop_marker" \
     ATP_TEST_START_MARKER="$start_marker" \
+    ATP_TEST_ORDER_MARKER="$order_marker" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
     ATP_TEST_STALE_CACHE="$stable_checkout/frontend/.angular/cache/deps.js" \
     PATH="$fake_bin:$PATH" \
@@ -142,5 +161,19 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
+
+# The standalone authority is installed and ready before the API start wrapper
+# whenever the production-default Task Server supervision path is enabled.
+rm -f "$stop_marker" "$start_marker" "$order_marker"
+printf '%s\n' 'release with task server supervision' > "$source_checkout/release.txt"
+git -C "$source_checkout" commit --quiet -am 'release with task server supervision'
+git -C "$source_checkout" push --quiet origin main
+
+git -C "$stable_checkout" switch --quiet --detach
+ATP_TEST_TASK_SERVER_ENABLED=1 run_update >/dev/null
+test "$(sed -n '1p' "$order_marker")" = stop
+test "$(sed -n '2p' "$order_marker")" = task-server
+test "$(sed -n '3p' "$order_marker")" = api
+test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
 
 printf '%s\n' 'update-stable tests passed'

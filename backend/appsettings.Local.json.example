@@ -12,6 +12,11 @@
     "BackendName": "dev"
   },
 
+  "//TaskServer": "Stable local topology: the standalone service must be supervised and ready before this proxy URL is enabled. Keep this block absent on a monolith-only dev checkout.",
+  "TaskServer": {
+    "//BaseUrl": "http://127.0.0.1:5071"
+  },
+
   "DevTools": {
     "//comment": "Devtools knobs are dev-only conveniences. Leave them off on stable.",
     "UpdateStableEnabled": true,

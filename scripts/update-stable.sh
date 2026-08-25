@@ -17,6 +17,10 @@
 #   ATP_BOOT_PROBE_SCRIPT        browser probe implementation
 #   ATP_BOOT_PROBE_TIMEOUT_MS    total browser probe deadline
 #   ATP_BOOT_PROBE_SETTLE_MS     time to collect deferred page errors
+#   ATP_TASK_SERVER_ENABLED      require Task Server package/start/probe (default: 1)
+#   ATP_TASK_SERVER_ENSURE       override the Windows ensure script
+#   ATP_TASK_SERVER_URL          standalone Task Server origin
+#   ATP_STABLE_API_URL           Stable OrchestratorApi origin
 
 set -Eeuo pipefail
 
@@ -37,6 +41,9 @@ start_script=${ATP_START_SCRIPT:-$devspace_dir/start-stable.sh}
 frontend_url=${ATP_STABLE_FRONTEND_URL:-http://127.0.0.1:4011}
 probe_timeout_ms=${ATP_BOOT_PROBE_TIMEOUT_MS:-180000}
 probe_settle_ms=${ATP_BOOT_PROBE_SETTLE_MS:-2000}
+task_server_enabled=${ATP_TASK_SERVER_ENABLED:-1}
+task_server_url=${ATP_TASK_SERVER_URL:-http://127.0.0.1:5071}
+stable_api_url=${ATP_STABLE_API_URL:-http://127.0.0.1:5031}
 
 log() {
   printf '[update-stable] %s\n' "$*"
@@ -53,6 +60,11 @@ stable_checkout=$(cd "$stable_checkout" && pwd)
 [ -x "$stop_script" ] || fail "Stable stop script is not executable: $stop_script"
 [ -x "$start_script" ] || fail "Stable start script is not executable: $start_script"
 
+case "$task_server_enabled" in
+  0|1) ;;
+  *) fail "ATP_TASK_SERVER_ENABLED must be 0 or 1." ;;
+esac
+
 probe_script=${ATP_BOOT_PROBE_SCRIPT:-$stable_checkout/scripts/stable-frontend-boot-probe.mjs}
 
 if [ -n "$(git -C "$stable_checkout" status --porcelain)" ]; then
@@ -63,8 +75,9 @@ head_before=$(git -C "$stable_checkout" rev-parse HEAD)
 log "Fetching $stable_remote/$stable_branch"
 git -C "$stable_checkout" fetch --quiet "$stable_remote" "$stable_branch"
 target=$(git -C "$stable_checkout" rev-parse "$stable_remote/$stable_branch")
+branch_before=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
 
-if [ "$head_before" = "$target" ]; then
+if [ "$head_before" = "$target" ] && [ "$branch_before" = "$stable_branch" ]; then
   log "Stable already matches $stable_remote/$stable_branch; nothing to update."
   exit 0
 fi
@@ -108,6 +121,26 @@ else
   log "Frontend dependency inputs are unchanged; skipping npm install"
 fi
 
+if [ "$task_server_enabled" -eq 1 ]; then
+  task_server_ensure=${ATP_TASK_SERVER_ENSURE:-$stable_checkout/deploy/windows/task-server/ensure-task-server.ps1}
+  [ -f "$task_server_ensure" ] || fail "Task Server ensure script not found: $task_server_ensure"
+  command -v powershell.exe >/dev/null 2>&1 || fail "powershell.exe is required to supervise the Windows Task Server."
+  ps_path() {
+    if command -v cygpath >/dev/null 2>&1; then
+      cygpath -w "$1"
+    else
+      printf '%s\n' "$1"
+    fi
+  }
+  log "Packaging, installing, and probing Task Server before Stable API start"
+  powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+    -File "$(ps_path "$task_server_ensure")" \
+    -SourceRoot "$(ps_path "$stable_checkout")" \
+    -DevspaceRoot "$(ps_path "$devspace_dir")" \
+    -ReleaseId "$target" \
+    -ListenUrl "$task_server_url"
+fi
+
 [ -f "$probe_script" ] || fail "Frontend boot probe not found: $probe_script"
 
 log "Starting Stable"
@@ -119,5 +152,18 @@ node "$probe_script" \
   --url "$frontend_url" \
   --timeout-ms "$probe_timeout_ms" \
   --settle-ms "$probe_settle_ms"
+
+if [ "$task_server_enabled" -eq 1 ]; then
+  task_server_probe=${ATP_TASK_SERVER_BOOT_PROBE_SCRIPT:-$stable_checkout/scripts/stable-task-server-boot-probe.mjs}
+  [ -f "$task_server_probe" ] || fail "Task Server boot probe not found: $task_server_probe"
+  log "Verifying standalone authority through the Stable proxy"
+  node "$task_server_probe" "$stable_api_url" "$task_server_url"
+fi
+
+current_branch=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
+if [ "$current_branch" != "$stable_branch" ]; then
+  git -C "$stable_checkout" switch --quiet -C "$stable_branch" "$target"
+  log "Reattached Stable to $stable_branch after successful verification"
+fi
 
 log "Stable started and healthy at $target"

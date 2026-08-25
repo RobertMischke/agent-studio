@@ -69,3 +69,13 @@ public sealed record LegacyMigrationResult(
     string IntegritySha256,
     string RollbackBoundary,
     IReadOnlyList<string> EvidenceGitRoots);
+
+public sealed record LegacyMigrationStatusDto(
+    string? MigrationId,
+    long AuthorityEpoch,
+    long Runs,
+    long Leases,
+    long Reviews,
+    long Reports,
+    long MaximumTaskFence,
+    long MaximumReviewFence);

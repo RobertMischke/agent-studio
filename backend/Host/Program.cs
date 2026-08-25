@@ -19,7 +19,6 @@ Log.Logger = new LoggerConfiguration()
     .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddTaskServerPlaneProxy(builder.Configuration);
 var orchestrationExecutionMode = OrchestrationExecutionModeParser.Parse(
     builder.Configuration["Orchestration:ExecutionMode"]);
 
@@ -87,6 +86,11 @@ if (underTestHost)
         builder.Configuration["TaskRepository"] = iso;
     }
 }
+
+// Register the proxy client only after appsettings.Local.json and the test
+// isolation overrides are present. Endpoint mapping and HttpClient setup must
+// make the same ownership decision from the same effective BaseUrl.
+builder.Services.AddTaskServerPlaneProxy(builder.Configuration);
 
 var startupSecurityProfile = SecurityProfiles.ActiveProfile(builder.Configuration);
 var publicDemoExecutionProfile = string.Equals(

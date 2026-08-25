@@ -1,7 +1,14 @@
 # Task Server deployment and recovery
 
 Status: production bootstrap, topology release, and sole v1 ownership contract,
-AGT-2192/AGT-2196/AGT-2330, 2026-07-25.
+AGT-2192/AGT-2196/AGT-2330/AGT-2663, 2026-08-25.
+
+> **Local Windows rollout hold:** release `20260816-180128Z` removed the local
+> coding-claim owner before the Stable host had a standalone Task Server. The
+> resulting `/api/v1` 404s starved every Runner until Stable was rolled back to
+> `release/20260816-091737Z`. Do not roll a release containing that decoupling
+> to the local Stable seat until the dry run, first-start migration, proxy
+> probe, and end-to-end verification below have passed on the Windows host.
 
 This runbook implements the Task Server boundary from
 [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md).
@@ -135,6 +142,18 @@ Start-ScheduledTask -TaskName AgentOrchestrator-TaskServer
 Get-ScheduledTask -TaskName AgentOrchestrator-TaskServer | Get-ScheduledTaskInfo
 Stop-ScheduledTask -TaskName AgentOrchestrator-TaskServer
 ```
+
+The local Stable updater invokes
+[`ensure-task-server.ps1`](../../../deploy/windows/task-server/ensure-task-server.ps1)
+after stopping the old Stable API and before starting the replacement API. The
+script publishes the release into `<devspace>\task-server-releases\<commit>`,
+keeps the durable store under `<devspace>\task-server-data`, repoints the
+`current` junction, registers or refreshes the S4U Scheduled Task, writes
+`TaskServer:BaseUrl` to Stable's ignored `backend/appsettings.Local.json`, and
+waits for `/readyz`. A Task Server failure therefore aborts the rollout before
+OrchestratorApi can start in proxy mode. `start-task-server.ps1` is the
+watchdog for the child executable and restarts it independently of an
+interactive session.
 
 `Stop-ScheduledTask` terminates the process tree without a graceful drain
 signal, so before an upgrade or a planned stop, put the server in `Draining`
@@ -345,6 +364,46 @@ remains in `Maintenance` until an operator explicitly resumes normal service.
 Legacy absolute paths and `watchPath` are migration inputs only. They never
 become resource identity.
 
+For the one-time local Windows cutover, rehearse first against a copy while the
+rollback release remains pinned:
+
+```powershell
+.\deploy\windows\task-server\invoke-migration-dry-run.ps1 `
+    -SourceRoot C:\Projects\agent-taskboard-dev `
+    -LegacyRoot C:\Projects\agent-taskboard-workspace `
+    -ResultsDirectory C:\Projects\agent-taskboard-workspace\tasks\AGT-2663\results
+```
+
+The rehearsal copies the legacy store into a unique directory under the
+devspace, publishes and starts an isolated Task Server on `127.0.0.1:15071`,
+exercises the real first-start import, compares imported run authority, hashes
+the resulting SQLite database, writes
+`task-server-migration-dry-run.json`, stops only its exact child PID, and
+removes its private rehearsal directory. It does not mutate the legacy root.
+The report is backed by
+`GET /api/v1/management/migrations/legacy/status`, which exposes the imported
+migration ID, authority epoch, run, lease, review, and retained report counts,
+plus the maximum coding and review fences.
+
+The first production start uses these temporary bootstrap keys, written by
+`ensure-task-server.ps1` only while the Task Server database does not exist:
+
+```text
+LEGACY_MIGRATION_ROOT=C:\Projects\agent-taskboard-workspace
+LEGACY_MIGRATION_WORKSPACE=Agent Studio
+LEGACY_MIGRATION_FREEZE_CONFIRMED=true
+```
+
+`LEGACY_MIGRATION_FREEZE_CONFIRMED=true` is accepted only after the updater has
+stopped OrchestratorApi and every legacy writer. The import includes
+`.metadata/attempt-authority.json` and its compaction archives: stable attempt
+IDs, Runner identities, leases, retained report deliveries, the authority
+epoch, and per-task fence counters are copied with the task inventory. A lease
+that was active before the freeze becomes
+`process-unknown`; it never becomes claimable merely because the new process
+started. A repeated first start accepts only the same migration ID. If the
+source digest changes, startup fails instead of merging two authorities.
+
 1. Call `POST /api/v1/management/migrations/legacy/inventory` with the legacy
    root and workspace name. Save the project/task/event/artifact counts,
    warnings, evidence-Git roots, and migration ID.
@@ -367,9 +426,37 @@ become resource identity.
    logical tasks.
 
 The automated acceptance suite rehearses inventory, freeze enforcement,
-transactional import, integrity verification, backup/restore, evidence Git
+transactional import, first-start idempotency, legacy lease and fence
+preservation, integrity verification, backup/restore, evidence Git
 preservation, restart fencing, protocol rejection, and separate process
 lifecycle.
+
+## Local Windows cutover checklist
+
+Keep the rollback tag pinned until every item has durable evidence in the task
+results directory.
+
+1. Run `invoke-migration-dry-run.ps1` and inspect its JSON report. Counts,
+   `authorityForked:false`, the legacy authority epoch, and maximum fence must
+   agree with the copied source.
+2. Stop all legacy writers. Run `scripts/update-stable.sh`. It must log Task
+   Server package, Scheduled Task registration, and readiness before it logs
+   the Stable API start.
+3. Confirm the ignored Stable configuration contains
+   `"TaskServer":{"BaseUrl":"http://127.0.0.1:5071"}` and `/api/v1` is owned
+   only by the proxy target.
+4. Run one coding claim through completion, one Remote Review claim and report,
+   one report submission with a durable artifact, and load the board projection
+   through OrchestratorApi. Save task histories and response status codes.
+5. Run `scripts/stable-task-server-boot-probe.mjs`. It compares direct and
+   proxied server identities, negotiates protocol v1, reads invariants, and
+   loads the project projection.
+6. Restart the Scheduled Task and Stable API independently. Confirm the Task
+   Server starts first and the same server ID, tasks, fences, reviews, reports,
+   and board projection remain visible.
+7. Only after all checks pass, attach Stable back to `main`, fast-forward to the
+   verified commit, and record the previous rollback tag and new commit in the
+   execution report. Do not delete the rollback tag or the pre-import backup.
 
 ## Release topology rehearsal
 

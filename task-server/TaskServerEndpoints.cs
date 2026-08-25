@@ -484,6 +484,10 @@ public static class TaskServerEndpoints
         management.MapPost("/migrations/legacy/import", async (
             HttpContext context, LegacyMigrationRequest request, LegacyMigrationService migration, CancellationToken ct)
             => await InvokeAsync(() => migration.ImportAsync(request, Actor(context), ct)));
+        management.MapGet("/migrations/legacy/status", async (
+            TaskServerStore store,
+            CancellationToken ct)
+            => await InvokeAsync(() => store.GetLegacyMigrationStatusAsync(ct)));
     }
 
     private static string Actor(HttpContext context)
