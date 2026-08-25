@@ -55,14 +55,16 @@ describe('publicDemoGuardInterceptor', () => {
     expect(ok).toBe(true);
   });
 
-  it('lets the read-only reference-status batch through in read-only mode', () => {
+  it('blocks read-shaped POST endpoints because the public edge denies every unsafe method', () => {
     const { http, httpMock } = configure(true);
-    let ok = false;
+    let status = 0;
 
-    http.post('/api/tasks/reference-status', { keys: ['AGT-1'] }).subscribe({ next: () => (ok = true) });
-    httpMock.expectOne('/api/tasks/reference-status').flush({ items: [] });
+    http.post('/api/tasks/reference-status', { keys: ['AGT-1'] }).subscribe({
+      error: (error: HttpErrorResponse) => (status = error.status),
+    });
 
-    expect(ok).toBe(true);
+    httpMock.expectNone('/api/tasks/reference-status');
+    expect(status).toBe(403);
   });
 
   it('lets mutating requests through when not in read-only mode', () => {

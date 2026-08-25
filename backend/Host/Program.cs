@@ -864,11 +864,13 @@ if (SecurityProfiles.IsLocal(builder.Configuration))
 
 var app = builder.Build();
 var networkedSecurityProfile = SecurityProfiles.IsNetworked(app.Configuration);
+var projectScopedSignalRProfile = networkedSecurityProfile || publicDemoExecutionProfile;
 var includeExceptionDetails = SecurityProfiles.IsLocal(app.Configuration)
     && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
 
 app.UseForwardedHeaders();
 app.UseRouting();
+if (networkedSecurityProfile || publicDemoExecutionProfile) app.UseHsts();
 app.UseRateLimiter();
 app.UsePublicDemoExecutionLock();
 // Runs after the execution lock: a route S2 already denies by identity keeps
@@ -876,7 +878,6 @@ app.UsePublicDemoExecutionLock();
 // it (blanket unsafe-method + explicit read-allowlist denial, TLS, headers,
 // viewer session). See PublicDemoEdgeMiddleware.
 app.UsePublicDemoReadOnlyEdge();
-if (networkedSecurityProfile) app.UseHsts();
 
 app.UseExceptionHandler(exceptionApp =>
 {
@@ -1169,11 +1170,11 @@ try
         try { cache.OnAppended(workspace, msg); } catch (Exception ex) { SilentCatch.Note(ex, "BusAggregationCache.OnAppended"); }
         try
         {
-            var recipients = !networkedSecurityProfile
-                ? pushHub.Clients.All
-                : !string.IsNullOrWhiteSpace(msg.Project)
+            var recipients = projectScopedSignalRProfile
+                ? !string.IsNullOrWhiteSpace(msg.Project)
                     ? pushHub.Clients.Group(TaskHub.ProjectGroup(msg.Project, app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>()))
-                    : pushHub.Clients.Group(TaskHub.UnscopedSecurityGroup);
+                    : pushHub.Clients.Group(TaskHub.UnscopedSecurityGroup)
+                : pushHub.Clients.All;
             _ = recipients.SendAsync("busMessageAdded", msg);
         }
         catch (Exception ex) { SilentCatch.Note(ex, "busMessageAdded SignalR push"); }
@@ -1221,12 +1222,12 @@ var hubContext = app.Services.GetRequiredService<IHubContext<TaskHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
 var eventProjects = app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>();
 IClientProxy ProjectEventClients(string projectName)
-    => networkedSecurityProfile
+    => projectScopedSignalRProfile
         ? hubContext.Clients.Group(TaskHub.ProjectGroup(projectName, eventProjects))
         : hubContext.Clients.All;
 IClientProxy TaskEventClients(string jobId)
 {
-    if (!networkedSecurityProfile) return hubContext.Clients.All;
+    if (!projectScopedSignalRProfile) return hubContext.Clients.All;
     var task = app.Services.GetRequiredService<TaskScannerService>().FindJob(jobId);
     return task is null
         ? hubContext.Clients.Group("project:unresolved")

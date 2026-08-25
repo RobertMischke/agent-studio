@@ -63,6 +63,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   readonly jobs = input.required<TaskInfo[]>();
   readonly allBoardJobs = input<readonly TaskInfo[]>([]);
   readonly reorderDisabled = input<boolean>(false);
+  readonly mutationsBlocked = input<boolean>(false);
   /** Resolved lane sort strategy; `mixed` means visible projects disagree. */
   readonly sortStrategy = input<string>('');
   readonly collapsed = input<boolean>(false);
@@ -359,6 +360,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   private readonly onAutoScrollEnd = () => { this.stopAutoScroll(); this.boardDrag.end(); };
 
   canAddTask(): boolean {
+    if (this.mutationsBlocked()) return false;
     const s = this.state();
     return s === TaskState.Preparation || s === TaskState.Ready;
   }
@@ -575,6 +577,10 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   onDragStart(event: DragEvent, job: TaskInfo) {
+    if (this.mutationsBlocked()) {
+      event.preventDefault();
+      return;
+    }
     this.boardDrag.start();
     event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, taskKey: job.taskKey }));
     event.dataTransfer?.setData('application/x-source-state', job.state);
@@ -716,6 +722,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
     event.stopPropagation();
     this.isDragOver = false;
     this.dropIndex = -1;
+    if (this.mutationsBlocked()) return;
     const payload = this.parsePayload(event.dataTransfer?.getData('text/plain'));
     const sourceState = event.dataTransfer?.getData('application/x-source-state');
     if (!payload) return;

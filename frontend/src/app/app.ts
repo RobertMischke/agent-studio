@@ -239,6 +239,8 @@ export class App implements OnInit, OnDestroy {
   private readonly orchestratorFeedStore = inject(OrchestratorFeedStore);
   private readonly _completionSound = inject(TaskCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
+  readonly mutationsBlocked = computed(() =>
+    this.updateClient.mutationsBlocked() || this.publicDemo.readOnly());
   private readonly _updateBridge = inject(UpdateNotificationBridge);
   readonly studioTabState = inject(StudioTabStateService);
   readonly pageContext = inject(PageContextService);
@@ -1419,7 +1421,7 @@ export class App implements OnInit, OnDestroy {
     return this.selectedJob() !== null && !!this.jobDetailRef?.commitActionsAvailable();
   }
   studioTriageMenuItems(): MenuItem[] {
-    const blocked = this.updateClient.mutationsBlocked();
+    const blocked = this.mutationsBlocked();
     const items = this.studioTriageOverflow().map<MenuItem>(b => ({
       kind: 'row',
       id: b.id,
@@ -1460,7 +1462,7 @@ export class App implements OnInit, OnDestroy {
 
   toggleStudioTriageOverflow(event: MouseEvent): void {
     event.stopPropagation();
-    if (this.updateClient.mutationsBlocked()) return;
+    if (this.mutationsBlocked()) return;
     this.studioTriageOverflowAnchor.set(event.currentTarget as HTMLElement);
     this.studioTriageOverflowOpen.update(v => !v);
   }
@@ -1669,6 +1671,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   openCreate(targetState?: string) {
+    if (this.mutationsBlocked()) return;
     this.createJobForm.open({
       watchPaths: this.watchPaths(),
       activeProjects: this.activeProjects(),

@@ -20,6 +20,7 @@ import { DriftService } from '../../../../services/drift.service';
 import { TaskService } from '../../../../services/task.service';
 import { CliCatalogStore } from '../../../cli';
 import { NotificationService } from '../../../../services/notification.service';
+import { PublicDemoModeService } from '../../../../services/public-demo-mode.service';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { OverlayPortalDirective } from '../../../../directives/overlay-portal.directive';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -190,6 +191,7 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly notifications = inject(NotificationService);
+  private readonly publicDemo = inject(PublicDemoModeService);
   private readonly taskNavigation = inject(TaskReferenceNavigationService);
   private readonly metaPanelState = inject(WikiMetaPanelStateService);
   private readonly wikiLiveRefresh = inject(WikiLiveRefreshService);
@@ -515,7 +517,8 @@ export class ProjectWikiSectionComponent implements OnDestroy {
   readonly canEditDoc = computed(() =>
     this.openedType() === 'md' && !this.revisionSha() && this.wikiWritable());
 
-  readonly wikiWritable = computed(() => this.tree()?.source?.writable !== false);
+  readonly wikiWritable = computed(() =>
+    !this.publicDemo.readOnly() && this.tree()?.source?.writable !== false);
 
   readonly editDisabledReason = computed(() => {
     if (this.revisionSha()) return 'Old revisions are read-only.';
