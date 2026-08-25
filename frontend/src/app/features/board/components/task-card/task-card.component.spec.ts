@@ -1167,8 +1167,8 @@ describe('TaskCardComponent (smoke)', () => {
   // kept the token-usage panel collapsed by default. Without a default-hidden
   // state every card paints its `position: fixed` popover off the right viewport
   // edge (operator screenshot: multiple panels hung open + clipped). The panel
-  // must stay hidden until the directive opens it on hover/focus.
-  it('keeps the token popover hidden until the trigger is hovered', async () => {
+  // must stay hidden until the directive opens it after explicit interaction.
+  it('keeps the token popover hidden until the trigger receives focus', async () => {
     const fixture = await renderCard(makeJob({
       tokenSummary: {
         calls: 2,
@@ -1191,12 +1191,14 @@ describe('TaskCardComponent (smoke)', () => {
     const popover = fixture.nativeElement.querySelector('[data-token-popover]') as HTMLElement | null;
     expect(popover, 'token popover element should exist in the card').not.toBeNull();
     expect(popover?.hidden, 'token popover must start hidden, not hang open').toBe(true);
+    expect(getComputedStyle(popover!).display, 'hidden must win over the component host display rule').toBe('none');
 
     const wrap = fixture.nativeElement.querySelector('[appTokenPopover]') as HTMLElement | null;
     expect(wrap).not.toBeNull();
-    wrap?.dispatchEvent(new MouseEvent('mouseenter'));
+    wrap?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     fixture.detectChanges();
-    expect(popover?.hidden, 'hovering the trigger should reveal the popover').toBe(false);
+    expect(popover?.hidden, 'focusing the trigger should reveal the popover').toBe(false);
+    expect(getComputedStyle(popover!).display).not.toBe('none');
     // Calm layout: the footnote line is short; the full disclaimer text
     // (incl. "historical list prices") lives in the tooltip, not inline.
     const footnote = popover?.querySelector('[data-testid="token-cost-tooltip"]');

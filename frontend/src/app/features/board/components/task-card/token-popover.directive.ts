@@ -4,6 +4,8 @@ import {
   OverlayPortalRef,
   OverlayPortalService,
 } from '../../../../services/overlay-portal.service';
+import { ModalStackService } from '../../../../services/modal-stack.service';
+import { TokenPopoverCoordinator } from './token-popover-coordinator.service';
 
 /**
  * Lifts the token-usage popover into the central body overlay layer so it can
@@ -33,37 +35,57 @@ import {
 export class TokenPopoverDirective implements OnDestroy {
   private static readonly GAP = 8;
   private static readonly VIEWPORT_PAD = 6;
+  /** Match the board's hover-intent convention so passing over chips stays quiet. */
+  private static readonly OPEN_DELAY_MS = 300;
   /** Grace period so the pointer can cross the trigger→popover gap without it closing. */
   private static readonly CLOSE_DELAY_MS = 120;
 
   private readonly host = inject(ElementRef<HTMLElement>).nativeElement;
   private readonly overlayPortal = inject(OverlayPortalService);
+  private readonly modalStack = inject(ModalStackService);
+  private readonly coordinator = inject(TokenPopoverCoordinator);
   private popoverEl: HTMLElement | null = null;
   private portalRef: OverlayPortalRef | null = null;
   private positionRef: ConnectedOverlayPositionRef | null = null;
+  private openTimer: ReturnType<typeof setTimeout> | null = null;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
+  private globalListeners: AbortController | null = null;
+  private intersectionObserver: IntersectionObserver | null = null;
+  private modalStackDispose: (() => void) | null = null;
+  private isOpen = false;
 
   ngOnDestroy(): void {
+    this.cancelOpen();
     this.cancelClose();
     this.close();
   }
 
   @HostListener('mouseenter')
+  onPointerEnter(): void {
+    this.scheduleOpen();
+  }
+
   @HostListener('focusin')
-  onOpen(): void {
+  onFocusIn(): void {
     this.open();
   }
 
   @HostListener('mouseleave')
   @HostListener('focusout')
   onLeave(): void {
+    this.cancelOpen();
     this.scheduleClose();
   }
 
   private open(): void {
+    this.cancelOpen();
     this.cancelClose();
     const pop = this.resolvePopover();
     if (!pop) return;
+
+    if (this.isOpen) return;
+    this.coordinator.claim(this, () => this.close());
+    this.isOpen = true;
     pop.hidden = false;
     pop.style.left = '-9999px';
     pop.style.top = '0px';
@@ -79,12 +101,21 @@ export class TokenPopoverDirective implements OnDestroy {
       gap: TokenPopoverDirective.GAP,
       viewportPadding: TokenPopoverDirective.VIEWPORT_PAD,
     });
+    this.attachDismissalBoundaries(pop);
   }
 
   private close(): void {
+    this.cancelOpen();
+    this.cancelClose();
     const pop = this.popoverEl;
     this.positionRef?.dispose();
     this.positionRef = null;
+    this.intersectionObserver?.disconnect();
+    this.intersectionObserver = null;
+    this.globalListeners?.abort();
+    this.globalListeners = null;
+    this.modalStackDispose?.();
+    this.modalStackDispose = null;
     if (pop) {
       pop.removeEventListener('mouseenter', this.cancelCloseBound);
       pop.removeEventListener('mouseleave', this.scheduleCloseBound);
@@ -94,6 +125,8 @@ export class TokenPopoverDirective implements OnDestroy {
     }
     this.portalRef?.dispose();
     this.portalRef = null;
+    this.isOpen = false;
+    this.coordinator.release(this);
   }
 
   private resolvePopover(): HTMLElement | null {
@@ -101,6 +134,14 @@ export class TokenPopoverDirective implements OnDestroy {
     this.popoverEl = this.host.querySelector('[data-token-popover]');
     if (this.popoverEl) this.popoverEl.hidden = true;
     return this.popoverEl;
+  }
+
+  private scheduleOpen(): void {
+    this.cancelOpen();
+    this.openTimer = setTimeout(() => {
+      this.openTimer = null;
+      this.open();
+    }, TokenPopoverDirective.OPEN_DELAY_MS);
   }
 
   private scheduleClose(): void {
@@ -111,6 +152,48 @@ export class TokenPopoverDirective implements OnDestroy {
     }, TokenPopoverDirective.CLOSE_DELAY_MS);
   }
 
+  private attachDismissalBoundaries(pop: HTMLElement): void {
+    this.globalListeners?.abort();
+    const listeners = new AbortController();
+    this.globalListeners = listeners;
+
+    document.addEventListener('pointerdown', this.onDocumentPointerDown, {
+      capture: true,
+      signal: listeners.signal,
+    });
+
+    const laneScroll = this.host.closest('[data-board-lane-scroll]') as HTMLElement | null;
+    laneScroll?.addEventListener('scroll', this.closeBound, {
+      passive: true,
+      signal: listeners.signal,
+    });
+
+    this.modalStackDispose = this.modalStack.push('task-token-usage-popover', () => {
+      this.close();
+      return true;
+    });
+
+    if (typeof IntersectionObserver !== 'undefined') {
+      const anchorCard = (this.host.closest('[data-token-popover-anchor-card]') as HTMLElement | null) ?? this.host;
+      this.intersectionObserver = new IntersectionObserver((entries) => {
+        if (entries.some(entry => entry.target === anchorCard && !entry.isIntersecting)) {
+          this.close();
+        }
+      });
+      this.intersectionObserver.observe(anchorCard);
+    }
+
+    // The panel is portaled outside the host, so the outside-click boundary
+    // must explicitly include it as well as the anchor wrapper.
+    this.popoverEl = pop;
+  }
+
+  private readonly onDocumentPointerDown = (event: Event): void => {
+    if (!this.isOpen || !(event.target instanceof Node)) return;
+    if (this.host.contains(event.target) || this.popoverEl?.contains(event.target)) return;
+    this.close();
+  };
+
   private cancelClose(): void {
     if (this.closeTimer !== null) {
       clearTimeout(this.closeTimer);
@@ -118,6 +201,14 @@ export class TokenPopoverDirective implements OnDestroy {
     }
   }
 
+  private cancelOpen(): void {
+    if (this.openTimer !== null) {
+      clearTimeout(this.openTimer);
+      this.openTimer = null;
+    }
+  }
+
   private readonly cancelCloseBound = () => this.cancelClose();
   private readonly scheduleCloseBound = () => this.scheduleClose();
+  private readonly closeBound = () => this.close();
 }

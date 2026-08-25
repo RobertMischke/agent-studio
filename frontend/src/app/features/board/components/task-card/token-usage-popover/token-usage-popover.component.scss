@@ -2,6 +2,12 @@
    escaping the card's overflow:hidden + content-visibility paint containment
    and the lane scroll container. The directive only sets left/top offsets;
    `position: fixed` must already be in CSS. */
+:host([hidden]) {
+  /* An authored `display` value overrides the user-agent `[hidden]` rule.
+     Keep this explicit or every card paints its panel before interaction. */
+  display: none;
+}
+
 :host {
   position: fixed;
   inset: auto;
