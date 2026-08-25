@@ -97,6 +97,7 @@
                     [class.column__status-pill--paused]="cluster.mode.kind === 'paused'"
                     [attr.data-testid]="'lane-auto-toggle-' + state()"
                     [attr.data-mode-kind]="cluster.mode.kind"
+                    [disabled]="mutationsBlocked()"
                     [cacTooltip]="cluster.mode.tooltip"
                     (click)="autoToggleRequest.emit(autoProject()!); $event.stopPropagation()">
               <span class="column__status-pill-label">{{ cluster.mode.label }}</span>
@@ -118,7 +119,7 @@
                   data-testid="archive-all-btn"
                   [attr.data-archiving]="archiving() ? 'true' : null"
                   [attr.aria-busy]="archiving() ? 'true' : null"
-                  [disabled]="archiving()"
+                  [disabled]="archiving() || mutationsBlocked()"
                   [cacTooltip]="archiving() ? 'Archiving in progress…' : 'Move all completed tasks to Archive'"
                   (click)="archiveAll.emit()">
             @if (archiving()) {
@@ -197,10 +198,11 @@
                   [epicSubTasks]="allBoardJobs()"
                   [compact]="compact()"
                   [highlightJobId]="highlightJobId()"
+                  [mutationsBlocked]="mutationsBlocked()"
                   (click)="jobClick.emit(job)"
                   (subTaskClick)="jobClick.emit($event)"
                   (deleteRequested)="jobDeleteRequest.emit($event)"
-                  draggable="true"
+                  [draggable]="!mutationsBlocked()"
                   (dragstart)="onDragStart($event, job)" />
               }
               @if (group.jobs.length === 0) {
@@ -210,7 +212,7 @@
           }
         } @else {
           @for (job of jobs(); track job.taskKey; let i = $index) {
-            @if (!reorderDisabled()) {
+            @if (!reorderDisabled() && !mutationsBlocked()) {
               <div class="column__drop-zone"
                    [class.column__drop-zone--active]="dropIndex === i"
                    (dragover)="onCardDragOver($event, i)"
@@ -223,14 +225,15 @@
               [epicSubTasks]="allBoardJobs()"
               [compact]="compact()"
               [highlightJobId]="highlightJobId()"
+              [mutationsBlocked]="mutationsBlocked()"
               (click)="jobClick.emit(job)"
               (subTaskClick)="jobClick.emit($event)"
               (deleteRequested)="jobDeleteRequest.emit($event)"
               (pickNextRequested)="jobPickNextRequest.emit($event)"
-              draggable="true"
+              [draggable]="!mutationsBlocked()"
               (dragstart)="onDragStart($event, job)" />
           }
-          @if (!reorderDisabled()) {
+          @if (!reorderDisabled() && !mutationsBlocked()) {
             <div class="column__drop-zone column__drop-zone--last"
                  [class.column__drop-zone--active]="dropIndex === jobs().length"
                  (dragover)="onCardDragOver($event, jobs().length)"

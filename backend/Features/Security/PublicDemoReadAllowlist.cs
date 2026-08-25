@@ -1,7 +1,7 @@
 namespace AgentStudio.Security;
 
 /// <summary>
-/// Explicit path prefixes the public-demo edge accepts on GET/HEAD/OPTIONS.
+/// Explicit path roots the public-demo edge accepts on GET/HEAD/OPTIONS.
 /// Studio maps far more routes than the demo's browse story needs (crash
 /// recovery, drift reports, security review, admin config, ...); those stay
 /// mapped for the networked/local profiles but must not become free,
@@ -12,7 +12,7 @@ namespace AgentStudio.Security;
 /// </summary>
 public static class PublicDemoReadAllowlist
 {
-    public static readonly IReadOnlyList<string> PathPrefixes =
+    public static readonly IReadOnlyList<string> PathRoots =
     [
         "/api/environment",
         "/api/system",
@@ -24,7 +24,7 @@ public static class PublicDemoReadAllowlist
         "/api/runner",
         "/api/tags",
         "/api/clients",
-        "/hubs/",
+        "/hubs",
     ];
 
     // "/api/projects" fans out into dozens of per-project sub-resources
@@ -42,7 +42,7 @@ public static class PublicDemoReadAllowlist
 
     public static bool Allows(string path)
     {
-        if (PathPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        if (PathRoots.Any(root => IsRootOrDescendant(path, root)))
             return true;
         return AllowsProjectScopedRead(path);
     }
@@ -59,7 +59,12 @@ public static class PublicDemoReadAllowlist
         if (subResourceStart < 0) return false;
 
         var subResource = afterProjectName[subResourceStart..];
-        return ProjectScopedReadSuffixes.Any(
-            suffix => subResource.StartsWith(suffix, StringComparison.OrdinalIgnoreCase));
+        return ProjectScopedReadSuffixes.Any(suffix => IsRootOrDescendant(subResource, suffix));
     }
+
+    private static bool IsRootOrDescendant(string path, string root)
+        => path.Equals(root, StringComparison.OrdinalIgnoreCase)
+           || (path.Length > root.Length
+               && path.StartsWith(root, StringComparison.OrdinalIgnoreCase)
+               && path[root.Length] == '/');
 }

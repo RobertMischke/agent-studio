@@ -18,6 +18,7 @@
       <button type="button"
               class="epic-overview__new"
               data-testid="epic-overview-new"
+              [disabled]="mutationsBlocked()"
               [cacTooltip]="'Create a new epic'"
               (click)="openCreate()">+ New epic</button>
     }
@@ -35,6 +36,7 @@
         <button type="button"
                 class="epic-overview__empty-cta"
                 data-testid="epic-overview-create"
+                [disabled]="mutationsBlocked()"
                 (click)="openCreate()">Create your first epic</button>
       </div>
     } @else {

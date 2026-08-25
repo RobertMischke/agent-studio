@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/dev-backend';
+import { setTheme } from '../helpers/theme';
 
 /**
  * W34 §8 S4 "Public read-only edge". The backend edge
@@ -15,7 +16,8 @@ import { test } from '../fixtures/dev-backend';
  * real dev backend the frontend proxies to.
  */
 test.describe('Public demo read-only banner', () => {
-  test('renders when the backend reports the public-demo-readonly profile', async ({ page, devBackend: _devBackend }) => {
+  test('renders when the backend reports the public-demo-readonly profile', async ({ page, devBackend }) => {
+    void devBackend;
     await page.route('**/api/environment', (route) => route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -32,11 +34,19 @@ test.describe('Public demo read-only banner', () => {
     await expect(banner).toContainText('Read-only public demo');
     const box = await banner.boundingBox();
     expect(box?.width, 'the read-only banner spans the viewport top edge').toBeGreaterThan(400);
+    await expect(page.getByTestId('studio-board-add-task')).toBeDisabled();
 
-    await page.screenshot({ path: 'test-results/public-demo-banner.png', fullPage: false });
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await page.screenshot({
+        path: `test-results/public-demo-banner--${theme}--mocked.png`,
+        fullPage: false,
+      });
+    }
   });
 
-  test('stays hidden when the backend is not in the public-demo profile', async ({ page, devBackend: _devBackend }) => {
+  test('stays hidden when the backend is not in the public-demo profile', async ({ page, devBackend }) => {
+    void devBackend;
     await page.route('**/api/environment', (route) => route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
