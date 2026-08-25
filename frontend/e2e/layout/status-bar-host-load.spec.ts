@@ -219,6 +219,126 @@ test.describe('Status bar execution-host load companion signal', () => {
     });
   });
 
+  test('review workers own elevated host load and expose both plane ceilings', async ({ page }) => {
+    await stubHostLoad(page, 0, 0, 4, 8.4);
+    const now = new Date().toISOString();
+    const telemetry = (clientId: string, activeSlots: number) => ({
+      clientId,
+      window: '1h',
+      points: [{
+        timestamp: now,
+        cpuPercent: 72,
+        load1: 4.2,
+        load5: 4.2,
+        load15: 4.2,
+        memoryUsedBytes: 24_000_000_000,
+        memoryTotalBytes: 64_000_000_000,
+        swapInBytesPerSecond: 0,
+        swapOutBytesPerSecond: 0,
+        cpuStealPercent: 0,
+        ioWaitPercent: 0,
+        cpuCores: 6,
+        activeSlots,
+      }],
+      findings: [],
+    });
+    const hostAdmission = {
+      hostId: 'host-berlin',
+      admissionState: 'open',
+      automaticDrainReason: null,
+      automaticDrainAt: null,
+      operatorDrainReason: null,
+      operatorDrainAt: null,
+    };
+    const capability = (key: 'executor:coding' | 'executor:review') => ({
+      key,
+      category: 'executor',
+      advertisedStatus: 'ready',
+      healthState: 'healthy',
+      reason: null,
+      advertisedAt: now,
+      freshUntil: new Date(Date.now() + 60_000).toISOString(),
+      isFresh: true,
+      firstFailureAt: null,
+      lastFailureAt: null,
+      cooldownUntil: null,
+      canaryClaimId: null,
+      consecutiveFailures: 0,
+      version: null,
+      identity: null,
+      detail: null,
+      affectedClaims: [],
+      recoveryHistory: [],
+    });
+
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', json([
+      {
+        id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
+        registeredAt: now, lastSeenAt: now, runnerGitStatus: 'ready',
+        runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 8,
+        runnerEffectiveMaxParallelism: 8,
+      },
+      {
+        id: 'agent-runner-review-01', displayName: 'agent-runner-review-01', kind: 'service',
+        registeredAt: now, lastSeenAt: now, runnerGitStatus: 'ready',
+        runnerDaemonState: 'running', runnerActiveSlots: 4, runnerAvailableSlots: 2,
+        runnerEffectiveMaxParallelism: 6,
+      },
+    ]));
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', json([
+      {
+        runnerId: 'agent-runner-01', name: 'agent-runner-01', hostId: 'host-berlin',
+        instanceId: 'coding', runnerVersion: '1.2.0', protocolVersion: 2,
+        status: 'active', registeredAt: now, lastSeenAt: now, hostAdmission,
+        capabilities: [capability('executor:coding')], effectiveMaxParallelism: 8,
+      },
+      {
+        runnerId: 'agent-runner-review-01', name: 'agent-runner-review-01', hostId: 'host-berlin',
+        instanceId: 'review', runnerVersion: '1.2.0', protocolVersion: 2,
+        status: 'active', registeredAt: now, lastSeenAt: now, hostAdmission,
+        capabilities: [capability('executor:review')], effectiveMaxParallelism: 6,
+      },
+    ]));
+    await page.unroute('**/api/clients/agent-runner-01/telemetry?window=1h');
+    await page.unroute('**/api/clients/agent-runner-01/telemetry?window=14d');
+    await page.route('**/api/clients/agent-runner-01/telemetry?window=*', json(telemetry('agent-runner-01', 0)));
+    await page.route('**/api/clients/agent-runner-review-01/telemetry?window=*', json(telemetry('agent-runner-review-01', 4)));
+    await page.route('**/api/runner/auto-review-queue', json({
+      queueDepth: 7,
+      activeJobs: 4,
+      isStagnant: false,
+      stagnantSince: null,
+      stagnantThresholdMinutes: 20,
+      drainRatePerMinute: 0.8,
+      medianReviewDurationMs: 190_000,
+      throughputWindowMinutes: 15,
+      observedAt: now,
+    }));
+
+    await page.goto('/');
+
+    const running = page.getByTestId('status-bar-running');
+    await expect(running).toContainText('coding 0/8');
+    await expect(running).not.toContainText('no runners');
+    await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
+    const review = page.getByTestId('status-bar-review');
+    await expect(review).toContainText('review 4/6 active');
+    await expect(review).toContainText('7 waiting');
+    await review.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('4 processing, 7 waiting');
+
+    await setTheme(page, 'dark');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-plane-utilization-dark--mocked.png'),
+    });
+    await setTheme(page, 'light');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-plane-utilization-light--mocked.png'),
+    });
+  });
+
   test('several reported runs with almost no load become the inverse quiet hint', async ({ page }) => {
     await stubHostLoad(page, 0, 5, 5, 0.3);
     await page.goto('/');
