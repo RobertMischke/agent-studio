@@ -199,6 +199,7 @@ function response(): ProjectCycleTimeResponse {
       excludedEpics: 0,
       tasksWithoutLedger: 0,
       tasksWithLaneEntryCompletion: 0,
+      tasksBackfilled: 0,
     },
     aggregates: [
       agg('preparation', 'Preparation', 'stage', 0, null),

@@ -57,7 +57,7 @@ export function sortValue(row: TaskCycleTimeRow, key: CycleTimeSortKey): number 
     case 'bounceRounds': return row.bounceRounds;
     case 'backwardTransitions': return row.backwardTransitions ?? 0;
     case 'outcome': return row.integrationOutcome ?? '';
-    default: return row.stages[key] ?? 0;
+    default: return row.stages?.[key] ?? 0;
   }
 }
 

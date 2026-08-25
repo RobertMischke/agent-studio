@@ -33,8 +33,9 @@ export interface TaskCycleTimeRow {
   createdAt: string;
   firstClaimedAt: string | null;
   completedAt: string;
-  completionSource: 'ledger' | 'lane-entry' | string;
-  stages: CycleTimeStageSeconds;
+  completionSource: 'ledger' | 'lane-entry' | 'backfill' | string;
+  /** Null for backfilled rows: the reconstructed completion dates the task but explains no stage durations. */
+  stages: CycleTimeStageSeconds | null;
   reviewRunSeconds: number;
   leadTimeSeconds: number;
   cycleTimeSeconds: number | null;
@@ -156,6 +157,8 @@ export interface ProjectCycleTimeCoverage {
   excludedEpics: number;
   tasksWithoutLedger: number;
   tasksWithLaneEntryCompletion: number;
+  /** Window tasks whose completion was reconstructed by the backfill sidecar; they enter the lead-time rollup only. */
+  tasksBackfilled: number;
 }
 
 export interface ProjectCycleTimeResponse {

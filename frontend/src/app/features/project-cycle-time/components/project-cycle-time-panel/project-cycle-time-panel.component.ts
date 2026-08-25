@@ -186,7 +186,7 @@ export class ProjectCycleTimePanelComponent {
       case 'bounceRounds': return String(row.bounceRounds);
       case 'backwardTransitions': return String(row.backwardTransitions ?? 0);
       case 'outcome': return row.integrationOutcome ?? '–';
-      default: return column.stage ? this.duration(row.stages[column.stage]) : '';
+      default: return column.stage ? this.duration(row.stages?.[column.stage]) : '';
     }
   }
 

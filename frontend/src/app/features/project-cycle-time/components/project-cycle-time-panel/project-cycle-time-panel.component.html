@@ -44,6 +44,10 @@
         <span class="cyc__sep" aria-hidden="true">·</span>
         {{ d.coverage.excludedInFlight }} in flight
       }
+      @if (d.coverage.tasksBackfilled > 0) {
+        <span class="cyc__sep" aria-hidden="true">·</span>
+        {{ d.coverage.tasksBackfilled }} with reconstructed completion (lead time only)
+      }
       @if (d.coverage.excludedNoCompletionTimestamp > 0) {
         <span class="cyc__sep" aria-hidden="true">·</span>
         {{ d.coverage.excludedNoCompletionTimestamp }} archived without a completion timestamp (excluded)
