@@ -51,6 +51,8 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
   readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 0);
   readonly hasRejections = computed(() =>
     this.visibleItems().some(item => item.lastRejection != null));
+  readonly buildProfileGateCount = computed(() =>
+    this.visibleItems().filter(item => item.lastRejection?.code === 'build-profile-gate').length);
 
   ngOnInit(): void {
     this.refresh();

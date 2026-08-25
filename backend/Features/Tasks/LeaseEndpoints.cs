@@ -550,6 +550,26 @@ public static class LeaseEndpoints
                         admission.ReasonCode));
                 }
 
+                // Gate decisions are operator-visible task state. Build-profile
+                // gating used to remove cards before the claim loop, leaving an
+                // ordinary queued-remote projection with no rejection reason.
+                foreach (var task in liveSnapshot.Where(t => !t.Fixture && t.State == TaskStates.Ready))
+                {
+                    var project = settings.Get(task.ProjectName);
+                    if (!ProjectExecutionPolicy.AllowsAutomaticPickup(project)
+                        || !ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName)
+                        || !AgentTypes.IsAutoPickupEligible(task.Agent)
+                        || TaskSlugs.IsHumanDecisionNeeded(task.Id)
+                        || (project.IntakeEnabled.GetValueOrDefault()
+                            && task.Phase != LifecyclePhases.IntakePassed)
+                        || waitsOn.EvaluateWaitsOn(task).Blocked)
+                        continue;
+
+                    var buildGate = BuildProfileGate.Evaluate(project.BuildProfile);
+                    if (!buildGate.AllowsPickup)
+                        RecordRejection(task, "build-profile-gate", buildGate.Reason);
+                }
+
                 var eligible = liveSnapshot
                     .Where(t => !t.Fixture && t.State == TaskStates.Ready)
                     .Where(t =>

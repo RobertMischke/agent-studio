@@ -913,6 +913,21 @@ public record BuildProfile
     /// <summary>UTC instant of the last green validation dry-run, or null if never green.</summary>
     public DateTime? LastValidatedAt { get; init; }
 
+    /// <summary>
+    /// True when commands changed after the last green verification. Pickup stays
+    /// open while the next remote review revalidates the edited profile.
+    /// </summary>
+    public bool RevalidationPending { get; init; }
+
+    /// <summary>UTC instant of the last green verification on a remote Review Executor.</summary>
+    public DateTime? LastRemoteVerificationAt { get; init; }
+
+    /// <summary>Immutable result SHA proven by the last green remote verification.</summary>
+    public string? LastRemoteVerificationSha { get; init; }
+
+    /// <summary>ReviewAttempt that supplied the last green remote verification.</summary>
+    public string? LastRemoteVerificationAttemptId { get; init; }
+
     /// <summary>Short reason from the last failed validation dry-run, or null.</summary>
     public string? LastValidationError { get; init; }
 }

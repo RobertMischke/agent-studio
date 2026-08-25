@@ -63,7 +63,6 @@ public static class RemoteQueueStarvationPolicy
                        && ProjectExecutionPolicy.AllowsAutomaticPickup(settings)
                        && AgentTypes.IsAutoPickupEligible(task.Agent)
                        && !TaskSlugs.IsHumanDecisionNeeded(task.Id)
-                       && BuildProfileGate.AllowsAutoPickup(settings.BuildProfile)
                        && (!settings.IntakeEnabled.GetValueOrDefault()
                            || task.Phase == LifecyclePhases.IntakePassed)
                        && !references.EvaluateWaitsOn(task).Blocked;
@@ -79,7 +78,8 @@ public static class RemoteQueueStarvationPolicy
                                    && now - referenceAt >= threshold;
 
         var items = eligibleTasks
-            .Where(task => task.RemoteDispatchRejection is not null
+            .Where(task => !BuildProfileGate.AllowsAutoPickup(projectSettings(task.ProjectName).BuildProfile)
+                           || task.RemoteDispatchRejection is not null
                            || (claimProgressStalled
                                && now - task.EnteredLaneAt.ToUniversalTime() >= threshold))
             .OrderBy(task => task.EnteredLaneAt)
@@ -90,7 +90,7 @@ public static class RemoteQueueStarvationPolicy
                 ProjectName = task.ProjectName,
                 Title = task.Title,
                 EnteredLaneAt = task.EnteredLaneAt,
-                LastRejection = task.RemoteDispatchRejection,
+                LastRejection = GateRejection(task, projectSettings(task.ProjectName), now),
             })
             .ToList();
         var hasRejections = items.Any(item => item.LastRejection is not null);
@@ -107,6 +107,25 @@ public static class RemoteQueueStarvationPolicy
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
+        };
+    }
+
+    private static RemoteDispatchRejection? GateRejection(
+        TaskInfo task,
+        ProjectSettings settings,
+        DateTime now)
+    {
+        var gate = BuildProfileGate.Evaluate(settings.BuildProfile);
+        if (gate.AllowsPickup) return task.RemoteDispatchRejection;
+        if (task.RemoteDispatchRejection is { Code: "build-profile-gate" } persisted)
+            return persisted;
+        return new RemoteDispatchRejection
+        {
+            Code = "build-profile-gate",
+            RunnerId = ProjectExecutionPolicy.ResolveExecutionLocation(settings),
+            RunnerName = ProjectExecutionPolicy.ResolveExecutionLocation(settings),
+            Reason = gate.Reason,
+            RejectedAtUtc = now,
         };
     }
 }

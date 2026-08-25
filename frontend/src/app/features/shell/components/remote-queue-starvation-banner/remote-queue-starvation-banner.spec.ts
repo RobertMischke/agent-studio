@@ -88,4 +88,49 @@ describe('RemoteQueueStarvationBannerComponent', () => {
     fixture.destroy();
     http.verify();
   });
+
+  it('names build-profile gate starvation loudly', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Quality Studio']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      waitingTaskCount: 25,
+      availableSlots: 8,
+      thresholdMinutes: 30,
+      claimProgressStalled: false,
+      lastSuccessfulClaimAt: '2026-08-23T09:59:00Z',
+      hasRejections: true,
+      oldestEnteredLaneAt: '2026-08-18T10:00:00Z',
+      observedAt: '2026-08-23T10:00:00Z',
+      items: Array.from({ length: 25 }, (_, index) => ({
+        taskKey: `QS-${index + 1}`,
+        taskId: `task-${index + 1}`,
+        projectName: 'Quality Studio',
+        title: `Card ${index + 1}`,
+        enteredLaneAt: '2026-08-18T10:00:00Z',
+        lastRejection: {
+          code: 'build-profile-gate',
+          runnerId: 'runner-01',
+          runnerName: 'Runner 01',
+          reason: 'build profile declared but not yet validated',
+          rejectedAtUtc: '2026-08-23T10:00:00Z',
+        },
+      })),
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-starvation-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('25 ready cards are not claimable: build profile not validated');
+    expect(banner.textContent).toContain('build-profile-gate reason');
+    fixture.destroy();
+    http.verify();
+  });
 });

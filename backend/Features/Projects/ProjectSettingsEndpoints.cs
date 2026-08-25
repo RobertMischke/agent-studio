@@ -780,9 +780,9 @@ public static class ProjectSettingsEndpoints
             });
         });
 
-        // PUT declares (or re-declares) the build profile. Always resets
-        // onboarding to "declared" - the project must re-run a green validation
-        // dry-run before the runner picks it up again.
+        // PUT declares or edits the build profile. First declaration closes the
+        // gate. An edit preserves prior green provenance with revalidation pending;
+        // the next green remote review refreshes it without starving the queue.
         app.MapPut("/api/projects/{projectName}/build-profile", (string projectName, SetBuildProfileRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
@@ -843,7 +843,10 @@ public static class ProjectSettingsEndpoints
             if (settings.Get(projectName).BuildProfile is null)
                 return Results.BadRequest(new { error = "no build profile declared for this project" });
 
-            var result = await validator.ValidateAsync(projectName, entry.Path, ct);
+            var workingDirectory = BuildProfileValidationWorkspace.Resolve(entry);
+            if (workingDirectory is null)
+                return Results.BadRequest(new { error = "project source workspace is not configured or does not exist" });
+            var result = await validator.ValidateAsync(projectName, workingDirectory, ct);
             var profile = settings.Get(projectName).BuildProfile;
             return Results.Ok(new
             {

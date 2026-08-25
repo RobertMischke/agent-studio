@@ -514,6 +514,15 @@ public static class V1ReviewPlaneEndpoints
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 
+            if (RemoteBuildProfileVerificationPolicy.IsGreen(request.Commands))
+            {
+                settings.MarkBuildProfileRemoteVerified(
+                    task.ProjectName,
+                    settled.ReviewAttempt.Subject.ExpectedResultSha,
+                    settled.ReviewAttempt.AttemptId,
+                    receivedAt);
+            }
+
             var infrastructureFailure = string.Equals(
                 request.Outcome,
                 "ReviewInfra",

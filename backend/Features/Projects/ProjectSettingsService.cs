@@ -315,11 +315,11 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Slice P (ASS-1663): declares (or re-declares) the project's build profile.
-    /// Normalizes blank command/path entries away and always resets onboarding to
-    /// <see cref="BuildProfileStatuses.Declared"/> - changing how the project
-    /// builds invalidates any prior green dry-run, so the project must re-validate
-    /// before the runner picks it up. Pass a null <paramref name="profile"/> to
-    /// clear the profile entirely (revert to legacy "no gate" behaviour).
+    /// Normalizes blank command/path entries away. A first declaration remains
+    /// closed until validated. Editing a previously validated profile preserves
+    /// its green provenance and marks revalidation pending, so a task-authored
+    /// settings edit cannot silently stop the project queue. The next green
+    /// remote review refreshes that provenance. Pass null to clear the profile.
     /// </summary>
     public void SetBuildProfile(string projectName, BuildProfile? profile)
     {
@@ -328,7 +328,23 @@ public class ProjectSettingsService
         {
             var key = ResolveAliasLocked(projectName);
             var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
-            _cache[key] = current with { BuildProfile = NormalizeProfile(profile) };
+            var normalized = NormalizeProfile(profile);
+            if (normalized is not null
+                && current.BuildProfile is { } previous
+                && BuildProfileGate.AllowsAutoPickup(previous))
+            {
+                normalized = normalized with
+                {
+                    Status = BuildProfileStatuses.PipelineReady,
+                    LastValidatedAt = previous.LastValidatedAt,
+                    LastValidationError = null,
+                    RevalidationPending = true,
+                    LastRemoteVerificationAt = previous.LastRemoteVerificationAt,
+                    LastRemoteVerificationSha = previous.LastRemoteVerificationSha,
+                    LastRemoteVerificationAttemptId = previous.LastRemoteVerificationAttemptId,
+                };
+            }
+            _cache[key] = current with { BuildProfile = normalized };
             Persist();
         }
         _logger.LogInformation(
@@ -350,6 +366,36 @@ public class ProjectSettingsService
     /// </summary>
     public void MarkBuildProfileValidated(string projectName) =>
         TransitionProfileStatus(projectName, BuildProfileStatuses.PipelineReady, validatedAt: DateTime.UtcNow, error: null);
+
+    public void MarkBuildProfileRemoteVerified(
+        string projectName,
+        string resultSha,
+        string reviewAttemptId,
+        DateTime? verifiedAtUtc = null)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var value) ? value : new ProjectSettings();
+            if (current.BuildProfile is null) return;
+            var verifiedAt = (verifiedAtUtc ?? DateTime.UtcNow).ToUniversalTime();
+            _cache[key] = current with
+            {
+                BuildProfile = current.BuildProfile with
+                {
+                    Status = BuildProfileStatuses.PipelineReady,
+                    LastValidatedAt = verifiedAt,
+                    LastValidationError = null,
+                    RevalidationPending = false,
+                    LastRemoteVerificationAt = verifiedAt,
+                    LastRemoteVerificationSha = resultSha,
+                    LastRemoteVerificationAttemptId = reviewAttemptId,
+                },
+            };
+            Persist();
+        }
+    }
 
     /// <summary>
     /// Marks the project's build profile validation as failed and records a short
@@ -375,6 +421,9 @@ public class ProjectSettingsService
                     Status = status,
                     LastValidatedAt = validatedAt ?? current.BuildProfile.LastValidatedAt,
                     LastValidationError = status == BuildProfileStatuses.ValidationFailed ? error : null,
+                    RevalidationPending = status == BuildProfileStatuses.PipelineReady
+                        ? false
+                        : current.BuildProfile.RevalidationPending,
                 }
             };
             Persist();

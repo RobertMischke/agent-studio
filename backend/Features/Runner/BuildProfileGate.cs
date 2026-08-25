@@ -32,7 +32,8 @@ public static class BuildProfileGate
         var status = BuildProfileStatuses.Normalize(profile.Status);
         return status switch
         {
-            BuildProfileStatuses.PipelineReady => new Decision(true, "pipeline-ready"),
+            BuildProfileStatuses.PipelineReady => new Decision(true,
+                profile.RevalidationPending ? "pipeline-ready; revalidation pending" : "pipeline-ready"),
             BuildProfileStatuses.Validating => new Decision(false, "validation dry-run in progress"),
             BuildProfileStatuses.ValidationFailed => new Decision(false,
                 "last validation dry-run failed" + (string.IsNullOrWhiteSpace(profile.LastValidationError) ? "" : $": {profile.LastValidationError}")),

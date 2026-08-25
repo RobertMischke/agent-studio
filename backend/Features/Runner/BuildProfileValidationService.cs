@@ -69,6 +69,19 @@ public sealed class ProcessBuildCommandRunner : IBuildCommandRunner
 /// <summary>Outcome of a full validation dry-run.</summary>
 public sealed record DryRunValidationResult(bool Green, string Status, string Summary, string? FailedCommand);
 
+/// <summary>Recognizes build-profile proof produced by a remote review workspace.</summary>
+public static class RemoteBuildProfileVerificationPolicy
+{
+    public static bool IsGreen(IEnumerable<AgentStudio.TaskServer.Contracts.ReviewCommandEvidenceDto> commands)
+    {
+        var buildCommands = commands
+            .Where(command => string.Equals(command.Aspect, "build-tests", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return buildCommands.Count > 0
+               && buildCommands.All(command => command.ExitCode == 0 && command.Signal is null);
+    }
+}
+
 /// <summary>
 /// Drives the onboarding validation dry-run (Slice P / ASS-1663): mark the
 /// project's build profile <c>validating</c>, run the planned install + build

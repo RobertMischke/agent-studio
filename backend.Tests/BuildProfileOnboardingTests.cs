@@ -57,6 +57,27 @@ public sealed class BuildProfileGateTests
     }
 }
 
+public sealed class RemoteBuildProfileVerificationPolicyTests
+{
+    [Fact]
+    public void GreenBuildCommands_CountAsRemoteValidation()
+    {
+        var command = Command("build-tests", 0);
+        Assert.True(RemoteBuildProfileVerificationPolicy.IsGreen([command]));
+    }
+
+    [Fact]
+    public void FailedOrAbsentBuildCommands_DoNotValidateProfile()
+    {
+        Assert.False(RemoteBuildProfileVerificationPolicy.IsGreen([Command("build-tests", 1)]));
+        Assert.False(RemoteBuildProfileVerificationPolicy.IsGreen([Command("completion", 0)]));
+    }
+
+    private static AgentStudio.TaskServer.Contracts.ReviewCommandEvidenceDto Command(string aspect, int exitCode) => new(
+        "verify-1", aspect, "sh", ["-lc", "dotnet build"], "abc", "abc", "tree",
+        DateTime.UtcNow, DateTime.UtcNow, exitCode, null, "stdout", "stderr");
+}
+
 public sealed class BuildProfileDryRunPlannerTests
 {
     [Fact]
@@ -100,6 +121,30 @@ public sealed class BuildProfileDryRunPlannerTests
         });
         Assert.Single(plan);
         Assert.Equal(DryRunStepKind.Install, plan[0].Kind);
+    }
+}
+
+public sealed class BuildProfileValidationWorkspaceTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "build-profile-source-" + Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void Resolve_PrefersConfiguredSourceRootOverTaskBoardPath()
+    {
+        Directory.CreateDirectory(_root);
+        var entry = new WatchPathEntry
+        {
+            Path = Path.Combine(_root, "empty-task-board-project"),
+            RootPath = _root,
+            RepositoryPath = Path.Combine(_root, "repo-fallback"),
+        };
+
+        Assert.Equal(Path.GetFullPath(_root), BuildProfileValidationWorkspace.Resolve(entry));
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch { }
     }
 }
 

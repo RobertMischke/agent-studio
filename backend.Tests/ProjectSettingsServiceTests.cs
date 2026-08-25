@@ -708,7 +708,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public void ReDeclaringBuildProfile_ResetsAnyPriorGreenValidation()
+    public void EditingValidatedBuildProfile_KeepsGateOpenWithRevalidationPending()
     {
         var svc = Build();
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
@@ -717,7 +717,28 @@ public sealed class ProjectSettingsServiceTests : IDisposable
 
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
 
-        Assert.Equal(BuildProfileStatuses.Declared, svc.Get("runbook").BuildProfile!.Status);
+        var edited = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, edited.Status);
+        Assert.True(edited.RevalidationPending);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(edited));
+    }
+
+    [Fact]
+    public void GreenRemoteReview_ClearsPendingAndRecordsProvenance()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+        svc.MarkBuildProfileValidated("runbook");
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
+        var verifiedAt = new DateTime(2026, 8, 23, 12, 0, 0, DateTimeKind.Utc);
+
+        svc.MarkBuildProfileRemoteVerified("runbook", "result-sha", "review-7", verifiedAt);
+
+        var profile = svc.Get("runbook").BuildProfile!;
+        Assert.False(profile.RevalidationPending);
+        Assert.Equal(verifiedAt, profile.LastRemoteVerificationAt);
+        Assert.Equal("result-sha", profile.LastRemoteVerificationSha);
+        Assert.Equal("review-7", profile.LastRemoteVerificationAttemptId);
     }
 
     [Fact]

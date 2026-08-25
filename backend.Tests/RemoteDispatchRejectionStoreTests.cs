@@ -85,6 +85,36 @@ public sealed class RemoteDispatchRejectionStoreTests : IDisposable
         Assert.Equal(secondReadyAt.AddMinutes(1), refreshed.RejectedAtUtc);
     }
 
+    [Fact]
+    public void Record_PersistsBuildProfileGateReasonForCardProjection()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(Path.Combine(_folder, "task.json"), "{}");
+        var store = new RemoteDispatchRejectionStore(
+            NullLogger<RemoteDispatchRejectionStore>.Instance);
+        var task = new TaskInfo
+        {
+            Id = "task-1",
+            Key = "QS-92",
+            ProjectName = "Quality Studio",
+            FolderPath = _folder,
+            EnteredLaneAt = new DateTime(2026, 8, 18, 9, 0, 0, DateTimeKind.Utc),
+        };
+
+        store.Record(
+            task,
+            "runner-01",
+            "Runner 01",
+            "build-profile-gate",
+            "build profile declared but not yet validated",
+            new DateTime(2026, 8, 23, 9, 0, 0, DateTimeKind.Utc));
+
+        var persisted = RemoteDispatchRejectionStore.Read(_folder);
+        Assert.NotNull(persisted);
+        Assert.Equal("build-profile-gate", persisted.Code);
+        Assert.Contains("not yet validated", persisted.Reason);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_folder)) Directory.Delete(_folder, recursive: true);

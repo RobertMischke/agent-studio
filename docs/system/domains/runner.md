@@ -962,6 +962,23 @@ evidence. The board mentions a latest rejection only when that evidence exists.
 The watchdog emits the rate-limited `remote-ready-starvation` warning event and
 clears the acute signal when claim progress, the queue, or capacity recovers.
 
+Build-profile admission is part of this visibility contract. A remote claim
+poll records `build-profile-gate` on every otherwise-runnable Ready card before
+eligibility filtering, so `executionLocation.lastRejection` never presents a
+gate-blocked card as an ordinary queue wait. Gate-blocked cards enter the
+starvation snapshot immediately and the workspace or project banner reports
+the number of Ready cards that are not claimable because the profile is not
+validated.
+
+Build-profile validation runs in the configured project source workspace,
+preferring `RootPath` and then `RepositoryPath`; the task-board project folder
+is never a validation workspace. A first profile declaration closes pickup
+until green. Editing a previously validated profile keeps its prior green
+status, sets `revalidationPending`, and leaves pickup open. The next remote
+review whose build/test commands are all green records the immutable result SHA,
+ReviewAttempt id, and verification time, then clears the pending flag. This is
+the chosen automatic revalidation rule for task-authored profile edits.
+
 ## Verification
 
 - Outcome and grammar changes need focused unit tests for analyzer, policy,
