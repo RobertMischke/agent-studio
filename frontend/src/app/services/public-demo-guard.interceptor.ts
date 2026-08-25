@@ -7,11 +7,12 @@ import { NotificationService } from './notification.service';
 /**
  * Client-side mirror of the backend's public-demo edge policy
  * (PublicDemoEdgeMiddleware / PublicDemoEdgePolicy.ReadOnlyDeniedCode). The
- * server is the real boundary and already rejects every mutating call with
- * "public-demo-read-only" - this interceptor exists so a blocked action fails
- * immediately and visibly instead of round-tripping to the edge first, and so
- * every call site gets the same explanatory toast without threading read-only
- * checks through each component (mirrors offlineGuardInterceptor's shape).
+ * server is the real boundary and rejects visitor mutations with
+ * "public-demo-read-only". This interceptor exists so a blocked UI action
+ * fails immediately and visibly instead of round-tripping to the edge first,
+ * and so every call site gets the same explanatory toast without threading
+ * read-only checks through each component (mirrors offlineGuardInterceptor's
+ * shape).
  */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 

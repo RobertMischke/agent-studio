@@ -1,7 +1,5 @@
 @if (auth.studioAllowed()) {
-    <!-- Backend-offline warning shown whenever the SignalR socket is down. Present in both layout branches. -->
     <app-offline-banner />
-    <!-- Read-only public demo warning (W34 §8 S4), shown whenever the backend reports the public-demo-readonly profile. -->
     <app-public-demo-banner />
     @if (featureFlags.vsCodeLayout()) {
       <!--
@@ -111,8 +109,7 @@
               <span class="studio-tab-actions-sep" aria-hidden="true"></span>
               <button type="button"
                       class="studio-tab-action studio-tab-action--primary"
-                      data-testid="studio-board-add-task"
-                      [disabled]="mutationsBlocked()"
+                      data-testid="studio-board-add-task" [disabled]="updateClient.mutationsBlocked()"
                       (click)="openCreate()">＋ Add task</button>
             </div>
           }
@@ -213,7 +210,7 @@
                           [attr.data-testid]="'studio-triage-action-' + primary.id"
                           [attr.data-action-id]="primary.id"
                           [attr.data-git-loading]="studioPrimaryAwaitingGit() ? 'true' : null"
-                          [disabled]="mutationsBlocked() || studioPrimaryAwaitingGit() || studioTriageActingId() !== null"
+                          [disabled]="updateClient.mutationsBlocked() || studioPrimaryAwaitingGit() || studioTriageActingId() !== null"
                           [appPendingButton]="studioTriageActingId() === primary.id"
                           [pendingLabel]="studioPrimaryLabel() + '…'"
                           [cacTooltip]="studioPrimaryAwaitingGit()
@@ -233,7 +230,7 @@
                         data-testid="studio-triage-overflow-btn"
                         aria-haspopup="menu"
                         [attr.aria-expanded]="studioTriageOverflowOpen()"
-                        [disabled]="mutationsBlocked()"
+                        [disabled]="updateClient.mutationsBlocked()"
                         [cacTooltip]="'More task actions'"
                         (click)="toggleStudioTriageOverflow($event)">⋯</button>
                 <app-menu
@@ -299,8 +296,7 @@
                           [archiving]="archivingInProgress()"
                           [highlightJobId]="justCreatedJobId()"
                           [sortStrategy]="laneSortStrategy(lane.state, lane.jobs)"
-                          [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)"
-                          [mutationsBlocked]="mutationsBlocked()"
+                          [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)" [mutationsBlocked]="updateClient.mutationsBlocked()"
                           [autoProject]="laneAutoProject(lane.state, lane.jobs)"
                           [projectScope]="boardProjectScope()"
                           [autoMode]="laneAutoMode(lane.state, lane.jobs)"
@@ -335,7 +331,7 @@
                                   [detail]="detail"
                                   [watchPaths]="watchPaths()"
                                   [lanePeers]="triageLanePeers()"
-                                  [mutationsBlocked]="mutationsBlocked()"
+                                  [mutationsBlocked]="updateClient.mutationsBlocked()"
                                   [routeDetailTab]="routeDetailTab()"
                                   [routeInspectorTab]="routeInspectorTab()"
                                   (back)="closeDetail()"
@@ -377,7 +373,7 @@
                         data-testid="studio-epic-subtask-detail"
                         [watchPaths]="watchPaths()"
                         [lanePeers]="epicTabSubTaskPeers()"
-                        [mutationsBlocked]="mutationsBlocked()"
+                        [mutationsBlocked]="updateClient.mutationsBlocked()"
                         (back)="closeEpicTabTaskDetail()"
                         (fileSaved)="onFileSaved()"
                         (projectChanged)="onProjectChanged($event)"
@@ -397,7 +393,7 @@
                                       data-testid="studio-epic-detail"
                                       [watchPaths]="watchPaths()"
                                       [lanePeers]="triageLanePeers()"
-                                      [mutationsBlocked]="mutationsBlocked()"
+                                      [mutationsBlocked]="updateClient.mutationsBlocked()"
                                       (back)="closeDetail()"
                                       (fileSaved)="onFileSaved()"
                                       (projectChanged)="onProjectChanged($event)"
@@ -431,8 +427,7 @@
               @if (studioTabState.activeTab(); as tab) {
                 @if (tab.kind === 'epics') {
                   <app-epic-overview-screen
-                    [scopedProject]="activeEpicScopedProject()"
-                    [mutationsBlocked]="mutationsBlocked()"
+                    [scopedProject]="activeEpicScopedProject()" [mutationsBlocked]="updateClient.mutationsBlocked()"
                     (openTask)="onEpicOverviewOpenTask($event)" />
                 }
               }
@@ -617,7 +612,7 @@
             [activeTagIds]="activeTagFilter()"
             (setType)="onSetType($event)"
             (toggleTag)="toggleTagFilter($event)" />
-          <button class="btn btn--create" [disabled]="mutationsBlocked()" (click)="openCreate()">
+          <button class="btn btn--create" [disabled]="updateClient.mutationsBlocked()" (click)="openCreate()">
             ＋ Add Task
           </button>
           <div class="devtools-menu">
@@ -715,7 +710,7 @@
                       </div>
                     }
                     @if (canAddTaskToGroup(group.state) && !isGroupCollapsed(group.state)) {
-                      <button class="task-nav__add" [disabled]="mutationsBlocked()" (click)="openCreate(group.state)">
+                      <button class="task-nav__add" [disabled]="updateClient.mutationsBlocked()" (click)="openCreate(group.state)">
                         <span>＋</span>
                         <span>Add task</span>
                       </button>
@@ -734,7 +729,7 @@
                               [detail]="detail"
                               [watchPaths]="watchPaths()"
                               [lanePeers]="triageLanePeers()"
-                              [mutationsBlocked]="mutationsBlocked()"
+                              [mutationsBlocked]="updateClient.mutationsBlocked()"
                               (back)="closeDetail()"
                               (fileSaved)="onFileSaved()"
                               (projectChanged)="onProjectChanged($event)"
@@ -787,8 +782,7 @@
                       [archiving]="archivingInProgress()"
                       [highlightJobId]="justCreatedJobId()"
                       [sortStrategy]="laneSortStrategy(lane.state, lane.jobs)"
-                      [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)"
-                      [mutationsBlocked]="mutationsBlocked()"
+                      [reorderDisabled]="laneReorderDisabled(lane.state, lane.jobs)" [mutationsBlocked]="updateClient.mutationsBlocked()"
                       (collapseToggle)="toggleLaneCollapse(lane.state)"
                       (jobClick)="openDetail($event)"
                       (jobDrop)="onJobDrop($event)"

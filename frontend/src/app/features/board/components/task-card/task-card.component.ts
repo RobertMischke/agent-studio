@@ -150,15 +150,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   });
 
   /** True for cards where "Pick next" makes sense (front-of-queue promotion). */
-  readonly canPickNext = computed(() =>
-    this.job().state === TaskState.Ready && !this.mutationsBlocked());
+  readonly canPickNext = computed(() => this.job().state === TaskState.Ready && !this.mutationsBlocked());
 
   onPickNextClick(event: Event) {
     event.stopPropagation();
     if (this.mutationsBlocked()) return;
     this.pickNextRequested.emit(this.job());
   }
-
   readonly ownerChip = computed(() => {
     const ownerId = this.job().ownerClientId;
     if (!ownerId) return null;
@@ -459,15 +457,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   /** Epics in this card's project, loaded on right-click for the assign submenu. */
   private readonly epicsForMenu = signal<EpicRollup[]>([]);
 
-  readonly cardCtxMenuItems = computed(() =>
-    buildCardCtxMenuItems(
-      this.job(),
-      this.isEpic(),
-      this.epicsForMenu(),
-      this.subTaskEpicId(),
-      this.mutationsBlocked(),
-    ),
-  );
+  readonly cardCtxMenuItems = computed(() => buildCardCtxMenuItems(
+    this.job(), this.isEpic(), this.epicsForMenu(), this.subTaskEpicId(), this.mutationsBlocked()));
 
   /** AGT-2029: open the dependency this card is waiting on (see resolveDependencyTarget). */
   navigateToDependency(chip: DependencyChip, event: MouseEvent): void {

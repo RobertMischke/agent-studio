@@ -16,6 +16,17 @@ import { setTheme } from '../helpers/theme';
  * real dev backend the frontend proxies to.
  */
 test.describe('Public demo read-only banner', () => {
+  test.beforeEach(async ({ page }) => {
+    // The fixture watches this task worktree, which is intentionally dirty
+    // while the test runs. Public-demo mode does not allow the operator-only
+    // crash-recovery inventory, so keep that local-only modal out of the
+    // visitor evidence.
+    await page.route('**/api/crash-recovery/pending', (route) => route.fulfill({
+      contentType: 'application/json',
+      body: '[]',
+    }));
+  });
+
   test('renders when the backend reports the public-demo-readonly profile', async ({ page, devBackend }) => {
     void devBackend;
     await page.route('**/api/environment', (route) => route.fulfill({

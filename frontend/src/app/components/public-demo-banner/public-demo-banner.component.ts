@@ -18,4 +18,8 @@ import { PublicDemoModeService } from '../../services/public-demo-mode.service';
 })
 export class PublicDemoBannerComponent {
   readonly mode = inject(PublicDemoModeService);
+
+  constructor() {
+    this.mode.loadFlags();
+  }
 }

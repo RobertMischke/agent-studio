@@ -24,8 +24,10 @@ public static class PublicDemoReadAllowlist
         "/api/runner",
         "/api/tags",
         "/api/clients",
-        "/hubs",
     ];
+
+    public const string JobsHubPath = "/hubs/jobs";
+    public const string JobsHubNegotiatePath = JobsHubPath + "/negotiate";
 
     // "/api/projects" fans out into dozens of per-project sub-resources
     // (security review, token usage, proposals, settings, ...) that a plain
@@ -44,8 +46,17 @@ public static class PublicDemoReadAllowlist
     {
         if (PathRoots.Any(root => IsRootOrDescendant(path, root)))
             return true;
+        if (AllowsJobsHubPath(path)) return true;
         return AllowsProjectScopedRead(path);
     }
+
+    public static bool AllowsJobsHubPath(string path)
+        => path.Equals(JobsHubPath, StringComparison.OrdinalIgnoreCase)
+           || path.Equals(JobsHubNegotiatePath, StringComparison.OrdinalIgnoreCase);
+
+    public static bool AllowsJobsHubNegotiate(string path, string method)
+        => HttpMethods.IsPost(method)
+           && path.Equals(JobsHubNegotiatePath, StringComparison.OrdinalIgnoreCase);
 
     private static bool AllowsProjectScopedRead(string path)
     {
