@@ -16,6 +16,7 @@ import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../services/quota-api.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';
 
@@ -75,6 +76,7 @@ interface QuotaCardModel {
   freshness: string;
   windows: QuotaWindow[];
   error: string | null;
+  failureLabel: string | null;
   source: string | null;
 }
 
@@ -93,6 +95,7 @@ interface QuotaCardModel {
 @Component({
   selector: 'app-header-quota',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './header-quota.html',
   styleUrl: './header-quota.scss'
@@ -171,7 +174,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
+    const stale = !!s.error || !s.fetchedAt || ageMs > ttlMs;
     const freshness = !s.fetchedAt
       ? 'never refreshed'
       : 'updated ' + this.formatAgo(ageMs);
@@ -195,6 +198,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness,
       windows: s.windows,
       error: s.error,
+      failureLabel: s.error ? this.probeFailureLabel(s) : null,
       source: s.source
     };
   }
@@ -214,8 +218,19 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness: 'never refreshed',
       windows: [],
       error: null,
+      failureLabel: null,
       source: null
     };
+  }
+
+  private probeFailureLabel(snapshot: QuotaSnapshot): string {
+    const failedAt = snapshot.probeFailedAt ? Date.parse(snapshot.probeFailedAt) : NaN;
+    const time = Number.isFinite(failedAt)
+      ? new Date(failedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      : 'time unknown';
+    const rawVersion = snapshot.cliVersion?.trim() ?? '';
+    const version = rawVersion.replace(/^codex-cli\s+/i, '').replace(/^claude(?:\s+code)?\s+/i, '') || 'version unknown';
+    return `probe failed ${time}, ${snapshot.cliType} ${version}`;
   }
 
   /**

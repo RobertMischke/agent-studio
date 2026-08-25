@@ -754,6 +754,7 @@ builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
+builder.Services.AddHostedService<CliVersionMonitorHostedService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddSingleton<CliQuotaWaitPolicyService>();
 builder.Services.AddSingleton<CliQuotaFallbackService>();

@@ -373,6 +373,22 @@ locked by:
 
 The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
 
+**CLI-version drift is fixture-locked (AGT-2679).** Sanitized, ANSI-stripped
+PTY captures live under `backend.Tests/Fixtures/quota/codex/`, with the Codex
+version in each filename. Codex 0.149.0 can put `(resets ...)` on the following
+row and can omit the standard 5-hour row while still reporting Weekly and Spark
+windows. Keep prior layouts as fallback fixtures when adding a new version.
+
+**Quota reads are stale-while-revalidate (AGT-2679).** `GET /api/cli/quota`
+returns the disk-backed cache without awaiting a PTY. A missing or expired entry
+starts a detached refresh with its own 45-second timeout, never the HTTP request
+cancellation token. On failure, `QuotaService` retains the last-good plan and
+windows, keeps their original `FetchedAt`, and adds `ProbeFailedAt`, `Error`, and
+the producing `CliVersion`. The UI renders those values as stale with the probe
+failure time and CLI version; the detailed error remains available in a tooltip.
+`CliVersionMonitorHostedService` logs installed versions at startup and logs a
+new `CLI version changed` event whenever a periodic sample differs.
+
 **Spark-block split is version-agnostic (AGT-2064).** `/status` renders a
 `<model>-Spark limit:` sub-block with its own near-empty 5h/Weekly lines. The
 standard windows are read only from the region ABOVE that header, so the Spark

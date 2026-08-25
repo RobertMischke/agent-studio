@@ -31,8 +31,10 @@ CLI execution tests.
   policy above the live model catalog and quota fallback machinery.
 - `backend/Services/Cli/`: CLI drivers and shared execution base.
 - `backend/Services/Cli/CliRouter.cs`: `cliType` routing.
-- `backend/Services/Quota/*QuotaProbe.cs`: per-CLI quota probes.
-- `backend/Services/Quota/QuotaService.cs`: aggregate quota surface.
+- `backend/Features/Cli/Quota/*QuotaProbe.cs`: per-CLI quota probes.
+- `backend/Features/Cli/Quota/QuotaService.cs`: non-blocking cached quota surface.
+- `backend/Features/Cli/Quota/CliVersionMonitorHostedService.cs`: startup and
+  periodic CLI-version drift attribution.
 - `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
   endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
   (lazy single-transcript parse: model, thinking, message count, first prompt)

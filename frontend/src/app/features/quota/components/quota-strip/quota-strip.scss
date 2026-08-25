@@ -118,3 +118,9 @@
   color: var(--studio-fg-muted);
 }
 .qwin__reset { font-style: italic; }
+.qcard__stale {
+  margin-bottom: var(--studio-spacing-2);
+  color: var(--studio-accent-warn-strong);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

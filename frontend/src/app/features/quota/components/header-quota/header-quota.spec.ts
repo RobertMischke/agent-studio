@@ -311,3 +311,46 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     expect(codex.state).not.toBe('unavailable');
   });
 });
+
+describe('HeaderQuotaComponent (failed background probe)', () => {
+  it('keeps last-good values and renders an attributable stale marker', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeaderQuotaComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeaderQuotaComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/cli/quota').flush({
+      ttlSeconds: 600,
+      snapshots: [
+        {
+          cliType: 'codex',
+          plan: 'Pro',
+          fetchedAt: '2026-08-25T18:55:00Z',
+          probeFailedAt: '2026-08-25T19:07:00Z',
+          cliVersion: 'codex-cli 0.149.0',
+          source: '/status',
+          error: 'Codex /status probe timed out before the quota panel was captured.',
+          windows: [
+            { label: 'Weekly', usedPct: 6, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '08:08 on 31 Aug' },
+          ],
+        },
+      ],
+    });
+    fixture.detectChanges();
+
+    const card = fixture.nativeElement.querySelector('[data-testid="hquota-card-codex"]') as HTMLElement;
+    const marker = fixture.nativeElement.querySelector('[data-testid="hquota-probe-failed-codex"]') as HTMLElement;
+    expect(card.textContent).toContain('6%');
+    expect(card.dataset['state']).toBe('error');
+    expect(marker.textContent).toContain('probe failed');
+    expect(marker.textContent).toContain('codex 0.149.0');
+    fixture.destroy();
+  });
+});

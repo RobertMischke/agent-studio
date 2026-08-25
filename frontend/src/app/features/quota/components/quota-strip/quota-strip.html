@@ -34,6 +34,10 @@
           </button>
         </div>
 
+        @if (probeFailureLabel(snap); as failure) {
+          <div class="qcard__stale" [cacTooltip]="snap.error || ''">{{ failure }}</div>
+        }
+
         @if (snap.error && snap.windows.length === 0) {
           <div class="qcard__error" [cacTooltip]="snap.error">No quota data available.</div>
         } @else if (snap.windows.length === 0) {
