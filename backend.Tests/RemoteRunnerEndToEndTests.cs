@@ -3688,10 +3688,17 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
             () => Directory.Exists(Path.Combine(_watchPath, TaskStates.HumanReview, TaskKey)),
             "adopted review did not reach Human Review",
             attempts: 600);
+        // Slot-state hygiene rides on the adopting daemon noticing the worker's
+        // exit and removing the workspace (read-only git objects, Windows file
+        // handles) before it deletes the state file. Poll gently - a tight
+        // LoadAll loop holds the very files the daemon is deleting - and give
+        // the slow path a real budget; on timeout the daemon names its reason.
         await WaitUntilAsync(
             () => !new RReviewStateStore(options.StateDir).LoadAll().Any(),
-            "adopted review state was not cleaned up",
-            attempts: 600);
+            () => "adopted review state was not cleaned up; replacement daemon log:\n"
+                  + string.Join("\n", secondLogs),
+            attempts: 240,
+            delayMs: 500);
 
         secondStop.Cancel();
         await secondRun.WaitAsync(TimeSpan.FromSeconds(10));
@@ -4093,12 +4100,13 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     private static async Task WaitUntilAsync(
         Func<bool> condition,
         Func<string> failure,
-        int attempts = 200)
+        int attempts = 200,
+        int delayMs = 50)
     {
         for (var attempt = 0; attempt < attempts; attempt++)
         {
             if (condition()) return;
-            await Task.Delay(50);
+            await Task.Delay(delayMs);
         }
         Assert.Fail(failure());
     }
