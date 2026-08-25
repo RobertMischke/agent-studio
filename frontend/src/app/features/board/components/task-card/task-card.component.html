@@ -10,6 +10,7 @@
      [style.--project-soft]="identity().soft"
      [style.--project-on]="identity().onColor"
      [attr.data-task-type]="taskTypeChip().kind"
+     data-token-popover-anchor-card
      data-testid="task-card"
      [attr.data-project]="job().projectName"
      [attr.data-running]="isRunning() ? 'true' : null"
@@ -273,6 +274,7 @@
           <app-task-token-usage-popover #tokenUsagePopover="tokenUsagePopover"
             role="tooltip" data-token-popover hidden
             data-testid="task-card-token-popover"
+            [attr.data-token-anchor]="job().taskKey"
             [job]="job()"
             [bubble]="tb" />
         </span>
