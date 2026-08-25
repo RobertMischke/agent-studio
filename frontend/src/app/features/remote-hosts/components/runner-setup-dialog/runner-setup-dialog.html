@@ -92,6 +92,43 @@
             <span>Choose Reverse tunnel, or enter a central or LAN URL the host can curl directly.</span>
           </div>
         }
+
+        @if (connectionMode() === 'tunnel') {
+          <div class="setup__tunnel" data-testid="runner-setup-tunnel-registration">
+            <div class="setup__tunnel-copy">
+              <strong>One-time Windows administrator registration</strong>
+              <p>Before SSH onboarding, Studio runs the product-owned tunnel supervision wrapper on this control-plane machine. Windows shows a UAC prompt so it can register the keeper and watchdog Scheduled Tasks. The tasks run unattended without further elevation.</p>
+            </div>
+            <div class="setup__fields">
+              <label>
+                <span>Windows devspace path</span>
+                <input data-testid="runner-setup-tunnel-devspace"
+                       autocomplete="off"
+                       placeholder="C:\Projects\agent-taskboard-devspace"
+                       [ngModel]="tunnelDevspacePath()"
+                       (ngModelChange)="tunnelDevspacePath.set($event)" />
+                <small>Stores the watchdog journal and live status files. Use the same path on every registration.</small>
+              </label>
+              <label>
+                <span>Local Task Server port</span>
+                <input data-testid="runner-setup-orchestrator-port"
+                       type="number"
+                       min="1"
+                       max="65535"
+                       [ngModel]="orchestratorPort()"
+                       (ngModelChange)="orchestratorPort.set(+$event)" />
+                <small>The Windows control-plane port forwarded to the remote listener, normally 5031.</small>
+              </label>
+            </div>
+            <label class="setup__consent">
+              <input data-testid="runner-setup-tunnel-consent"
+                     type="checkbox"
+                     [ngModel]="tunnelRegistrationConsent()"
+                     (ngModelChange)="tunnelRegistrationConsent.set($event)" />
+              <span>I understand and want setup to request the Windows UAC prompt for this one-time registration.</span>
+            </label>
+          </div>
+        }
       </section>
 
       <section class="setup__authentication" aria-labelledby="runner-setup-auth-title">

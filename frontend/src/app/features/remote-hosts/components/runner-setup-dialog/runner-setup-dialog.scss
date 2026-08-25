@@ -71,6 +71,19 @@
 .setup__fields select:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
 .setup__field--wide { grid-column: 1 / -1; }
 
+.setup__tunnel {
+  display: grid;
+  gap: var(--studio-spacing-3);
+  margin-top: var(--studio-spacing-4);
+  padding: var(--studio-spacing-4);
+  background: var(--studio-bg-selected);
+}
+.setup__tunnel-copy strong { color: var(--studio-fg-strong); font-size: 12px; }
+.setup__tunnel-copy p { max-width: 76ch; margin: var(--studio-spacing-1) 0 0; color: var(--studio-fg-dim); font-size: 11px; line-height: 1.5; }
+.setup__consent { display: flex; align-items: flex-start; gap: var(--studio-spacing-2); color: var(--studio-fg); font-size: 11px; line-height: 1.45; }
+.setup__consent input { accent-color: var(--studio-accent); }
+.setup__consent:focus-within { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
+
 .setup__reachability,
 .setup__blocked { margin-top: var(--studio-spacing-4); padding: var(--studio-spacing-3); border: 1px solid var(--notify-warning-border); border-radius: 7px; background: var(--notify-warning-tint); color: var(--notify-warning-icon-fg); font-size: 11px; }
 .setup__reachability { display: grid; gap: var(--studio-spacing-1); }

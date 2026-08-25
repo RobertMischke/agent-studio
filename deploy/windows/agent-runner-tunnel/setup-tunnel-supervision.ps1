@@ -107,7 +107,7 @@ function Invoke-ElevatedRegistration {
     Write-Host 'Requesting elevation (a UAC prompt will appear)...'
     $process = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Verb RunAs -Wait -PassThru
     if ($process.ExitCode -ne 0) {
-        Write-Warning "Elevated registration exited with code $($process.ExitCode). Details: $childTranscriptPath"
+        throw "Elevated registration exited with code $($process.ExitCode). Details: $childTranscriptPath"
     }
 }
 

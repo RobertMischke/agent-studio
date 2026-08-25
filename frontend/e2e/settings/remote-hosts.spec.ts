@@ -44,6 +44,7 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/crash-recovery/pending', json({ pending: [] }));
   await page.route('**/api/watch-paths', json([{ name: 'agent-taskboard', path: 'C:/projects/agent-taskboard', rootPath: 'C:/projects' }]));
   await page.route('**/api/runner/status', json({ projects: {} }));
+  await page.route('**/api/system/tunnel-supervision', json({ overall: 'not-configured', snapshot: null }));
   await page.route('**/api/runner/queue-starvation', json({
     active: false,
     waitingTaskCount: 0,
@@ -132,6 +133,70 @@ test.describe('Execution Hosts settings section', () => {
     await expect(page.getByTestId('remote-hosts-summary')).toContainText(String(count));
 
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section--mocked.png'), fullPage: false });
+  });
+
+  test('shows tunnel supervision and requires Windows UAC consent in guided setup', async ({ page }) => {
+    await page.unroute('**/api/system/tunnel-supervision');
+    await page.route('**/api/system/tunnel-supervision', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        overall: 'healthy',
+        snapshot: {
+          schemaVersion: 1,
+          generatedAt: '2026-08-25T09:30:00Z',
+          keeper: {
+            taskName: 'AgentRunner-TunnelKeeper',
+            registered: true,
+            state: 'Running',
+            lastStatus: 'healthy',
+            lastObservedAt: '2026-08-25T09:29:30Z',
+            lastMessage: 'Remote health probe succeeded.',
+          },
+          watchdog: {
+            taskName: 'AgentRunner-TunnelWatchdog',
+            registered: true,
+            state: 'Running',
+            lastProbeAt: '2026-08-25T09:29:45Z',
+            lastProbeResult: 'ok',
+            lastHealAt: '2026-08-25T08:15:00Z',
+            lastHealResult: 'succeeded',
+            consecutiveProbeFailures: 0,
+          },
+        },
+      }),
+    }));
+
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const supervision = page.getByTestId('tunnel-supervision-status');
+    await expect(supervision).toBeVisible();
+    await expect(supervision.getByTestId('tunnel-supervision-keeper')).toContainText('registered: yes');
+    await expect(supervision.getByTestId('tunnel-supervision-watchdog')).toContainText('last heal: succeeded');
+
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'agt-2664-tunnel-supervision-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: join(SHOT_DIR, 'agt-2664-tunnel-supervision-dark--mocked.png'), fullPage: false });
+
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expandHost(remote);
+    await remote.getByTestId('remote-host-action-setup').click();
+    await page.getByTestId('runner-setup-connection-mode').selectOption('tunnel');
+
+    const registration = page.getByTestId('runner-setup-tunnel-registration');
+    await expect(registration).toBeVisible();
+    await expect(registration).toContainText('One-time Windows administrator registration');
+    await expect(registration).toContainText('Windows shows a UAC prompt');
+    await expect(page.getByTestId('runner-setup-blocked')).toContainText(
+      'Confirm the one-time Windows administrator registration.',
+    );
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'agt-2664-tunnel-setup-uac-light--mocked.png'), fullPage: false });
+
+    await page.setViewportSize({ width: 720, height: 900 });
+    await setTheme(page, 'dark');
+    await expect(registration).toBeVisible();
+    await page.screenshot({ path: join(SHOT_DIR, 'agt-2664-tunnel-setup-uac-narrow-dark--mocked.png'), fullPage: false });
   });
 
   test('sorts table columns and restores sort plus row disclosure after reload', async ({ page }) => {

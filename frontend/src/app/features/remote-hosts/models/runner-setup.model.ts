@@ -11,6 +11,9 @@ export interface RunnerSetupConfig {
   clientId: string;
   gitRemote: string;
   gitPushRemote: string;
+  tunnelDevspacePath: string;
+  orchestratorPort: number;
+  tunnelRegistrationConsent: boolean;
 }
 
 /** Validate the operator-owned values before a provisioning task can be queued. */
@@ -29,6 +32,20 @@ export function runnerSetupIssues(config: RunnerSetupConfig): string[] {
   if (config.taskServerUrl.trim() && isLocalUrl(config.taskServerUrl) && config.connectionMode !== 'tunnel') {
     issues.push('A remote host cannot reach this loopback URL. Choose Tunnel or enter a central or LAN URL.');
   }
+  if (config.connectionMode === 'tunnel') {
+    if (!config.tunnelDevspacePath.trim()) {
+      issues.push('Windows devspace path is required for tunnel supervision.');
+    }
+    if (!Number.isInteger(config.orchestratorPort) || config.orchestratorPort < 1 || config.orchestratorPort > 65_535) {
+      issues.push('Local Task Server port must be between 1 and 65535.');
+    }
+    if (tunnelRemotePort(config.taskServerUrl) === null) {
+      issues.push('Tunnel Task Server URL must include the remote listener port.');
+    }
+    if (!config.tunnelRegistrationConsent) {
+      issues.push('Confirm the one-time Windows administrator registration.');
+    }
+  }
   return issues;
 }
 
@@ -41,6 +58,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
   const gitPushRemote = config.gitPushRemote.trim();
   const connectionMode = config.connectionMode || 'not selected';
   const healthUrl = `${taskServerUrl}/healthz`;
+  const remotePort = tunnelRemotePort(taskServerUrl);
   const controllerCommand = [
     'bash scripts/remote-runner-onboard.sh',
     `--host ${shellArg(sshTarget)}`,
@@ -51,12 +69,37 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
     `--git-remote ${shellArg(gitRemote)}`,
     `--git-push-remote ${shellArg(gitPushRemote)}`,
   ].join(' ');
+  const tunnelSetupCommand = connectionMode === 'tunnel' && remotePort !== null
+    ? [
+        'powershell.exe -NoProfile -ExecutionPolicy Bypass',
+        `-File ${powerShellArg('.\\deploy\\windows\\agent-runner-tunnel\\setup-tunnel-supervision.ps1')}`,
+        `-SshTarget ${powerShellArg(sshTarget)}`,
+        `-RemotePort ${remotePort}`,
+        `-OrchestratorPort ${config.orchestratorPort}`,
+        `-DevspacePath ${powerShellArg(config.tunnelDevspacePath.trim())}`,
+        '-Force',
+      ].join(' ')
+    : null;
+  const executionCommand = tunnelSetupCommand
+    ? `${tunnelSetupCommand} && ${controllerCommand}`
+    : controllerCommand;
+  const tunnelPrompt = tunnelSetupCommand
+    ? [
+        '0. Windows control-plane tunnel supervision (must run before the remote reachability gate)',
+        '- The operator explicitly consented in Studio to the one-time administrator registration. Run the product-owned command below on the Windows control-plane machine. Do not replace it with direct Scheduled Task commands.',
+        `- Run: \`${tunnelSetupCommand}\``,
+        '- Windows will show a UAC prompt. Wait for the operator to approve or decline it. Never attempt to bypass UAC or weaken the Scheduled Task principal.',
+        '- Require both keeper and watchdog to report `registered=True`. If elevation is declined or registration fails, stop and report the transcript path printed by the wrapper.',
+        '- The wrapper writes the supervision snapshot used by Workspace Settings -> Execution Hosts. Registration is complete only after that snapshot is written.',
+        '',
+      ]
+    : [];
 
   return {
     title: `Set up agent host on ${host.name}`,
     scope: `Set up the agent host daemon on ${host.name}`,
     reason: 'Provision the host idempotently, verify its Studio-provisioned provider environment, register its agent-host daemon, and prove one real remote task handoff.',
-    command: controllerCommand,
+    command: executionCommand,
     expectedDuration: '10 to 20 minutes',
     cliType: 'codex',
     context: {
@@ -67,13 +110,16 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
       clientId,
       gitRemote,
       gitPushRemote,
-      executionBoundary: 'Run the controller agent locally; perform every host operation through SSH.',
+      executionBoundary: tunnelSetupCommand
+        ? 'Register tunnel supervision on the Windows control plane after explicit UAC consent; perform every agent-host operation through SSH.'
+        : 'Run the controller agent locally; perform every host operation through SSH.',
     },
     prompt: [
-      `Set up remote host ${host.name}. Run every inspection and mutation through SSH target \`${sshTarget}\`; do not install or configure agent-host on the operator workstation.`,
+      `Set up remote host ${host.name}. ${tunnelSetupCommand ? 'The consented tunnel-supervision step runs on the Windows control plane; every agent-host inspection and mutation runs' : 'Run every inspection and mutation'} through SSH target \`${sshTarget}\`. Do not install or configure agent-host on the operator workstation.`,
       '',
       'Treat this as an idempotent remote-host process that is safe to repeat after a wipe. Report each phase in the task conversation and fail with a concrete recovery instruction instead of waiting silently.',
       '',
+      ...tunnelPrompt,
       '1. Reachability gate (must run first)',
       `- From the remote host, verify \`${healthUrl}\` with curl and the exact header \`X-Client-Id: ${clientId}\`.`,
       `- Connection mode is \`${connectionMode}\`. If it is \`tunnel\`, verify the tunnel on the remote host before curl.`,
@@ -117,4 +163,19 @@ function isHttpUrl(value: string): boolean {
 
 function shellArg(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function powerShellArg(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function tunnelRemotePort(value: string): number | null {
+  try {
+    const url = new URL(value.trim());
+    if (!url.port) return null;
+    const port = Number(url.port);
+    return Number.isInteger(port) && port >= 1 && port <= 65_535 ? port : null;
+  } catch {
+    return null;
+  }
 }

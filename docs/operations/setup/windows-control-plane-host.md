@@ -26,7 +26,17 @@ has to already know about.
 
 ## 1. Register the tunnel keeper and watchdog
 
-From the devspace checkout, in an ordinary (non-elevated) PowerShell session:
+The primary path is **Workspace Settings -> Execution Hosts -> Set up agent
+host**. Choose **Reverse tunnel**, enter the Windows devspace path and local
+Task Server port, then acknowledge the one-time administrator step. The visible
+setup task runs the product-owned wrapper on the Windows control plane before
+it starts Linux host onboarding through SSH. Windows still presents its own UAC
+prompt, so the operator can approve or decline the elevation at the operating
+system boundary. Setup stops before host installation if registration is
+declined or either Scheduled Task is not registered.
+
+The command below is the manual repeat and recovery path. Run it from the
+devspace checkout in an ordinary (non-elevated) PowerShell session:
 
 ```powershell
 Set-Location C:\Projects\agent-studio
@@ -58,9 +68,10 @@ surface:
    privileged operation; the tasks themselves run unattended afterward with no
    further elevation).
 2. It asks for explicit confirmation, then requests elevation with a UAC
-   prompt (`Start-Process -Verb RunAs`). Pass `-Force` to skip only the
-   script's own confirmation step on a re-run; the OS elevation prompt itself
-   is never skipped.
+   prompt (`Start-Process -Verb RunAs`). The Studio flow records that explicit
+   consent before it queues the task and therefore invokes the wrapper with
+   `-Force`; manual calls omit `-Force` and prompt in the terminal. The OS
+   elevation prompt itself is never skipped.
 3. The elevated child registers both Scheduled Tasks, then the script prints
    and persists a combined status snapshot - registered, running, and last
    heal - to
@@ -108,10 +119,11 @@ panel is hidden entirely on a deployment where the file has never been
 written - most deployments, which do not use the interim Windows tunnel at
 all.
 
-The backend never triggers elevation or registration itself; it only reads
-the file the script already writes. Registration stays an explicit,
-consent-gated operator action run from a terminal, not something a web
-request can trigger silently on a Windows admin machine.
+The backend status endpoint never triggers elevation or registration; it only
+reads the file the script already writes. Registration is owned by the visible
+setup task after the dialog records consent, and Windows asks for UAC approval
+before any Scheduled Task changes. A status read or ordinary web request cannot
+silently trigger elevation on the control-plane machine.
 
 ## Is this still the right topology?
 

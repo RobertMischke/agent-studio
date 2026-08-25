@@ -64,11 +64,14 @@ Host agent-runner
 ```
 
 Use the repository-owned functional keeper instead of a bare `ssh -N` loop.
-The guided product entry point is
+The primary guided entry point is **Workspace Settings -> Execution Hosts ->
+Set up agent host** with **Reverse tunnel** selected. It records the operator's
+one-time administrator consent, then the visible setup task runs
 [`setup-tunnel-supervision.ps1`](../../../deploy/windows/agent-runner-tunnel/setup-tunnel-supervision.ps1) -
-see [windows-control-plane-host.md](./windows-control-plane-host.md) for the
-full walkthrough, including the elevation-consent step and the resulting
-Studio admin-UI visibility:
+before remote host onboarding. Windows still presents the UAC prompt. See
+[windows-control-plane-host.md](./windows-control-plane-host.md) for the full
+walkthrough, including failure recovery and the resulting Studio admin-UI
+visibility. The direct command remains the manual repeat path:
 
 ```powershell
 Set-Location C:\Projects\agent-studio

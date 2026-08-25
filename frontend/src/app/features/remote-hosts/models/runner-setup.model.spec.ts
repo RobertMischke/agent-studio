@@ -24,12 +24,16 @@ const VALID: RunnerSetupConfig = {
   clientId: 'runner-client-01',
   gitRemote: 'https://github.com/example/agent-studio.git',
   gitPushRemote: 'git@github.com:example/agent-studio.git',
+  tunnelDevspacePath: '',
+  orchestratorPort: 5031,
+  tunnelRegistrationConsent: false,
 };
 
 describe('runner setup model', () => {
   it('requires every operator-owned connection value', () => {
     expect(runnerSetupIssues({
       sshTarget: '', taskServerUrl: '', connectionMode: '', clientId: '', gitRemote: '', gitPushRemote: '',
+      tunnelDevspacePath: '', orchestratorPort: 5031, tunnelRegistrationConsent: false,
     })).toEqual([
       'SSH target is required.',
       'Task Server URL is required.',
@@ -45,7 +49,12 @@ describe('runner setup model', () => {
     expect(runnerSetupIssues(loopback)).toContain(
       'A remote host cannot reach this loopback URL. Choose Tunnel or enter a central or LAN URL.',
     );
-    expect(runnerSetupIssues({ ...loopback, connectionMode: 'tunnel' })).toEqual([]);
+    expect(runnerSetupIssues({
+      ...loopback,
+      connectionMode: 'tunnel',
+      tunnelDevspacePath: 'C:\\Projects\\agent-taskboard-devspace',
+      tunnelRegistrationConsent: true,
+    })).toEqual([]);
   });
 
   it('builds the exact idempotent remote setup and protected provider-auth contract', () => {
@@ -79,5 +88,37 @@ describe('runner setup model', () => {
     expect(request.prompt).not.toContain('codex login --device-auth');
     expect(request.prompt).not.toContain('claude auth login');
     expect(request.prompt).toContain('one real smoke task');
+  });
+
+  it('makes consented keeper and watchdog registration part of tunnel setup', () => {
+    const request = buildRunnerSetupRequest(HOST, {
+      ...VALID,
+      taskServerUrl: 'http://127.0.0.1:15031',
+      connectionMode: 'tunnel',
+      tunnelDevspacePath: 'C:\\Projects\\agent-taskboard-devspace',
+      tunnelRegistrationConsent: true,
+    });
+
+    expect(request.command).toContain('setup-tunnel-supervision.ps1');
+    expect(request.command).toContain('-RemotePort 15031');
+    expect(request.command).toContain('-OrchestratorPort 5031');
+    expect(request.command).toContain("-DevspacePath 'C:\\Projects\\agent-taskboard-devspace'");
+    expect(request.command).toContain('-Force && bash scripts/remote-runner-onboard.sh');
+    expect(request.prompt).toContain('Windows control-plane tunnel supervision');
+    expect(request.prompt).toContain('Windows will show a UAC prompt');
+    expect(request.prompt).toContain('both keeper and watchdog to report `registered=True`');
+    expect(request.context?.['executionBoundary']).toContain('explicit UAC consent');
+  });
+
+  it('requires tunnel paths, an explicit listener port, and UAC consent', () => {
+    expect(runnerSetupIssues({
+      ...VALID,
+      taskServerUrl: 'http://127.0.0.1',
+      connectionMode: 'tunnel',
+    })).toEqual([
+      'Windows devspace path is required for tunnel supervision.',
+      'Tunnel Task Server URL must include the remote listener port.',
+      'Confirm the one-time Windows administrator registration.',
+    ]);
   });
 });

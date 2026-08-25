@@ -56,7 +56,11 @@ describe('RunnerSetupDialogComponent', () => {
     fixture.detectChanges();
     expect(component.taskServerUrl()).toBe('http://127.0.0.1:15031');
     expect(component.ready()).toBe(false);
+    expect(el.querySelector('[data-testid="runner-setup-tunnel-registration"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="visible-cli-task-card"]')).toBeNull();
+
+    component.tunnelDevspacePath.set('C:\\Projects\\agent-taskboard-devspace');
+    component.tunnelRegistrationConsent.set(true);
 
     const secret = 'sk-ant-oat01-provider-auth-fixture';
     component.providerAuthSecret.set(secret);
@@ -86,6 +90,8 @@ describe('RunnerSetupDialogComponent', () => {
     expect(component.ready()).toBe(true);
     expect(el.querySelector('[data-testid="runner-setup-loopback-block"]')).toBeNull();
     expect(el.querySelector('[data-testid="visible-cli-task-card"]')).toBeTruthy();
+    expect(component.request().command).toContain('setup-tunnel-supervision.ps1');
+    expect(component.request().prompt).toContain('Windows will show a UAC prompt');
     expect(component.request().prompt).toContain('/etc/agent-runner/provider-auth.env');
     expect(component.request().prompt).not.toContain(secret);
   });
