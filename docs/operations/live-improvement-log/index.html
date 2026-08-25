@@ -158,6 +158,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done)</td>
   <td>Dedup against open AGT/QS/TE cards: AGT-2675 (in flight) owns the popover stacking/scroll class; 10 findings are new-candidates (price-catalog display-name resolution, popover cost honesty, Delivered-lane header compaction, cycle-time task-open feedback, &hellip;) &mdash; recorded in the sweep page, no cards cut. AGT-2653's skipped integration is orchestrator work (gate fix + requeue); the two decision-pending dossiers stay with the operator.</td>
 </tr>
+<tr>
+  <td class="meta">08-25 13:0x</td>
+  <td><strong>Flaky-test hunt finished - all six "environmental" failures were PRODUCT bugs on Windows</strong> (14 commits): git MAX_PATH kills rev-list on long refs (the exact mechanism behind AGT-2220's emptied review subject - fixed with -- terminators + core.longpaths injection); SQLite pooling held chat/.index.db open so BACKUPS silently failed on Windows (Pooling=false + exclusivity regression test); AtomicJsonFileWriter used File.Replace whose two-rename window dropped ~20 FileNotFound per write under readers (single atomic Move + retry, measured 0); bash unresolvable from Git-cmd-only PATH (shared BashExecutable resolver); hermetic review env lacked SystemRoot/ComSpec; review slot admission required /proc/loadavg and stayed CLOSED FOREVER on Windows hosts (telemetry seam + injected samples). 7 additional red MachineBound e2e tests fixed. Full suite honest: 5547/5576, residual failures are pre-existing wall-clock/TTL-sensitive tests (flagged, not touched - overlap with other agents' cache work).</td>
+  <td class="v action">operator-action (done)</td>
+  <td>Product fixes ride the next train. Follow-up candidates for the operator: injectable clocks for the TTL caches (5 wall-clock tests), long-path-aware temp sweep (~144 stuck atp-runner-e2e-* dirs).</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
