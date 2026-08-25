@@ -344,6 +344,7 @@ public sealed class VerifyCommandPlannerTests : IDisposable
         Assert.Equal("frontend", scope.WorkingSubdir);
         Assert.Equal(["package-lock.json"], scope.Lockfiles);
         Assert.Equal(profile.PreserveGlobs, plan.PreserveGlobs);
+        Assert.Equal(BuildProfileValidationFingerprint.Create(profile), plan.BuildProfileFingerprint);
     }
 
     [Fact]

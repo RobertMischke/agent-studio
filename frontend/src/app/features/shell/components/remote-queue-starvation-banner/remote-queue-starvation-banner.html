@@ -4,7 +4,12 @@
     layout="banner"
     ariaLive="polite"
     testid="remote-queue-starvation-banner">
-    <strong data-testid="notice-bar-headline"><span class="notification__number">{{ visibleItems().length }}</span> {{ visibleItems().length === 1 ? 'task is' : 'tasks are' }} waiting despite free Runner capacity.</strong>
-    <span class="notification__detail" data-testid="notice-bar-detail"><span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'slot is' : 'slots are' }} available. @if (hasRejections()) { Open a task to inspect its latest rejection. } @else { No successful claim has been recorded for at least <span class="notification__number">{{ thresholdMinutes() }}</span> minutes. }</span>
+    @if (buildProfileGateBlockedCount() > 0) {
+      <strong data-testid="notice-bar-headline"><span class="notification__number">{{ buildProfileGateBlockedCount() }}</span> ready {{ buildProfileGateBlockedCount() === 1 ? 'card' : 'cards' }} not claimable: build profile not validated.</strong>
+      <span class="notification__detail" data-testid="notice-bar-detail">Revalidate the project build profile. @if (availableSlots() > 0) { <span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'Runner slot is' : 'Runner slots are' }} available. } @else { Runner capacity cannot open this gate. }</span>
+    } @else {
+      <strong data-testid="notice-bar-headline"><span class="notification__number">{{ visibleItems().length }}</span> {{ visibleItems().length === 1 ? 'task is' : 'tasks are' }} waiting despite free Runner capacity.</strong>
+      <span class="notification__detail" data-testid="notice-bar-detail"><span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'slot is' : 'slots are' }} available. @if (hasRejections()) { Open a task to inspect its latest rejection. } @else { No successful claim has been recorded for at least <span class="notification__number">{{ thresholdMinutes() }}</span> minutes. }</span>
+    }
   </app-notification>
 }

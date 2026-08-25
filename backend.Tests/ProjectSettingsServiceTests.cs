@@ -708,7 +708,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public void ReDeclaringBuildProfile_ResetsAnyPriorGreenValidation()
+    public void EditingValidatedBuildProfile_LeavesThreeRunRevalidationGrace()
     {
         var svc = Build();
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
@@ -717,7 +717,52 @@ public sealed class ProjectSettingsServiceTests : IDisposable
 
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
 
-        Assert.Equal(BuildProfileStatuses.Declared, svc.Get("runbook").BuildProfile!.Status);
+        var edited = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, edited.Status);
+        Assert.True(edited.RevalidationPending);
+        Assert.Equal(BuildProfile.DefaultRevalidationGraceRuns, edited.RevalidationGraceRunsRemaining);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(edited));
+    }
+
+    [Fact]
+    public void RevalidationGrace_ClosesAfterThreeActualRunAdmissions()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
+        svc.MarkBuildProfileValidated("runbook");
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
+
+        Assert.Equal(2, svc.ConsumeBuildProfileRevalidationGraceRun("runbook"));
+        svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "pnpm install" });
+        Assert.Equal(2, svc.Get("runbook").BuildProfile!.RevalidationGraceRunsRemaining);
+        Assert.Equal(1, svc.ConsumeBuildProfileRevalidationGraceRun("runbook"));
+        Assert.Equal(0, svc.ConsumeBuildProfileRevalidationGraceRun("runbook"));
+
+        var exhausted = svc.Get("runbook").BuildProfile!;
+        Assert.True(exhausted.RevalidationPending);
+        Assert.False(BuildProfileGate.AllowsAutoPickup(exhausted));
+        Assert.Null(svc.ConsumeBuildProfileRevalidationGraceRun("runbook"));
+    }
+
+    [Fact]
+    public void GreenRemoteReview_ValidatesOnlyTheExactProfileFingerprint()
+    {
+        var svc = Build();
+        svc.SetBuildProfile("runbook", new BuildProfile { BuildCmds = ["dotnet build"] });
+        var fingerprint = BuildProfileValidationFingerprint.Create(svc.Get("runbook").BuildProfile)!;
+
+        Assert.False(svc.MarkBuildProfileRemotelyValidated(
+            "runbook", "stale-fingerprint", "review-old", "review-runner", "abc123", DateTime.UtcNow));
+        Assert.True(svc.MarkBuildProfileRemotelyValidated(
+            "runbook", fingerprint, "review-current", "review-runner", "def456", DateTime.UtcNow));
+
+        var validated = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, validated.Status);
+        Assert.False(validated.RevalidationPending);
+        Assert.Equal("review-current", validated.LastRemoteValidationAttemptId);
+        Assert.Equal("review-runner", validated.LastRemoteValidationRunnerId);
+        Assert.Equal("def456", validated.LastRemoteValidationResultSha);
+        Assert.NotNull(validated.LastRemoteValidationAt);
     }
 
     [Fact]

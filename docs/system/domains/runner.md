@@ -949,6 +949,24 @@ detail header render it inline. Successful dispatch clears it, and a later lane
 generation cannot inherit it. Missing repository registration is also projected
 as a failed project preflight in Execution Hosts before a Runner polls.
 
+The build-profile gate is evaluated inside the remote candidate loop, after a
+Ready card is known to be routed to that Runner. A closed gate records the
+stable `build-profile-gate` refusal on every affected current Ready generation
+instead of filtering the card before rejection recording. The starvation
+snapshot includes these cards immediately, even before the age threshold, and
+publishes a separate build-profile-blocked count for the workspace and
+Execution Hosts banner.
+
+Build-profile validation runs only in the project's registered source checkout,
+never in its task-store or Review workspace. A profile fingerprint is frozen in
+each immutable Remote Review plan. A passing remote report validates the
+current profile only when that fingerprint still matches, and records the
+ReviewAttempt, executor, result SHA, and timestamp as the last green remote
+verification. Editing a previously validated profile starts a three-run grace
+window with revalidation pending. Successful coding claims consume the window;
+a matching green local or remote validation clears it, while exhaustion closes
+the gate loudly.
+
 `RemoteQueueStarvationWatchdog` independently detects remotely routed Ready
 cards while a live Runner reports free slots. A durable claim rejection is
 acute evidence immediately. Without a rejection, a card must be older than

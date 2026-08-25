@@ -54,7 +54,8 @@ public sealed record ReviewPlanDto(
     bool RequireDifferentHostFailureDomain = false,
     string? IntegrationRef = null,
     IReadOnlyList<ReviewPreparationCommandDto>? Preparation = null,
-    IReadOnlyList<string>? PreserveGlobs = null);
+    IReadOnlyList<string>? PreserveGlobs = null,
+    string? BuildProfileFingerprint = null);
 
 public sealed record CreateReviewSubjectRequest(
     string TaskId,

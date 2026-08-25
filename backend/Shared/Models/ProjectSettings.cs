@@ -801,9 +801,10 @@ public static class IntegrationStrategies
 
 /// <summary>
 /// Onboarding lifecycle of a project's <see cref="BuildProfile"/> (Slice P /
-/// ASS-1663). A project only becomes <see cref="PipelineReady"/> after a green
-/// validation dry-run (fresh worktree -&gt; install -&gt; build). Until then the
-/// runner refuses auto-pickup (<see cref="AgentStudio.Runner.BuildProfileGate"/>).
+/// ASS-1663). A project first becomes <see cref="PipelineReady"/> after a green
+/// local validation or matching green remote Review. A validated profile edit
+/// keeps a bounded revalidation grace window; otherwise the runner refuses
+/// auto-pickup (<see cref="AgentStudio.Runner.BuildProfileGate"/>).
 /// A project that has never declared a profile carries no profile at all (null)
 /// and keeps the legacy "pickup allowed" behaviour, so existing projects are
 /// untouched.
@@ -850,13 +851,18 @@ public static class BuildProfileStatuses
 ///
 /// <para>
 /// A project with no profile (null) behaves exactly as today. Once a profile is
-/// declared it gates auto-pickup: the runner only picks the project up after a
-/// green validation dry-run flips <see cref="Status"/> to
-/// <see cref="BuildProfileStatuses.PipelineReady"/>.
+/// declared it gates auto-pickup: initial pickup requires green validation.
+/// Later edits retain a bounded grace window while matching proof is pending.
 /// </para>
 /// </summary>
 public record BuildProfile
 {
+    /// <summary>
+    /// Maximum number of coding runs admitted after an edit to a previously
+    /// validated profile while an exact-profile revalidation is still pending.
+    /// </summary>
+    public const int DefaultRevalidationGraceRuns = 3;
+
     /// <summary>
     /// Declared stack id (free-form, e.g. <c>node</c>, <c>dotnet</c>,
     /// <c>node+dotnet</c>). Informational - drives onboarding defaults and the
@@ -915,6 +921,33 @@ public record BuildProfile
 
     /// <summary>Short reason from the last failed validation dry-run, or null.</summary>
     public string? LastValidationError { get; init; }
+
+    /// <summary>
+    /// Stable fingerprint of the profile fields that affect preparation and
+    /// verification. Remote proof is accepted only for this exact value.
+    /// </summary>
+    public string? ValidationFingerprint { get; init; }
+
+    /// <summary>
+    /// True when the current profile differs from the last validated profile.
+    /// A bounded grace window keeps pickup open while fresh proof is produced.
+    /// </summary>
+    public bool RevalidationPending { get; init; }
+
+    /// <summary>Number of coding-run admissions left in the revalidation grace window.</summary>
+    public int RevalidationGraceRunsRemaining { get; init; }
+
+    /// <summary>UTC instant of the last green verification executed by a remote Review Executor.</summary>
+    public DateTime? LastRemoteValidationAt { get; init; }
+
+    /// <summary>ReviewAttempt that last proved this exact profile on a remote executor.</summary>
+    public string? LastRemoteValidationAttemptId { get; init; }
+
+    /// <summary>Remote executor identity that produced the last green profile proof.</summary>
+    public string? LastRemoteValidationRunnerId { get; init; }
+
+    /// <summary>Immutable result SHA covered by the last green remote profile proof.</summary>
+    public string? LastRemoteValidationResultSha { get; init; }
 }
 
 /// <summary>Stable test levels used in settings, evidence, and gate logs.</summary>
