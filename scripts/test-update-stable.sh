@@ -15,6 +15,8 @@ devspace=$test_root/devspace
 fake_bin=$test_root/bin
 stop_marker=$test_root/stop-ran
 start_marker=$test_root/start-ran
+task_server_start_marker=$test_root/task-server-start-ran
+task_server_probe_marker=$test_root/task-server-probe-ran
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
@@ -79,6 +81,7 @@ EOF
 cat > "$devspace/stop-stable.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
+rm -f "$ATP_TEST_START_MARKER"
 : > "$ATP_TEST_STOP_MARKER"
 EOF
 cat > "$devspace/start-stable.sh" <<'EOF'
@@ -86,12 +89,26 @@ cat > "$devspace/start-stable.sh" <<'EOF'
 set -eu
 : > "$ATP_TEST_START_MARKER"
 EOF
+cat > "$devspace/start-task-server.sh" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+test ! -e "$ATP_TEST_START_MARKER"
+: > "$ATP_TEST_TASK_SERVER_START_MARKER"
+EOF
+cat > "$devspace/probe-task-server.sh" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+test -e "$ATP_TEST_TASK_SERVER_START_MARKER"
+test ! -e "$ATP_TEST_START_MARKER"
+: > "$ATP_TEST_TASK_SERVER_PROBE_MARKER"
+EOF
 cat > "$fake_bin/npm" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 printf '%s\n' patched > "$ATP_TEST_PACKAGE_FILE"
 EOF
-chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$fake_bin/npm"
+chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" \
+  "$devspace/start-task-server.sh" "$devspace/probe-task-server.sh" "$fake_bin/npm"
 
 run_update() {
   env \
@@ -99,10 +116,14 @@ run_update() {
     ATP_STABLE_CHECKOUT="$stable_checkout" \
     ATP_STOP_SCRIPT="$devspace/stop-stable.sh" \
     ATP_START_SCRIPT="$devspace/start-stable.sh" \
+    ATP_TASK_SERVER_START_SCRIPT="$devspace/start-task-server.sh" \
+    ATP_TASK_SERVER_BOOT_PROBE_SCRIPT="$devspace/probe-task-server.sh" \
     ATP_BOOT_PROBE_SCRIPT="$probe" \
     ATP_BOOT_PROBE_SETTLE_MS=0 \
     ATP_TEST_STOP_MARKER="$stop_marker" \
     ATP_TEST_START_MARKER="$start_marker" \
+    ATP_TEST_TASK_SERVER_START_MARKER="$task_server_start_marker" \
+    ATP_TEST_TASK_SERVER_PROBE_MARKER="$task_server_probe_marker" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
     ATP_TEST_STALE_CACHE="$stable_checkout/frontend/.angular/cache/deps.js" \
     PATH="$fake_bin:$PATH" \
@@ -118,10 +139,13 @@ git -C "$source_checkout" push --quiet origin main
 output=$(run_update)
 test -f "$stop_marker"
 test -f "$start_marker"
+test -f "$task_server_start_marker"
+test -f "$task_server_probe_marker"
 test ! -e "$stable_checkout/frontend/.angular/cache"
 grep -q '^patched$' "$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs"
 printf '%s' "$output" | grep -q 'Invalidated the Angular/Vite optimizer cache'
 printf '%s' "$output" | grep -q 'Boot completed without page errors'
+printf '%s' "$output" | grep -q 'Starting supervised Task Server before Stable API'
 printf '%s' "$output" | grep -q 'Stable started and healthy'
 
 # A separate release injects an application boot crash. An open port and a
@@ -142,5 +166,16 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
+
+# A rollback may leave Stable pinned at a detached release. The updater keeps
+# it detached during verification and reattaches it to main only after every
+# control-plane and browser probe succeeds.
+git -C "$stable_checkout" switch --quiet --detach
+printf '%s\n' 'healthy release after rollback pin' > "$source_checkout/release.txt"
+git -C "$source_checkout" commit --quiet -am 'healthy release after rollback pin'
+git -C "$source_checkout" push --quiet origin main
+detached_output=$(run_update)
+test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
+printf '%s' "$detached_output" | grep -q 'reattaching Stable to main'
 
 printf '%s\n' 'update-stable tests passed'

@@ -17,6 +17,10 @@
 #   ATP_BOOT_PROBE_SCRIPT        browser probe implementation
 #   ATP_BOOT_PROBE_TIMEOUT_MS    total browser probe deadline
 #   ATP_BOOT_PROBE_SETTLE_MS     time to collect deferred page errors
+#   ATP_TASK_SERVER_START_SCRIPT supervised Task Server start/ensure helper
+#   ATP_TASK_SERVER_BOOT_PROBE_SCRIPT Task Server readiness probe
+#   ATP_TASK_SERVER_URL          standalone Task Server origin
+#   ATP_TASK_SERVER_PROBE_TIMEOUT_MS Task Server readiness deadline
 
 set -Eeuo pipefail
 
@@ -37,6 +41,8 @@ start_script=${ATP_START_SCRIPT:-$devspace_dir/start-stable.sh}
 frontend_url=${ATP_STABLE_FRONTEND_URL:-http://127.0.0.1:4011}
 probe_timeout_ms=${ATP_BOOT_PROBE_TIMEOUT_MS:-180000}
 probe_settle_ms=${ATP_BOOT_PROBE_SETTLE_MS:-2000}
+task_server_url=${ATP_TASK_SERVER_URL:-http://127.0.0.1:5071}
+task_server_probe_timeout_ms=${ATP_TASK_SERVER_PROBE_TIMEOUT_MS:-60000}
 
 log() {
   printf '[update-stable] %s\n' "$*"
@@ -54,9 +60,17 @@ stable_checkout=$(cd "$stable_checkout" && pwd)
 [ -x "$start_script" ] || fail "Stable start script is not executable: $start_script"
 
 probe_script=${ATP_BOOT_PROBE_SCRIPT:-$stable_checkout/scripts/stable-frontend-boot-probe.mjs}
+task_server_probe_script=${ATP_TASK_SERVER_BOOT_PROBE_SCRIPT:-$stable_checkout/scripts/task-server-boot-probe.mjs}
+task_server_start_script=${ATP_TASK_SERVER_START_SCRIPT:-$stable_checkout/deploy/windows/task-server/ensure-task-server.ps1}
 
 if [ -n "$(git -C "$stable_checkout" status --porcelain)" ]; then
   fail "Stable checkout has local changes; refusing to update."
+fi
+
+was_detached=0
+if ! git -C "$stable_checkout" symbolic-ref --quiet HEAD >/dev/null; then
+  was_detached=1
+  log "Stable is pinned at a detached checkout; it will be reattached to $stable_branch only after all boot probes pass."
 fi
 
 head_before=$(git -C "$stable_checkout" rev-parse HEAD)
@@ -64,28 +78,29 @@ log "Fetching $stable_remote/$stable_branch"
 git -C "$stable_checkout" fetch --quiet "$stable_remote" "$stable_branch"
 target=$(git -C "$stable_checkout" rev-parse "$stable_remote/$stable_branch")
 
+update_needed=1
 if [ "$head_before" = "$target" ]; then
-  log "Stable already matches $stable_remote/$stable_branch; nothing to update."
-  exit 0
-fi
-
-if ! git -C "$stable_checkout" merge-base --is-ancestor "$head_before" "$target"; then
+  update_needed=0
+  log "Stable already matches $stable_remote/$stable_branch; supervising the existing release."
+elif ! git -C "$stable_checkout" merge-base --is-ancestor "$head_before" "$target"; then
   fail "Stable cannot fast-forward from $head_before to $target."
 fi
 
 install_frontend=0
-if ! git -C "$stable_checkout" diff --quiet "$head_before" "$target" -- \
+if [ "$update_needed" -eq 1 ] && ! git -C "$stable_checkout" diff --quiet "$head_before" "$target" -- \
   frontend/package.json \
   frontend/package-lock.json \
   'frontend/scripts/patch-coding-agent-chat-*.mjs'; then
   install_frontend=1
 fi
 
-log "Stopping Stable"
-"$stop_script"
+if [ "$update_needed" -eq 1 ]; then
+  log "Stopping Stable"
+  "$stop_script"
 
-log "Fast-forwarding Stable to $target"
-git -C "$stable_checkout" merge --quiet --ff-only "$target"
+  log "Fast-forwarding Stable to $target"
+  git -C "$stable_checkout" merge --quiet --ff-only "$target"
+fi
 
 if [ "$install_frontend" -eq 1 ]; then
   log "Installing frontend dependencies"
@@ -109,6 +124,36 @@ else
 fi
 
 [ -f "$probe_script" ] || fail "Frontend boot probe not found: $probe_script"
+[ -f "$task_server_probe_script" ] || fail "Task Server boot probe not found: $task_server_probe_script"
+
+log "Starting supervised Task Server before Stable API"
+case "$task_server_start_script" in
+  *.ps1)
+    command -v powershell.exe >/dev/null 2>&1 \
+      || fail "powershell.exe is required to start the Windows Task Server service."
+    powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+      -File "$task_server_start_script"
+    ;;
+  *)
+    [ -x "$task_server_start_script" ] \
+      || fail "Task Server start script is not executable: $task_server_start_script"
+    "$task_server_start_script"
+    ;;
+esac
+
+log "Waiting for Task Server authority at $task_server_url"
+case "$task_server_probe_script" in
+  *.mjs|*.js)
+    node "$task_server_probe_script" \
+      --url "$task_server_url" \
+      --timeout-ms "$task_server_probe_timeout_ms"
+    ;;
+  *)
+    [ -x "$task_server_probe_script" ] \
+      || fail "Task Server boot probe is not executable: $task_server_probe_script"
+    "$task_server_probe_script" "$task_server_url" "$task_server_probe_timeout_ms"
+    ;;
+esac
 
 log "Starting Stable"
 DETACH=1 "$start_script"
@@ -119,5 +164,10 @@ node "$probe_script" \
   --url "$frontend_url" \
   --timeout-ms "$probe_timeout_ms" \
   --settle-ms "$probe_settle_ms"
+
+if [ "$was_detached" -eq 1 ]; then
+  log "Boot probes passed; reattaching Stable to $stable_branch"
+  git -C "$stable_checkout" switch --quiet -C "$stable_branch" --track "$stable_remote/$stable_branch"
+fi
 
 log "Stable started and healthy at $target"

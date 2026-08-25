@@ -448,6 +448,76 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Legacy_migration_imports_current_task_layout_and_fails_closed_over_attempt_authority()
+    {
+        using var data = new TempDirectory();
+        using var legacy = new TempDirectory();
+        var activeTaskDirectory = Path.Combine(legacy.Path, "projects", "PROJ-1", "tasks", "000", "AGT-11");
+        var reviewTaskDirectory = Path.Combine(legacy.Path, "projects", "PROJ-1", "tasks", "000", "AGT-12");
+        Directory.CreateDirectory(activeTaskDirectory);
+        Directory.CreateDirectory(reviewTaskDirectory);
+        Directory.CreateDirectory(Path.Combine(legacy.Path, ".metadata"));
+        await File.WriteAllTextAsync(Path.Combine(activeTaskDirectory, "task.json"), """
+            {"id":"active-task","key":"AGT-11","title":"Active migrated task","state":"3-progress","createdAt":"2026-08-16T18:00:00Z"}
+            """);
+        await File.WriteAllTextAsync(Path.Combine(reviewTaskDirectory, "task.json"), """
+            {"id":"review-task","key":"AGT-12","title":"Review migrated task","state":"4-auto-review","createdAt":"2026-08-16T17:00:00Z"}
+            """);
+        await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"), """
+            {
+              "schemaVersion": 4,
+              "authorityEpoch": 9,
+              "lastFenceByTask": {"AGT-11": 41, "AGT-12": 42},
+              "runAttempts": [
+                {
+                  "attemptId":"run-active", "taskKey":"AGT-11", "repositoryId":"repo-1",
+                  "state":1, "lastFence":41, "authorityEpoch":9, "createdAt":"2026-08-16T18:01:00Z",
+                  "lease":{"leaseId":"lease-active","fence":41,"authorityEpoch":9,"executorId":"runner-1","hostId":"host-1","leaseInstanceId":"instance-1","acquiredAt":"2026-08-16T18:01:00Z","expiresAt":"2026-08-16T18:03:00Z"}
+                },
+                {
+                  "attemptId":"run-completed", "taskKey":"AGT-12", "repositoryId":"repo-1",
+                  "state":2, "lastFence":40, "authorityEpoch":9, "createdAt":"2026-08-16T17:01:00Z",
+                  "terminalAt":"2026-08-16T17:10:00Z", "resultSha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+              ],
+              "reviewAttempts": [
+                {
+                  "attemptId":"review-active", "taskKey":"AGT-12", "repositoryId":"repo-1", "sourceRunAttemptId":"run-completed",
+                  "state":1, "lastFence":42, "authorityEpoch":9, "createdAt":"2026-08-16T17:11:00Z",
+                  "subject":{"subjectId":"subject-1","repositoryId":"repo-1","expectedResultSha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","sourceRunAttemptId":"run-completed","reviewPolicyHash":"policy-1"},
+                  "lease":{"leaseId":"review-lease-active","fence":42,"authorityEpoch":9,"executorId":"reviewer-1","hostId":"review-host-1","leaseInstanceId":"review-instance-1","acquiredAt":"2026-08-16T17:11:00Z","expiresAt":"2026-08-16T17:13:00Z"}
+                }
+              ]
+            }
+            """);
+
+        var store = Store(data.Path);
+        await store.InitializeAsync();
+        var migration = new LegacyMigrationService(store);
+        var request = new LegacyMigrationRequest(legacy.Path, "Production", true);
+        var inventory = await migration.InventoryAsync(request, default);
+        Assert.Equal(2, inventory.Tasks);
+        Assert.Equal(2, inventory.Runs);
+        Assert.Equal(1, inventory.Leases);
+        Assert.Equal(1, inventory.ReviewAttempts);
+        Assert.Equal(9, inventory.AuthorityEpoch);
+
+        await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "dry-run cutover"), "operator", default);
+        var result = await migration.ImportAsync(request with { ExpectedMigrationId = inventory.MigrationId }, "operator", default);
+        Assert.Equal(2, result.Runs);
+        Assert.Equal(1, result.ReviewAttempts);
+
+        await using var connection = new SqliteConnection($"Data Source={store.DatabasePath};Pooling=False");
+        await connection.OpenAsync();
+        Assert.Equal(2L, await ScalarAsync(connection, "SELECT count(*) FROM runs;"));
+        Assert.Equal("process-unknown", await ScalarAsync(connection, "SELECT status FROM leases WHERE lease_id = 'lease-active';"));
+        Assert.Equal("process-unknown", await ScalarAsync(connection, "SELECT status FROM review_attempts WHERE id = 'review-active';"));
+        Assert.Equal(41L, await ScalarAsync(connection, "SELECT last_fence FROM fence_counters WHERE task_id = (SELECT id FROM tasks WHERE task_key = 'AGT-11');"));
+        Assert.Equal(42L, await ScalarAsync(connection, "SELECT last_fence FROM review_fence_counters WHERE subject_id = 'subject-1';"));
+        Assert.Equal("9", await ScalarAsync(connection, "SELECT value FROM meta WHERE key = 'legacy_authority_epoch';"));
+    }
+
+    [Fact]
     public async Task Legacy_import_rejects_a_source_that_changed_after_inventory()
     {
         using var data = new TempDirectory();
@@ -1377,6 +1447,13 @@ public sealed class TaskServerStoreTests
         using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         Assert.True(stream.CanRead);
         Assert.True(stream.CanWrite);
+    }
+
+    private static async Task<object?> ScalarAsync(SqliteConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return await command.ExecuteScalarAsync();
     }
 
     private static async Task<(WorkspaceDto Workspace, ProjectDto Project, TaskDto Task)> SeedReadyTaskAsync(TaskServerStore store)
