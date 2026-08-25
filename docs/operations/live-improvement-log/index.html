@@ -146,6 +146,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v candidate">new-candidate &rarr; card cut</td>
   <td>AGT-2680: limit-aware runner behavior (detect account-level limits, pause claude claims with quotaWait + banner instead of escalation storm, auto-resume at reset). Related but separate: AGT-2679 (probe drift). Flaky-test agent resumed with fresh brief.</td>
 </tr>
+<tr>
+  <td class="meta">08-25 11:3x</td>
+  <td><strong>Zero-claims morning solved:</strong> the night's limit storm tripped the pickup circuit breaker - Agent Studio and Quality Studio were mode=paused with an EMPTY halt reason; nothing surfaced it, and it did not self-resume after the limit reset. Also found: the previous api.sh start had failed its build against a locked old process (45-line log, MSB3027) while the stale process kept serving. Healed: clean process swap (verified build), modes back to auto-continuous - 14 claims in 90 s on the GPT fleet.</td>
+  <td class="v covered">covered-by (extended)</td>
+  <td>AGT-2680 extended: breaker pauses must carry visible reasons and auto-resume on provider-limit recovery; AGT-2678 (already integrated) covers the restart defect - its fix reaches stable with the next rollout.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
