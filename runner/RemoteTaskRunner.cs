@@ -703,6 +703,9 @@ public sealed class RemoteTaskRunner
             : $"[runner] spawning {invocation.FileName} {string.Join(' ', invocation.Arguments)}";
         _log(engineLine);
         shipper.Add("system", engineLine);
+        File.WriteAllText(
+            Path.Combine(slot.WorkerDirectory, "provider-limit-retry-prompt.txt"),
+            prompt);
         slot = _state.Save(slot with
         {
             WorktreePath = workspace.RepoPath,
@@ -808,6 +811,76 @@ public sealed class RemoteTaskRunner
                             processResult,
                             result.LaunchFailed,
                             sameSessionResumeAttempts);
+                    if (classified.Decision.Outcome == ExecutionOutcomeKind.QuotaExceeded)
+                    {
+                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                       ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var limit = ProviderLimitParser.Detect(
+                            provider,
+                            $"{result.StdOut}\n{result.StdErr}",
+                            DateTime.UtcNow);
+                        if (limit is not null)
+                        {
+                            ProviderAuthProbe.Shared.MarkProviderLimited(limit);
+                            slot = _state.Save(slot with
+                            {
+                                ProcessId = null,
+                                ProcessStartedAtUtc = null,
+                                Phase = "quota-waiting",
+                            });
+                            var delay = limit.RetryAt - DateTime.UtcNow;
+                            if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
+                            shipper.Add(
+                                "system",
+                                $"[runner] provider-limit provider={provider} limitedUntil={limit.RetryAt:O}; holding the fenced card without completion or escalation; other CLI capabilities remain eligible");
+                            await shipper.FlushAsync(stopRun);
+                            await Task.Delay(delay, stopRun);
+                            await ProviderAuthProbe.Shared.RefreshAsync(
+                                AgentCliProcess.Resolve(
+                                    _options,
+                                    (slot.RunSpec ?? new RunSpecDto()) with { CliType = provider }).FileName,
+                                stopRun);
+                            var retryPromptPath = Path.Combine(
+                                slot.WorkerDirectory,
+                                "provider-limit-retry-prompt.txt");
+                            var retryPrompt = File.Exists(retryPromptPath)
+                                ? await File.ReadAllTextAsync(retryPromptPath, stopRun)
+                                : "Resume the claimed task from the durable workspace after the provider limit reset. Complete and verify the work, then emit the required terminal sentinel.";
+                            var retryWorkerDirectory = Path.Combine(
+                                slot.WorkerDirectory,
+                                $"quota-retry-{DateTime.UtcNow:yyyyMMddHHmmss}");
+                            Directory.CreateDirectory(retryWorkerDirectory);
+                            await File.WriteAllTextAsync(
+                                Path.Combine(retryWorkerDirectory, "provider-limit-retry-prompt.txt"),
+                                retryPrompt,
+                                stopRun);
+                            slot = _state.Save(slot with
+                            {
+                                WorkerDirectory = retryWorkerDirectory,
+                                LastOutputSequence = 0,
+                                Phase = "launching",
+                            });
+                            var resumed = DurableAgentProcess.Start(
+                                _options,
+                                retryWorkerDirectory,
+                                workspace.RepoPath,
+                                retryPrompt,
+                                ResultsDir(slot.TaskKey),
+                                runSpec: slot.RunSpec,
+                                runId: slot.AttemptId,
+                                cleanContextKey: slot.TaskKey);
+                            slot = _state.Save(slot with
+                            {
+                                ProcessId = resumed.ProcessId,
+                                ProcessStartedAtUtc = resumed.ProcessStartedAtUtc,
+                                LastOutputSequence = 0,
+                                Phase = "running",
+                            });
+                            _inventory.AttachProcess(slot.RunId ?? slot.AttemptId, resumed.ProcessId);
+                            return await AwaitDetachedAsync(
+                                slot, workspace, shipper, outbox, stopRun, sameSessionResumeAttempts);
+                        }
+                    }
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
                     {

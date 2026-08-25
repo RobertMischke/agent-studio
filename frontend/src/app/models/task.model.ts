@@ -1681,6 +1681,13 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
+  providerLimits?: {
+    provider: string;
+    observedAt: string;
+    retryAt: string;
+    reason: string;
+    reportedReset?: string | null;
+  }[];
 }
 
 /**

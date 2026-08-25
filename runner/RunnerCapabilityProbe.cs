@@ -406,6 +406,8 @@ public sealed class ProviderAuthProbe
         new(StringComparer.Ordinal);
     private readonly HashSet<string> _refreshInFlight =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProviderLimitDetection> _providerLimits =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public ProviderAuthProbe(
         ProviderAuthLauncher? launcher = null,
@@ -454,6 +456,18 @@ public sealed class ProviderAuthProbe
     {
         lock (_sync)
         {
+            var provider = RunnerCapabilityProbe.Provider(cliBinary);
+            if (_providerLimits.TryGetValue(provider, out var limit))
+            {
+                if (limit.RetryAt > _clock().UtcDateTime)
+                {
+                    return new ProviderAuthStatus(
+                        Unavailable,
+                        $"{provider}: limited until {limit.RetryAt:O}. {limit.Reason}",
+                        limit.ObservedAt);
+                }
+                _providerLimits.Remove(provider);
+            }
             _observed.TryGetValue(cliBinary, out var known);
             if (known is not null && _clock() - known.Status.ObservedAt < _ttl) return known.Status;
 
@@ -472,6 +486,21 @@ public sealed class ProviderAuthProbe
             var bootstrap = PresenceOnly(cliBinary, probeWired: _launcher is not null);
             _observed[cliBinary] = new ProviderAuthCacheEntry(bootstrap, 0);
             return bootstrap;
+        }
+    }
+
+    public void MarkProviderLimited(ProviderLimitDetection limit)
+    {
+        lock (_sync)
+        {
+            _providerLimits[limit.Provider] = limit;
+            foreach (var binary in _observed.Keys
+                         .Where(binary => string.Equals(
+                             RunnerCapabilityProbe.Provider(binary),
+                             limit.Provider,
+                             StringComparison.OrdinalIgnoreCase))
+                         .ToArray())
+                _observed.Remove(binary);
         }
     }
 

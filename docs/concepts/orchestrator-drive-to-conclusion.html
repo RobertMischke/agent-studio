@@ -245,6 +245,26 @@
       </thead>
       <tbody>
         <tr>
+          <td>2026-08-23/24</td>
+          <td><code>AGT-2680</code><br><span class="small">Claude account limit fleet outage</span></td>
+          <td>
+            The shared Claude account hit its session limit around 22:00. Every Claude card was treated as a task failure,
+            producing an escalation storm (32 cards by morning), exhausting claimable work, and tripping pickup breakers.
+            Breaker pauses then remained in place after quota reset until an operator manually restored auto mode.
+          </td>
+          <td>
+            Runtime limit text was classified only after it entered card-level failure policy. There was no process-wide,
+            provider-scoped limit state to close Claude admission while leaving Codex eligible, no durable waiting projection
+            for the current card, and no reset-driven resume path. The breaker reason was also not the recovery authority.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> Claude session-limit responses now create a provider-scoped limit with the parsed
+            reset time, advertise <code>claude: limited until &lt;t&gt;</code>, keep the current card in
+            <code>quota-waiting</code> without escalation, and let mixed-CLI pickup continue. At reset, quota/auth is probed and
+            the waiting card resumes automatically. Manual pauses remain outside this recovery path.
+          </td>
+        </tr>
+        <tr>
           <td><strong>Running</strong></td>
           <td><span class="pill transient">transient</span></td>
           <td class="lane">3-progress</td>

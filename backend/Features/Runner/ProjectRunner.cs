@@ -139,6 +139,7 @@ public class ProjectRunner
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly CliQuotaWaitPolicyService? _quotaWaitPolicy;
+    private readonly ProviderLimitRegistry _providerLimits;
     private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly GitService _git;
@@ -453,7 +454,8 @@ public class ProjectRunner
         AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
-        VisualQaService? visualQa = null)
+        VisualQaService? visualQa = null,
+        ProviderLimitRegistry? providerLimits = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -476,6 +478,7 @@ public class ProjectRunner
         _quotaCaps = quotaCaps;
         _quotaFallback = quotaFallback;
         _quotaWaitPolicy = quotaWaitPolicy;
+        _providerLimits = providerLimits ?? new ProviderLimitRegistry();
         _loadThrottle = loadThrottle;
         _git = git;
         _pickupFailures = pickupFailures;
@@ -727,7 +730,8 @@ public class ProjectRunner
     private static string ClassifyModeSource(string reason)
     {
         if (string.IsNullOrWhiteSpace(reason)) return "system";
-        if (reason.Contains("circuit-breaker", StringComparison.OrdinalIgnoreCase))
+        if (reason.Contains("circuit-breaker", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("infra breaker", StringComparison.OrdinalIgnoreCase))
             return "circuit-breaker";
         if (reason.StartsWith("supervisor", StringComparison.OrdinalIgnoreCase))
             return "supervisor";
@@ -820,7 +824,25 @@ public class ProjectRunner
     private async Task RefreshQuotaAfterResetAsync(TaskInfo info, string cliType)
     {
         try { await _quotaService.RefreshAsync(cliType); }
-        finally { ClearQuotaWait(info); }
+        finally
+        {
+            _providerLimits.Clear(cliType);
+            ClearQuotaWait(info);
+        }
+    }
+
+    private void RecordProviderLimitWait(TaskInfo info, AgentStudio.TaskServer.Contracts.ProviderLimitDetection limit)
+    {
+        var policy = _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName));
+        var existing = QuotaWaitMarker.TryRead(info.FolderPath, _logger);
+        QuotaWaitMarker.Write(info.FolderPath, new QuotaWaitRecord
+        {
+            CliType = limit.Provider,
+            StartedAt = existing?.StartedAt ?? limit.ObservedAt,
+            ResetAt = limit.RetryAt,
+            ThresholdMinutes = policy?.ThresholdMinutes ?? CliQuotaWaitPolicyService.DefaultThresholdMinutes,
+            Reason = limit.Reason,
+        }, _logger);
     }
 
     /// <summary>
@@ -1140,6 +1162,19 @@ public class ProjectRunner
             {
                 EmitLoadThrottleDecision(candidate.Info, _loadThrottle.Current);
                 _lastPickReason = $"load-throttle: {candidate.Info.Id}: {_loadThrottle.Current.Reason}";
+                continue;
+            }
+
+            if (_providerLimits.Current(candidate.Info.CliType) is { } providerLimit)
+            {
+                RecordProviderLimitWait(candidate.Info, providerLimit);
+                _lastPickReason = $"provider-limited: {candidate.Info.Id}: {providerLimit.Provider} until {providerLimit.RetryAt:O}";
+                continue;
+            }
+
+            if (candidate.Info.QuotaWait is { } activeWait && activeWait.ResetAt > DateTime.UtcNow)
+            {
+                _lastPickReason = $"quota-wait: {candidate.Info.Id}: {activeWait.CliType} until {activeWait.ResetAt:O}";
                 continue;
             }
 
@@ -2144,9 +2179,25 @@ public class ProjectRunner
             if (info.QuotaWait is { } dueWait && dueWait.ResetAt <= DateTime.UtcNow)
             {
                 await _quotaService.RefreshAsync(dueWait.CliType, ct);
+                _providerLimits.Clear(dueWait.CliType);
                 ClearQuotaWait(info);
                 info = _scanner.FindJob(jobId, Entry.Path) ?? info;
                 admissionInfo = info;
+            }
+
+            if (_providerLimits.Current(info.CliType) is { } providerLimit)
+            {
+                RecordProviderLimitWait(info, providerLimit);
+                return RunOutcome.Reject(new RunRejection(
+                    Reason: RunRejectReason.QuotaCapExceeded,
+                    Message: $"{providerLimit.Provider} is limited until {providerLimit.RetryAt:O}."));
+            }
+
+            if (info.QuotaWait is { } activeWait && activeWait.ResetAt > DateTime.UtcNow)
+            {
+                return RunOutcome.Reject(new RunRejection(
+                    Reason: RunRejectReason.QuotaCapExceeded,
+                    Message: $"{activeWait.CliType} is limited until {activeWait.ResetAt:O}."));
             }
 
             // Resolve the workspace route from the latest cached quota. The
@@ -5149,19 +5200,55 @@ public class ProjectRunner
             var runFinishedAt = execution.DurationSeconds is double recordedDuration
                 ? execution.StartedAt.AddSeconds(Math.Max(0, recordedDuration))
                 : DateTime.UtcNow;
+            var cli = _router.Get(cliType);
+            var earlyOutputSnapshot = cli.GetOutput(jobKey);
+            var providerLimit = string.Equals(execution.Status, RunStatuses.Failed, StringComparison.OrdinalIgnoreCase)
+                                || execution.ExitCode is < 0 or > 0
+                ? AgentStudio.TaskServer.Contracts.ProviderLimitParser.Detect(
+                    cliType,
+                    string.Join(Environment.NewLine, earlyOutputSnapshot.Select(line => line.Text ?? string.Empty)),
+                    runFinishedAt)
+                : null;
             _sessions.CloseSessionEvent(jobId, new RunSessionCloseout
             {
                 StartedAt = execution.StartedAt,
                 FinishedAt = runFinishedAt,
-                Status = execution.Status,
-                Result = execution.RunOutcome,
+                Status = providerLimit is null ? execution.Status : LifecyclePhases.QuotaWaiting,
+                Result = providerLimit is null ? execution.RunOutcome : LifecyclePhases.QuotaWaiting,
                 ExitCode = execution.ExitCode,
                 DurationSeconds = execution.DurationSeconds
             }, Entry.Path);
 
-            var cli = _router.Get(cliType);
-            var earlyOutputSnapshot = cli.GetOutput(jobKey);
             var runInfo = _scanner.FindJob(jobId, Entry.Path);
+            if (providerLimit is not null && runInfo is not null)
+            {
+                var recorded = _providerLimits.Record(providerLimit);
+                RecordProviderLimitWait(runInfo, recorded);
+                _mutations.SetJobPhase(runInfo.FolderPath, LifecyclePhases.QuotaWaiting);
+                _chatLog.Append(
+                    runInfo,
+                    OrchestratorMessageKind.Decision,
+                    $"[quota-wait] {recorded.Reason} Claims for Claude are paused until {recorded.RetryAt:O}; other CLIs remain eligible. This card will resume automatically.");
+                _timeline?.Append(
+                    runInfo.FolderPath,
+                    TimelineEventKinds.QuotaAdmissionDecision,
+                    TimelineActors.System,
+                    $"Claude limited until {recorded.RetryAt:O}; waiting without escalation",
+                    details: new()
+                    {
+                        ["outcome"] = "Wait",
+                        ["decision"] = "provider-limit-detected",
+                        ["cli"] = recorded.Provider,
+                        ["resetAt"] = recorded.RetryAt.ToString("o"),
+                    });
+                _logger.LogWarning(
+                    "provider_limit_wait project={Project} job={JobId} cli={Cli} resetAt={ResetAt:o}; task remains in progress and no escalation is recorded",
+                    ProjectName, jobId, recorded.Provider, recorded.RetryAt);
+                _ = _quotaService.InvalidateForGroundTruthLimit(
+                    recorded.Provider, $"provider session limit detected on {jobId}");
+                NotifyStatus();
+                return;
+            }
             var runGitRoot = run.IsWorktreeRun ? run.WorktreePath! : Entry.RootPath;
             var workerHeadAfter = _git.ReadHeadShaAt(runGitRoot);
             var workerHeadChanged = !string.IsNullOrWhiteSpace(run.WorkerHeadShaBefore)
@@ -8943,7 +9030,7 @@ public class ProjectRunner
         if (IsAutoMode(_mode))
         {
             SetMode("manual",
-                $"cross-slug infra circuit-breaker on {cliType}: {string.Join(", ", trip.Slugs)}");
+                $"pickup paused: infra breaker, {trip.Slugs.Count} failures cliType={cliType} at {trip.TrippedAt:O}");
             return true;
         }
         return false;

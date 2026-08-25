@@ -103,6 +103,30 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Evaluate_ReportsProviderLimitedWorkInsteadOfCallingItStalled()
+    {
+        var claude = ReadyTask(90) with { CliType = "claude", Agent = AgentTypes.Claude };
+        var codex = ReadyTask(90) with { Id = "task-2", Key = "AGT-2", CliType = "codex" };
+        var limit = new AgentStudio.TaskServer.Contracts.ProviderLimitDetection(
+            "claude", Now.AddMinutes(-5), Now.AddHours(1), "session limit");
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [claude, codex],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([claude, codex]),
+            [Runner(2, 0)],
+            [limit]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal(1, snapshot.WaitingTaskCount);
+        Assert.Equal(1, snapshot.LimitedTaskCount);
+        Assert.Equal("claude", Assert.Single(snapshot.LimitedProviders).Provider);
+        Assert.Equal("AGT-2", Assert.Single(snapshot.Items).TaskKey);
+    }
+
+    [Fact]
     public void Watchdog_LogsWarningOnceForAnAcuteQueueAndRecoveryWhenItClears()
     {
         var logger = new CapturingLogger();

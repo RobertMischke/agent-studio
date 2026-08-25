@@ -28,6 +28,7 @@ public class TaskRunnerService : BackgroundService
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly CliQuotaWaitPolicyService? _quotaWaitPolicy;
+    private readonly ProviderLimitRegistry _providerLimits;
     private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
@@ -152,7 +153,8 @@ public class TaskRunnerService : BackgroundService
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
         VisualQaService? visualQa = null,
-        StartupExecutionAdmission? executionAdmission = null)
+        StartupExecutionAdmission? executionAdmission = null,
+        ProviderLimitRegistry? providerLimits = null)
     {
         _config = config;
         _logger = logger;
@@ -201,6 +203,7 @@ public class TaskRunnerService : BackgroundService
         _clients = clients;
         _quotaWaitPolicy = quotaWaitPolicy;
         _executionAdmission = executionAdmission;
+        _providerLimits = providerLimits ?? new ProviderLimitRegistry();
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -374,7 +377,8 @@ public class TaskRunnerService : BackgroundService
                 conceptWorkbenchPublisher: _conceptWorkbenchPublisher,
                 promptEnrichment: _promptEnrichment,
                 dossierMaintenance: _dossierMaintenance,
-                visualQa: _visualQa);
+                visualQa: _visualQa,
+                providerLimits: _providerLimits);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -416,6 +420,23 @@ public class TaskRunnerService : BackgroundService
                 _logger.LogInformation("Restored runner mode '{Mode}' for project '{Name}'", savedMode, entry.Name);
             }
             _logger.LogInformation("Initialized runner for project '{Name}' (Root: {RootPath})", entry.Name, entry.RootPath);
+        }
+
+        // Rebuild the process-wide provider gate from the durable card marker.
+        // A backend restart during a limit window must not reopen Claude claims
+        // for every other project while the original card still records the
+        // reset time.
+        foreach (var task in _scanner.ScanAllAutomationJobs())
+        {
+            if (task.QuotaWait is not { } wait
+                || wait.ResetAt <= DateTime.UtcNow
+                || !string.Equals(wait.CliType, CliTypes.Claude, StringComparison.OrdinalIgnoreCase))
+                continue;
+            _providerLimits.Record(new AgentStudio.TaskServer.Contracts.ProviderLimitDetection(
+                wait.CliType,
+                wait.StartedAt,
+                wait.ResetAt,
+                wait.Reason));
         }
 
         // Check CLI availability (default backend = Claude)
@@ -546,7 +567,7 @@ public class TaskRunnerService : BackgroundService
         {
             projects[name] = runner.GetStatus();
         }
-        return new RunnerStatus { Projects = projects };
+        return new RunnerStatus { Projects = projects, ProviderLimits = _providerLimits.Snapshot() };
     }
 
     public bool SetMode(string projectName, string mode, string? reason = null)

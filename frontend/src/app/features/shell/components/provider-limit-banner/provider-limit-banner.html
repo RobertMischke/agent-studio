@@ -1,0 +1,10 @@
+@if (active()) {
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="provider-limit-banner">
+    <strong data-testid="provider-limit-headline">{{ summary() }}</strong>
+    <span class="notification__detail">@if (limits().length > 0) { Claims for the limited CLI are paused. Waiting cards resume automatically after recovery; other CLIs remain eligible. } @else { Automatic pickup is paused by infrastructure protection. The reason remains visible in Runner status. }</span>
+  </app-notification>
+}

@@ -152,10 +152,13 @@ escalating instead of parking it on first detection:
   `cli-launch-failed` category. It no longer parks straight to `5e` on the first
   launch failure.
 
-Non-retryable environmental members (`ModelInvalid`, `ContextOverflow`,
-`QuotaExhausted`, `EnvironmentBlocker`, `AuthRefreshFailed`) still escalate on
-first detection with their own honest categories (AGT-1941) - re-running would
-hit the same wall.
+Non-retryable task-shaped environmental members (`ModelInvalid`,
+`ContextOverflow`, `EnvironmentBlocker`, `AuthRefreshFailed`) still escalate on
+first detection with their own honest categories (AGT-1941). A resettable,
+account-wide `QuotaExhausted` response is different: the runner records a
+provider-scoped limit, holds the card in `quota-waiting`, closes claims only for
+that CLI, and resumes after the reported reset. It creates no card failure or
+escalation record. Other CLI capabilities remain eligible (AGT-2680).
 
 - `AuthRefreshFailed` (AGT-2066 WÄCHTER / breaker) - the agent CLI could not
   launch because its OAuth session expired and the token refresh failed ("OAuth

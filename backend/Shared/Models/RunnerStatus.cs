@@ -160,6 +160,7 @@ public static class TaskRunActivityClassifier
 public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
+    public IReadOnlyList<AgentStudio.TaskServer.Contracts.ProviderLimitDetection> ProviderLimits { get; init; } = [];
 }
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);

@@ -147,6 +147,12 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- A resettable Claude account/session limit is provider-scoped rather than
+  task-scoped. The host advertises `provider-auth:claude` as unavailable with
+  `claude: limited until <t>`, holds the current card in `quota-waiting`, and
+  keeps other CLI capabilities claimable. The reported reset drives an auth and
+  quota refresh followed by automatic continuation; it does not create an
+  escalation or require a manual mode toggle (AGT-2680).
 - Remote provider credentials use one protected host file,
   `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
   `root:agent` mode `640`, loaded by both Coding and Review units after their

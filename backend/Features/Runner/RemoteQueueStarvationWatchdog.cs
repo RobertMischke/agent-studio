@@ -19,6 +19,8 @@ public sealed record RemoteQueueStarvationSnapshot
     public bool ClaimProgressStalled { get; init; }
     public DateTime? LastSuccessfulClaimAt { get; init; }
     public bool HasRejections { get; init; }
+    public int LimitedTaskCount { get; init; }
+    public IReadOnlyList<AgentStudio.TaskServer.Contracts.ProviderLimitDetection> LimitedProviders { get; init; } = [];
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
@@ -33,7 +35,8 @@ public static class RemoteQueueStarvationPolicy
         IEnumerable<TaskInfo> tasks,
         Func<string, ProjectSettings> projectSettings,
         TaskReferenceIndex references,
-        IEnumerable<ClientIdentity> runners)
+        IEnumerable<ClientIdentity> runners,
+        IReadOnlyList<AgentStudio.TaskServer.Contracts.ProviderLimitDetection>? providerLimits = null)
     {
         var liveRunners = runners
             .Where(runner => string.Equals(
@@ -54,7 +57,10 @@ public static class RemoteQueueStarvationPolicy
             .Cast<DateTime?>()
             .FirstOrDefault();
 
-        var eligibleTasks = tasks
+        var activeLimits = (providerLimits ?? [])
+            .Where(limit => limit.RetryAt > now)
+            .ToDictionary(limit => limit.Provider, StringComparer.OrdinalIgnoreCase);
+        var otherwiseEligibleTasks = tasks
             .Where(task => task.State == TaskStates.Ready && !task.Fixture)
             .Where(task =>
             {
@@ -68,6 +74,11 @@ public static class RemoteQueueStarvationPolicy
                            || task.Phase == LifecyclePhases.IntakePassed)
                        && !references.EvaluateWaitsOn(task).Blocked;
             })
+            .ToList();
+        var limitedTaskCount = otherwiseEligibleTasks.Count(task =>
+            !string.IsNullOrWhiteSpace(task.CliType) && activeLimits.ContainsKey(task.CliType));
+        var eligibleTasks = otherwiseEligibleTasks
+            .Where(task => string.IsNullOrWhiteSpace(task.CliType) || !activeLimits.ContainsKey(task.CliType))
             .ToList();
         var oldestEligibleAt = eligibleTasks
             .Select(task => task.EnteredLaneAt.ToUniversalTime())
@@ -104,6 +115,8 @@ public static class RemoteQueueStarvationPolicy
             ClaimProgressStalled = claimProgressStalled,
             LastSuccessfulClaimAt = lastSuccessfulClaimAt,
             HasRejections = hasRejections,
+            LimitedTaskCount = limitedTaskCount,
+            LimitedProviders = activeLimits.Values.OrderBy(limit => limit.Provider).ToArray(),
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
@@ -126,6 +139,7 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
     private readonly ClientIdentityStore _clients;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RemoteQueueStarvationWatchdog> _logger;
+    private readonly ProviderLimitRegistry _providerLimits;
     private readonly object _gate = new();
     private RemoteQueueStarvationSnapshot _current = new() { ObservedAt = DateTime.UtcNow };
     private string? _warningSignature;
@@ -136,13 +150,15 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
         ProjectSettingsService settings,
         ClientIdentityStore clients,
         IConfiguration configuration,
-        ILogger<RemoteQueueStarvationWatchdog> logger)
+        ILogger<RemoteQueueStarvationWatchdog> logger,
+        ProviderLimitRegistry? providerLimits = null)
     {
         _scanner = scanner;
         _settings = settings;
         _clients = clients;
         _configuration = configuration;
         _logger = logger;
+        _providerLimits = providerLimits ?? new ProviderLimitRegistry();
     }
 
     public RemoteQueueStarvationSnapshot Current
@@ -165,7 +181,8 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
             snapshot.Live,
             _settings.Get,
             snapshot.References,
-            _clients.ListAll());
+            _clients.ListAll(),
+            _providerLimits.Snapshot(now));
 
         lock (_gate)
         {
