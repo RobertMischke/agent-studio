@@ -176,6 +176,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done)</td>
   <td>AGT-2678 fix now live (next restart replaces cleanly). New-candidate: workspace-repo push backlog (8.7GB/1270 behind) - relates to the workspace-repo-log-bloat memory; needs a deliberate push/gc, own card after operator nod.</td>
 </tr>
+<tr>
+  <td class="meta">08-25 14:1x</td>
+  <td><strong>Confirmed public-site XSS fixed</strong> (ai-patterns.dev, commit 75abd49 on main): the bypass was empirically reproduced (&lt;animate /onbegin=...&gt; slipped the whitespace-anchored handler regex and the element denylist); replaced the leaky regex denylist with an allowlist SVG sanitizer (scripts/lib/svg-sanitizer.mjs) plus a render-time browser mirror that fails closed, both shipped figures re-validated, npm run check green end-to-end. NOT published: a v* tag triggers the release workflow - awaits operator.</td>
+  <td class="v action">operator-action (done, publish pending)</td>
+  <td>One of two things awaiting an operator v-tag on ai-patterns.dev: the XSS fix (75abd49) and the two thesis articles (Skip the PR, Memory Management). Both are on main, unpublished until tagged.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
