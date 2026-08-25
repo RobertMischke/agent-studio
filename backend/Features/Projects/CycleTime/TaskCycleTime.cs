@@ -44,9 +44,10 @@ public sealed record TaskCycleTime(
     DateTime CreatedAt,
     DateTime? FirstClaimedAt,
     DateTime CompletedAt,
-    /// <summary><c>ledger</c> when the completion time comes from the lane-change ledger, <c>lane-entry</c> for the legacy EnteredLaneAt fallback.</summary>
+    /// <summary><c>ledger</c> when the completion time comes from the lane-change ledger, <c>lane-entry</c> for the legacy EnteredLaneAt fallback, <c>backfill</c> for a completion reconstructed by the offline backfill sidecar.</summary>
     string CompletionSource,
-    CycleTimeStageSeconds Stages,
+    /// <summary>Null for backfilled rows: a reconstructed completion dates the task but explains none of its time, so no stage durations are invented.</summary>
+    CycleTimeStageSeconds? Stages,
     double ReviewRunSeconds,
     double LeadTimeSeconds,
     double? CycleTimeSeconds,
@@ -106,6 +107,12 @@ public static class TaskCycleTimeAnalyzer
         TaskStates.HumanReview, TaskStates.Escalated, TaskStates.Completed,
     };
 
+    public const string LedgerCompletionSource = "ledger";
+    public const string LaneEntryCompletionSource = "lane-entry";
+    public const string BackfillCompletionSource = "backfill";
+    /// <summary>Data-gap prefix of a backfilled row; the suffix names the evidence (<c>backfilled:git-archive-move</c>).</summary>
+    public const string BackfilledGapPrefix = "backfilled:";
+
     private const string DeliveryGateFailedOutcome = "delivery-gate-failed";
     private const string NoLedgerGap = "no-ledger";
     private const string CompletionFromLaneEntryGap = "completion-from-lane-entry";
@@ -128,7 +135,8 @@ public static class TaskCycleTimeAnalyzer
     public static TaskCycleAnalysis Analyze(
         TaskInfo task,
         IReadOnlyList<TimelineEvent> events,
-        PipelineExecutionRecord? pipeline)
+        PipelineExecutionRecord? pipeline,
+        CycleTimeBackfillEntry? backfill = null)
     {
         if (string.Equals(task.Kind, TaskKinds.Epic, StringComparison.OrdinalIgnoreCase))
             return new TaskCycleAnalysis(null, TaskCycleAnalysis.ExcludedEpic);
@@ -151,14 +159,25 @@ public static class TaskCycleTimeAnalyzer
             .Where(e => Detail(e, "to") == TaskStates.Completed)
             .Select(e => (DateTime?)e.Ts)
             .LastOrDefault();
-        var completionSource = "ledger";
+        var completionSource = LedgerCompletionSource;
         if (completedAt is null)
         {
             if (string.Equals(task.State, TaskStates.Completed, StringComparison.Ordinal) && task.EnteredLaneAt != default)
             {
                 completedAt = Utc(task.EnteredLaneAt);
-                completionSource = "lane-entry";
+                completionSource = LaneEntryCompletionSource;
                 gaps.Add(CompletionFromLaneEntryGap);
+            }
+            else if (backfill is not null)
+            {
+                // Reconstructed offline from durable evidence (workspace-repo
+                // git history, terminal enteredLaneAt, file mtimes) for tasks
+                // that predate the lane_changed ledger. An approximate anchor:
+                // good enough to date the completion, never to explain where
+                // the time went.
+                completedAt = Utc(backfill.CompletedAt);
+                completionSource = BackfillCompletionSource;
+                gaps.Add(BackfilledGapPrefix + backfill.Source);
             }
             else
             {
@@ -183,6 +202,31 @@ public static class TaskCycleTimeAnalyzer
         var taskKey = !string.IsNullOrWhiteSpace(task.Key) ? task.Key! :
             !string.IsNullOrWhiteSpace(task.TaskKey) ? task.TaskKey : task.Id;
         var leadTime = (completedAt.Value - createdAt.Value).TotalSeconds;
+
+        if (string.Equals(completionSource, BackfillCompletionSource, StringComparison.Ordinal))
+        {
+            // The reconstructed completion dates the task; the ledger (almost
+            // always absent here) explains none of the span. Stages stay null
+            // so the stage breakdown never carries invented durations, and the
+            // row contributes to the lead-time rollup only. Whatever partial
+            // ledger exists is still surfaced as transitions and as the claim
+            // anchor, because those rows are real evidence.
+            var backfillTransitions = LaneTransitionExtractor.Extract(ledger, createdAt);
+            var claimedAt = ledger.FirstOrDefault(e => e.Kind == TimelineEventKinds.AgentRunStarted)?.Ts;
+            if (claimedAt is null && task.Provenance?.Transitions is { Count: > 0 } provenance)
+            {
+                var progress = provenance.FirstOrDefault(x => string.Equals(x.Lane, TaskStates.Progress, StringComparison.Ordinal));
+                if (progress is not null && progress.AtUtc != default) claimedAt = Utc(progress.AtUtc);
+            }
+            if (claimedAt > completedAt) claimedAt = null;
+            return new TaskCycleAnalysis(new TaskCycleTime(
+                task.Id, taskKey, task.Title, task.State, task.WatchPath ?? string.Empty,
+                createdAt.Value, claimedAt, completedAt.Value, completionSource,
+                Stages: null, 0, Round(leadTime), null, 0, 0, 0, 0, null, null,
+                gaps.Distinct(StringComparer.Ordinal).ToList(),
+                backfillTransitions.Count(t => t.Direction == TransitionDirections.Backward),
+                backfillTransitions), null);
+        }
 
         if (ledger.Count == 0)
         {

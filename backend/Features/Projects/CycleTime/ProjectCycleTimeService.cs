@@ -24,7 +24,14 @@ public sealed record ProjectCycleTimeCoverage(
     /// <summary>Window tasks whose ledger is missing; their lead time is reported as unattributed.</summary>
     int TasksWithoutLedger,
     /// <summary>Window tasks whose completion time came from the legacy lane-entry fallback.</summary>
-    int TasksWithLaneEntryCompletion);
+    int TasksWithLaneEntryCompletion,
+    /// <summary>
+    /// Window tasks whose completion time was reconstructed by the offline
+    /// backfill sidecar (<c>.metadata/cycle-time-backfill.json</c>). These
+    /// rows enter the lead-time rollup only; their stage breakdown is null
+    /// and they stay out of the stage, count, and outcome aggregates.
+    /// </summary>
+    int TasksBackfilled);
 
 public sealed record ProjectCycleTimeResponse(
     string Project,
@@ -73,6 +80,8 @@ public sealed class ProjectCycleTimeService
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, ProjectMemo> _projectMemo =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, BackfillMemo> _backfillMemo =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     public ProjectCycleTimeService(
         TaskScannerService scanner,
@@ -181,6 +190,12 @@ public sealed class ProjectCycleTimeService
             .ThenBy(r => r.TaskKey, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // Backfilled rows (approximate completion, null stage breakdown) are
+        // real completions for coverage and for the lead-time rollup, but they
+        // carry no stage, count, or outcome evidence: those aggregates use only
+        // the evidenced rows so a reconstructed timestamp never dilutes them.
+        var evidenced = rows.Where(r => r.Stages is not null).ToList();
+
         var coverage = new ProjectCycleTimeCoverage(
             analyses.Count,
             completed.Count
@@ -190,31 +205,32 @@ public sealed class ProjectCycleTimeService
             analyses.Count(a => a.ExclusionReason == TaskCycleAnalysis.ExcludedNoCompletion),
             analyses.Count(a => a.ExclusionReason == TaskCycleAnalysis.ExcludedNotCompleted),
             analyses.Count(a => a.ExclusionReason == TaskCycleAnalysis.ExcludedEpic),
-            rows.Count(r => r.DataGaps.Contains("no-ledger")),
-            rows.Count(r => r.CompletionSource == "lane-entry"));
+            evidenced.Count(r => r.DataGaps.Contains("no-ledger")),
+            evidenced.Count(r => r.CompletionSource == TaskCycleTimeAnalyzer.LaneEntryCompletionSource),
+            rows.Count - evidenced.Count);
 
         var aggregates = new List<CycleTimeStageAggregate>();
         foreach (var stage in CycleTimeStages.Additive)
         {
             aggregates.Add(CycleTimeStatistics.Aggregate(stage, "stage", "seconds",
-                rows.Select(r => r.Stages.Get(stage)).Where(v => v > 0)));
+                evidenced.Select(r => r.Stages!.Get(stage)).Where(v => v > 0)));
         }
         aggregates.Add(CycleTimeStatistics.Aggregate(CycleTimeStages.ReviewRun, "rollup", "seconds",
-            rows.Select(r => r.ReviewRunSeconds).Where(v => v > 0)));
+            evidenced.Select(r => r.ReviewRunSeconds).Where(v => v > 0)));
         aggregates.Add(CycleTimeStatistics.Aggregate(CycleTimeStages.LeadTime, "rollup", "seconds",
             rows.Select(r => r.LeadTimeSeconds).Where(v => v > 0)));
         aggregates.Add(CycleTimeStatistics.Aggregate(CycleTimeStages.CycleTime, "rollup", "seconds",
-            rows.Where(r => r.CycleTimeSeconds is > 0).Select(r => r.CycleTimeSeconds!.Value)));
+            evidenced.Where(r => r.CycleTimeSeconds is > 0).Select(r => r.CycleTimeSeconds!.Value)));
         aggregates.Add(CycleTimeStatistics.Aggregate(CycleTimeStages.CodingRuns, "count", "count",
-            rows.Select(r => (double)r.CodingRuns)));
+            evidenced.Select(r => (double)r.CodingRuns)));
         aggregates.Add(CycleTimeStatistics.Aggregate(CycleTimeStages.ReviewRounds, "count", "count",
-            rows.Select(r => (double)r.ReviewRounds)));
+            evidenced.Select(r => (double)r.ReviewRounds)));
         aggregates.Add(CycleTimeStatistics.Aggregate(CycleTimeStages.BounceRounds, "count", "count",
-            rows.Select(r => (double)r.BounceRounds)));
+            evidenced.Select(r => (double)r.BounceRounds)));
         aggregates.Add(CycleTimeStatistics.Aggregate(CycleTimeStages.IntegrationAttempts, "count", "count",
-            rows.Select(r => (double)r.IntegrationAttempts)));
+            evidenced.Select(r => (double)r.IntegrationAttempts)));
 
-        var outcomes = rows
+        var outcomes = evidenced
             .GroupBy(r => string.IsNullOrWhiteSpace(r.IntegrationOutcome) ? "none" : r.IntegrationOutcome!, StringComparer.OrdinalIgnoreCase)
             .Select(g => new CycleTimeOutcomeCount(g.Key, g.Count()))
             .OrderByDescending(o => o.Count)
@@ -304,15 +320,19 @@ public sealed class ProjectCycleTimeService
 
     private TaskCycleAnalysis AnalyzeTask(TaskInfo task)
     {
+        var (backfillEntries, backfillStamp) = BackfillFor(task.WatchPath);
+        var backfill = FindBackfill(backfillEntries, task);
+
         var folder = task.FolderPath;
         if (string.IsNullOrWhiteSpace(folder))
-            return TaskCycleTimeAnalyzer.Analyze(task, [], null);
+            return TaskCycleTimeAnalyzer.Analyze(task, [], null, backfill);
 
         var timelineStamp = Stamp(TaskPaths.TimelineLog(folder));
         var pipelineStamp = Stamp(Path.Combine(folder, PipelineExecutionLog.FileName));
         if (_taskMemo.TryGetValue(folder, out var memo)
             && memo.TimelineStamp == timelineStamp
             && memo.PipelineStamp == pipelineStamp
+            && memo.BackfillStamp == backfillStamp
             && memo.State == task.State
             && memo.EnteredLaneAt == task.EnteredLaneAt)
         {
@@ -340,9 +360,37 @@ public sealed class ProjectCycleTimeService
             _logger.LogWarning(ex, "cycle-time-pipeline-read-failed task={TaskId} folder={Folder}", task.Id, folder);
         }
 
-        var analysis = TaskCycleTimeAnalyzer.Analyze(task, events, pipeline);
-        _taskMemo[folder] = new TaskMemo(timelineStamp, pipelineStamp, task.State, task.EnteredLaneAt, analysis);
+        var analysis = TaskCycleTimeAnalyzer.Analyze(task, events, pipeline, backfill);
+        _taskMemo[folder] = new TaskMemo(timelineStamp, pipelineStamp, backfillStamp, task.State, task.EnteredLaneAt, analysis);
         return analysis;
+    }
+
+    /// <summary>
+    /// The project's completion-backfill sidecar, cached against the file
+    /// stamp so a (re)generated sidecar invalidates the per-task memos on the
+    /// next uncached build without any restart.
+    /// </summary>
+    private (IReadOnlyDictionary<string, CycleTimeBackfillEntry> Entries, (long Length, long Ticks) Stamp) BackfillFor(string? watchPath)
+    {
+        if (string.IsNullOrWhiteSpace(watchPath))
+            return (EmptyBackfill, (-1, 0));
+        var path = CycleTimeBackfillSidecar.PathFor(watchPath);
+        var stamp = Stamp(path);
+        if (_backfillMemo.TryGetValue(path, out var memo) && memo.Stamp == stamp)
+            return (memo.Entries, stamp);
+        var entries = stamp.Length < 0 ? EmptyBackfill : CycleTimeBackfillSidecar.Load(path);
+        if (entries.Count > 0)
+            _logger.LogInformation("cycle-time-backfill-loaded path={Path} entries={Count}", path, entries.Count);
+        _backfillMemo[path] = new BackfillMemo(stamp, entries);
+        return (entries, stamp);
+    }
+
+    private static CycleTimeBackfillEntry? FindBackfill(IReadOnlyDictionary<string, CycleTimeBackfillEntry> entries, TaskInfo task)
+    {
+        if (entries.Count == 0) return null;
+        if (!string.IsNullOrWhiteSpace(task.Key) && entries.TryGetValue(task.Key, out var byKey)) return byKey;
+        if (!string.IsNullOrWhiteSpace(task.Id) && entries.TryGetValue(task.Id, out var byId)) return byId;
+        return null;
     }
 
     /// <summary>
@@ -373,9 +421,17 @@ public sealed class ProjectCycleTimeService
     private sealed record TaskMemo(
         (long Length, long Ticks) TimelineStamp,
         (long Length, long Ticks) PipelineStamp,
+        (long Length, long Ticks) BackfillStamp,
         string State,
         DateTime EnteredLaneAt,
         TaskCycleAnalysis Analysis);
+
+    private static readonly IReadOnlyDictionary<string, CycleTimeBackfillEntry> EmptyBackfill =
+        new Dictionary<string, CycleTimeBackfillEntry>();
+
+    private sealed record BackfillMemo(
+        (long Length, long Ticks) Stamp,
+        IReadOnlyDictionary<string, CycleTimeBackfillEntry> Entries);
 
     private sealed record ProjectMemo(DateTime At, DateTime? Since, int TaskCount, IReadOnlyList<TaskCycleAnalysis> Analyses);
 }
