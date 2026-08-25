@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Token-popover open/close + viewport regression (ASS-1700).
@@ -9,23 +11,23 @@ import { test, expect, type Page } from '@playwright/test';
  * viewport), clipped, and hung permanently open across multiple cards.
  *
  * This spec mocks the whole API surface so it runs against any served frontend
- * (no live backend). It asserts:
- *   1. the popover is NOT shown until the trigger is hovered;
- *   2. once open it is portaled into the body overlay root and sits fully
- *      inside the viewport (no right-edge cutoff);
- *   3. it closes again when the pointer leaves.
+ * (no live backend). The Ready lane deliberately carries 35 token-bearing
+ * cards, matching the dense operator lane where the regression surfaced.
  */
 
 const PROJECT = 'fixture-token-viewport';
 const WATCH_PATH = 'C:/fixtures/token-viewport';
 
-function makeJob() {
+const RESULTS_DIR = process.env.JOB_RESULTS_DIR?.trim() || 'test-results';
+
+function makeJob(index: number) {
+  const suffix = String(index + 1).padStart(2, '0');
   return {
-    id: 'token-viewport-job',
-    taskKey: `${WATCH_PATH}::token-viewport-job`,
-    title: 'Token viewport fixture',
-    state: '5-human-review',
-    order: 1,
+    id: `token-viewport-job-${suffix}`,
+    taskKey: `${WATCH_PATH}::token-viewport-job-${suffix}`,
+    title: `Token viewport fixture ${suffix}`,
+    state: '2-ready',
+    order: index + 1,
     agent: 'claude',
     cliType: 'claude',
     createdAt: '2026-06-09T08:00:00Z',
@@ -67,22 +69,25 @@ const GROUPED = {
   backlog: [],
   preparation: [],
   orchestratorPrep: [],
-  ready: [],
+  ready: Array.from({ length: 35 }, (_, index) => makeJob(index)),
   progress: [],
   failedPickup: [],
   autoReview: [],
-  humanReview: [makeJob()],
+  humanReview: [],
   escalated: [],
   review: [],
   completed: [],
   archive: [],
 };
 
-async function installRoutes(page: Page): Promise<void> {
+async function installRoutes(page: Page): Promise<{ groupedRequests: number }> {
+  const requests = { groupedRequests: 0 };
   await page.route('**/api/**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined));
-  await page.route('**/api/tasks/grouped**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED) }));
+  await page.route('**/api/tasks/grouped**', (route) => {
+    requests.groupedRequests += 1;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GROUPED) });
+  });
   await page.route('**/api/watch-paths**', (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
@@ -116,6 +121,7 @@ async function installRoutes(page: Page): Promise<void> {
     }));
   await page.route('**/api/tags', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  return requests;
 }
 
 async function seedBoardTab(page: Page): Promise<void> {
@@ -129,34 +135,48 @@ async function seedBoardTab(page: Page): Promise<void> {
 }
 
 test.describe('Token popover open/close + viewport (ASS-1700)', () => {
-  test('stays collapsed until hover, then opens fully inside the viewport', async ({ page }) => {
+  test('keeps one refresh-safe popover across a dense Ready lane', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await seedBoardTab(page);
-    await installRoutes(page);
+    const requests = await installRoutes(page);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
-    const card = page.locator('[data-testid="task-card"]').first();
-    await expect(card).toBeVisible({ timeout: 10_000 });
+    const cards = page.getByTestId('lane-2-ready').getByTestId('task-card');
+    await expect(cards).toHaveCount(35, { timeout: 10_000 });
+    const popovers = page.getByTestId('task-card-token-popover');
+    await expect(popovers).toHaveCount(35);
+    const visiblePopovers = page.locator('[data-testid="task-card-token-popover"]:visible');
 
-    const bubble = card.locator('[data-testid="task-card-token-bubble"]');
-    await expect(bubble).toBeVisible({ timeout: 5_000 });
+    // Dense-lane rest state: all panel templates exist but none paints before
+    // an explicit hover, focus, or click on a token chip.
+    await expect(visiblePopovers).toHaveCount(0);
 
-    // 1. The popover must not be visible before any interaction (the bug was a
-    //    permanently-open, clipped panel).
-    const popover = page.locator('[data-testid="task-card-token-popover"]');
-    await expect(popover).toBeHidden();
+    const firstCard = cards.filter({ hasText: 'Token viewport fixture 01' });
+    const secondCard = cards.filter({ hasText: 'Token viewport fixture 02' });
+    const firstBubble = firstCard.getByTestId('task-card-token-bubble');
+    const secondBubble = secondCard.getByTestId('task-card-token-bubble');
+    await firstBubble.hover();
+    await expect(visiblePopovers).toHaveCount(1, { timeout: 3_000 });
 
-    // Capture the resting board (no panel hanging open).
-    await page.screenshot({ path: 'test-results/token-popover-default-hidden.png' });
+    // Keyboard-open the second chip while the pointer remains over the first.
+    // Before the coordinator fix this leaves both panels rendered and stacked.
+    await secondBubble.focus();
+    const sequentialOpenCount = await visiblePopovers.count();
+    if (sequentialOpenCount > 1) {
+      mkdirSync(RESULTS_DIR, { recursive: true });
+      await page.screenshot({
+        path: join(RESULTS_DIR, 'token-popover-stacked-before--mocked.png'),
+        fullPage: false,
+      });
+    }
+    await expect(visiblePopovers).toHaveCount(1);
 
-    // 2. Hover the trigger -> popover opens, portaled to the body overlay root.
-    await bubble.hover();
-    await expect(popover).toBeVisible({ timeout: 3_000 });
+    // The surviving panel is portaled into the shared overlay layer and remains
+    // clamped to the viewport.
+    const popover = visiblePopovers.first();
     const overlayRoot = page.locator('[data-testid="studio-overlay-root"]');
     await expect(overlayRoot.locator('[data-testid="task-card-token-popover"]')).toBeVisible();
-
-    // 3. It sits fully inside the viewport: no right-edge cutoff, no left spill.
     const box = await popover.boundingBox();
     expect(box, 'popover should have a layout box when open').not.toBeNull();
     if (box) {
@@ -166,10 +186,34 @@ test.describe('Token popover open/close + viewport (ASS-1700)', () => {
       expect(box.y + box.height).toBeLessThanOrEqual(800);
     }
 
-    await page.screenshot({ path: 'test-results/token-popover-open-in-viewport.png' });
+    mkdirSync(RESULTS_DIR, { recursive: true });
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'token-popover-single-after--mocked.png'),
+      fullPage: false,
+    });
 
-    // 4. Closes again when the pointer leaves (move to a far corner).
-    await page.mouse.move(10, 10);
-    await expect(popover).toBeHidden({ timeout: 3_000 });
+    // Escape dismisses without moving focus.
+    await page.keyboard.press('Escape');
+    await expect(visiblePopovers).toHaveCount(0);
+
+    // A programmatic refresh click exercises the same grouped snapshot signal
+    // used by SignalR reconciliation without producing an outside pointerdown.
+    await secondBubble.click();
+    await expect(visiblePopovers).toHaveCount(1);
+    const groupedRequestsBeforeRefresh = requests.groupedRequests;
+    await page.getByTestId('studio-sidebar-refresh').evaluate((button: HTMLButtonElement) => button.click());
+    await expect.poll(() => requests.groupedRequests).toBeGreaterThan(groupedRequestsBeforeRefresh);
+    await expect(visiblePopovers).toHaveCount(0);
+
+    // Outside click and lane scroll each dismiss an independently reopened panel.
+    await secondBubble.click();
+    await expect(visiblePopovers).toHaveCount(1);
+    await page.getByTestId('lane-title-2-ready').click();
+    await expect(visiblePopovers).toHaveCount(0);
+
+    await secondBubble.click();
+    await expect(visiblePopovers).toHaveCount(1);
+    await page.getByTestId('lane-body-2-ready').evaluate((lane) => lane.scrollBy(0, 400));
+    await expect(visiblePopovers).toHaveCount(0);
   });
 });

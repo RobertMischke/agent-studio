@@ -138,7 +138,7 @@
       @if (state() === '5-human-review') {
         <app-decision-backlog-hint [tasks]="jobs()" [allTasks]="allBoardJobs()" (taskClick)="jobClick.emit($event)" />
       }
-      <div class="column__body">
+      <div class="column__body" [attr.data-testid]="'lane-body-' + state()">
         @if (isArchive()) {
           <div class="archive-filter">
             <input type="search"
