@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verification sweep 2026-08-25</title>
+<style>
+  :root { --ink:#1d1d1f; --muted:#6e6e73; --line:#e5e5e7; --accent:#8a3ffc; --bg:#ffffff; --soft:#f7f7f8; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 60rem; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+  h1 { font-size:1.9rem; font-weight:600; letter-spacing:-.01em; margin:0 0 .3rem; }
+  .sub { color:var(--muted); margin-bottom:2.2rem; }
+  h2 { font-size:1.2rem; font-weight:600; margin:2.4rem 0 .5rem; }
+  table { border-collapse: collapse; width:100%; font-size:.95rem; }
+  th { text-align:left; color:var(--muted); font-weight:600; padding:.5rem .8rem; border-bottom:1px solid var(--line); }
+  td { padding:.6rem .8rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  .v { font-weight:600; white-space:nowrap; }
+  .ok { color:#198038; } .def { color:#da1e28; } .nyi { color:#b26b00; }
+  .covered { color:#0f62fe; } .candidate { color:var(--accent); }
+  .sev { font-weight:600; white-space:nowrap; }
+  .high { color:#da1e28; } .medium { color:#b26b00; } .low { color:var(--muted); }
+  .meta { color:var(--muted); font-size:.85rem; }
+  .verdictline { margin:.2rem 0 .8rem; }
+  footer { margin-top:3rem; color:var(--muted); font-size:.85rem; border-top:1px solid var(--line); padding-top:1rem; }
+  a { color:#0f62fe; }
+</style>
+</head>
+<body>
+<main>
+<h1>Verification sweep 2026-08-25</h1>
+<p class="sub">Read-only live verification of eight recent deliveries against the running stable instance
+(frontend :4011, backend :5031): headless browser probes in light and dark themes and at narrow widths,
+API cross-checks, git lineage checks. Verdicts:
+<strong class="ok">ok</strong>, <strong class="def">defects-found</strong>,
+<strong class="nyi">not-implemented-yet</strong>. Every defects-found finding is reconciled against the
+open AGT, QS and TE boards (dedup discipline of the <a href="index.html">live improvement log</a>);
+findings not owned by an open card are marked <strong class="candidate">new-candidate</strong>.
+No cards were cut in this sweep. Evidence screenshots are session-local and not archived here.</p>
+
+<h2>Summary</h2>
+<table>
+<tr><th>Feature</th><th>Verdict</th><th>Findings</th></tr>
+<tr><td>AGT-2676 &mdash; explorer tree lane dots</td><td class="v ok">ok</td><td class="meta">6 low (all verifications or by-design observations)</td></tr>
+<tr><td>AGT-2656 + AGT-2675 &mdash; token usage popovers</td><td class="v def">defects-found</td><td class="meta">2 high, 2 medium, 2 low</td></tr>
+<tr><td>AGT-2644 + AGT-2642 &mdash; lane headers + tree typography</td><td class="v def">defects-found</td><td class="meta">core verified; 1 medium, 2 low defects/observations</td></tr>
+<tr><td>Cycle-time panel (local build 08-23)</td><td class="v def">defects-found</td><td class="meta">1 medium, 3 low</td></tr>
+<tr><td>AGT-2645 &mdash; status-bar review plane</td><td class="v nyi">not-implemented-yet</td><td class="meta">3 high, 2 medium, 1 low</td></tr>
+<tr><td>AGT-2653 &mdash; execution hosts table</td><td class="v nyi">not-implemented-yet</td><td class="meta">7 high, 1 low</td></tr>
+<tr><td>AGT-2643 &mdash; escalation view IA</td><td class="v nyi">not-implemented-yet</td><td class="meta">1 medium, 3 low (dossier-only by scope)</td></tr>
+<tr><td>Timeline redesign (dossier AGT-W35)</td><td class="v nyi">not-implemented-yet</td><td class="meta">3 high, 1 medium, 1 low</td></tr>
+</table>
+<p class="meta">Counts: ok 1 &middot; defects-found 3 &middot; not-implemented-yet 4. Dedup result: 3 findings covered by the open card AGT-2675; 10 new-candidates (list at the end).</p>
+
+<h2>AGT-2676 &mdash; explorer tree lane dots</h2>
+<p class="verdictline v ok">ok</p>
+<table>
+<tr><th>Sev</th><th>Finding</th></tr>
+<tr><td class="sev low">low</td><td>Verified live: tree lane dots match visible board lane contents exactly, sampled in the same DOM frame (Agent Studio 1/6/7 &rarr; 14 dots; Quality Studio 2/2/16 &rarr; 15 dots + "+5" overflow, sum equals aggregate). Backlog/Preparation/Post-Processing/Delivered/Archive correctly absent per the three-chip contract.</td></tr>
+<tr><td class="sev low">low</td><td>Epic exclusion verified on the regression fixture: epic TE-8 in 5-human-review, Token Economy board all-zero, tree draws zero dots. The 08-23 operator sighting (green dot on an empty board) is gone.</td></tr>
+<tr><td class="sev low">low</td><td>Human-review dot uses the review lane hue in both themes (light rgb(124,58,237) byte-identical to a live 5-human-review card's --state-color; dark purple-vscode), not green.</td></tr>
+<tr><td class="sev low">low</td><td>By design: ready/progress dots use the explorer nav palette (slate/amber), not the board lane green &mdash; matches the documented nav token contract.</td></tr>
+<tr><td class="sev low">low</td><td>Observation: dots render empty for the first seconds after load (aria-label all zeros) and tree counts lag the board stream by one ~10&thinsp;s refresh cycle; within any single frame tree and board always agreed. Shell data-refresh behavior, not counting logic.</td></tr>
+<tr><td class="sev low">low</td><td>Not exercisable live: the escalated-lane fold into the human-review dot (no escalated card existed during verification); covered by the unit spec.</td></tr>
+</table>
+
+<h2>AGT-2656 + AGT-2675 &mdash; token usage popovers</h2>
+<p class="verdictline v def">defects-found</p>
+<table>
+<tr><th>Sev</th><th>Finding</th><th>Dedup</th></tr>
+<tr><td class="sev high">high</td><td>Popovers render WITHOUT interaction: on board load all ~36 task-card popovers paint despite their <code>hidden</code> attribute (<code>:host { display:block; position:fixed }</code> overrides the UA <code>[hidden]</code> rule), showing content strips over uninteracted cards in every lane, both themes, all widths &mdash; and the hidden subtrees intercept pointer events.</td><td class="covered">covered-by AGT-2675 (3-progress; not yet delivered to stable &mdash; integration null)</td></tr>
+<tr><td class="sev high">high</td><td>"No Unknown totals for Claude 5 family" fails live: runs recorded under the display name "Claude Sonnet 5" (remote-runner ledger form) resolve to unknownModel in the price catalog while the id form <code>claude-sonnet-5</code> is priced &mdash; whole popover buckets show "no price data" (e.g. AGT-2669: 6 of 7 runs, the 215M "Core agent work" bucket).</td><td class="candidate">new-candidate &mdash; TE-44 (delivered) added the id-form prices only; QS-94 is the QS-side catalog, a different system. No open card owns display-name resolution.</td></tr>
+<tr><td class="sev medium">medium</td><td>No dismiss on scroll: an open popover stays open while the lane scrolls; OverlayPortalService repositions instead of closing, and once the anchor leaves the viewport the popover clamps to the edge and floats detached over unrelated cards.</td><td class="covered">covered-by AGT-2675 (scroll dismiss is in the card title)</td></tr>
+<tr><td class="sev medium">medium</td><td>Contradictory cost statements in one popover: "Core agent work 215M &mdash; no price data" next to a resolved-looking "Total (est.): $22.22"; the honest "Incomplete: 6 runs without price" marker lives only in the hover tooltip (<code>incompleteTokenCostLabel()</code> exists but is unused on this path). Violates ADM-05.</td><td class="candidate">new-candidate &mdash; no open card owns popover cost honesty</td></tr>
+<tr><td class="sev low">low</td><td>PER RUN table has no horizontal gap between When and Model columns ("12:37:48 PMClaude Sonnet 5") at every width; td padding is <code>1px 0</code>. Legibility, ADM-08.</td><td class="candidate">new-candidate</td></tr>
+<tr><td class="sev low">low</td><td>POST /api/token-pricing/calculate returns 500 NullReferenceException (stack trace in body) instead of 400 when the body lacks the items array.</td><td class="candidate">new-candidate</td></tr>
+</table>
+
+<h2>AGT-2644 + AGT-2642 &mdash; lane headers + tree typography</h2>
+<p class="verdictline v def">defects-found (core verified working)</p>
+<table>
+<tr><th>Sev</th><th>Finding</th><th>Dedup</th></tr>
+<tr><td class="sev low">low</td><td>Verified: lane headers use one type system (name 13px/600, count + status 11px tabular-nums), share one vertical centerline (0.0px spread across all 8 lanes, all widths, both themes); at the 220px lane floor no name truncated &mdash; sort glyph and info button collapse first.</td><td class="meta">&mdash;</td></tr>
+<tr><td class="sev low">low</td><td>Verified: compact status notation ("2 active / 3 waiting" &rarr; "1/4" below the 360px container breakpoint), full wording in tooltip/aria-label, counts reconcile with the lane badge; identical in dark theme.</td><td class="meta">&mdash;</td></tr>
+<tr><td class="sev low">low</td><td>Verified: dossier tree entries as single 24px rows, flattened indent, inline status dot / "N open", zero-count badges omitted, group badges reconcile, quiet empty states, key in tooltip per the key-inline-or-tooltip rule.</td><td class="meta">&mdash;</td></tr>
+<tr><td class="sev medium">medium</td><td>DEFECT (in the "all lanes" scope): Delivered lane header overflows at the 220px minimum width &mdash; the non-compacting "Archive all" button (78.7px) pushes trailing controls past the header edge (collapse control squeezed to 6.4px and clipped). Violates the ADM-12 compaction order. Name-first itself held.</td><td class="candidate">new-candidate</td></tr>
+<tr><td class="sev low">low</td><td>DEFECT (adjacent, name-first rule): workspace folder rows still truncate their name ("Agent Orchestra&hellip;") while count badge and add button keep full width, and the full name is not available (tooltip is the rename hint, aria-label null). Project rows are fixed.</td><td class="candidate">new-candidate</td></tr>
+<tr><td class="sev low">low</td><td>Out-of-scope observation: token popovers render open on page load across many cards in both themes.</td><td class="covered">covered-by AGT-2675</td></tr>
+</table>
+
+<h2>Cycle-time panel (local build 08-23)</h2>
+<p class="verdictline v def">defects-found</p>
+<table>
+<tr><th>Sev</th><th>Finding</th><th>Dedup</th></tr>
+<tr><td class="sev medium">medium</td><td>Drill-down task open gives no pending feedback and the task-detail fetch took 3.4s / 11.8s / 14.2s / once &gt;15s in four fresh-context trials; <code>App.onOpenTaskFromReel</code> swallows errors (<code>error: () =&gt; {}</code>), so a slow or failed open is indistinguishable from a dead click. The open itself works end-to-end.</td><td class="candidate">new-candidate</td></tr>
+<tr><td class="sev low">low</td><td>Dark-theme transition matrix: level-4 cells render the ~11px count numerals at &asymp;4.2:1 contrast, just under WCAG AA 4.5:1; all other levels &ge;6:1.</td><td class="candidate">new-candidate</td></tr>
+<tr><td class="sev low">low</td><td>Data observation: AGT-2555 reports 36 integration attempts from a stuck-integration retry loop (2 coding runs, outcome OperatorOverride) and dominates the 30d/all-time attempts max without a retry-loop cause hint. AGT-2575 itself is correct at 17.</td><td class="candidate">new-candidate (cause hint / loop annotation)</td></tr>
+<tr><td class="sev low">low</td><td>At 420px the studio shell keeps tree and deck rail expanded, squeezing the panel to a sliver. Not a cycle-time defect (panel tables scroll internally, body never scrolls horizontally) &mdash; the shell has no narrow-width collapse.</td><td class="candidate">new-candidate (shell-level)</td></tr>
+</table>
+
+<h2>AGT-2645 &mdash; status-bar review plane</h2>
+<p class="verdictline v nyi">not-implemented-yet</p>
+<table>
+<tr><th>Sev</th><th>Finding</th></tr>
+<tr><td class="sev high">high</td><td>Feature absent from live stable: no review-plane footer item, no per-plane slot figures, no utilization figure, no amber attention state &mdash; light, dark-emulated and 700px-narrow probes alike (<code>status-bar-review</code> testid count 0; footer reads "9 remote &middot; 8/17 auto &middot; quota").</td></tr>
+<tr><td class="sev high">high</td><td>The backend endpoint the frontend depends on, /api/runner/auto-review-queue, returns 404 live &mdash; the adding commit 827d504 is not reachable from deployed main.</td></tr>
+<tr><td class="sev high">high</td><td>Never integrated: all AGT-2645 commits live only on runner result/salvage/quarantine branches; no integration record; the card is re-running (real delivery = integration.status==integrated).</td></tr>
+<tr><td class="sev medium">medium</td><td>The forbidden state ("no runners" while a plane has active workers) is still reachable: live <code>formatRunningLabel</code> returns "no runners" whenever local=0 and remote=0, with no review-plane input.</td></tr>
+<tr><td class="sev medium">medium</td><td>The targeted visibility gap is live and observable: the review plane was processing 2 post-processing jobs while the footer surfaced only coding-plane activity.</td></tr>
+<tr><td class="sev low">low</td><td>The branch implementation (not live) does match the spec on code inspection: per-plane labels, amber/mismatch tone, stagnation tooltip, "no runners" suppression.</td></tr>
+</table>
+<p class="meta">Reconciliation: the card itself is still in flight (4-auto-review at sweep time) &mdash; no dedup entries; watch the next integration.</p>
+
+<h2>AGT-2653 &mdash; execution hosts table</h2>
+<p class="verdictline v nyi">not-implemented-yet</p>
+<table>
+<tr><th>Sev</th><th>Finding</th></tr>
+<tr><td class="sev high">high</td><td>The delivery never reached the running build: integration.status = conflict-skipped (build gate blocked the merge into develop: 5 test failures in OrchestratorApi.Tests, develop rolled back, nothing pushed). The stable tree contains only the round-1 table; the live UI exhibits every defect the card describes.</td></tr>
+<tr><td class="sev high">high</td><td>Retired hosts not hidden by default and no toggle: 12 retired e2e-* rows dominate the 15-row list; DOM sweep found zero filter controls.</td></tr>
+<tr><td class="sev high">high</td><td>No physical-host grouping: agent-runner-01 and agent-runner-01-review render as unrelated rows with independent load bars; the /api/clients record carries no host-identity field the UI could group by.</td></tr>
+<tr><td class="sev high">high</td><td>Review-role slots cell shows the literal "0 / n/a" the card demands be fixed.</td></tr>
+<tr><td class="sev high">high</td><td>Release column shows generic "0.1.0" for both runner roles; retired rows render "Not reported" placeholder bars, and the Load "Not reported" overlaps the Last-activity text.</td></tr>
+<tr><td class="sev high">high</td><td>Not responsive: the table wrap shrinks to 476/176/0px at 1100/800/520px viewports; all row action buttons sit beyond the visible edge &mdash; no overflow menu, no column yielding.</td></tr>
+<tr><td class="sev high">high</td><td>Expanded row is still the flat "gray blob": five sections rendered at once, 5624 characters, zero per-section expanders, no compact summary layer.</td></tr>
+<tr><td class="sev low">low</td><td>Incidentals: dark emulation is a no-op (theme is an explicit app setting); a transient "Backend not reachable" banner degraded the table to a stale snapshot once; no console errors.</td></tr>
+</table>
+<p class="meta">Reconciliation: known conflict-skipped class ("Delivered" lies) &mdash; orchestrator action, not a new card: fix the gate failures, requeue/re-integrate AGT-2653.</p>
+
+<h2>AGT-2643 &mdash; escalation view IA</h2>
+<p class="verdictline v nyi">not-implemented-yet</p>
+<table>
+<tr><th>Sev</th><th>Finding</th></tr>
+<tr><td class="sev low">low</td><td>AGT-2643 delivered the IA dossier only, per its own scope line ("no UI implementation"); commit 2acd19ba is docs-only, card archived.</td></tr>
+<tr><td class="sev medium">medium</td><td>No implementation cards were ever cut: workbench.json says decision-pending/decision-ready with implementationTasks=[] &mdash; blocked on the operator decision since 08-12.</td></tr>
+<tr><td class="sev low">low</td><td>Live UI confirms the pre-dossier state on an escalated card (AGT-2307): content-free escalation header, competing Pipeline chip + GAP strip, Result "Pipeline failure" badge, nested WHERE IT STOPPED box &mdash; none of the target IA present.</td></tr>
+<tr><td class="sev low">low</td><td>Code markers for all four dossier slices absent in the served checkout (no problemSummary, no badge suppression, no acceptance fixtures beyond the pre-existing spec).</td></tr>
+</table>
+<p class="meta">Reconciliation: waiting on the operator's dossier decision; cards are cut only after the nod.</p>
+
+<h2>Timeline redesign (dossier AGT-W35)</h2>
+<p class="verdictline v nyi">not-implemented-yet</p>
+<table>
+<tr><th>Sev</th><th>Finding</th></tr>
+<tr><td class="sev high">high</td><td>Only the dossier exists (decision-pending, implementationTasks=[]); the sole timeline code change since (AGT-2640 progressive window) lives on an unmerged salvage ref only.</td></tr>
+<tr><td class="sev high">high</td><td>Newest-first with jump-to-start absent live: Timeline renders oldest-first at scrollTop 0 with no navigation control; on a 182-event task the newest entry sits ~36,500px away.</td></tr>
+<tr><td class="sev high">high</td><td>Resolved QuotaExceeded still presented as acute: a red danger banner stays pinned atop healed tasks (AGT-2577 completed+archived, AGT-2664 running again) although the stream contains the healing events &mdash; exactly the anti-pattern the dossier removes.</td></tr>
+<tr><td class="sev medium">medium</td><td>Long outputs not collapsed: zero disclosures among timeline rows; integration_failed rows up to ~2,400 chars inline; idempotency keys / salvage URLs / SHAs as raw chips wrapping mid-value.</td></tr>
+<tr><td class="sev low">low</td><td>Context: dark emulation is a no-op (explicit toggle), 420px crushes the pane to a ~127px sliver without document-level overflow, near-empty timeline renders cleanly, cold-start showed a transient backend banner.</td></tr>
+</table>
+<p class="meta">Reconciliation: waiting on the operator's dossier decision.</p>
+
+<h2>New-candidates</h2>
+<p>Recorded per log discipline &mdash; no cards cut; each becomes a card only after a second sighting or operator nod.
+The first four form one popover/pricing complex and would likely cut as two cards, not four.</p>
+<table>
+<tr><th>#</th><th>Candidate</th><th>Sev</th><th>Source</th></tr>
+<tr><td>1</td><td>Price catalog must resolve model display names: "Claude Sonnet 5" (remote-runner ledger form) &rarr; the priced <code>claude-sonnet-5</code>; today ~180M Claude-5 tokens are unpriced. TE-44 (delivered) covered the id form only.</td><td class="sev high">high</td><td>2656+2675</td></tr>
+<tr><td>2</td><td>Popover cost honesty: visible "Incomplete: N runs without price" instead of tooltip-only; no per-bucket "no price data" next to a resolved-looking total (ADM-05).</td><td class="sev medium">medium</td><td>2656+2675</td></tr>
+<tr><td>3</td><td>Popover PER RUN table: horizontal gap between When and Model columns (values currently collide).</td><td class="sev low">low</td><td>2656+2675</td></tr>
+<tr><td>4</td><td>POST /api/token-pricing/calculate: 400 on missing items array instead of 500 NullReferenceException with stack trace in the body.</td><td class="sev low">low</td><td>2656+2675</td></tr>
+<tr><td>5</td><td>Delivered lane header: "Archive all" must compact/collapse at minimum lane width instead of clipping trailing controls (ADM-12 compaction order).</td><td class="sev medium">medium</td><td>2644+2642</td></tr>
+<tr><td>6</td><td>Workspace folder rows: name gets available width first and the full name is always available as tooltip (AGT-2642 addendum, done for project rows, missing for workspace rows).</td><td class="sev low">low</td><td>2644+2642</td></tr>
+<tr><td>7</td><td>Task open from the cycle-time reel: pending indicator, surfaced errors (handler currently swallows them), and the 3.4&ndash;15s task-detail fetch investigated.</td><td class="sev medium">medium</td><td>cycle-time</td></tr>
+<tr><td>8</td><td>Cycle-time dark matrix: level-4 cell count numerals below WCAG AA (4.2:1).</td><td class="sev low">low</td><td>cycle-time</td></tr>
+<tr><td>9</td><td>Integration-attempt counts need a retry-loop cause hint (AGT-2555: 36 attempts from 2 runs dominates the aggregate max and misleads without one).</td><td class="sev low">low</td><td>cycle-time</td></tr>
+<tr><td>10</td><td>Studio shell narrow-width collapse: below ~500px tree and deck rail stay expanded and squeeze the panel to a sliver.</td><td class="sev low">low</td><td>cycle-time</td></tr>
+</table>
+
+<footer>Sweep executed 2026-08-25 by the session orchestrator, read-only against stable. Dedup checked against the open AGT, QS and TE boards at sweep time (AGT-2675 in 3-progress; TE-44 delivered/closed). Back to the <a href="index.html">live improvement log</a>.</footer>
+</main>
+</body>
+</html>

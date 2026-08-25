@@ -152,6 +152,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v covered">covered-by (extended)</td>
   <td>AGT-2680 extended: breaker pauses must carry visible reasons and auto-resume on provider-limit recovery; AGT-2678 (already integrated) covers the restart defect - its fix reaches stable with the next rollout.</td>
 </tr>
+<tr>
+  <td class="meta">08-25 12:0x</td>
+  <td><strong>Live verification sweep across eight recent deliveries</strong> (read-only: headless probes of stable in light/dark/narrow, API cross-checks, git lineage). Result: 1 ok (AGT-2676 tree lane dots &mdash; exact board match, epic exclusion proven on the TE-8 fixture), 3 defects-found (token popovers 2656+2675 incl. render-without-interaction and unpriced Claude-5 display names; lane headers/tree 2644+2642 core verified with edge defects; cycle-time panel), 4 not-implemented-yet (AGT-2645 status-bar review plane &mdash; never integrated, endpoint 404, card re-running; AGT-2653 execution hosts &mdash; conflict-skipped, live UI unchanged; AGT-2643 escalation IA and timeline W35 &mdash; both dossier-only, decision-pending). Full findings with severities and per-finding dedup: <a href="verification-2026-08-25.html">verification-2026-08-25</a>.</td>
+  <td class="v action">operator-action (done)</td>
+  <td>Dedup against open AGT/QS/TE cards: AGT-2675 (in flight) owns the popover stacking/scroll class; 10 findings are new-candidates (price-catalog display-name resolution, popover cost honesty, Delivered-lane header compaction, cycle-time task-open feedback, &hellip;) &mdash; recorded in the sweep page, no cards cut. AGT-2653's skipped integration is orchestrator work (gate fix + requeue); the two decision-pending dossiers stay with the operator.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
