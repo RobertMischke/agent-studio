@@ -15,13 +15,14 @@ devspace=$test_root/devspace
 fake_bin=$test_root/bin
 stop_marker=$test_root/stop-ran
 start_marker=$test_root/start-ran
+task_server_start_marker=$test_root/task-server-start-ran
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
 git -C "$source_checkout" config user.name 'Stable Update Test'
 git -C "$source_checkout" config user.email 'stable-update@example.invalid'
 mkdir -p "$source_checkout/frontend/scripts"
-printf '%s\n' '/frontend/node_modules/' '/frontend/.angular/' > "$source_checkout/.gitignore"
+printf '%s\n' '/frontend/node_modules/' '/frontend/.angular/' '/backend/appsettings.Local.json' > "$source_checkout/.gitignore"
 printf '%s\n' '{"name":"fixture","private":true}' > "$source_checkout/frontend/package.json"
 printf '%s\n' '{"lockfileVersion":3}' > "$source_checkout/frontend/package-lock.json"
 printf '%s\n' '// initial compatibility patch' > "$source_checkout/frontend/scripts/patch-coding-agent-chat-technical-blocks.mjs"
@@ -86,12 +87,22 @@ cat > "$devspace/start-stable.sh" <<'EOF'
 set -eu
 : > "$ATP_TEST_START_MARKER"
 EOF
+cat > "$devspace/start-task-server.sh" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+: > "$ATP_TEST_TASK_SERVER_START_MARKER"
+EOF
 cat > "$fake_bin/npm" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 printf '%s\n' patched > "$ATP_TEST_PACKAGE_FILE"
 EOF
-chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$fake_bin/npm"
+cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+exit 0
+EOF
+chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$devspace/start-task-server.sh" "$fake_bin/npm" "$fake_bin/curl"
 
 run_update() {
   env \
@@ -103,6 +114,7 @@ run_update() {
     ATP_BOOT_PROBE_SETTLE_MS=0 \
     ATP_TEST_STOP_MARKER="$stop_marker" \
     ATP_TEST_START_MARKER="$start_marker" \
+    ATP_TEST_TASK_SERVER_START_MARKER="$task_server_start_marker" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
     ATP_TEST_STALE_CACHE="$stable_checkout/frontend/.angular/cache/deps.js" \
     PATH="$fake_bin:$PATH" \
@@ -124,6 +136,29 @@ printf '%s' "$output" | grep -q 'Invalidated the Angular/Vite optimizer cache'
 printf '%s' "$output" | grep -q 'Boot completed without page errors'
 printf '%s' "$output" | grep -q 'Stable started and healthy'
 
+# A rollback leaves Stable detached. A no-content update must reattach the
+# checkout to main so the next fast-forward is an ordinary branch update.
+git -C "$stable_checkout" checkout --quiet --detach
+detached_output=$(run_update)
+test "$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD)" = main
+printf '%s' "$detached_output" | grep -q 'attached to main'
+
+# Proxy mode requires the supervised Task Server to start and become ready
+# before the API wrapper is invoked. The API proxy route is probed as a second
+# topology boundary before browser startup.
+mkdir -p "$stable_checkout/backend"
+printf '%s\n' '{"TaskServer":{"BaseUrl":"http://127.0.0.1:5071"}}' > "$stable_checkout/backend/appsettings.Local.json"
+printf '%s\n' 'release with task server proxy' > "$source_checkout/release.txt"
+git -C "$source_checkout" commit --quiet -am 'release with task server proxy'
+git -C "$source_checkout" push --quiet origin main
+proxy_output=$(ATP_TASK_SERVER_START_SCRIPT="$devspace/start-task-server.sh" run_update)
+test -f "$task_server_start_marker"
+task_server_line=$(printf '%s\n' "$proxy_output" | grep -n 'Starting supervised Task Server' | cut -d: -f1)
+api_line=$(printf '%s\n' "$proxy_output" | grep -n 'Starting Stable' | cut -d: -f1)
+test "$task_server_line" -lt "$api_line"
+printf '%s' "$proxy_output" | grep -q 'Task Server ready'
+printf '%s' "$proxy_output" | grep -q 'Stable Task Server proxy ready'
+
 # A separate release injects an application boot crash. An open port and a
 # successful document response must not allow the updater to claim health.
 printf '%s\n' 'release with injected crash' > "$source_checkout/release.txt"
@@ -131,7 +166,7 @@ git -C "$source_checkout" commit --quiet -am 'release with boot crash'
 git -C "$source_checkout" push --quiet origin main
 
 set +e
-crash_output=$(ATP_TEST_PAGEERROR='injected boot crash' run_update)
+crash_output=$(ATP_TEST_PAGEERROR='injected boot crash' ATP_TASK_SERVER_START_SCRIPT="$devspace/start-task-server.sh" run_update)
 crash_rc=$?
 set -e
 

@@ -1,7 +1,8 @@
 # Task Server deployment and recovery
 
-Status: production bootstrap, topology release, and sole v1 ownership contract,
-AGT-2192/AGT-2196/AGT-2330, 2026-07-25.
+Status: production bootstrap, topology release, sole v1 ownership contract, and
+planned Windows local cutover, AGT-2192/AGT-2196/AGT-2330/AGT-2663,
+2026-08-25.
 
 This runbook implements the Task Server boundary from
 [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md).
@@ -151,6 +152,95 @@ targeting the installed executable, mirroring
 ```powershell
 C:\AgentOrchestrator\current\task-server.exe backup --name manual
 ```
+
+### Planned Windows local cutover
+
+The 16 August 2026 incident proved that claim-path decoupling cannot be
+released before the local host topology is migrated. Keep Stable on the known
+good pre-decoupling release until every step below has evidence. Do not create
+an interactive session task for either the rehearsal or production service.
+
+1. From an elevated PowerShell, publish and install the production service.
+   Its store is under the devspace, outside the versioned executable directory,
+   and the default listener is `http://127.0.0.1:5071`:
+
+   ```powershell
+   .\deploy\windows\task-server\install-task-server.ps1 `
+       -SourceRoot C:\Projects\agent-taskboard-dev `
+       -DevspaceDirectory C:\Projects\agent-taskboard-devspace
+   ```
+
+   Save the returned version, release directory, data directory, Scheduled
+   Task name, and ready URL. Confirm the `AgentOrchestrator-TaskServer`
+   principal has `LogonType=S4U`, and confirm only that account can modify
+   `server.env` and the data directory.
+
+2. Rehearse migration against a frozen copy and a separate Task Server store.
+   Create `C:\ProgramData\AgentOrchestrator\rehearsal.env` with `LISTEN_URL`
+   set to `http://127.0.0.1:5072`, `STORE_PATH` set to a new rehearsal data
+   directory, and `AUTH=none`. Register it with a distinct S4U task:
+
+   ```powershell
+   .\deploy\windows\task-server\register-task-server.ps1 `
+       -TaskName AgentOrchestrator-TaskServer-Rehearsal `
+       -InstallRoot C:\AgentOrchestrator\current `
+       -EnvFile C:\ProgramData\AgentOrchestrator\rehearsal.env
+
+   .\deploy\windows\task-server\rehearse-legacy-migration.ps1 `
+       -LegacyRoot C:\Projects\agent-taskboard-workspace `
+       -RehearsalRoot C:\Projects\agent-taskboard-devspace\migration-rehearsal-source `
+       -TaskServerUrl http://127.0.0.1:5072 `
+       -EvidencePath C:\Projects\agent-taskboard-devspace\migration-rehearsal.json
+   ```
+
+   The rehearsal is successful only when task, coding-attempt, review-attempt,
+   active-authority, and authority-epoch values match between inventory and
+   import, the integrity digest is present, and no invariant violation reports
+   a second writer. `LegacyMigrationService` includes
+   `.metadata/attempt-authority.json` in the inventory digest. Active coding
+   and review leases import as `process-unknown`, never as newly claimable
+   work, and fence counters retain their highest legacy values. Archive the
+   rehearsal JSON and delete the rehearsal Scheduled Task before production
+   cutover.
+
+3. Freeze all legacy writers. Pause Coding and Review runners, stop Stable,
+   and retain the untouched legacy root as the rollback half. Inventory the
+   production source, put the production Task Server in `Maintenance`, and
+   import with `freezeConfirmed=true` and the exact returned migration ID.
+   Compare all counts and archive the pre-import backup ID plus integrity
+   SHA-256. A changed migration ID or any missing attempt authority aborts the
+   cutover. Do not resume either writer.
+
+4. Only after the production import passes, configure proxy mode in the
+   gitignored Stable override:
+
+   ```powershell
+   .\deploy\windows\task-server\set-stable-task-server-proxy.ps1 `
+       -StableCheckout C:\Projects\agent-taskboard-stable `
+       -BaseUrl http://127.0.0.1:5071
+   ```
+
+   Resume the Task Server in `Normal`, then run `scripts/update-stable.sh` from
+   the current development checkout. When `TaskServer:BaseUrl` is present, the
+   updater starts the supervised Task Server before the API, waits for
+   `/readyz`, verifies the API's proxied `/api/v1/protocol`, runs the browser
+   boot probe, and reattaches a detached Stable checkout to `main` only after
+   all probes pass.
+
+5. Resume one Coding runner and one Review runner. Preserve evidence for one
+   fenced coding claim and heartbeat, coding report/result submission, review
+   claim and fenced report, resulting board projections through Auto Review
+   and Human Review, and the management audit rows. Then resume the fleet.
+   Roll back before any new write if a route is 404, an authority count
+   differs, a fence regresses, or a projection does not converge. After the
+   first accepted write, never restart the legacy writer against these logical
+   tasks.
+
+The host execution record belongs in the task job's collected `results/`
+directory. Include the rehearsal JSON, production inventory/import responses,
+service identity and readiness output, Stable HEAD and branch state, route
+probe output, claim/review/report identifiers with secrets removed, and board
+projection evidence.
 
 ## Configuration and health
 

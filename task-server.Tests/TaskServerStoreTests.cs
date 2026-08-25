@@ -404,9 +404,39 @@ public sealed class TaskServerStoreTests
                 var taskDirectory = Path.Combine(legacy.Path, "projects", "agent-studio", "2-ready", "AGT-1");
                 Directory.CreateDirectory(Path.Combine(taskDirectory, "results"));
                 Directory.CreateDirectory(Path.Combine(legacy.Path, ".git"));
+                Directory.CreateDirectory(Path.Combine(legacy.Path, ".metadata"));
                 await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".git", "HEAD"), "ref: refs/heads/main\n");
-                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "job.json"), """
+                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "task.json"), """
                     {"id":"AGT-1","title":"Migrated task","state":"2-ready","projectName":"Agent Studio"}
+                    """);
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"), """
+                    {
+                      "schemaVersion": 4,
+                      "authorityEpoch": 7,
+                      "lastFenceByTask": { "AGT-1": 12 },
+                      "runAttempts": [
+                        {
+                          "attemptId": "run_legacy_active",
+                          "taskKey": "AGT-1",
+                          "repositoryId": "repo-agent-studio",
+                          "state": 1,
+                          "lastFence": 12,
+                          "authorityEpoch": 7,
+                          "createdAt": "2026-07-17T10:01:00Z",
+                          "lease": {
+                            "leaseId": "lease_legacy_active",
+                            "fence": 12,
+                            "authorityEpoch": 7,
+                            "executorId": "runner-legacy",
+                            "hostId": "windows-host",
+                            "leaseInstanceId": "instance-legacy",
+                            "acquiredAt": "2026-07-17T10:01:00Z",
+                            "expiresAt": "2026-07-17T10:03:00Z"
+                          }
+                        }
+                      ],
+                      "reviewAttempts": []
+                    }
                     """);
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "prompt.md"), "Migrated prompt");
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "timeline.jsonl"), "{\"kind\":\"created\",\"timestamp\":\"2026-07-17T10:00:00Z\"}\n");
@@ -421,6 +451,10 @@ public sealed class TaskServerStoreTests
                 Assert.Equal(1, inventory.Tasks);
                 Assert.Equal(1, inventory.Events);
                 Assert.Equal(1, inventory.Artifacts);
+                Assert.Equal(1, inventory.CodingAttempts);
+                Assert.Equal(0, inventory.ReviewAttempts);
+                Assert.Equal(1, inventory.ActiveAuthorities);
+                Assert.Equal(7, inventory.AuthorityEpoch);
 
                 request = request with { ExpectedMigrationId = inventory.MigrationId };
                 await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "single-writer cutover"), "operator", default);
@@ -434,8 +468,31 @@ public sealed class TaskServerStoreTests
                 var migrated = Assert.Single(await store.ListTasksAsync(project.ProjectId, default));
                 Assert.Equal("AGT-1", migrated.TaskKey);
                 Assert.Equal("Migrated prompt", migrated.Body);
+                Assert.Equal(1, result.CodingAttempts);
+                Assert.Equal(1, result.ActiveAuthorities);
                 Assert.Single(await store.ListEventsAsync(string.Empty, 0, default));
                 Assert.Single(await store.ListArtifactsAsync(string.Empty, default));
+
+                await using (var connection = new SqliteConnection($"Data Source={store.DatabasePath}"))
+                {
+                    await connection.OpenAsync();
+                    await using var command = connection.CreateCommand();
+                    command.CommandText = """
+                        SELECT r.id, r.status, r.fence, l.lease_id, l.status, l.runner_id, l.instance_id
+                          FROM runs r
+                          JOIN leases l ON l.run_id = r.id
+                         WHERE r.id = 'run_legacy_active';
+                        """;
+                    await using var reader = await command.ExecuteReaderAsync();
+                    Assert.True(await reader.ReadAsync());
+                    Assert.Equal("run_legacy_active", reader.GetString(0));
+                    Assert.Equal("process-unknown", reader.GetString(1));
+                    Assert.Equal(12, reader.GetInt64(2));
+                    Assert.Equal("lease_legacy_active", reader.GetString(3));
+                    Assert.Equal("process-unknown", reader.GetString(4));
+                    Assert.Equal("runner-legacy", reader.GetString(5));
+                    Assert.Equal("instance-legacy", reader.GetString(6));
+                }
 
                 var migrationBackup = Assert.Single(Directory.EnumerateFiles(
                     store.BackupDirectory,

@@ -57,7 +57,11 @@ public sealed record LegacyMigrationInventory(
     int Events,
     int Artifacts,
     IReadOnlyList<string> EvidenceGitRoots,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    int CodingAttempts = 0,
+    int ReviewAttempts = 0,
+    int ActiveAuthorities = 0,
+    long AuthorityEpoch = 0);
 
 public sealed record LegacyMigrationResult(
     string MigrationId,
@@ -68,4 +72,8 @@ public sealed record LegacyMigrationResult(
     int Artifacts,
     string IntegritySha256,
     string RollbackBoundary,
-    IReadOnlyList<string> EvidenceGitRoots);
+    IReadOnlyList<string> EvidenceGitRoots,
+    int CodingAttempts = 0,
+    int ReviewAttempts = 0,
+    int ActiveAuthorities = 0,
+    long AuthorityEpoch = 0);
