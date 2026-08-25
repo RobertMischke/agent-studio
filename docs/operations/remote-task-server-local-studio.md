@@ -241,17 +241,19 @@ These are Phase B work, not assumptions that operations can work around:
    only the versioned subset. Phase B must classify every Studio route as
    Task Server, local dev-seat helper, or retired, and prove all task,
    orchestration, host, file, event, and management paths remotely.
-2. **Current workspace migration.** `LegacyMigrationService` currently scans
-   `job.json`, while the active backend writes `task.json`. A production
-   inventory could therefore report a false zero. The migrator must consume the
-   current layout and add per-project and per-state counts before it is trusted.
+2. **Current workspace migration.** The local Windows cutover migrator now
+   consumes `task.json` and legacy `job.json`, includes attempt authority in the
+   frozen-source digest, preserves coding and review attempt IDs and fences, and
+   imports unresolved leases as `process-unknown`. The broader remote cutover
+   still needs per-project and per-state inventory presentation for operator
+   acceptance.
 3. **Scoped credentials.** The packaged install defaults to one shared bearer.
    It must support separate hash-only Studio, Engine, and per-Runner
    credentials with route authorization and revocation.
-4. **Windows fallback artifact.** The documented control-plane release is
-   `linux-x64`. A version-matched Windows Task Server package or an equally
-   tested Windows service installation, including cross-platform backup
-   restore, is required before the move can be called reversible.
+4. **Windows fallback artifact.** A version-matched self-contained `win-x64`
+   package and S4U Scheduled Task installer now exist for the local control
+   plane. The remote Linux move still requires a cross-platform backup restore
+   rehearsal before it can be called reversible.
 5. **Connector security.** The local connector needs complete `/api` and
    `/hubs` forwarding, secret-file or Credential Manager integration, strict
    Origin checks, CSRF, protocol negotiation, health reporting, and an atomic

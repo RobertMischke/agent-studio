@@ -111,10 +111,23 @@ Register and supervise the process with the scripts in
 from the Studio checkout:
 
 ```powershell
+.\deploy\windows\task-server\install-task-server.ps1 `
+    -SourceRoot C:\Projects\agent-taskboard-devspace\agent-taskboard-dev `
+    -DevspaceRoot C:\Projects\agent-taskboard-devspace
+
 .\deploy\windows\task-server\register-task-server.ps1 `
     -InstallRoot C:\AgentOrchestrator\current `
     -EnvFile C:\ProgramData\AgentOrchestrator\server.env
 ```
+
+The installer publishes a versioned, self-contained package, keeps the
+`current` junction under `C:\AgentOrchestrator`, and places the mutable store
+and backups under
+`C:\Projects\agent-taskboard-devspace\state\task-server`. It creates the
+loopback-only `server.env` only when that host-owned file does not exist. An
+existing file must already contain every required key and is never replaced.
+The installer intentionally does not enable OrchestratorApi proxy mode. Enable
+the proxy only after the frozen migration has passed the rehearsal below.
 
 `register-task-server.ps1` registers `AgentOrchestrator-TaskServer` as an
 `AtStartup`-triggered Scheduled Task under an `S4U` principal - services never
@@ -345,23 +358,38 @@ remains in `Maintenance` until an operator explicitly resumes normal service.
 Legacy absolute paths and `watchPath` are migration inputs only. They never
 become resource identity.
 
-1. Call `POST /api/v1/management/migrations/legacy/inventory` with the legacy
-   root and workspace name. Save the project/task/event/artifact counts,
-   warnings, evidence-Git roots, and migration ID.
-2. Stop every legacy writer. Confirm Studio task mutations and the in-process
+The inventory reads both the current `task.json` layout and the older
+`job.json` layout. It hashes `.metadata/attempt-authority.json` into the
+migration ID and reports coding Runs, leases, ReviewAttempts, and the legacy
+authority epoch. Import preserves RunAttempt and ReviewAttempt IDs and their
+monotonic fences. Every unresolved coding or review lease enters the new store
+as `process-unknown`; it cannot be reclaimed until the operator proves process
+containment. A malformed authority record or an attempt that refers to a task
+outside the frozen inventory fails the transaction.
+
+1. Copy the complete TaskRepository to an isolated rehearsal directory. Call
+   `POST /api/v1/management/migrations/legacy/inventory` with the copied root
+   and workspace name. Save the project/task/event/artifact counts,
+   Run/lease/ReviewAttempt counts, authority epoch, warnings, evidence-Git
+   roots, and migration ID.
+2. Import the rehearsal inventory into a disposable Task Server data directory
+   in `Maintenance`. Compare all counts, the returned integrity digest, attempt
+   IDs, fence counters, and `process-unknown` rows. Preserve the report before
+   deleting only this disposable rehearsal store.
+3. Stop every legacy writer. Confirm Studio task mutations and the in-process
    runner are stopped. A delta replay is acceptable only if it ends with the
    same exclusive writer freeze.
-3. Put Task Server in `Maintenance` and call the matching `/import` route with
+4. Put Task Server in `Maintenance` and call the matching `/import` route with
    `freezeConfirmed:true` and `expectedMigrationId` set to the saved inventory
    ID. Import fails if task metadata, prompts, timelines, or result artifacts
    changed after inventory.
-4. The server creates a pre-import backup, imports the inventory in one
+5. The server creates a pre-import backup, imports the inventory in one
    transaction, preserves task `results/`, timeline events, stable generated
    identities, and copies evidence Git metadata into
    `migration-evidence/{migrationId}`.
-5. Compare counts and save the returned integrity SHA-256. Start Task Server as
+6. Compare counts and save the returned integrity SHA-256. Start Task Server as
    the only writer, then point Studio/BFF and Runner at its URL.
-6. The rollback boundary is the returned pre-import backup plus the untouched,
+7. The rollback boundary is the returned pre-import backup plus the untouched,
    frozen legacy root. Roll back before allowing either side to accept another
    write. After cutover, never reactivate the legacy writer against the same
    logical tasks.
@@ -370,6 +398,45 @@ The automated acceptance suite rehearses inventory, freeze enforcement,
 transactional import, integrity verification, backup/restore, evidence Git
 preservation, restart fencing, protocol rejection, and separate process
 lifecycle.
+
+## Local Windows cutover gate
+
+After the production import is verified and all unresolved attempt authority
+has a recorded containment decision, set the server to `Normal`. Add the
+following block to the stable checkout's gitignored
+`backend/appsettings.Local.json`:
+
+```json
+"TaskServer": {
+  "BaseUrl": "http://127.0.0.1:5071"
+}
+```
+
+If bearer authentication is enabled, add `AuthTokenFile` beside `BaseUrl` and
+keep the secret outside both checkouts. Never configure the proxy before the
+import. Doing so exposes an empty authority while the legacy writer remains
+live.
+
+Run `scripts/update-stable.sh` for the rollout. The updater starts or confirms
+the S4U Task Server Scheduled Task, waits for `/readyz` and management status to
+report restored authority, and only then starts OrchestratorApi and performs
+the browser boot probe. A no-source-change watchdog pass performs the same Task
+Server supervision. If stable was pinned at a detached rollback release, the
+updater keeps it detached until all probes pass and then reattaches it to the
+configured `main` branch.
+
+Before releasing the rollout hold, preserve an execution record in the task's
+collected `results/` directory with:
+
+- package version and Git SHA;
+- Scheduled Task principal, state, and last result;
+- frozen source migration ID and pre-import backup ID;
+- inventory and imported counts, authority epoch, and integrity SHA-256;
+- all `process-unknown` containment decisions;
+- direct Task Server and proxied API health;
+- one coding claim and completion, one remote review claim and report, result
+  submission, and board projection evidence;
+- stable branch name and deployed SHA after reattachment.
 
 ## Release topology rehearsal
 
