@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operator Decision Briefing | Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;      /* Branch-Identität: develop */
+    --taskbr: #4a3aa7;       /* Branch-Identität: task/<slug> */
+    --salvage: #eb6834;      /* Branch-Identität: runner/<id>/<key> (Salvage) */
+    --rescue: #b58500;       /* Branch-Identität: rescue/WIP */
+    --ok: #008300;           /* Status gut (immer mit Icon+Text) */
+    --bad: #c93736;          /* Status Problem (immer mit Icon+Text) */
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  /* SVG-Rollen */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-commit { stroke-width: 2.5; fill: var(--surface-1); }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .building-blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 20px 0; }
+  .building-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .building-block h4 { margin: 0 0 4px; font-size: 16px; }
+  .building-block figure { margin: 12px 0 0; }
+  .building-block figure svg { min-height: 170px; }
+  .building-block figcaption { margin-bottom: 0; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  .term-table td:first-child { width: 180px; white-space: nowrap; }
+  .term-table td:nth-child(2) { width: 210px; }
+  .lease-explainer { display: flow-root; }
+  .sequence-wrap { overflow-x: auto; margin: 26px 0; }
+  .sequence-wrap figure { min-width: 900px; margin: 0; }
+  .sequence-wrap figure svg { min-width: 900px; }
+  .seq-head { fill: var(--surface-2); stroke: var(--line); }
+  .seq-head-control { fill: var(--accent-soft); stroke: var(--develop); }
+  .seq-head-exec { fill: var(--ok-soft); stroke: var(--ok); }
+  .seq-head-recovery { fill: var(--warn-soft); stroke: var(--warn); }
+  .seq-life { stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 5 6; }
+  .seq-control { stroke: var(--develop); stroke-width: 2; fill: none; }
+  .seq-exec { stroke: var(--ok); stroke-width: 2; fill: none; }
+  .seq-warn { stroke: var(--warn); stroke-width: 2; fill: none; }
+  .seq-reject { stroke: var(--bad); stroke-width: 2.4; fill: none; }
+  .seq-label { fill: var(--ink-1); font: 600 12px system-ui, sans-serif; }
+  .seq-meta { fill: var(--ink-2); font: 11px ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .seq-chip-control { fill: var(--accent-soft); stroke: var(--develop); }
+  .seq-chip-exec { fill: var(--ok-soft); stroke: var(--ok); }
+  .seq-chip-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .seq-chip-bad { fill: var(--bad-soft); stroke: var(--bad); }
+  .seq-phase { fill: var(--surface-2); stroke: var(--line); stroke-dasharray: 4 4; }
+  .seq-time { fill: var(--ink-3); font: 10.5px ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .more-link { white-space: nowrap; }
+  @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Dossier · Agent Studio</p>
+  <h1>Operator Decision Briefing</h1>
+  <p class="lede">Eight dossiers wait for an operator decision. This page is the map.</p>
+  <div class="meta">
+    <span><b>Date:</b> 25.08.2026</span>
+    <span><b>Scope:</b> all dossiers in status <code>decision-pending</code></span>
+    <span><b>Order:</b> by leverage — cost of delay first, then confidence</span>
+  </div>
+</header>
+
+<p>Eight decisions wait: two with a measured, recurring cost of delay (95 days of cumulative
+requeue rework in 30 days; up to 21.8 weekly quota points per recurrence of the 11–12 August
+wave), one throughput contract behind a 1.2-day median post-processing wait, two routing-economics
+foundations, one telemetry layer, and two presentation contracts. Each section below states the
+recommendation, the evidence behind it, what delay costs, what approval sets in motion, and what
+remains open — ordered by leverage, highest first. The closing table gives each decision as one
+line: the ask and the recommended answer.</p>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#agt-2662">§1 AGT-2662 Rebase, merge, and bounce steering</a></li>
+    <li><a href="#agt-2652">§2 AGT-2652 Token and retry tax</a></li>
+    <li><a href="#agt-2648">§3 AGT-2648 Batch Gate</a></li>
+    <li><a href="#te-43">§4 TE-43 TokenEconomy evidence base</a></li>
+    <li><a href="#te-42">§5 TE-42 Model benchmark per task class</a></li>
+    <li><a href="#agt-2661">§6 AGT-2661 Telemetry layer</a></li>
+    <li><a href="#agt-w35">§7 AGT-W35 Task Timeline redesign</a></li>
+    <li><a href="#agt-2643">§8 AGT-2643 Escalation view</a></li>
+    <li><a href="#answers">§9 Answers</a></li>
+  </ul>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="agt-2662"><span class="no">§1</span>AGT-2662 · Rebase, merge, and bounce steering</h2>
+<p><span class="pill done">confidence: high</span></p>
+<p class="evidence-link">Dossier: <code>docs/operations/rebase-merge-and-steering/</code></p>
+
+<h3>Recommendation</h3>
+<p>Keep the stage-specific Git hybrid and make its boundary explicit: a fresh agent recovery
+round rebases the delivery onto current <code>origin/&lt;integration-branch&gt;</code> and records
+a new fenced review subject; canonical integration tries SHA-preserving no-FF merge first, with
+mapped rebase only as a guarded fallback that fails closed on ambiguous attribution; promotion
+advances <code>main</code> only to the exact gated candidate SHA. Move the first recoverable
+conflict-skipped bounce from live-session labor into one deterministic, restart-safe backend
+round per operator review epoch (scenario 2). Invoke a strong guardian only on repetition,
+contradictory evidence, or genuinely semantic conflicts, ending at Human Review when the bounded
+budget is exhausted — no blind third loop. The Batch Gate (AGT-2648) stays a separate decision.</p>
+
+<h3>Evidence</h3>
+<ul>
+  <li>Session ownership is the proven failure mode: on 13 August the steering session stopped and
+      17 eligible cards accumulated without requeue; 16 more piled up on 15 August; the live
+      improvement log's 20 August entry states "session-cron mortality now bit three times"; on
+      25 August a tripped pickup circuit breaker with an <i>empty</i> halt reason left 0 claims
+      from 00:20 to 09:00 with 32 escalated cards — stalls can be invisible, not just unowned.</li>
+  <li>The merge-first invariant is a learned correction, not a preference: the first 10 August
+      recovery cut rebased before merging and made acceptance attribution fragile; the 11 August
+      AGT-2632 amendment reversed the order — preserve SHAs first, map only as exact fallback,
+      roll back before publication, project ambiguity as <code>AgentRoundRequired</code>. Squash
+      or unmapped rebase at canonical integration is forced out by the <code>commits[]</code>
+      ancestry acceptance contract.</li>
+  <li>Scenario 2 extends deployed seams, not a new scheduler:
+      <code>POST /api/tasks/{jobId}/integration/rebase</code> already validates and requeues;
+      IntegrationAgentRoundService already runs one bounded automatic round; AGT-2544's envelope
+      policy already does one deterministic retry then typed escalation; AGT-2654's guardian
+      already writes restart-safe receipts.</li>
+  <li>Honest weak spot: no measured bounce-volume or cost baseline exists — slice S0 (shadow mode)
+      exists precisely to measure eligible count, latency, repeats, and false eligibility before
+      any mutation. The Batch Gate member-assembly shape is explicitly undecided.</li>
+</ul>
+
+<h3>Cost of delay</h3>
+<p>First-bounce ownership currently equals session availability: each session death strands
+eligible reviewed cards (17 on 08-13, 16 on 08-15, three session-cron mortality incidents by
+08-20, and the invisible breaker pause of 08-25). The 30-day lane-transition measurement sizes
+the surrounding manual carousel: <b>354 operator-requeue moves = 95 days of cumulative rework</b>
+(median 1.9 h each), most of it the orchestrator's own rebase-requeue rail reacting to develop
+movement — though only the integration-recovery share (42 moves) maps one-to-one to the rail this
+decision automates. Undecided means every future orchestrator-session death repeats the pileup
+shape, since implementation cards are cut only after the operator picks a scenario.</p>
+
+<h3>On approval</h3>
+<p>Migration slices S0–S4, backend-owned via existing services: S0 defines the
+IntegrationBounceObligation contract and shadows current manual bounces without mutation; S1 gives
+the deterministic rail ownership of the first eligible reviewed conflict-skipped round
+(matrix-tested; no model call); S2 adds floor-aware thinking selection, action receipts, a
+queue-age alert, and a per-project kill switch — acceptance includes the 17-card session-loss
+shape draining after a backend restart with no open Studio session; S3 feeds repeated or complex
+bounces into the W15 guardian evidence pack, one strong call per fingerprint; S4 aligns with the
+Batch Gate only if AGT-2648 is approved. Defaults: one automatic round per operator review epoch,
+claim-or-visibly-defer within five minutes; automation never resolves content, edits Git, waives
+a gate, or requeues a hold card. The card is concept-only — implementation cards follow the pick.</p>
+
+<h3>Open questions</h3>
+<ul>
+  <li>Batch Gate member assembly (mapped rebase replay vs. prebuilt no-FF member merges) is
+      undecided inside AGT-2648 — shadow-compare both before the pilot chooses; a fixed rebase
+      replay makes the per-member replacement map a launch-blocking evidence contract.</li>
+  <li>How far automation may act: append a precise steer, apply a floor-safe route, supersede,
+      and requeue via existing services — or only durable detection and obligation visibility,
+      with mutation declined.</li>
+  <li>Guardian trigger boundary: strong model on repeats and semantic conflicts (at least
+      Sol/medium, Sol/xhigh for fencing/security/data-loss risk, one call per fingerprint) — or
+      straight to Human Review; the model may author explanation and proposed steer, never the
+      lane or Git mutation.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="agt-2652"><span class="no">§2</span>AGT-2652 · Token and retry tax, 11–12 August</h2>
+<p><span class="pill done">confidence: high</span></p>
+<p class="evidence-link">Dossier: <code>docs/operations/token-retry-tax-analysis/</code></p>
+
+<h3>Recommendation</h3>
+<p>Approve a CAR requeue-continuation slice first: persist the captured Codex session UUID per
+attempt chain, resume it only when task identity, worktree, branch, and provider still match, and
+cap a mechanical resumed rebase round at 1,211,213 tokens (10% of the cold-round envelope). On
+the observed workload the central counterfactual saves 19.8 weekly quota points (prudent range
+17.6–19.8). In parallel, finish the incident controls already in flight — AGT-2646, AGT-2649,
+AGT-2651 were still in auto-review at cutoff; only AGT-2650 is live as <code>agt-2650b</code> —
+and claim no recurrence protection until they are live and a controlled restart/deploy smoke
+proves it.</p>
+
+<h3>Evidence</h3>
+<ul>
+  <li>Of the 27 observed quota points (68%→95%, 23:52–09:24 CEST): 3 points (11.1%) useful
+      first-run coding, 22 points (81.5%) conflict/rebase re-rounds, 2 points (7.4%)
+      aborted/duplicate/probe runs; reviews consumed 0 GPT points. 88.9% of the rise was retry or
+      aborted-run tax.</li>
+  <li>8,540 Codex token_count events between the anchors: 1,091,939,651 processed tokens, priced
+      by TokenEconomy 0.3.2 at an API-list equivalent of $743.64 — of which $564.81 was conflict
+      re-rounds across 61 sessions.</li>
+  <li>A cold rebase-only round (median 12,112,130.5 tokens, N=10) cost 3.9% <i>more</i> tokens and
+      ran 26.1% longer than a first coding run (median 11,653,720 tokens, N=9) — the opposite of a
+      mechanical continuation's desired shape; every re-round opened a new rollout id because
+      <code>resumeSessionId</code> was null in nightly runner specs, despite codex-cli 0.144.1
+      supporting <code>exec resume</code>.</li>
+  <li>Review incidents (1,905 LeaseExpired messages, wedged-worker kills, a 160-start crash loop)
+      cost host time but 0 GPT points; the conflict-bounce tax (22 of 24 retry points) is
+      untouched by the in-flight incident controls and needs the continuation or a
+      platform-rebase control.</li>
+</ul>
+
+<h3>Cost of delay</h3>
+<p>If this exact wave recurs once per weekly quota window, the non-overlapping central saving
+forgone is <b>21.8 quota points per week</b> (19.8 continuation + 1.0 deploy smoke + 1.0 helper
+race), with 18.6 points/week as the stated planning floor. In observed terms: one such night
+burned 27 points of the weekly GPT quota, of which 24 points (about $625 API-equivalent of
+$743.64 total) were tax rather than work.</p>
+
+<h3>On approval</h3>
+<p>P0: pilot the CAR attempt-chain session-continuation slice on rebase-only rounds (persist
+session UUID, identity-gated resume, compact requeue delta, one resumed continuation with typed
+fallback, per-generation ledger fields); in parallel approve the design of a platform-owned
+deterministic rebase preflight (up to 22.0 points — overlaps continuation, never summed); finish
+review and ship AGT-2651 (deploy smoke). P1: ship AGT-2649 (MainPID wait) and AGT-2646 (attempt
+re-adoption), keep AGT-2650 live, approve the token-ledger durability slice (card
+<code>tokenSummary</code> was null on all inspected nightly cards). P2: decide AGT-2648
+separately on CPU/latency grounds.</p>
+
+<h3>Open questions</h3>
+<ul>
+  <li>The 10% resumed-round envelope (≤1,211,213 tokens, ≤300 s) is an engineering SLO, not a
+      demonstrated property of the untested resume path — the 17.6–19.8-point saving is the
+      estimate the pilot must validate; model-substitution scenarios (13.2 or 21.12 points)
+      overlap it and must not be added on top.</li>
+  <li>AGT-2649's 1-point attribution is inferred: the link between the config-helper PID race and
+      the first aborted AGT-2635 run is "probable, not proven".</li>
+  <li>The literal 22:00 CEST window held at least 32 points, not 27 — the dossier answers only
+      the 68%-to-95% question; recurrence is not closed until AGT-2646/2649/2651 are live and a
+      controlled restart/deploy smoke passes.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="agt-2648"><span class="no">§3</span>AGT-2648 · Batch Gate</h2>
+<p><span class="pill new">confidence: medium</span></p>
+<p class="evidence-link">Dossier: <code>docs/operations/batch-gate-concept/</code></p>
+
+<h3>Recommendation</h3>
+<p>Adopt Option A, Batch Gate, as the primary throughput control: keep per-card model review and
+immutable delivery validation, but move the full build/test suite into one single-flight run over
+a closed, fenced, exact-SHA combined candidate, publishing only a verified green tip (red
+candidates reduced by bounded halving; conflicted or superseded members ejected without blocking
+the rest). The operator note of 18 August sharpens the sequencing: the full suite never runs per
+round — model review and cheap deterministic checks run first on every delivery, and the suite
+runs only as the final gate once a card appears done, once per batch; the note claims roughly
+half of today's suite runs (rounds that die at review or on conflicts) would be eliminated
+outright. Approval requested is for the operating contract plus a reversible docs-only pilot —
+explicitly not yet approval to edit the current pipeline. Option C (separate gate host) composes
+with A later; Option B (risk-scaled skipping) must never be the only guard for code-bearing
+changes.</p>
+
+<h3>Evidence</h3>
+<ul>
+  <li>11 August night (the trigger): 12-core host at load 22.7 (~1.89/core) versus the admission
+      threshold of 1.5/core, with 4 concurrent full review suites plus coding, drain of ~4
+      reviews per 2 hours, and a 41-card waiting queue — concurrent full suites, not test cost,
+      are the wave-scale bottleneck.</li>
+  <li>25 July (847 tasks, 2,396 attempts): coding carried ~98% of all tokens and test CPU was
+      ~0.05% of token spend — the dossier explicitly does <i>not</i> claim tests became
+      expensive; batching targets host concurrency, not money.</li>
+  <li>Bounded red path: one reproducible offender is isolated in at most ceil(log2 n) diagnostic
+      suite runs; the bound does <i>not</i> hold for multiple offenders or cross-member
+      interaction failures, which fall back to per-task gates or an operator-owned cohort.</li>
+  <li>The operator note's "roughly half of today's suite runs" savings figure is stated without a
+      cited measurement.</li>
+</ul>
+
+<h3>Cost of delay</h3>
+<p>Every delivery wave repeats the 11 August pattern: 4 concurrent full suites throttle coding
+and drain reviews at ~4 per 2 hours — a 41-card queue needs roughly 20 hours of wall time, and
+the fleet's post-processing wait already sits at a <b>1.2-day median</b>. The pilot targets
+quantify what delay leaves on the table: ≥50% fewer overload minutes, ≥50% faster drain at
+comparable arrivals, suite runs per delivered member down to ≤0.40 (versus ~1 today, before
+counting the per-round runs the operator note calls wasted). Caveat the dossier itself makes:
+one observed night window, not a controlled benchmark.</p>
+
+<h3>On approval</h3>
+<p>Four predeclared slices under the shared ref-mutation lease: (1) shadow manifest — one week or
+ten eligible docs-only deliveries, batches formed and persisted without changing routing; (2)
+docs-only authority pilot — 20 deliveries in batches of 2–4 through the real full suite, proving
+construction, exact-SHA publication, per-member evidence, restart recovery, rollback; (3)
+low-coupling code pilot — one allowlisted feature area, max batch size 4, only after docs-only
+go-criteria; (4) general decision after at least three comparable wave windows. Prerequisite: a
+native append-only per-member Batch Gate record (the 11 August integration-records endpoint is
+bookkeeping, not gate-pass authority). Pilot parameters: close at 4 members (hard max 8),
+15-minute age trigger, pressure-close at 2 when queue ≥12 or the load gate throttles. Rollback is
+per project and never rewrites develop; any evidence-correctness violation stops the pilot.</p>
+
+<h3>Open questions</h3>
+<ul>
+  <li>Core capacity evidence is a single night's observation — the pilot must retain comparable
+      windows and host telemetry before default routing changes; the "roughly half" savings
+      figure carries no measurement.</li>
+  <li>Is the red-path budget acceptable: ceil(log2 n) diagnostic runs per isolation cycle with
+      cohort fallback, given no logarithmic guarantee for multi-offender or interaction-only
+      failures?</li>
+  <li>Sign off the pilot parameters as parameters (size 4 / max 8, 15-min age, pressure-close at
+      2, docs-only first) so success criteria cannot move after results; the suite-as-final-gate
+      trigger ("card appears done, no further round expected") needs an operational definition.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="te-43"><span class="no">§4</span>TE-43 · TokenEconomy evidence base</h2>
+<p><span class="pill new">confidence: medium</span></p>
+<p class="evidence-link">Dossier: <code>C:/Projects/coding-agent-token-economy/docs/operations/evidence-base/</code> (entrypoint <code>index.md</code>)</p>
+
+<h3>Recommendation</h3>
+<p>TokenEconomy should recommend the least expensive evidence-qualified <i>set</i> of
+model-and-thinking routes that clears the task's correctness floor, rather than a single global
+winner. Concretely: add Planning and DecisionMaking as explicit strong-ideal task classes; split
+quota-independent recommendation (returns a set) from quota-aware selection (picks one route only
+with a current, trustworthy quota snapshot); treat MechanicalChore, DocEdit, tight local repair,
+and bounded transforms as smaller-model territory with explicit provisional labels; keep
+cross-file implementation, open-ended research, real PR review, frontend, planning, and decisions
+at a strong floor until task-local evidence shows non-inferiority. Add outcome metrics over
+retained attempts (billed tokens and dated list-price cost per accepted delivery, retry uplift,
+evidence-gated expected cost to acceptance), costed via the shipped v0.3.1/v0.3.2 pricing
+catalog at the attempt timestamp.</p>
+
+<h3>Evidence</h3>
+<ul>
+  <li>SWE-Lancer (E02, rated A-, vendor bias high): 724 real manager/proposal-selection tasks
+      with 99% validation agreement and no tested model at majority accuracy on the full set —
+      the strongest direct evidence for strong-ideal DecisionMaking; higher reasoning effort
+      raised pass@1 from 9.3% to 16.5% on the Diamond implementation subset.</li>
+  <li>TokenEconomy's own curated hard-coding suite (O02): Sol/medium 9/9, Terra/medium 2/9,
+      Claude Sonnet 5/high 4/9 — supports a conservative strong floor for demanding Feature work
+      (three synthetic C# fixtures only; catalog cost missing for two routes).</li>
+  <li>Aider polyglot (E04, rated B): o4-mini/high and Claude Opus 4 (32K thinking) tied at 72.0%
+      two-attempt score at $19.64 vs $65.75 recorded run cost — direct evidence a smaller model
+      can be economically equivalent on bounded coding; supports set-valued results and
+      retry-adjusted metrics.</li>
+  <li>Review is not coding (E06 SWE-PRBench): eight frontier models detected only 15–31% of
+      human-flagged issues diff-only, the top four statistically indistinguishable, every model
+      degrading with more context; corroborated by SWRBench (E05) with up to 43.67% F1 gain from
+      multi-review aggregation.</li>
+</ul>
+
+<h3>Cost of delay</h3>
+<p>No per-week figure; quota-aware selection savings are explicitly unmeasured (no counterfactual
+replay exists yet). Directional costs documented: continued flagship spend where a smaller route
+can tie (the observed tie cost $65.75 vs $19.64, roughly 3.3x, on a bounded distribution); the
+gap-closing benchmark wave stays uncommissioned, so no named smaller model can ever be declared
+equivalent for review, planning, decisions, or HTML work; and current single-winner
+recommendation copy keeps overstating what the evidence supports.</p>
+
+<h3>On approval</h3>
+<p>Five decisions, approvable independently: (1) strong-ideal semantics for Planning and
+DecisionMaking; (2) recommendation sets as the quota-independent API result plus a separate pure
+quota-aware Select; (3) the conditional smaller-model territory with provisional labels; (4) the
+efficiency-metric definitions with attempt-level inputs required before implementation; (5)
+commissioning the five-wave gap-closing benchmark program. Executable policy does not change from
+this dossier alone: TE-42 or a later policy card must version any change, following the stated
+compatibility path (add the two task classes, introduce RecommendSet beside SuggestModel, add
+Select with a RecommendationOnly state, version policy/JSON/knowledge/tests together).</p>
+
+<h3>Open questions</h3>
+<ul>
+  <li>Per-class non-inferiority margins: no global delta is set deliberately (5 percentage points
+      may suit reversible chores but not security/data-loss work) — margins must be declared per
+      class before benchmark results exist.</li>
+  <li>Fate of the existing SuggestModel API: compatibility projection only if it can avoid
+      inventing a winner, otherwise deprecate.</li>
+  <li>Sequencing and resourcing of the five-wave program, given that Planning/DecisionMaking
+      strong-ideal (O08: no local benchmark) and the MechanicalChore/DocEdit smaller-ideal claim
+      currently rest on operator risk judgment, not local data.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="te-42"><span class="no">§5</span>TE-42 · Model benchmark per task class</h2>
+<p><span class="pill open">confidence: low</span></p>
+<p class="evidence-link">Dossier: <code>C:/Projects/coding-agent-token-economy/docs/task-class-routing-studies.md</code></p>
+
+<h3>Recommendation</h3>
+<p>Route per task class from a versioned, set-valued evidence catalog instead of one global
+winner: the pilots recommend Sol/medium for HTML/UI implementation (Terra/medium only as a
+downgrade candidate for reversible, single-frontend-subsystem cards with deterministic visual
+regression and policy score ≤50) and Terra/medium for bounded source-code review with a compact
+contract, while a security boundary keeps a Sol/xhigh hard floor and ambiguous evidence that can
+authorize security/destructive/lane-affecting actions requires at least Sol/medium. Recommend()
+returns a ranked quota-independent set; Select() picks within it only from a fresh quota
+snapshot, and downgrades never cross correctness floors. Both class priors are explicitly
+provisional: with 2 scenarios and 1 attempt per route the pilots are stated as "not validated"
+until qualification thresholds are met.</p>
+
+<h3>Evidence</h3>
+<ul>
+  <li>HTML/UI pilot (2 scenarios, deterministic checks + blinded Sol/xhigh jury): Sol/medium
+      passed 2/2, mean quality 0.9175, 0 critical defects, $0.212954 per outcome; Terra/medium
+      passed 2/2 at 0.86125 for $0.086544/outcome; Sol/xhigh passed 1/2 with 1 critical defect at
+      $0.519849/passed outcome — "More thinking did not improve this pilot."</li>
+  <li>Source-code review pilot (2 C# snapshots, 10 seeded contract defects): Terra/medium passed
+      2/2, found 10/10 seeds, precision 0.8125, $0.030434/outcome; Sol/xhigh had equal recall at
+      about 5.4x cost/outcome; Sol/medium passed only 1/2 with 9/10 seeds.</li>
+  <li>Weak-evidence disclosures the dossier itself makes: qualification requires ≥5 scenarios,
+      20 attempts per route, 70% outcome coverage, ≤10% semantic reissue; the Sol/medium HTML/UI
+      cases consumed 31,074 additional jury tokens of unknown dollar cost, so $0.212954 is
+      subject-only; the Quality Studio observational line shows 0 eligible runs for both routes.</li>
+  <li>Smaller tiers gpt-5.5/medium and gpt-5.4-mini/high are registered as "scheduled", not
+      measured; one excluded review run (empty reviews under nested bubblewrap) is retained as an
+      infrastructure failure, not negative model evidence.</li>
+</ul>
+
+<h3>Cost of delay</h3>
+<p>Per-outcome deltas, not a weekly rate: keeping bounded source review on Sol/xhigh costs about
+5.4x per outcome ($0.164714 vs $0.030434), and HTML/UI on Sol/xhigh cost $0.519849 per passed
+outcome (passing only 1/2) versus $0.212954 subject-only on Sol/medium. Weekly cost scales with
+review/UI card volume, which the dossier does not state; delay also leaves gpt-5.5/medium and
+gpt-5.4-mini/high perpetually "scheduled" and the class priors stuck at unvalidated pilot
+status.</p>
+
+<h3>On approval</h3>
+<p>The next identical-scenario wave runs the already-registered gpt-5.5/medium and
+gpt-5.4-mini/high candidates; then six documented slices in order: security assessment (Sol/xhigh
+stays the hard floor), redundancy detection, graphical-quality judgment, consistency checking,
+expansion of existing coding classes, and Planning/Decision-Making corpora with blinded expert
+ground truth. Each class qualifies only at ≥5 scenarios, 20 attempts/route, 70% outcome coverage,
+≤10% semantic reissue. Agent Studio consults the TaskClassRecommendationCatalog at card creation;
+ModelRouter, floors, and operator pins remain authoritative. The companion dossier TE-43 asks the
+operator to commission the gap-closing wave.</p>
+
+<h3>Open questions</h3>
+<ul>
+  <li>Adopt the provisional pilot priors now or wait — is 2 scenarios × 1 attempt per route
+      enough to start routing bounded review to Terra/medium?</li>
+  <li>True HTML/UI cost per outcome is unknown: 31,074 jury tokens were retained only as a total,
+      so the published $0.212954 excludes verification cost.</li>
+  <li>Sol/medium missed a weighted review defect while cheaper Terra/medium found 10/10 —
+      inversion signal or two-scenario noise? The smaller tiers are entirely unmeasured.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="agt-2661"><span class="no">§6</span>AGT-2661 · Organization-wide telemetry layer</h2>
+<p><span class="pill new">confidence: medium</span></p>
+<p class="evidence-link">Dossier: <code>docs/operations/telemetry-layer/</code> (AGT-W38)</p>
+
+<h3>Recommendation</h3>
+<p>Adopt a hybrid, local-first telemetry architecture: every organization app appends events to a
+durable app-local JSONL buffer, a collector validates/redacts/fingerprints/deduplicates and sends
+a best-effort loopback push to Agent Studio, which emits derived observations on the existing
+Agent Message Bus with SignalR fan-out. The bus stays inert — observability spine, not workflow
+engine; only the orchestrator acts, through existing APIs and bounded, policy-versioned actions
+with idempotent receipts. Pilot in Coding Agent Chat with the single category
+<code>chat.message-send.failed</code> ending in one idempotent Backlog healing card. Seven
+decisions are on the table (architecture, truth boundaries, Agent Studio as operations hub, bus
+authority, pilot, local-only privacy, rollout order); the dossier recommends approving all
+seven.</p>
+
+<h3>Evidence</h3>
+<ul>
+  <li>Current-state inventory of 9 existing signal families with concrete code locations
+      (GitProcessTelemetry with its 1,500 ms slow-spawn warning, ProductRuntimeEventStore JSONL
+      streams, AgentMessageBusStore + SignalR fan-out, runner journals, review evidence,
+      prompt-call telemetry, wiki-usage store, pipeline alarms) — the building blocks exist, a
+      common org-level event contract and action loop do not.</li>
+  <li>Bus-option comparison: file-first is durable but slow-feedback; local-push-only risks loss
+      or app blocking during Studio outages and is rejected as sole architecture; hybrid gives
+      atomic file append plus immediate push when reachable.</li>
+  <li>Proposed policy thresholds are initial rules, not measured baselines (error cluster: same
+      fingerprint 3 times across 2 correlations in 30 minutes or one Fatal; friction: 5 times
+      across 3 correlations in 7 days; retention 30 days raw / 3 days Trace-Debug).</li>
+  <li>Known gaps the dossier flags itself: Quality Studio and voice-lint are absent from the
+      dated Project Map capture; AGT-2652 found inspected nightly task records with null
+      <code>tokenSummary</code> — token durability and coverage are uneven.</li>
+</ul>
+
+<h3>Cost of delay</h3>
+<p>No per-week number is quantified. Qualitatively: cross-app defect recurrence is never
+clustered into one operational signal (errors, friction, warnings stay scattered across request
+logs, task folders, runner state, review files, and feature-specific alarm projections), and the
+already-approved Global Orchestrator Watcher (AGT-2557) is missing its cross-product trigger
+substrate — each week of delay keeps repeated failures invisible as clusters and blocks that
+guardian vision. The dossier is honest that no measured incident or volume numbers back the
+urgency.</p>
+
+<h3>On approval</h3>
+<p>Slices T0–T4 in order: T0 publishes the OrgTelemetryEvent/v1 schema, event-name registry, and
+privacy test fixtures; T1 instruments only <code>chat.message-send.failed</code> in the Coding
+Agent Chat workbench (app-local JSONL, no content leakage, unchanged behavior without Studio);
+T2 hybrid delivery with collector checkpoints, replay, and file/push parity; T3 one action — a
+pure error-cluster policy creating exactly one idempotent Backlog healing card, validated on 10
+synthetic and 5 real cases with zero leaks and duplicates; T4 a two-week observe-only soak with a
+95%-useful-cards exit gate. Then rollout: Quality Studio, Agent Studio + Runner, Token Economy +
+websites, Agent Studio website, voice-lint last. Default action mode stays observe;
+implementation cards still need to be cut.</p>
+
+<h3>Open questions</h3>
+<ul>
+  <li>Quality Studio and voice-lint have no stable appId or event root in the current Project Map
+      capture — their onboarding shape is asserted, not evidenced from their repositories.</li>
+  <li>All clustering thresholds, cooldowns, and budgets are unvalidated initial rules; only the
+      T4 soak produces measurements (false clusters, card acceptance, disk use).</li>
+  <li>The hybrid's two delivery paths require parity tests the dossier itself names as the
+      option's cost — dedupe correctness across crash, rotation, torn-tail, and duplicate
+      wake-up cases is assumed, not demonstrated.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="agt-w35"><span class="no">§7</span>AGT-W35 · Task Timeline redesign</h2>
+<p><span class="pill done">confidence: high</span></p>
+<p class="evidence-link">Dossier: <code>docs/operations/timeline-redesign/</code> (card AGT-2631)</p>
+
+<h3>Recommendation</h3>
+<p>Adopt one presentation contract for the Task Timeline: six event categories in one shared row
+grid with three structural row registers; incident state projected from unresolved open events —
+a banner exists only while an incident is open and is closed by a typed, linked resolution event;
+newest-first day sections with stable anchors; one centrally maintained technical-concept
+glossary behind explanation-first copyable popovers. The same payload and Trace rules apply to
+the task-level Timeline and the run-level Activity stream without merging their stores; Trace
+stays the raw evidence view. AGT-2631 contains no implementation — approval converts seven
+specified delivery slices (T1–T7) into delivery cards; rejection should name which of decisions
+D1–D4 changes.</p>
+
+<h3>Evidence</h3>
+<ul>
+  <li>Live Task API snapshot for AGT-2577: 42 timeline events across six runs. A QuotaExceeded
+      run on 10 August moved the card to Escalated; later runs completed three times on
+      11 August and returned it to Auto Review — yet no resolution event exists, so the red
+      "Escalated to human" banner still shows while the card is in Post Processing (real
+      light+dark captures).</li>
+  <li>Observed schema/projection gap: <code>TimelineEvent.cs</code> has no durable event ID or
+      resolution relation, and the frontend projection selects the last
+      accepted/reopened/escalated event — later lane and run events structurally cannot close
+      that verdict.</li>
+  <li>Technical wall and flat hierarchy, observed: attempt IDs, fences, authority epochs,
+      idempotency keys, branches, URLs, and SHAs sit inline in prose;
+      <code>integration_failed</code> shares the same neutral geometry as routine lane changes;
+      gate output renders as long open prose.</li>
+  <li>Oldest-first chronology: the view opens on creation-time events, so the operator must
+      scroll ("39 more events" in the AGT-2577 baseline) to discover current state.</li>
+</ul>
+
+<h3>Cost of delay</h3>
+<p>No per-week or monetary figure — operator time lost is not quantified. The concrete ongoing
+cost is qualitative and observed: every affected card presents a resolved incident as acute
+current truth (the stale red escalation banner on AGT-2577 persisted through at least three
+subsequent successful runs), which misleads triage, and each task open requires scrolling an
+undifferentiated oldest-first ledger to find what is current. Delay also leaves the ledger
+without event IDs and resolution links, so any interim banner fix stays heuristic.</p>
+
+<h3>On approval</h3>
+<p>The seven slices become delivery cards: T1 Registry (exhaustive kind-to-category mapping, no
+visual change) first; T2 Timeline shell and T3 Technical disclosure in parallel; T4 Incident
+semantics (additive eventId/incidentId, resolution links, incident producers) is the semantic
+correction that must land before the stale banner counts as fixed; T5 Payload renderer and T6
+Lifecycle condensation share the Activity projection boundary and are coordinated with the
+coding-agent-chat release (CAC-21) rather than duplicated in Studio; T7 Scale and proof (cursor
+paging, virtualization, accessibility, light/dark Playwright evidence) last. A verification
+matrix is specified; no owners are named in the dossier.</p>
+
+<h3>Open questions</h3>
+<ul>
+  <li>The "after" state is unproven: all four AGT-2577 after-mockups are explicitly "mocked
+      proposal" SVGs, and T7's acceptance depends on a measured long-stream baseline and an
+      agreed render/scroll budget the dossier does not yet define.</li>
+  <li>T4 requires a new backend ledger contract (durable eventId, incidentId, resolutionOf,
+      closure kinds) plus new closure-producing events such as "Quota restored"; closure rules
+      per incident type leave judgment calls to implementation.</li>
+  <li>No effort estimate per slice and no quantified operator impact — the decision rests on
+      well-documented qualitative evidence.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="agt-2643"><span class="no">§8</span>AGT-2643 · Escalation view information architecture</h2>
+<p><span class="pill new">confidence: medium</span></p>
+<p class="evidence-link">Dossier: <code>docs/operations/escalation-view-information-architecture/</code> (AGT-W36)</p>
+
+<h3>Recommendation</h3>
+<p>Make the escalation header the sole owner of the actual blocker and the human-decision state,
+with a documented source priority (recorded status-stub reason, structured steering reason, first
+structured open finding, then the explicit fallback "No blocker summary was recorded." — never a
+synthesized cause). Remove the terminal "Escalated to human" strip and GAP from Pipeline and the
+"Pipeline failure" case badge from Result on escalated cards, keeping the CORE AGENT WORK
+ATTENTION marker because it identifies the failed locus rather than restating the outcome.
+Flatten Result's GOAL and WHERE IT STOPPED into sibling rows with a calm whole-row red tint for
+the stopped state — no left accent, border, or nested panel. The dossier recommends approving all
+three items as one information-architecture contract.</p>
+
+<h3>Evidence</h3>
+<ul>
+  <li>Live Stable capture of AGT-2278 (12 August, both themes): the always-visible header says
+      only "0 review rounds · Grade not recorded · 0 open findings · Human decision required"
+      while the only useful decision input — "The remote agent reported a blocker:
+      agt-2404-phase-b-not-approved" — sits below the Pipeline heading.</li>
+  <li>The Angular ownership inventory traces the duplication to three independent projections of
+      overlapping source data (EscalationSummaryComponent essence label,
+      CompletionLoopIndicatorComponent terminal chip+GAP, ResultViewComponent verdict badge),
+      plus a fourth surface (ATTENTION/failed-step row) that carries different information and
+      stays.</li>
+  <li>Operator evidence rests on two sightings only, AGT-2599 and AGT-2278 — and AGT-2599 had
+      already advanced at capture time, so AGT-2278 is the single live current-state proof; the
+      dossier is explicit about this.</li>
+  <li>Two alternatives were weighed and documented: "Result owns the GAP" (not selected) and
+      "keep every surface, improve copy" (rejected: wording does not cure three competing red
+      outcome statements).</li>
+</ul>
+
+<h3>Cost of delay</h3>
+<p>No measured per-week number. The implied cost is qualitative: every escalated card keeps
+showing three competing red outcome statements while the actual blocker text stays buried under
+the Pipeline heading and the always-visible header stays content-free, so each escalation costs
+extra search time before the Continue/Accept/Abort decision — and the four implementation slices
+stay uncut until this dossier is approved.</p>
+
+<h3>On approval</h3>
+<p>One approval of the three-item contract unlocks the implementation-card cut (AGT-2643 itself
+contains no UI code, backend code, task creation, or moves). Four review-ready slices in order:
+(1) header summary projection — typed problemSummary in <code>escalation-summary.util.ts</code>
+with source-priority and rendering tests, hide empty metrics; (2) Pipeline de-duplication — stop
+CompletionLoopIndicatorComponent rendering its terminal escalated verdict, preserve non-terminal
+attempt-cycle info; (3) flat escalated Result — suppress the result-case badge, sibling
+GOAL/WHERE IT STOPPED rows; (4) acceptance proof — AGT-2278-shaped Playwright fixture plus real
+Stable probe across light/dark, wide/narrow, recorded and missing blocker. No backend or
+wire-contract change is required for the observed data.</p>
+
+<h3>Open questions</h3>
+<ul>
+  <li>Approve all three items as one contract (the dossier's recommendation) or split — e.g.
+      accept the header-owns-blocker change but keep the Result badge?</li>
+  <li>The evidence base is two sightings with a single live capture; whether the IA generalizes
+      to other escalation shapes (cards with real review rounds and findings) is asserted via the
+      source-priority rule, not demonstrated.</li>
+  <li>Is the fallback line "No blocker summary was recorded." acceptable as the header's only
+      content when no structured reason exists, given the ban on synthesizing a plausible
+      cause?</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="answers"><span class="no">§9</span>Answers</h2>
+<p class="dim">One line per decision: the ask and the recommended answer, in leverage order.</p>
+
+<table>
+  <thead>
+    <tr><th>Key</th><th>Ask</th><th>Recommended answer</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>AGT-2662</b></td>
+      <td>Which scenario owns the first conflict-skipped bounce, and where is the Git-hybrid boundary?</td>
+      <td>Scenario 2: one deterministic backend round per review epoch; merge-first invariant stays; start S0 shadow now, guardian only on repetition.</td>
+    </tr>
+    <tr>
+      <td><b>AGT-2652</b></td>
+      <td>Fund the CAR session-continuation slice and finish the in-flight incident controls?</td>
+      <td>Yes: P0 continuation pilot under the 10% envelope; ship AGT-2651, then AGT-2649/2646; no recurrence claim before the smoke passes.</td>
+    </tr>
+    <tr>
+      <td><b>AGT-2648</b></td>
+      <td>Adopt the Batch Gate operating contract plus a reversible docs-only pilot?</td>
+      <td>Yes to the contract and slices 1–2 (shadow manifest, docs-only pilot); no pipeline edit yet; record pilot parameters before starting.</td>
+    </tr>
+    <tr>
+      <td><b>TE-43</b></td>
+      <td>Approve the five evidence-base decisions and commission the benchmark program?</td>
+      <td>Yes to decisions 1–4 now; commission the five-wave program after declaring per-class non-inferiority margins.</td>
+    </tr>
+    <tr>
+      <td><b>TE-42</b></td>
+      <td>Adopt the provisional per-class routing priors?</td>
+      <td>Adopt as a provisional catalog only; run the scheduled smaller-tier wave before default rerouting; the Sol/xhigh security floor stands.</td>
+    </tr>
+    <tr>
+      <td><b>AGT-2661</b></td>
+      <td>Approve the seven telemetry decisions and the Chat pilot?</td>
+      <td>Yes to all seven; T0–T1 first, observe-only, action mode stays observe until the T4 soak passes.</td>
+    </tr>
+    <tr>
+      <td><b>AGT-W35</b></td>
+      <td>Adopt the Timeline presentation contract (D1–D4)?</td>
+      <td>Yes; cut T1–T7, with T4 (incident semantics) required before the stale banner counts as fixed.</td>
+    </tr>
+    <tr>
+      <td><b>AGT-2643</b></td>
+      <td>Approve the three-item escalation-header contract?</td>
+      <td>Yes, as one contract; cut the four slices, acceptance proof against the AGT-2278 shape.</td>
+    </tr>
+  </tbody>
+</table>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "decision-briefing",
+  "title": "Operator decision briefing",
+  "summary": "Map across the eight decision-pending dossiers: one section per decision, ordered by leverage using cost of delay (95 days requeue rework in 30 days, up to 21.8 weekly quota points per wave recurrence, 1.2-day median post-processing wait). Each section carries recommendation, evidence, cost of delay, approval consequences, open questions, and a confidence tag; a closing table gives the one-line ask and recommended answer per key.",
+  "entrypoint": "index.html",
+  "status": "decision-pending",
+  "phase": "decision-ready",
+  "updatedAt": "2026-08-25T00:00:00Z",
+  "sourceTaskKeys": [],
+  "implementationTasks": [],
+  "relatedTaskKeys": [
+    "AGT-2662",
+    "AGT-2652",
+    "AGT-2648",
+    "TE-43",
+    "TE-42",
+    "AGT-2661",
+    "AGT-2631",
+    "AGT-2643"
+  ],
+  "key": "AGT-W40"
+}
