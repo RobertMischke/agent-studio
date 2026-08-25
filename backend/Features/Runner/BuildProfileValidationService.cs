@@ -70,6 +70,22 @@ public sealed class ProcessBuildCommandRunner : IBuildCommandRunner
 /// <summary>Outcome of a full validation dry-run.</summary>
 public sealed record DryRunValidationResult(bool Green, string Status, string Summary, string? FailedCommand);
 
+/// <summary>Resolves local validation only to a real project source workspace.</summary>
+public static class BuildProfileValidationWorkspace
+{
+    public static string? Resolve(WatchPathEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (!string.IsNullOrWhiteSpace(entry.RepositoryPath)
+            && Directory.Exists(entry.RepositoryPath))
+            return Path.GetFullPath(entry.RepositoryPath);
+        if (!string.IsNullOrWhiteSpace(entry.RootPath)
+            && Directory.Exists(entry.RootPath))
+            return Path.GetFullPath(entry.RootPath);
+        return null;
+    }
+}
+
 /// <summary>
 /// Drives the onboarding validation dry-run (Slice P / ASS-1663): mark the
 /// project's build profile <c>validating</c>, run the planned install + build
@@ -81,8 +97,8 @@ public sealed record DryRunValidationResult(bool Green, string Status, string Su
 /// The command execution is delegated to an injected <see cref="IBuildCommandRunner"/>
 /// so the orchestration + status transitions are unit-testable without a real
 /// package manager. The dry-run executes in the supplied working directory; the
-/// caller (endpoint) passes a fresh/throwaway worktree path per the concept's
-/// "frisches Worktree -> install -> build -> gruen" flow.
+/// endpoint resolves it from the project's registered RepositoryPath or
+/// RootPath and never substitutes the task-store workspace.
 /// </para>
 /// </summary>
 public sealed class BuildProfileValidationService

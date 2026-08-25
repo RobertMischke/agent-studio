@@ -2738,6 +2738,41 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Daemon_claim_records_build_profile_gate_on_every_ready_card_before_filtering()
+    {
+        SeedTask(TaskStates.Ready, TaskKey, "Profile validation blocks pickup", "Prompt.");
+
+        using var factory = BuildFactory();
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId);
+        await RegisterCodingRunnerAsync(client, http);
+
+        (await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/execution-runner",
+            new { executionRunner = ProjectName, remoteExecutionEnabled = true })).EnsureSuccessStatusCode();
+        (await http.PutAsJsonAsync(
+            $"/api/projects/{ProjectName}/build-profile",
+            new { stack = "dotnet", buildCmds = new[] { "dotnet build" } })).EnsureSuccessStatusCode();
+
+        var claim = await client.ClaimAsync(new RClaim(
+            RunnerId, ProjectName, "hetzner-test", 4242, "remote-runner"), CancellationToken.None);
+
+        Assert.Equal(RClaimStatus.Empty, claim.Status);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, TaskKey)));
+        using var grouped = await http.GetAsync("/api/tasks/grouped");
+        grouped.EnsureSuccessStatusCode();
+        using var groupedJson = JsonDocument.Parse(await grouped.Content.ReadAsStringAsync());
+        var card = Assert.Single(groupedJson.RootElement.GetProperty("ready").EnumerateArray());
+        var rejection = card.GetProperty("executionLocation").GetProperty("lastRejection");
+        Assert.Equal("build-profile-gate", rejection.GetProperty("code").GetString());
+        Assert.Equal(RunnerId, rejection.GetProperty("runnerId").GetString());
+        Assert.Contains(
+            "not yet validated",
+            rejection.GetProperty("reason").GetString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Daemon_claim_skips_project_that_opts_out_of_remote_execution()
     {
         SeedTask(TaskStates.Ready, TaskKey, "Machine-bound", "Prompt.");

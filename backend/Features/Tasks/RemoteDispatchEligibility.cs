@@ -19,11 +19,30 @@ public static class RemoteDispatchEligibility
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(references);
 
+        return IsAssignedAndRoutable(task, project, runnerId, runnerName, references)
+               && BuildProfileGate.AllowsAutoPickup(project.BuildProfile);
+    }
+
+    /// <summary>
+    /// Evaluates every non-repository claim rule except the build-profile gate.
+    /// Claim and starvation scans use this form so gate-blocked Ready cards stay
+    /// visible and can receive a durable rejection reason.
+    /// </summary>
+    public static bool IsAssignedAndRoutable(
+        TaskInfo task,
+        ProjectSettings project,
+        string runnerId,
+        string? runnerName,
+        TaskReferenceIndex references)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(references);
+
         return ProjectExecutionPolicy.AllowsAutomaticPickup(project)
                && ProjectExecutionPolicy.IsAssignedRemote(project, runnerId, runnerName)
                && AgentTypes.IsAutoPickupEligible(task.Agent)
                && !TaskSlugs.IsHumanDecisionNeeded(task.Id)
-               && BuildProfileGate.AllowsAutoPickup(project.BuildProfile)
                && (!project.IntakeEnabled.GetValueOrDefault()
                    || task.Phase == LifecyclePhases.IntakePassed)
                && !references.EvaluateWaitsOn(task).Blocked;

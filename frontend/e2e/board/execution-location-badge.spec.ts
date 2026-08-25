@@ -58,14 +58,14 @@ const initialTasks = [
   task('remote-two', 'Second remote slot', location('remote-running', 'agent-runner-02', 'remote')),
 ];
 
-const rejectedReadyTask = task(
+const gateBlockedReadyTask = task(
   'remote-rejected',
   'Remote dispatch is visibly blocked',
   location('awaiting-remote', 'agent-runner-01', 'remote', false, {
-    code: 'repository-url-missing',
+    code: 'build-profile-gate',
     runnerId: 'agent-runner-01',
     runnerName: 'agent-runner-01',
-    reason: 'project has no repositoryUrl',
+    reason: 'build profile revalidation pending; grace runs exhausted',
     rejectedAtUtc: '2026-08-08T07:30:00Z',
   }),
   '2-ready',
@@ -202,6 +202,12 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
           enteredLaneAt: '2026-08-08T07:30:00Z',
           waitingMinutes: 330,
           lastRejection: item.executionLocation.lastRejection,
+          blockReasonCode: item.executionLocation.lastRejection?.code === 'build-profile-gate'
+            ? 'build-profile-gate'
+            : null,
+          blockReason: item.executionLocation.lastRejection?.code === 'build-profile-gate'
+            ? item.executionLocation.lastRejection.reason
+            : null,
         })),
       });
     }
@@ -282,24 +288,25 @@ test('shows each concurrent task owner and limits warnings to the stale remote r
   await expect(page.locator('[data-execution-state="remote-running"]')).toHaveCount(2);
 });
 
-test('shows a durable remote refusal on the card and the starvation banner', async ({ page }) => {
+test('shows a durable build-profile gate refusal on the card and the starvation banner', async ({ page }) => {
   mkdirSync(RESULTS, { recursive: true });
   await page.setViewportSize({ width: 720, height: 800 });
   await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
     v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
   })));
-  await installRoutes(page, () => [rejectedReadyTask]);
+  await installRoutes(page, () => [gateBlockedReadyTask]);
   await page.goto('/?includeFixtures=true');
   await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
 
-  const card = page.getByTestId('task-card').filter({ hasText: rejectedReadyTask.title });
+  const card = page.getByTestId('task-card').filter({ hasText: gateBlockedReadyTask.title });
   const rejection = card.getByTestId('remote-dispatch-rejection');
   await expect(rejection).toContainText('Runner agent-runner-01 rejected:');
-  await expect(rejection).toContainText('project has no repositoryUrl');
+  await expect(rejection).toHaveAttribute('data-rejection-code', 'build-profile-gate');
+  await expect(rejection).toContainText('build profile revalidation pending; grace runs exhausted');
 
   const banner = page.getByTestId('remote-queue-starvation-banner');
-  await expect(banner).toContainText('1 task is waiting despite free Runner capacity.');
-  await expect(banner).toContainText('8 slots are available.');
+  await expect(banner).toContainText('1 ready card not claimable: build profile not validated.');
+  await expect(banner).toContainText('8 Runner slots are available.');
   await expectFlatFullBleedNoticeBar(banner);
   await expectNoticeCopySharesWideLine(page, banner);
 

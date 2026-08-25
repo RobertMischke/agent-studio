@@ -169,6 +169,24 @@ or working directory. Restart the backend after changing any of those three
 values and before enabling local auto-pickup. A runner assignment change is
 persisted immediately.
 
+## Validate and edit the build profile
+
+`POST /api/projects/{project}/build-profile/validate` runs install and build
+commands in the registered `RepositoryPath`, falling back to `RootPath` only
+when no repository checkout is available. It never runs in the task-store
+`Path`. If neither source workspace exists on the Task Server, the endpoint
+returns a conflict instead of recording a misleading product validation
+failure. A green remote Review also validates the profile when its immutable
+Review plan carries the exact fingerprint of the current profile.
+
+The first profile declaration remains blocked until one of those validations
+is green. Editing a profile that was already validated does not silently close
+pickup. It preserves the last validated status with `revalidationPending=true`
+and admits at most three new coding runs. Each successful claim consumes one
+grace run. A matching green local validation or remote Review clears the flag;
+if all three runs are consumed first, the build-profile gate blocks further
+pickup and surfaces that reason on Ready cards and the workspace banner.
+
 ## Configure staged test execution
 
 The build profile declares the complete test inventory. The separate staged

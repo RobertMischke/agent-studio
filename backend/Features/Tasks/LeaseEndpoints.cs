@@ -555,14 +555,8 @@ public static class LeaseEndpoints
                     .Where(t =>
                     {
                         var project = settings.Get(t.ProjectName);
-                        return ProjectExecutionPolicy.AllowsAutomaticPickup(project)
-                               && ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName)
-                               && AgentTypes.IsAutoPickupEligible(t.Agent)
-                               && !TaskSlugs.IsHumanDecisionNeeded(t.Id)
-                               && BuildProfileGate.AllowsAutoPickup(project.BuildProfile)
-                               && (!project.IntakeEnabled.GetValueOrDefault()
-                                   || t.Phase == LifecyclePhases.IntakePassed)
-                               && !waitsOn.EvaluateWaitsOn(t).Blocked;
+                        return RemoteDispatchEligibility.IsAssignedAndRoutable(
+                            t, project, req.RunnerId, req.RunnerName, waitsOn);
                     })
                     .OrderBy(t => t.Order)
                     .ThenBy(t => t.CreatedAt);
@@ -576,6 +570,18 @@ public static class LeaseEndpoints
                 string? capabilityMismatch = null;
                 foreach (var task in eligible)
                 {
+                    var taskProjectSettings = settings.Get(task.ProjectName);
+                    var buildProfileGate = BuildProfileGate.Evaluate(taskProjectSettings.BuildProfile);
+                    if (!buildProfileGate.AllowsPickup)
+                    {
+                        RecordRejection(task, "build-profile-gate", buildProfileGate.Reason);
+                        logger.LogWarning(
+                            "remote-runner-coding-claim-skipped-build-profile-gate runner={Runner} task={TaskKey} reason={Reason}",
+                            req.RunnerName,
+                            task.Key ?? task.TaskKey ?? task.Id,
+                            buildProfileGate.Reason);
+                        continue;
+                    }
                     var cliType = CliTypes.Normalize(task.CliType);
                     var requiredCapabilities = (req.RequiredCapabilities ?? [])
                         .Append(CapabilityProtocol.CodingExecutor)
@@ -601,7 +607,7 @@ public static class LeaseEndpoints
                     }
                     var registryProject = projects.FindByStorageLocation(task.WatchPath)
                                           ?? projects.FindByIdOrDisplayName(task.ProjectName);
-                    var targetBranch = settings.Get(task.ProjectName).IntegrationBranch;
+                    var targetBranch = taskProjectSettings.IntegrationBranch;
                     repository = RemoteProjectRepositoryResolver.Resolve(
                         registryProject,
                         targetBranch);
@@ -854,6 +860,13 @@ public static class LeaseEndpoints
                     "remote-runner-task-claimed project={Project} projectId={ProjectId} task={TaskKey} runner={Runner} lease={LeaseId} token={FencingToken} repositorySource={RepositorySource} defaultBranch={DefaultBranch}",
                     candidate.ProjectName, repository.ProjectId, taskKey, req.RunnerName, acquire.Lease.LeaseId,
                     acquire.Lease.FencingToken, repository.Source, repository.DefaultBranch);
+                var graceRunsRemaining = settings.ConsumeBuildProfileRevalidationGraceRun(candidate.ProjectName);
+                if (graceRunsRemaining is not null)
+                {
+                    logger.LogWarning(
+                        "build-profile-revalidation-grace-consumed project={Project} task={TaskKey} remainingRuns={RemainingRuns}",
+                        candidate.ProjectName, taskKey, graceRunsRemaining);
+                }
                 sessions.AppendSessionEvent(candidate.Id, new SessionEvent
                 {
                     Ts = acquire.Lease.AcquiredAt,

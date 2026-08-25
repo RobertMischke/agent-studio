@@ -315,11 +315,10 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Slice P (ASS-1663): declares (or re-declares) the project's build profile.
-    /// Normalizes blank command/path entries away and always resets onboarding to
-    /// <see cref="BuildProfileStatuses.Declared"/> - changing how the project
-    /// builds invalidates any prior green dry-run, so the project must re-validate
-    /// before the runner picks it up. Pass a null <paramref name="profile"/> to
-    /// clear the profile entirely (revert to legacy "no gate" behaviour).
+    /// Normalizes blank command/path entries away. The first declaration starts
+    /// blocked. Editing a previously validated profile preserves its last green
+    /// status for a bounded three-run grace window and marks revalidation pending.
+    /// Pass a null <paramref name="profile"/> to clear the profile entirely.
     /// </summary>
     public void SetBuildProfile(string projectName, BuildProfile? profile)
     {
@@ -328,7 +327,7 @@ public class ProjectSettingsService
         {
             var key = ResolveAliasLocked(projectName);
             var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
-            _cache[key] = current with { BuildProfile = NormalizeProfile(profile) };
+            _cache[key] = current with { BuildProfile = NormalizeProfile(profile, current.BuildProfile) };
             Persist();
         }
         _logger.LogInformation(
@@ -360,6 +359,77 @@ public class ProjectSettingsService
         TransitionProfileStatus(projectName, BuildProfileStatuses.ValidationFailed, validatedAt: null,
             error: string.IsNullOrWhiteSpace(error) ? "validation failed" : error.Trim());
 
+    /// <summary>
+    /// Records a green remote Review as validation proof only when the immutable
+    /// Review plan carried the current profile's exact fingerprint.
+    /// </summary>
+    public bool MarkBuildProfileRemotelyValidated(
+        string projectName,
+        string? profileFingerprint,
+        string attemptId,
+        string runnerId,
+        string resultSha,
+        DateTime validatedAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(profileFingerprint)) return false;
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var settings) ? settings : new ProjectSettings();
+            if (current.BuildProfile is null) return false;
+            var currentFingerprint = BuildProfileValidationFingerprint.Create(current.BuildProfile);
+            if (!string.Equals(currentFingerprint, profileFingerprint, StringComparison.Ordinal))
+                return false;
+
+            _cache[key] = current with
+            {
+                BuildProfile = current.BuildProfile with
+                {
+                    Status = BuildProfileStatuses.PipelineReady,
+                    LastValidatedAt = validatedAtUtc.ToUniversalTime(),
+                    LastValidationError = null,
+                    ValidationFingerprint = currentFingerprint,
+                    RevalidationPending = false,
+                    RevalidationGraceRunsRemaining = 0,
+                    LastRemoteValidationAt = validatedAtUtc.ToUniversalTime(),
+                    LastRemoteValidationAttemptId = attemptId,
+                    LastRemoteValidationRunnerId = runnerId,
+                    LastRemoteValidationResultSha = resultSha,
+                },
+            };
+            Persist();
+        }
+        _logger.LogInformation(
+            "Build profile remotely validated for project {Project} by {Runner} in {AttemptId} at {ResultSha}",
+            projectName, runnerId, attemptId, resultSha);
+        return true;
+    }
+
+    /// <summary>
+    /// Charges one successfully admitted coding run against a pending profile's
+    /// grace window. Returns the remaining allowance after the charge.
+    /// </summary>
+    public int? ConsumeBuildProfileRevalidationGraceRun(string projectName)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var key = ResolveAliasLocked(projectName);
+            var current = _cache.TryGetValue(key, out var settings) ? settings : new ProjectSettings();
+            var profile = current.BuildProfile;
+            if (profile is not { RevalidationPending: true, RevalidationGraceRunsRemaining: > 0 })
+                return null;
+            var remaining = profile.RevalidationGraceRunsRemaining - 1;
+            _cache[key] = current with
+            {
+                BuildProfile = profile with { RevalidationGraceRunsRemaining = remaining },
+            };
+            Persist();
+            return remaining;
+        }
+    }
+
     private void TransitionProfileStatus(string projectName, string status, DateTime? validatedAt, string? error)
     {
         EnsureLoaded();
@@ -375,6 +445,9 @@ public class ProjectSettingsService
                     Status = status,
                     LastValidatedAt = validatedAt ?? current.BuildProfile.LastValidatedAt,
                     LastValidationError = status == BuildProfileStatuses.ValidationFailed ? error : null,
+                    ValidationFingerprint = BuildProfileValidationFingerprint.Create(current.BuildProfile),
+                    RevalidationPending = false,
+                    RevalidationGraceRunsRemaining = 0,
                 }
             };
             Persist();
@@ -384,10 +457,10 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Trims blank command/path entries, clamps a non-positive pool size to null,
-    /// and forces the onboarding status to <see cref="BuildProfileStatuses.Declared"/>.
+    /// and applies the bounded revalidation rule.
     /// Returns null when the input is null.
     /// </summary>
-    private static BuildProfile? NormalizeProfile(BuildProfile? profile)
+    private static BuildProfile? NormalizeProfile(BuildProfile? profile, BuildProfile? previous)
     {
         if (profile is null) return null;
 
@@ -400,7 +473,7 @@ public class ProjectSettingsService
             return list.Count == 0 ? null : list;
         }
 
-        return new BuildProfile
+        var normalized = new BuildProfile
         {
             Stack = string.IsNullOrWhiteSpace(profile.Stack) ? null : profile.Stack.Trim(),
             InstallCmd = string.IsNullOrWhiteSpace(profile.InstallCmd) ? null : profile.InstallCmd.Trim(),
@@ -410,8 +483,48 @@ public class ProjectSettingsService
             PreserveGlobs = Clean(profile.PreserveGlobs),
             PoolSize = profile.PoolSize is > 0 ? profile.PoolSize : null,
             Status = BuildProfileStatuses.Declared,
-            LastValidatedAt = null,
-            LastValidationError = null,
+        };
+        var fingerprint = BuildProfileValidationFingerprint.Create(normalized);
+        if (previous is null)
+            return normalized with { ValidationFingerprint = fingerprint };
+
+        var previousFingerprint = BuildProfileValidationFingerprint.Create(previous);
+        if (string.Equals(previousFingerprint, fingerprint, StringComparison.Ordinal))
+        {
+            return normalized with
+            {
+                Status = previous.Status,
+                LastValidatedAt = previous.LastValidatedAt,
+                LastValidationError = previous.LastValidationError,
+                ValidationFingerprint = fingerprint,
+                RevalidationPending = previous.RevalidationPending,
+                RevalidationGraceRunsRemaining = previous.RevalidationGraceRunsRemaining,
+                LastRemoteValidationAt = previous.LastRemoteValidationAt,
+                LastRemoteValidationAttemptId = previous.LastRemoteValidationAttemptId,
+                LastRemoteValidationRunnerId = previous.LastRemoteValidationRunnerId,
+                LastRemoteValidationResultSha = previous.LastRemoteValidationResultSha,
+            };
+        }
+
+        var previouslyValidated = BuildProfileStatuses.Normalize(previous.Status)
+                                  == BuildProfileStatuses.PipelineReady;
+        return normalized with
+        {
+            Status = previouslyValidated
+                ? BuildProfileStatuses.PipelineReady
+                : BuildProfileStatuses.Declared,
+            LastValidatedAt = previous.LastValidatedAt,
+            ValidationFingerprint = fingerprint,
+            RevalidationPending = previouslyValidated,
+            RevalidationGraceRunsRemaining = previouslyValidated
+                ? previous.RevalidationPending
+                    ? Math.Max(0, previous.RevalidationGraceRunsRemaining)
+                    : BuildProfile.DefaultRevalidationGraceRuns
+                : 0,
+            LastRemoteValidationAt = previous.LastRemoteValidationAt,
+            LastRemoteValidationAttemptId = previous.LastRemoteValidationAttemptId,
+            LastRemoteValidationRunnerId = previous.LastRemoteValidationRunnerId,
+            LastRemoteValidationResultSha = previous.LastRemoteValidationResultSha,
         };
     }
 

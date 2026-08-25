@@ -55,6 +55,23 @@ public sealed class BuildProfileGateTests
         var d = BuildProfileGate.Evaluate(new BuildProfile { Status = BuildProfileStatuses.PipelineReady });
         Assert.True(d.AllowsPickup);
     }
+
+    [Theory]
+    [InlineData(3, true)]
+    [InlineData(1, true)]
+    [InlineData(0, false)]
+    public void RevalidationPending_UsesBoundedGraceRuns(int remaining, bool expectedPickup)
+    {
+        var d = BuildProfileGate.Evaluate(new BuildProfile
+        {
+            Status = BuildProfileStatuses.PipelineReady,
+            RevalidationPending = true,
+            RevalidationGraceRunsRemaining = remaining,
+        });
+
+        Assert.Equal(expectedPickup, d.AllowsPickup);
+        Assert.Contains("revalidation pending", d.Reason);
+    }
 }
 
 public sealed class BuildProfileDryRunPlannerTests
@@ -193,5 +210,50 @@ public sealed class BuildProfileValidationServiceTests : IDisposable
         public FakeRunner(Func<string, int> exitFor) => _exitFor = exitFor;
         public Task<BuildCommandResult> RunAsync(string workingDir, string command, CancellationToken ct) =>
             Task.FromResult(new BuildCommandResult(_exitFor(command), $"output of {command}"));
+    }
+}
+
+public sealed class BuildProfileValidationWorkspaceTests : IDisposable
+{
+    private readonly string _root = Path.Combine(
+        Path.GetTempPath(), "rdo-bp-workspace-" + Guid.NewGuid().ToString("N"));
+
+    public BuildProfileValidationWorkspaceTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch { /* best-effort */ }
+    }
+
+    [Fact]
+    public void Resolve_PrefersRealRepositoryOverTaskWorkspace()
+    {
+        var repository = Path.Combine(_root, "repository");
+        var taskStore = Path.Combine(_root, "tasks", "2-ready");
+        Directory.CreateDirectory(repository);
+        Directory.CreateDirectory(taskStore);
+
+        var resolved = BuildProfileValidationWorkspace.Resolve(new WatchPathEntry
+        {
+            Path = taskStore,
+            RootPath = taskStore,
+            RepositoryPath = repository,
+        });
+
+        Assert.Equal(Path.GetFullPath(repository), resolved);
+    }
+
+    [Fact]
+    public void Resolve_DoesNotFallBackToTaskWorkspace()
+    {
+        var taskStore = Path.Combine(_root, "tasks", "2-ready");
+        Directory.CreateDirectory(taskStore);
+
+        var resolved = BuildProfileValidationWorkspace.Resolve(new WatchPathEntry
+        {
+            Path = taskStore,
+        });
+
+        Assert.Null(resolved);
     }
 }

@@ -471,6 +471,16 @@ public static class V1ReviewPlaneEndpoints
                     StringComparison.Ordinal))
                 ?.ReceivedAt
                 ?? DateTime.UtcNow;
+            if (settled.ReviewAttempt.Outcome == ReviewTerminalOutcome.Pass)
+            {
+                settings.MarkBuildProfileRemotelyValidated(
+                    task.ProjectName,
+                    settled.ReviewAttempt.Subject.Plan?.BuildProfileFingerprint,
+                    settled.ReviewAttempt.AttemptId,
+                    request.ExecutorId,
+                    request.Workspace.ActualHead,
+                    receivedAt);
+            }
             var payload = JsonSerializer.Serialize(request, Json);
             var reportHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)))
                 .ToLowerInvariant();
@@ -981,7 +991,8 @@ public static class V1ReviewPlaneEndpoints
                 .ToList(),
             IntegrationRef: integrationRef,
             Preparation: preparation,
-            PreserveGlobs: profile?.PreserveGlobs);
+            PreserveGlobs: profile?.PreserveGlobs,
+            BuildProfileFingerprint: BuildProfileValidationFingerprint.Create(profile));
     }
 
     /// <summary>

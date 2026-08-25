@@ -1093,6 +1093,13 @@ public class ProjectRunner
             }
 
             await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
+            var graceRunsRemaining = _projectSettings.ConsumeBuildProfileRevalidationGraceRun(ProjectName);
+            if (graceRunsRemaining is not null)
+            {
+                _logger.LogWarning(
+                    "build-profile-revalidation-grace-consumed project={Project} task={TaskKey} remainingRuns={RemainingRuns}",
+                    ProjectName, nextJob.Key ?? nextJob.TaskKey ?? nextJob.Id, graceRunsRemaining);
+            }
         }
     }
 
