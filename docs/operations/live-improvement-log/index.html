@@ -164,6 +164,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done)</td>
   <td>Product fixes ride the next train. Follow-up candidates for the operator: injectable clocks for the TTL caches (5 wall-clock tests), long-path-aware temp sweep (~144 stuck atp-runner-e2e-* dirs).</td>
 </tr>
+<tr>
+  <td class="meta">08-25 13:4x</td>
+  <td><strong>Org-wide security audit (5 surfaces, adversarially verified): 7 confirmed findings.</strong> Dossier AGT-W41 (docs/operations/org-security-audit-2026-08/). HIGH: bypassable SVG figure validator on public ai-patterns.dev &rarr; stored XSS, empirically proven &mdash; being fixed now (allowlist sanitizer). MEDIUM: absolute filesystem paths (WatchPath/FolderPath) leak from anonymous read endpoints incl. the new cycle-time rows (matters for the public-demo positioning); the demo.replay S3 exclusive-scope defense is inert in the profile the demo actually runs (its compromise tests use the wrong profile); QS AllowedRoots widened to C:\Projects (R-09 recurrence &mdash; this is MY own uncommitted healing edit from the QS boot-crash fix, still in the QS working tree); QS default dependencies-sensor runs npm audit/dotnet list in untrusted repo dirs; SpendRequestsPerMinute partition keyed on spoofable id. LOW: ai-patterns.dev ships no CSP.</td>
+  <td class="v action">operator-action</td>
+  <td>Dossier is decision-pending for operator triage &mdash; deliberately NO card storm. Owned-up: the AllowedRoots widening is my own regression from the QS heal; the correct narrow fix belongs with QS-77. XSS fix in flight (public site, fix-now class). Path-leak + demo.replay-profile findings are directly relevant to the public-demo slices (AGT-2667/2668/2669) still in flight &mdash; fold into their review.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
