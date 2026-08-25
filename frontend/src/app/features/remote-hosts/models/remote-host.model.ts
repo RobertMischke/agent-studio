@@ -225,6 +225,8 @@ export interface TaskServerRunnerCapabilitySnapshot {
   runtimeCapacityAppliedAt?: string | null;
   runtimeCapacityAppliedVersion?: number | null;
   projectPolicy?: NonNullable<RemoteHost['projectPolicy']> | null;
+  /** Role-local RUNNER_MAX_PARALLELISM declared by this runner process. */
+  roleMaxParallelism?: number | null;
 }
 
 export interface RemoteHostAdmission {
@@ -293,6 +295,8 @@ export interface RemoteHost {
   runtimeCapacity?: RuntimeCapacitySettings | null;
   /** Latest capacity value reported as adopted by this daemon process. */
   effectiveMaxParallelism?: number | null;
+  /** Role-local ceiling advertised from RUNNER_MAX_PARALLELISM. */
+  roleMaxParallelism?: number | null;
   runtimeCapacityAppliedAt?: string | null;
   /** Exact Task Server policy version confirmed by this daemon. */
   runtimeCapacityAppliedVersion?: number | null;

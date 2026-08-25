@@ -4,6 +4,12 @@ This runbook is the operator path for adding, connecting, draining, retiring,
 reviving, and permanently removing a remote agent host. The detailed Linux
 installation reference remains [linux-runner-host.md](setup/linux-runner-host.md).
 
+Execution Hosts groups service identities by the physical `hostId` advertised
+by each runner. Coding and Review on one VM appear as role sub-rows with their
+own slot ceilings and actions, while load, activity, and release appear once on
+the machine row. Retired identities are hidden by default and can be revealed
+with the compact **Show retired** filter.
+
 ## Add a host
 
 Open **Workspace Settings > Execution Hosts > Add execution host**. The wizard introduced in
@@ -123,6 +129,11 @@ come from the daemon's latest telemetry sample. If that sample or the host
 heartbeat is older than five minutes, the last slot value is explicitly marked
 stale and rendered quietly instead of being presented as live.
 
+The primary Release value is the immutable `/opt/agent-host/releases/<id>`
+directory selected by the `current` symlink. Studio truncates that value in the
+column and exposes the complete id in a tooltip. The assembly package version
+is not a deployment identity.
+
 The same card shows the server-owned **Runtime capacity** policy. Change the
 slot ceiling, target load, or ramp strategy there and choose **Apply**. The
 Task Server versions the update, enforces the ceiling across Coding RUN leases
@@ -143,6 +154,11 @@ also writes the last accepted policy to
 last-known-good cache, not an operator configuration surface. A replacement
 daemon on the same host restores it before connecting, while the next valid
 Task Server response remains authoritative.
+
+Each runner role advertises its own startup `RUNNER_MAX_PARALLELISM` value.
+Execution Hosts uses that role-local capacity for Review and the centrally
+managed effective capacity for Coding. Roles sharing a physical `hostId` stay
+grouped without merging their slot ceilings.
 
 Provision a host policy before the first daemon connects by using expected
 version `0`:
@@ -245,8 +261,8 @@ curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/drain \
 Use **Retire**, read the confirmation, then choose **Drain and retire**. If work
 is running, the server drains first and changes the identity to `retired` only
 after the daemon reports zero active slots. With zero active slots it retires
-immediately. Retired clients move into the
-collapsed **Retired clients** section and retain historical attribution.
+immediately. Retired identities are hidden from the default active-host view
+and retain historical attribution.
 
 ```bash
 curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/retire \
@@ -255,8 +271,9 @@ curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/retire \
 
 ## Revive
 
-Expand **Retired clients** and choose **Revive**. Start or re-register the daemon
-afterward so `LastSeenAt`, daemon state, and the push probe become fresh again.
+Choose **Show retired**, then choose **Revive** for the retired role. Start or
+re-register the daemon afterward so `LastSeenAt`, daemon state, and the push
+probe become fresh again.
 
 ```bash
 curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/revive \

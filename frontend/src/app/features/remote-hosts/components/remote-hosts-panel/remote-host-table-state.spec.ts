@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RemoteHost } from '../../models/remote-host.model';
+import type { PhysicalHostGroup } from '../../models/physical-host-group';
 import {
   REMOTE_HOST_TABLE_SESSION_KEY,
   RemoteHostTableState,
 } from './remote-host-table-state';
 
-const HOSTS: RemoteHost[] = [
-  host('runner-b', 'offline', 91, '2026-08-11T08:00:00Z', 'release-2'),
-  host('runner-a', 'online', 21, '2026-08-11T10:00:00Z', 'release-1'),
+const HOSTS: PhysicalHostGroup[] = [
+  group(host('runner-b', 'offline', 91, '2026-08-11T08:00:00Z', 'release-2')),
+  group(host('runner-a', 'online', 21, '2026-08-11T10:00:00Z', 'release-1')),
 ];
 
 afterEach(() => window.sessionStorage.clear());
@@ -72,4 +73,8 @@ function host(
     },
     releaseId,
   };
+}
+
+function group(machine: RemoteHost): PhysicalHostGroup {
+  return { id: machine.id, name: machine.name, machine, roles: [machine] };
 }

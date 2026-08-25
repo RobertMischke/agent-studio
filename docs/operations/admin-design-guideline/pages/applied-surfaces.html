@@ -115,7 +115,7 @@
       </thead>
       <tbody>
         <tr>
-          <td>11 Aug 2026</td>
+          <td>25 Aug 2026</td>
           <td>
             <p><strong>Execution hosts settings</strong></p>
             <p><code>#/workspace/settings/execution-hosts</code></p>
@@ -141,9 +141,9 @@
             </div>
           </td>
           <td>
-            <p>One sortable host table: Name, Status, Slots, Load, Last activity, Release, Actions. Persisted row disclosure for identity, capabilities, connection, and telemetry. Warning semantics only for genuine host / auth / delivery failures.</p>
+            <p>One sortable physical-machine table with Coding and Review role sub-rows. Load, activity, and immutable release appear once per machine; role-local slots and lifecycle actions remain per role. Retired roles are hidden by default, narrow actions use a complete text menu, resolved missing values use an ADM-17 dash, and the machine disclosure opens to compact section summaries.</p>
           </td>
-          <td><span class="card-key">AGT-2568</span></td>
+          <td><span class="card-key">AGT-2568</span> <span class="card-key">AGT-2681</span></td>
           <td><span class="status-badge status-applied">Applied</span></td>
         </tr>
         <tr>

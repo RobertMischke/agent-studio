@@ -683,7 +683,7 @@
 
     <div class="adoption-flow" role="list" aria-label="Incremental adoption flow">
       <div class="adoption-step" role="listitem"><span>01 · READ</span><p>Load the hard rules and this dossier before admin UI design or implementation.</p></div>
-      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-12 to the new or changed surface and its immediate family.</p></div>
+      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-17 to the new or changed surface and its immediate family.</p></div>
       <div class="adoption-step" role="listitem"><span>03 · PROVE</span><p>Capture light, dark, wide, narrow, collapsed, and expanded states as applicable.</p></div>
       <div class="adoption-step" role="listitem"><span>04 · DEFER</span><p>Record unrelated legacy drift as a named finding or card. Do not widen the implementation.</p></div>
     </div>
@@ -699,6 +699,7 @@
       <li>Rows track stable identity and use the same grid for comparable entries.</li>
       <li>Both themes and relevant widths are covered by Playwright and preserved screenshots.</li>
       <li>Push-panel boundaries, fixed header geometry, ellipsis behavior, and transcript overlays remain collision-free where applicable.</li>
+      <li>Resolved missing values use a dim typographic dash, never a placeholder bar, box, pill, or empty meter.</li>
       <li>Any intentional exception names the user need, scope, and review evidence. Existing drift is not precedent.</li>
     </ol>
   </section>
@@ -962,7 +963,22 @@
     <p class="muted">Evidence: deterministic mocked before and after captures for light and dark themes at wide and narrow widths in the AGT-2606 results.</p>
   </section>
 
-  <footer>Prepared 10 August 2026; flat outcome-summary, panel keyboard containment, lane-header, and Dossier-list guidance extended 12 August 2026; promoted to living standard with visual dos-and-donts and applied-surfaces subpages by AGT-2617 on 16 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, AGT-2606, AGT-2638, AGT-2642, AGT-2643, and AGT-2644. Multi-page format (index.html + pages/) introduced by AGT-2617; task-header status pair added by AGT-2637.</footer>
+  <section id="table-absence-addendum" data-concept-section="decision-log">
+    <h2><span class="section-no">13</span>Missing table facts</h2>
+    <p>This append-only rule records the Execution Hosts table evidence from AGT-2653 and its AGT-2681 delivery audit.</p>
+
+    <h3>ADM-17: Absence stays typographic</h3>
+    <ul>
+      <li><strong>Use one dim dash.</strong> An optional table fact that is unavailable or not reported uses one small dim dash with an accessible explanation.</li>
+      <li><strong>Do not imply measured quantity.</strong> A resolved missing value must not render as a full-width gray bar, boxed placeholder, empty progress track, or pill.</li>
+      <li><strong>Reserve skeletons for loading.</strong> Structural placeholders may appear only while a response is actively pending and disappear when it resolves.</li>
+      <li><strong>Yield columns before identity.</strong> At narrow widths, remove lower-priority columns and move complete row actions into a text menu. Never truncate an action label into an ambiguous fragment.</li>
+    </ul>
+
+    <p class="muted">Evidence: live stable before captures plus deterministic light, dark, narrow, and expanded-summary after captures in the AGT-2681 results.</p>
+  </section>
+
+  <footer>Prepared 10 August 2026; flat outcome-summary, panel keyboard containment, lane-header, and Dossier-list guidance extended 12 August 2026; promoted to living standard with visual dos-and-donts and applied-surfaces subpages by AGT-2617 on 16 August 2026; missing-table-fact guidance added by AGT-2681 on 25 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, AGT-2606, AGT-2638, AGT-2642, AGT-2643, AGT-2644, AGT-2653, and AGT-2681. Multi-page format (index.html + pages/) introduced by AGT-2617; task-header status pair added by AGT-2637.</footer>
 </main>
 </body>
 </html>

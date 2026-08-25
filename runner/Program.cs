@@ -1,6 +1,5 @@
 using AgentRunner;
 using System.Runtime.InteropServices;
-using System.Reflection;
 
 // Standalone agent host. With a task key it performs the RM-5 one-shot run;
 // without one (or with --poll) it continuously fills bounded host slots. See
@@ -8,13 +7,7 @@ using System.Reflection;
 
 if (args is ["--version"])
 {
-    var assembly = typeof(RunnerOptions).Assembly;
-    var informational = assembly
-        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-        ?.InformationalVersion
-        ?? assembly.GetName().Version?.ToString(3)
-        ?? "unknown";
-    Console.WriteLine($"agent-host {informational}");
+    Console.WriteLine($"agent-host {RunnerReleaseIdentity.Current}");
     return 0;
 }
 

@@ -1,0 +1,69 @@
+@let h = host();
+
+<td class="role__name-cell">
+  <span class="role__branch" aria-hidden="true">↳</span>
+  <strong data-testid="remote-host-role-label">{{ roleLabel() }}</strong>
+  <span class="role__identity" data-testid="remote-host-role-name" [title]="h.name">{{ h.name }}</span>
+</td>
+<td>
+  <span class="role__status" data-testid="remote-host-role-status">
+    <span class="role__dot" [attr.data-tone]="tone()" aria-hidden="true"></span>
+    <span>{{ statusLabel() }}</span>
+  </span>
+</td>
+<td class="role__number" data-testid="remote-host-slots-summary">
+  {{ activeSlots() }} / {{ slotTotal() ?? 'n/a' }}
+</td>
+<td class="role__load"><span class="role__placeholder" title="Reported once per machine">–</span></td>
+<td class="role__activity"><span class="role__placeholder" title="Reported once per machine">–</span></td>
+<td class="role__release"><span class="role__placeholder" title="Reported once per machine">–</span></td>
+<td class="role__actions">
+  <div class="role__actions-wide">
+    @if (retired()) {
+      <button class="role__btn role__btn--primary" type="button"
+              data-testid="remote-host-action-revive"
+              [disabled]="!!h.busyAction"
+              (click)="emit('revive')">
+        {{ h.busyAction === 'revive' ? 'Reviving…' : 'Revive' }}
+      </button>
+    } @else {
+      <button class="role__btn" type="button"
+              data-testid="remote-host-action-drain"
+              title="Stop new leases. Running work continues until it finishes."
+              [disabled]="!!h.busyAction || h.status === 'draining'"
+              (click)="emit('drain')">
+        {{ h.busyAction === 'drain' ? 'Draining…' : 'Drain' }}
+      </button>
+      <button class="role__btn role__btn--danger" type="button"
+              data-testid="remote-host-action-retire"
+              [disabled]="!!h.busyAction"
+              (click)="emit('retire')">
+        {{ h.busyAction === 'retire' ? 'Retiring…' : 'Retire' }}
+      </button>
+    }
+  </div>
+
+  <details class="role__overflow" data-testid="remote-host-action-menu">
+    <summary data-testid="remote-host-action-overflow"
+             [attr.aria-label]="'Actions for ' + h.name">
+      <span aria-hidden="true">⋯</span>
+    </summary>
+    <div class="role__menu" role="menu">
+      @if (retired()) {
+        <button type="button" role="menuitem" [disabled]="!!h.busyAction" (click)="emit('revive')">
+          {{ h.busyAction === 'revive' ? 'Reviving…' : 'Revive' }}
+        </button>
+      } @else {
+        <button type="button" role="menuitem"
+                [disabled]="!!h.busyAction || h.status === 'draining'"
+                (click)="emit('drain')">
+          {{ h.busyAction === 'drain' ? 'Draining…' : 'Drain' }}
+        </button>
+        <button class="role__menu-danger" type="button" role="menuitem"
+                [disabled]="!!h.busyAction" (click)="emit('retire')">
+          {{ h.busyAction === 'retire' ? 'Retiring…' : 'Retire' }}
+        </button>
+      }
+    </div>
+  </details>
+</td>
