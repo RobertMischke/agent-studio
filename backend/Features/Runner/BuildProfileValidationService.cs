@@ -69,6 +69,21 @@ public sealed class ProcessBuildCommandRunner : IBuildCommandRunner
 /// <summary>Outcome of a full validation dry-run.</summary>
 public sealed record DryRunValidationResult(bool Green, string Status, string Summary, string? FailedCommand);
 
+/// <summary>Chooses the real source checkout for local profile validation.</summary>
+public static class BuildProfileValidationWorkspace
+{
+    public static string Resolve(
+        string? registeredRepositoryPath,
+        string? registeredRootPath,
+        string? watchRepositoryPath,
+        string? watchRootPath,
+        string watchPath) =>
+        First(registeredRepositoryPath, registeredRootPath, watchRepositoryPath, watchRootPath) ?? watchPath;
+
+    private static string? First(params string?[] candidates) =>
+        candidates.FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate))?.Trim();
+}
+
 /// <summary>
 /// Drives the onboarding validation dry-run (Slice P / ASS-1663): mark the
 /// project's build profile <c>validating</c>, run the planned install + build
@@ -80,8 +95,9 @@ public sealed record DryRunValidationResult(bool Green, string Status, string Su
 /// The command execution is delegated to an injected <see cref="IBuildCommandRunner"/>
 /// so the orchestration + status transitions are unit-testable without a real
 /// package manager. The dry-run executes in the supplied working directory; the
-/// caller (endpoint) passes a fresh/throwaway worktree path per the concept's
-/// "frisches Worktree -> install -> build -> gruen" flow.
+/// caller (endpoint) passes the project's registered source checkout, not the
+/// taskboard metadata/review root. Remote Review provides the disposable,
+/// authoritative runner-workspace verification path.
 /// </para>
 /// </summary>
 public sealed class BuildProfileValidationService

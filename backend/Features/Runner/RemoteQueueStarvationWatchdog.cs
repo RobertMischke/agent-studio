@@ -8,6 +8,7 @@ public sealed record RemoteQueueStarvationItem
     public string Title { get; init; } = "";
     public DateTime EnteredLaneAt { get; init; }
     public RemoteDispatchRejection? LastRejection { get; init; }
+    public bool BuildProfileGateBlocked { get; init; }
 }
 
 public sealed record RemoteQueueStarvationSnapshot
@@ -19,6 +20,7 @@ public sealed record RemoteQueueStarvationSnapshot
     public bool ClaimProgressStalled { get; init; }
     public DateTime? LastSuccessfulClaimAt { get; init; }
     public bool HasRejections { get; init; }
+    public int BuildProfileGateBlockedCount { get; init; }
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
@@ -54,7 +56,7 @@ public static class RemoteQueueStarvationPolicy
             .Cast<DateTime?>()
             .FirstOrDefault();
 
-        var eligibleTasks = tasks
+        var observableTasks = tasks
             .Where(task => task.State == TaskStates.Ready && !task.Fixture)
             .Where(task =>
             {
@@ -63,11 +65,16 @@ public static class RemoteQueueStarvationPolicy
                        && ProjectExecutionPolicy.AllowsAutomaticPickup(settings)
                        && AgentTypes.IsAutoPickupEligible(task.Agent)
                        && !TaskSlugs.IsHumanDecisionNeeded(task.Id)
-                       && BuildProfileGate.AllowsAutoPickup(settings.BuildProfile)
                        && (!settings.IntakeEnabled.GetValueOrDefault()
                            || task.Phase == LifecyclePhases.IntakePassed)
                        && !references.EvaluateWaitsOn(task).Blocked;
             })
+            .ToList();
+        var eligibleTasks = observableTasks
+            .Where(task => BuildProfileGate.AllowsAutoPickup(projectSettings(task.ProjectName).BuildProfile))
+            .ToList();
+        var gateBlockedTasks = observableTasks
+            .Where(task => !BuildProfileGate.AllowsAutoPickup(projectSettings(task.ProjectName).BuildProfile))
             .ToList();
         var oldestEligibleAt = eligibleTasks
             .Select(task => task.EnteredLaneAt.ToUniversalTime())
@@ -91,24 +98,51 @@ public static class RemoteQueueStarvationPolicy
                 Title = task.Title,
                 EnteredLaneAt = task.EnteredLaneAt,
                 LastRejection = task.RemoteDispatchRejection,
+                BuildProfileGateBlocked = false,
             })
+            .Concat(gateBlockedTasks.Select(task => new RemoteQueueStarvationItem
+            {
+                TaskKey = task.Key ?? task.TaskKey ?? task.Id,
+                TaskId = task.Id,
+                ProjectName = task.ProjectName,
+                Title = task.Title,
+                EnteredLaneAt = task.EnteredLaneAt,
+                LastRejection = task.RemoteDispatchRejection is { Code: "build-profile-gate" } rejection
+                    ? rejection
+                    : BuildProfileGateRejection(task, projectSettings(task.ProjectName), now),
+                BuildProfileGateBlocked = true,
+            }))
+            .OrderBy(item => item.EnteredLaneAt)
             .ToList();
         var hasRejections = items.Any(item => item.LastRejection is not null);
 
         return new RemoteQueueStarvationSnapshot
         {
-            Active = items.Count > 0 && availableSlots > 0,
+            Active = items.Count > 0 && (availableSlots > 0 || gateBlockedTasks.Count > 0),
             WaitingTaskCount = items.Count,
             AvailableSlots = availableSlots,
             ThresholdMinutes = Math.Max(1, (int)Math.Ceiling(threshold.TotalMinutes)),
             ClaimProgressStalled = claimProgressStalled,
             LastSuccessfulClaimAt = lastSuccessfulClaimAt,
             HasRejections = hasRejections,
+            BuildProfileGateBlockedCount = gateBlockedTasks.Count,
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
         };
     }
+
+    private static RemoteDispatchRejection BuildProfileGateRejection(
+        TaskInfo task,
+        ProjectSettings settings,
+        DateTime observedAt) => new()
+    {
+        Code = "build-profile-gate",
+        RunnerId = "build-profile-gate",
+        RunnerName = "Build profile gate",
+        Reason = BuildProfileGate.Evaluate(settings.BuildProfile).Reason,
+        RejectedAtUtc = task.EnteredLaneAt == default ? observedAt : task.EnteredLaneAt.ToUniversalTime(),
+    };
 }
 
 /// <summary>
@@ -124,6 +158,7 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
     private readonly TaskScannerService _scanner;
     private readonly ProjectSettingsService _settings;
     private readonly ClientIdentityStore _clients;
+    private readonly RemoteDispatchRejectionStore _dispatchRejections;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RemoteQueueStarvationWatchdog> _logger;
     private readonly object _gate = new();
@@ -135,12 +170,14 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
         TaskScannerService scanner,
         ProjectSettingsService settings,
         ClientIdentityStore clients,
+        RemoteDispatchRejectionStore dispatchRejections,
         IConfiguration configuration,
         ILogger<RemoteQueueStarvationWatchdog> logger)
     {
         _scanner = scanner;
         _settings = settings;
         _clients = clients;
+        _dispatchRejections = dispatchRejections;
         _configuration = configuration;
         _logger = logger;
     }
@@ -159,6 +196,22 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
             1,
             24 * 60);
         var snapshot = _scanner.GetLiveSnapshotWithReferenceIndex();
+        foreach (var task in snapshot.Live.Where(task => task.State == TaskStates.Ready && !task.Fixture))
+        {
+            var project = _settings.Get(task.ProjectName);
+            if (ProjectExecutionPolicy.ResolveExecutionLocation(project) == ExecutionLocations.Local
+                || !ProjectExecutionPolicy.AllowsAutomaticPickup(project))
+                continue;
+            var gate = BuildProfileGate.Evaluate(project.BuildProfile);
+            if (!gate.AllowsPickup)
+                _dispatchRejections.Record(
+                    task,
+                    "build-profile-gate",
+                    "Build profile gate",
+                    "build-profile-gate",
+                    gate.Reason,
+                    now);
+        }
         var next = RemoteQueueStarvationPolicy.Evaluate(
             now,
             TimeSpan.FromMinutes(thresholdMinutes),
@@ -256,9 +309,12 @@ public static class RemoteQueueStarvationEndpoints
                 .ToList();
             return Results.Ok(snapshot with
             {
-                Active = visibleItems.Count > 0 && snapshot.AvailableSlots > 0,
+                Active = visibleItems.Count > 0
+                         && (snapshot.AvailableSlots > 0
+                             || visibleItems.Any(item => item.BuildProfileGateBlocked)),
                 WaitingTaskCount = visibleItems.Count,
                 HasRejections = visibleItems.Any(item => item.LastRejection is not null),
+                BuildProfileGateBlockedCount = visibleItems.Count(item => item.BuildProfileGateBlocked),
                 OldestEnteredLaneAt = visibleItems.FirstOrDefault()?.EnteredLaneAt,
                 Items = visibleItems,
             });

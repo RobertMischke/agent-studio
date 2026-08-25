@@ -88,4 +88,51 @@ describe('RemoteQueueStarvationBannerComponent', () => {
     fixture.destroy();
     http.verify();
   });
+
+  it('shows a loud build-profile gate banner for ready cards excluded before claim', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Quality Studio']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      waitingTaskCount: 25,
+      availableSlots: 0,
+      thresholdMinutes: 30,
+      claimProgressStalled: false,
+      lastSuccessfulClaimAt: null,
+      hasRejections: true,
+      buildProfileGateBlockedCount: 25,
+      oldestEnteredLaneAt: '2026-08-18T09:00:00Z',
+      observedAt: '2026-08-23T09:00:00Z',
+      items: Array.from({ length: 25 }, (_, index) => ({
+        taskKey: `QS-${index + 1}`,
+        taskId: `task-${index + 1}`,
+        projectName: 'Quality Studio',
+        title: 'Blocked card',
+        enteredLaneAt: '2026-08-18T09:00:00Z',
+        buildProfileGateBlocked: true,
+        lastRejection: {
+          code: 'build-profile-gate',
+          runnerId: 'build-profile-gate',
+          runnerName: 'Build profile gate',
+          reason: 'build profile declared but not yet validated (no green dry-run)',
+          rejectedAtUtc: '2026-08-18T09:00:00Z',
+        },
+      })),
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-starvation-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('25 ready cards are not claimable: build profile not validated');
+    expect(banner.textContent).toContain('build-profile-gate');
+    fixture.destroy();
+    http.verify();
+  });
 });

@@ -71,6 +71,19 @@ const rejectedReadyTask = task(
   '2-ready',
 );
 
+const buildProfileGateBlockedTask = task(
+  'build-profile-gated',
+  'Build profile validation blocks pickup',
+  location('queued-remote', 'agent-runner-01', 'remote', false, {
+    code: 'build-profile-gate',
+    runnerId: 'build-profile-gate',
+    runnerName: 'Build profile gate',
+    reason: 'build profile declared but not yet validated (no green dry-run)',
+    rejectedAtUtc: '2026-08-18T07:30:00Z',
+  }),
+  '2-ready',
+);
+
 const stalledAcceptedTask = {
   ...task(
     'accepted-stalled',
@@ -202,7 +215,10 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
           enteredLaneAt: '2026-08-08T07:30:00Z',
           waitingMinutes: 330,
           lastRejection: item.executionLocation.lastRejection,
+          buildProfileGateBlocked: item.executionLocation.lastRejection?.code === 'build-profile-gate',
         })),
+        buildProfileGateBlockedCount: waiting.filter(item =>
+          item.executionLocation.lastRejection?.code === 'build-profile-gate').length,
       });
     }
     if (url.includes('/api/pipeline/accepted-integration-alert')) {
@@ -309,6 +325,32 @@ test('shows a durable remote refusal on the card and the starvation banner', asy
     await expect(rejection).toBeVisible();
     await page.screenshot({
       path: join(RESULTS, `notice-bar-after-starvation-narrow-${theme}--mocked.png`),
+      fullPage: false,
+    });
+  }
+});
+
+test('shows build-profile-gated ready cards loudly in both themes', async ({ page }) => {
+  mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 980, height: 800 });
+  await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
+  })));
+  await installRoutes(page, () => [buildProfileGateBlockedTask]);
+  await page.goto('/?includeFixtures=true');
+  await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
+
+  const banner = page.getByTestId('remote-queue-starvation-banner');
+  await expect(banner).toContainText('1 ready card is not claimable: build profile not validated.');
+  await expect(banner).toContainText('build-profile-gate');
+  const card = page.getByTestId('task-card').filter({ hasText: buildProfileGateBlockedTask.title });
+  await expect(card.getByTestId('remote-dispatch-rejection')).toContainText('not yet validated');
+
+  for (const theme of ['dark', 'light'] as const) {
+    await setTheme(page, theme);
+    await dismissDevErrorDialog(page);
+    await page.screenshot({
+      path: join(RESULTS, `build-profile-gate-banner-${theme}--mocked.png`),
       fullPage: false,
     });
   }

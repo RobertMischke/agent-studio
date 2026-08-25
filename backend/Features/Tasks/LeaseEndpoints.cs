@@ -550,6 +550,25 @@ public static class LeaseEndpoints
                         admission.ReasonCode));
                 }
 
+                // Gate decisions are operational refusals too. Record them before
+                // eligibility removes the card so task APIs and the board never
+                // present a silently queued card with lastRejection=null.
+                foreach (var task in liveSnapshot.Where(t => !t.Fixture && t.State == TaskStates.Ready))
+                {
+                    var project = settings.Get(task.ProjectName);
+                    if (!ProjectExecutionPolicy.AllowsAutomaticPickup(project)
+                        || !ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName))
+                        continue;
+                    var gate = BuildProfileGate.Evaluate(project.BuildProfile);
+                    if (!gate.AllowsPickup)
+                        dispatchRejections.Record(
+                            task,
+                            "build-profile-gate",
+                            "Build profile gate",
+                            "build-profile-gate",
+                            gate.Reason);
+                }
+
                 var eligible = liveSnapshot
                     .Where(t => !t.Fixture && t.State == TaskStates.Ready)
                     .Where(t =>

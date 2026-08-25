@@ -315,10 +315,10 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Slice P (ASS-1663): declares (or re-declares) the project's build profile.
-    /// Normalizes blank command/path entries away and always resets onboarding to
-    /// <see cref="BuildProfileStatuses.Declared"/> - changing how the project
-    /// builds invalidates any prior green dry-run, so the project must re-validate
-    /// before the runner picks it up. Pass a null <paramref name="profile"/> to
+    /// Normalizes blank command/path entries away. A first declaration starts in
+    /// <see cref="BuildProfileStatuses.Declared"/>. Editing a previously green
+    /// profile preserves its open gate and marks revalidation pending: the next
+    /// green remote review automatically verifies the edited profile. Pass a null <paramref name="profile"/> to
     /// clear the profile entirely (revert to legacy "no gate" behaviour).
     /// </summary>
     public void SetBuildProfile(string projectName, BuildProfile? profile)
@@ -328,7 +328,7 @@ public class ProjectSettingsService
         {
             var key = ResolveAliasLocked(projectName);
             var current = _cache.TryGetValue(key, out var s) ? s : new ProjectSettings();
-            _cache[key] = current with { BuildProfile = NormalizeProfile(profile) };
+            _cache[key] = current with { BuildProfile = NormalizeProfile(profile, current.BuildProfile) };
             Persist();
         }
         _logger.LogInformation(
@@ -349,7 +349,16 @@ public class ProjectSettingsService
     /// and clears any prior error. No-op when the project has no declared profile.
     /// </summary>
     public void MarkBuildProfileValidated(string projectName) =>
-        TransitionProfileStatus(projectName, BuildProfileStatuses.PipelineReady, validatedAt: DateTime.UtcNow, error: null);
+        TransitionProfileStatus(projectName, BuildProfileStatuses.PipelineReady, validatedAt: DateTime.UtcNow, error: null,
+            remoteVerifiedAt: null);
+
+    /// <summary>Records a green remote review as verification of the active profile.</summary>
+    public void MarkBuildProfileRemoteVerified(string projectName, DateTime? verifiedAt = null)
+    {
+        var at = verifiedAt ?? DateTime.UtcNow;
+        TransitionProfileStatus(projectName, BuildProfileStatuses.PipelineReady,
+            validatedAt: at, error: null, remoteVerifiedAt: at);
+    }
 
     /// <summary>
     /// Marks the project's build profile validation as failed and records a short
@@ -358,9 +367,10 @@ public class ProjectSettingsService
     /// </summary>
     public void MarkBuildProfileValidationFailed(string projectName, string? error) =>
         TransitionProfileStatus(projectName, BuildProfileStatuses.ValidationFailed, validatedAt: null,
-            error: string.IsNullOrWhiteSpace(error) ? "validation failed" : error.Trim());
+            error: string.IsNullOrWhiteSpace(error) ? "validation failed" : error.Trim(), remoteVerifiedAt: null);
 
-    private void TransitionProfileStatus(string projectName, string status, DateTime? validatedAt, string? error)
+    private void TransitionProfileStatus(string projectName, string status, DateTime? validatedAt, string? error,
+        DateTime? remoteVerifiedAt = null)
     {
         EnsureLoaded();
         lock (_lock)
@@ -375,6 +385,8 @@ public class ProjectSettingsService
                     Status = status,
                     LastValidatedAt = validatedAt ?? current.BuildProfile.LastValidatedAt,
                     LastValidationError = status == BuildProfileStatuses.ValidationFailed ? error : null,
+                    RevalidationPending = false,
+                    LastRemoteVerificationAt = remoteVerifiedAt ?? current.BuildProfile.LastRemoteVerificationAt,
                 }
             };
             Persist();
@@ -384,10 +396,10 @@ public class ProjectSettingsService
 
     /// <summary>
     /// Trims blank command/path entries, clamps a non-positive pool size to null,
-    /// and forces the onboarding status to <see cref="BuildProfileStatuses.Declared"/>.
+    /// and applies the first-declaration or validated-edit transition policy.
     /// Returns null when the input is null.
     /// </summary>
-    private static BuildProfile? NormalizeProfile(BuildProfile? profile)
+    private static BuildProfile? NormalizeProfile(BuildProfile? profile, BuildProfile? previous)
     {
         if (profile is null) return null;
 
@@ -400,6 +412,8 @@ public class ProjectSettingsService
             return list.Count == 0 ? null : list;
         }
 
+        var previouslyValidated = previous is not null
+                                  && BuildProfileStatuses.Normalize(previous.Status) == BuildProfileStatuses.PipelineReady;
         return new BuildProfile
         {
             Stack = string.IsNullOrWhiteSpace(profile.Stack) ? null : profile.Stack.Trim(),
@@ -409,9 +423,11 @@ public class ProjectSettingsService
             Lockfiles = Clean(profile.Lockfiles),
             PreserveGlobs = Clean(profile.PreserveGlobs),
             PoolSize = profile.PoolSize is > 0 ? profile.PoolSize : null,
-            Status = BuildProfileStatuses.Declared,
-            LastValidatedAt = null,
+            Status = previouslyValidated ? BuildProfileStatuses.PipelineReady : BuildProfileStatuses.Declared,
+            LastValidatedAt = previouslyValidated ? previous!.LastValidatedAt : null,
             LastValidationError = null,
+            RevalidationPending = previouslyValidated,
+            LastRemoteVerificationAt = previouslyValidated ? previous!.LastRemoteVerificationAt : null,
         };
     }
 

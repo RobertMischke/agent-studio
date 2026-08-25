@@ -780,9 +780,9 @@ public static class ProjectSettingsEndpoints
             });
         });
 
-        // PUT declares (or re-declares) the build profile. Always resets
-        // onboarding to "declared" - the project must re-run a green validation
-        // dry-run before the runner picks it up again.
+        // PUT declares (or re-declares) the build profile. Edits to a previously
+        // green profile keep pickup open while the next remote review performs
+        // automatic revalidation.
         app.MapPut("/api/projects/{projectName}/build-profile", (string projectName, SetBuildProfileRequest req, ProjectSettingsService settings, TaskScannerService scanner) =>
         {
             var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
@@ -835,7 +835,7 @@ public static class ProjectSettingsEndpoints
         // checkout). On green the profile flips to pipeline-ready and the runner
         // may auto-pick the project; on red it lands in validation-failed with a
         // recorded reason. Synchronous: the caller waits for the verdict.
-        app.MapPost("/api/projects/{projectName}/build-profile/validate", async (string projectName, ProjectSettingsService settings, TaskScannerService scanner, BuildProfileValidationService validator, CancellationToken ct) =>
+        app.MapPost("/api/projects/{projectName}/build-profile/validate", async (string projectName, ProjectSettingsService settings, TaskScannerService scanner, ProjectRegistry projects, BuildProfileValidationService validator, CancellationToken ct) =>
         {
             var entry = scanner.GetWatchPaths().FirstOrDefault(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (entry is null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
@@ -843,7 +843,14 @@ public static class ProjectSettingsEndpoints
             if (settings.Get(projectName).BuildProfile is null)
                 return Results.BadRequest(new { error = "no build profile declared for this project" });
 
-            var result = await validator.ValidateAsync(projectName, entry.Path, ct);
+            var registered = projects.FindByIdOrDisplayName(projectName);
+            var workingDirectory = BuildProfileValidationWorkspace.Resolve(
+                registered?.RepositoryPath,
+                registered?.RootPath,
+                entry.RepositoryPath,
+                entry.RootPath,
+                entry.Path);
+            var result = await validator.ValidateAsync(projectName, workingDirectory, ct);
             var profile = settings.Get(projectName).BuildProfile;
             return Results.Ok(new
             {

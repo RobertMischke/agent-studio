@@ -10,6 +10,7 @@ interface RemoteQueueStarvationItem {
   title: string;
   enteredLaneAt: string;
   lastRejection?: RemoteDispatchRejection | null;
+  buildProfileGateBlocked?: boolean;
 }
 
 interface RemoteQueueStarvationSnapshot {
@@ -20,6 +21,7 @@ interface RemoteQueueStarvationSnapshot {
   claimProgressStalled: boolean;
   lastSuccessfulClaimAt: string | null;
   hasRejections: boolean;
+  buildProfileGateBlockedCount: number;
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
@@ -51,6 +53,8 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
   readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 0);
   readonly hasRejections = computed(() =>
     this.visibleItems().some(item => item.lastRejection != null));
+  readonly buildProfileGateBlockedCount = computed(() =>
+    this.visibleItems().filter(item => item.buildProfileGateBlocked).length);
 
   ngOnInit(): void {
     this.refresh();

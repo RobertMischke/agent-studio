@@ -514,6 +514,17 @@ public static class V1ReviewPlaneEndpoints
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 
+            // A green review ran the profile-derived verification plan in the
+            // authoritative remote workspace. It is therefore stronger evidence
+            // than repeating the same commands in the taskboard metadata root.
+            // Profile edits keep one automatic revalidation pending until this
+            // durable remote result clears it.
+            if (string.Equals(request.Outcome, "Pass", StringComparison.OrdinalIgnoreCase)
+                && settings.Get(task.ProjectName).BuildProfile is not null)
+            {
+                settings.MarkBuildProfileRemoteVerified(task.ProjectName, receivedAt);
+            }
+
             var infrastructureFailure = string.Equals(
                 request.Outcome,
                 "ReviewInfra",

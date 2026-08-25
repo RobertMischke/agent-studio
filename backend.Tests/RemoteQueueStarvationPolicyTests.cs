@@ -103,10 +103,34 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Evaluate_CountsBuildProfileGateBlockedCardsWithoutRunnerCapacity()
+    {
+        var task = ReadyTask(5);
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings() with
+            {
+                BuildProfile = new BuildProfile { Status = BuildProfileStatuses.Declared },
+            },
+            TaskReferenceIndex.Build([task]),
+            []);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal(1, snapshot.BuildProfileGateBlockedCount);
+        var blocked = Assert.Single(snapshot.Items);
+        Assert.True(blocked.BuildProfileGateBlocked);
+        Assert.Equal("build-profile-gate", blocked.LastRejection?.Code);
+        Assert.Contains("not yet validated", blocked.LastRejection?.Reason);
+    }
+
+    [Fact]
     public void Watchdog_LogsWarningOnceForAnAcuteQueueAndRecoveryWhenItClears()
     {
         var logger = new CapturingLogger();
         var watchdog = new RemoteQueueStarvationWatchdog(
+            null!,
             null!,
             null!,
             null!,

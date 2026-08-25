@@ -708,7 +708,7 @@ public sealed class ProjectSettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public void ReDeclaringBuildProfile_ResetsAnyPriorGreenValidation()
+    public void ReDeclaringBuildProfile_PreservesOpenGateWithAutomaticRevalidationPending()
     {
         var svc = Build();
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm ci" });
@@ -717,7 +717,17 @@ public sealed class ProjectSettingsServiceTests : IDisposable
 
         svc.SetBuildProfile("runbook", new BuildProfile { InstallCmd = "npm install" });
 
-        Assert.Equal(BuildProfileStatuses.Declared, svc.Get("runbook").BuildProfile!.Status);
+        var edited = svc.Get("runbook").BuildProfile!;
+        Assert.Equal(BuildProfileStatuses.PipelineReady, edited.Status);
+        Assert.True(edited.RevalidationPending);
+        Assert.True(BuildProfileGate.AllowsAutoPickup(edited));
+
+        var verifiedAt = new DateTime(2026, 8, 23, 10, 0, 0, DateTimeKind.Utc);
+        svc.MarkBuildProfileRemoteVerified("runbook", verifiedAt);
+
+        var verified = svc.Get("runbook").BuildProfile!;
+        Assert.False(verified.RevalidationPending);
+        Assert.Equal(verifiedAt, verified.LastRemoteVerificationAt);
     }
 
     [Fact]

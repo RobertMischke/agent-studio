@@ -32,6 +32,8 @@ public static class BuildProfileGate
         var status = BuildProfileStatuses.Normalize(profile.Status);
         return status switch
         {
+            BuildProfileStatuses.PipelineReady when profile.RevalidationPending =>
+                new Decision(true, "pipeline-ready; automatic remote revalidation pending"),
             BuildProfileStatuses.PipelineReady => new Decision(true, "pipeline-ready"),
             BuildProfileStatuses.Validating => new Decision(false, "validation dry-run in progress"),
             BuildProfileStatuses.ValidationFailed => new Decision(false,

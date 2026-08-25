@@ -153,6 +153,18 @@ Three things describe one project and should be decided in the same sitting. Ski
    commands are the override and take precedence over the derivation. See
    [onboard-a-project.md](./onboard-a-project.md) for the build-profile fields.
 
+   Build-profile validation runs in the registered source checkout
+   (`repositoryPath`, falling back to `rootPath`), never in the taskboard review
+   metadata directory. A first declaration closes automatic pickup until that
+   validation is green. Editing a previously validated profile does not silently
+   close an active queue: it preserves `pipeline-ready`, sets
+   `revalidationPending`, and the next green Remote Review records
+   `lastRemoteVerificationAt` and clears the pending flag. That review executes
+   the profile-derived plan in the authoritative runner workspace, so it counts
+   as automatic revalidation. Until the first validation is green, every Ready
+   card records a `build-profile-gate` rejection and the project/host banner
+   reports the blocked-card count.
+
 ## 4. Run your first task
 
 Full walkthrough, including what to queue and what to watch for: [your-first-task.md](./your-first-task.md). Short version:

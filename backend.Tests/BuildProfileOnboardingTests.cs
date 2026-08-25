@@ -55,6 +55,19 @@ public sealed class BuildProfileGateTests
         var d = BuildProfileGate.Evaluate(new BuildProfile { Status = BuildProfileStatuses.PipelineReady });
         Assert.True(d.AllowsPickup);
     }
+
+    [Fact]
+    public void EditedValidatedProfile_AllowsPickupWhileRemoteRevalidationIsPending()
+    {
+        var d = BuildProfileGate.Evaluate(new BuildProfile
+        {
+            Status = BuildProfileStatuses.PipelineReady,
+            RevalidationPending = true,
+        });
+
+        Assert.True(d.AllowsPickup);
+        Assert.Contains("revalidation pending", d.Reason);
+    }
 }
 
 public sealed class BuildProfileDryRunPlannerTests
@@ -100,6 +113,22 @@ public sealed class BuildProfileDryRunPlannerTests
         });
         Assert.Single(plan);
         Assert.Equal(DryRunStepKind.Install, plan[0].Kind);
+    }
+}
+
+public sealed class BuildProfileValidationWorkspaceTests
+{
+    [Fact]
+    public void Resolve_PrefersRegisteredSourceCheckoutOverTaskboardReviewPath()
+    {
+        var resolved = BuildProfileValidationWorkspace.Resolve(
+            "/sources/quality-studio",
+            "/sources/quality-studio/subdir",
+            null,
+            "/taskboard/projects/quality-studio",
+            "/taskboard/projects/quality-studio/review");
+
+        Assert.Equal("/sources/quality-studio", resolved);
     }
 }
 
