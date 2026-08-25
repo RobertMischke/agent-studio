@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Org Security Audit | August 2026</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;
+    --taskbr: #4a3aa7;
+    --salvage: #eb6834;
+    --rescue: #b58500;
+    --ok: #008300;
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; scroll-margin-top: 20px; }
+  p  { max-width: 82ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  /* severity + verdict pills */
+  .pill.sev-high { background: var(--bad-soft); color: var(--bad); }
+  .pill.sev-med  { background: var(--warn-soft); color: var(--warn); }
+  .pill.sev-low  { background: var(--accent-soft); color: var(--develop); }
+  .pill.sev-info { background: var(--surface-3); color: var(--ink-2); }
+  .pill.confirmed { background: var(--bad-soft); color: var(--bad); letter-spacing: .04em; }
+  .pill.mitigated { background: var(--ok-soft); color: var(--ok); letter-spacing: .04em; }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 82ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .finding { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 30px; }
+  .finding .tags { margin: 6px 0 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .finding p { margin: 8px 0; }
+  .lbl { font-weight: 600; color: var(--ink-1); }
+  .conf { font-size: 12.5px; color: var(--ink-3); }
+  .surface-count { font-size: 13px; color: var(--ink-2); margin: 6px 0 0; }
+  .table-wrap { overflow-x: auto; margin: 18px 0; }
+  .table-wrap table { margin: 0; min-width: 860px; }
+  td.rank { font-variant-numeric: tabular-nums; color: var(--ink-3); font-weight: 600; }
+  .counts td:first-child { width: 60%; }
+  .counts td b { font-variant-numeric: tabular-nums; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Security Audit · Agent Studio</p>
+  <h1>Org Security Audit</h1>
+  <p class="lede">A consolidated read-only audit across five surfaces of the organization. Every
+  candidate exploit finding was put through adversarial refutation before it was allowed to stand.</p>
+  <div class="meta">
+    <span><b>Date:</b> 2026-08-25</span>
+    <span><b>Method:</b> parallel single-surface audits, then adversarial verification of the candidate exploit set</span>
+    <span><b>Scope:</b> five surfaces (Quality Studio at HEAD <code>e31089c</code>)</span>
+    <span><b>Triage:</b> no cards created — the operator triages</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#summary">Executive summary</a></li>
+    <li><a href="#s1">1 &middot; Public demo — Studio backend</a></li>
+    <li><a href="#s2">2 &middot; Quality Studio</a></li>
+    <li><a href="#s3">3 &middot; Public websites</a></li>
+    <li><a href="#s4">4 &middot; Runner host</a></li>
+    <li><a href="#s5">5 &middot; Chat &amp; Token Economy</a></li>
+    <li><a href="#remediation">Prioritized remediation</a></li>
+    <li><a href="#appendix-a">Appendix A — Verified-mitigated &amp; false-positives</a></li>
+    <li><a href="#appendix-b">Appendix B — Low &amp; informational observations</a></li>
+  </ul>
+</nav>
+
+<!-- ============================================================ -->
+<section id="summary" class="box accent">
+  <h4>Executive summary</h4>
+  <p>Five surfaces were audited independently and read-only. Each surface produced its own candidate
+  findings. The set of candidate findings that claimed a live exploit or a real weakness was then handed
+  to a separate verification pass whose only job was to refute each one on every available guard. What
+  follows separates what survived that refutation (<b>confirmed</b>) from what was checked and set aside
+  (<b>verified-mitigated</b>), and keeps the single-surface hardening notes in a final appendix.</p>
+
+  <p><span class="lbl">Surfaces audited.</span> Public demo — Studio backend (OrchestratorApi under the
+  <code>public-demo-readonly</code> profile); Quality Studio (QualityStudio.Api + AgentOrchestrator.CodeQuality);
+  public websites (ai-patterns.dev Angular&nbsp;21 SSR + agent-orchestrator-website static/Caddy); runner host
+  (Linux runner + Windows reverse-tunnel keeper); Chat &amp; Token Economy (coding-agent-chat npm library +
+  coding-agent-token-economy .NET/NuGet).</p>
+
+  <p><span class="lbl">Adversarial verification.</span> Eight candidate exploit findings entered adversarial
+  refutation. <b>Seven survived as confirmed.</b> One — originally rated high — was reclassified to
+  <b>verified-mitigated</b> because no live exploit path exists in any sanctioned deployment (its guard is a
+  documented pre-launch invariant, not yet an enforced gate). <b>Zero</b> candidates collapsed into outright
+  false-positives.</p>
+
+  <table class="counts">
+    <thead><tr><th>Bucket</th><th>Count</th><th>By severity</th></tr></thead>
+    <tbody>
+      <tr><td><b>Confirmed</b> (survived adversarial verification)</td><td><b>7</b></td>
+          <td><span class="pill sev-high">High 1</span> <span class="pill sev-med">Medium 5</span> <span class="pill sev-low">Low 1</span></td></tr>
+      <tr><td><b>Verified-mitigated</b> (dismissed as a live exploit)</td><td><b>1</b></td>
+          <td>originally High — see Appendix A</td></tr>
+      <tr><td><b>False-positives</b></td><td><b>0</b></td><td>—</td></tr>
+      <tr><td><b>Low / informational</b> (single-surface deep audits)</td><td><b>22</b></td>
+          <td><span class="pill sev-low">Low 10</span> <span class="pill sev-info">Info 12</span></td></tr>
+    </tbody>
+  </table>
+
+  <p class="dim" style="margin-bottom:0">One high-severity item is confirmed: a bypassable figure-SVG validator
+  feeding a deliberately unsanitized <code>innerHTML</code> sink on ai-patterns.dev, i.e. stored XSS, reproduced
+  in isolation. The five confirmed medium items concentrate in the public demo (path disclosure, an inert
+  replay-scope defense) and Quality Studio (a widened filesystem confinement boundary, a bypassable rate-limit
+  partition, and untrusted-repo dependency scanning). The confirmed low is the app-layer absence of CSP on
+  ai-patterns.dev.</p>
+</section>
+
+<p class="dim"><span class="lbl">How to read this.</span> Sections&nbsp;1–5 take one surface each and present its
+<b>confirmed</b> findings in full — where the defect lives, how it triggers, why it survived refutation, and the
+fix. Surfaces with no confirmed finding still get a section, so the reader sees the surface was audited and what
+it produced. The <a href="#remediation">remediation table</a> ranks the confirmed set. Appendix&nbsp;A records what
+was checked and dismissed; Appendix&nbsp;B collects the low and informational observations.</p>
+
+<!-- ============================================================ -->
+<h2 id="s1"><span class="no">1</span>Public demo — Studio backend</h2>
+<p class="dim">Audited: the OrchestratorApi under <code>Security:Profile=public-demo-readonly</code> — the
+PublicDemoExecutionLock deny middleware and its route-inventory gate, AccessSecurity/ClientIdentity behavior
+under the profile, the DemoReplay ingest and the <code>demo.replay</code> scope (S3/AGT-2668), the
+cycle-time/board read endpoints, and the S4 edge/CSP status (AGT-2669).</p>
+<p class="surface-count"><b>Confirmed on this surface: 2 medium.</b> One high-severity read-only claim was
+verified-mitigated (Appendix&nbsp;A, M1). Low/info: three items (Appendix&nbsp;B).</p>
+
+<div class="finding" id="f1">
+  <h3>F1 · Absolute server filesystem paths leak from anonymous read endpoints</h3>
+  <div class="tags">
+    <span class="pill confirmed">CONFIRMED</span>
+    <span class="pill sev-med">Medium</span>
+    <span class="conf">confidence 0.9 &middot; information disclosure / reconnaissance</span>
+  </div>
+  <p><span class="lbl">Where.</span> <code>backend/Shared/Models/TaskInfo.cs:30</code> (<code>WatchPath</code>),
+  <code>:32</code> (<code>FolderPath</code>) — no <code>[JsonIgnore]</code>;
+  <code>Features/Projects/CycleTime/TaskCycleTime.cs:43</code> (WatchPath in every cycle-time row);
+  <code>Features/Runner/RunnerEndpoints.cs:60</code> (orchestrator-feed emits <code>watchPath = project.Path</code>);
+  serialized by <code>TaskCrudEndpoints.cs:112/113</code> (<code>/</code>) and <code>:115+</code> (<code>/grouped</code>);
+  populated by <code>JobStatsMetadataCache.cs:230,232</code>. Anonymity gate:
+  <code>AccessSecurityMiddleware.cs:35</code> + <code>SecurityProfiles.IsNetworked</code>
+  (<code>AccessSecurityModels.cs:12</code>).</p>
+  <p><span class="lbl">Mechanism.</span> Under <code>public-demo</code>, <code>IsNetworked</code> is false, so
+  <code>AccessSecurityMiddleware</code> short-circuits at line 35 with no authentication — <code>/api/*</code>
+  reads are anonymous — and <code>ProjectAccessAuthorization.FilterTasks</code> returns all tasks unfiltered when
+  no <code>HumanPrincipal</code> is present. <code>GET /api/tasks/</code> and <code>/grouped</code> therefore
+  return raw <code>TaskInfo</code> objects whose serialized <code>WatchPath</code> and <code>FolderPath</code> are
+  live absolute on-disk paths of the form
+  <code>runtime_root/releases/&lt;version&gt;.&lt;rand&gt;/runtime/datastore/projects/&lt;slug&gt;/&lt;lane&gt;/&lt;key&gt;</code>.
+  <code>GET /api/projects/{p}/cycle-time</code> and <code>GET /api/runner/orchestrator-feed</code> carry the same
+  path. A public visitor learns the operator-chosen <code>runtime_root</code>, the release version directory, and
+  the lane/slug layout — reconnaissance that aids path-targeting.</p>
+  <p><span class="lbl">Survived refutation.</span> Every guard was tried and the finding held. Anonymity is real
+  (<code>IsNetworked</code> is true only for the literal <code>networked</code> profile); <code>FilterTasks</code>
+  emits everything without a principal; the leaking endpoints are mapped unconditionally in
+  <code>EndpointMapping.cs</code>; the fields are live absolute paths, not fixtures; there is no serialization
+  guard (<code>ConfigureHttpJsonOptions</code> adds only a <code>JsonStringEnumConverter</code>, and these fields
+  carry no <code>[JsonIgnore]</code> — in deliberate contrast to <code>RemoteDispatchRejection</code> at
+  <code>TaskInfo.cs:465</code>, which does). <code>PublicDemoExecutionLock</code> is an execution-deny gate, not a
+  serialization filter; the S5 build-time datastore scanner cannot catch request-time injections; no test asserts
+  stripping. Severity is medium — disclosure, not direct compromise.</p>
+  <p><span class="lbl">Fix.</span> Add a public-demo response projection that strips or replaces
+  <code>WatchPath</code>/<code>FolderPath</code> (and the orchestrator-feed <code>watchPath</code> and
+  <code>TaskCycleTime.WatchPath</code>) before serialization, or mark them <code>[JsonIgnore]</code> and address
+  tasks by an opaque stable handle. For a single-scene read-only demo the project handle suffices; the
+  <code>WatchPath</code> echo (used only as the frontend's <code>?watchPath=</code> link param) is unnecessary
+  exposure.</p>
+</div>
+
+<div class="finding" id="f2">
+  <h3>F2 · The <code>demo.replay</code> exclusive-scope defense is inert in the profile the demo runs</h3>
+  <div class="tags">
+    <span class="pill confirmed">CONFIRMED</span>
+    <span class="pill sev-med">Medium</span>
+    <span class="conf">confidence 0.85 &middot; assurance gap (leans low-medium)</span>
+  </div>
+  <p><span class="lbl">Where.</span> <code>AccessSecurityMiddleware.cs:35</code> (short-circuit) vs <code>:179</code>
+  (the <code>RunnerScopes.DemoReplay</code> check, reached only when networked);
+  <code>ClientIdentityMiddleware.cs:122</code> (replay carve-out) with <code>Host/Program.cs:864</code>;
+  <code>backend.Tests/DemoReplayScopeCompromiseTests.cs:331</code> (boots <code>Security:Profile=networked</code>);
+  deployment profile pinned <code>public-demo-readonly</code> at <code>docs/operations/demo-instanz/index.html:526</code>.</p>
+  <p><span class="lbl">Mechanism.</span> Under the deployed <code>public-demo-readonly</code> profile,
+  <code>AccessSecurityMiddleware</code> returns at line 35 before the <code>demo.replay</code> scope check at line
+  179 ever runs, and <code>ClientIdentityMiddleware.OwnsFencedAttribution</code> passes
+  <code>/api/runner/replay</code> through with no <code>X-Client-Id</code>. The PublicDemoExecutionLock does not
+  cover the ingest (the route carries no <code>ExecutionRouteMetadata</code>). So the ingest is reachable with no
+  credential, gated only by <code>DemoReplayAdmissionPolicy</code> (pinned trace/digest/scene/kind + a valid ECDSA
+  seal against the pinned release key) and the epoch ledger. Forgery is genuinely blocked by the seal and
+  re-submission by the monotonic epoch cursor, so the only real effect is injecting or replaying pre-signed
+  Simulated events onto fixture tasks, plus unbounded journal growth until the 6h reset (no app-layer rate
+  limiting). The core defect is assurance: the entire S3 compromise suite boots under <code>networked</code>, so
+  its two scope-specific tests prove properties of a mechanism that is inert in the live profile, and no test
+  boots public-demo against the ingest.</p>
+  <p><span class="lbl">Survived refutation.</span> Four angles failed. The demo runs
+  <code>public-demo-readonly</code> (the release manifest pins it; the <code>replay-only-runner.md:99</code>
+  "networked … is what the public demo runs" line is stale — precisely the drift the finding names). No middleware
+  re-guards the ingest under public-demo (the full pipeline was traced: execution-lock pass, access-security
+  short-circuit, client-identity carve-out, management-mode normal). PublicDemoExecutionProfileTests iterate only
+  the 78 <code>ExecutionRouteMetadata</code>-tagged routes; the replay ingest is untagged. The admission logic is
+  unit-tested but that is profile-independent — reachability and the two scope tests remain untested on the live
+  profile. Direct-exploit risk is mitigated by the pinned-key seal and the epoch ledger (an external actor without
+  the pre-signed trace cannot mint an admissible frame); the assurance/hardening gap is real and reproducible from
+  the code.</p>
+  <p><span class="lbl">Fix.</span> Add a compromise/route-matrix test that boots under
+  <code>public-demo-readonly</code> and asserts the ingest's actual gate there (credential-free reachability +
+  admission-policy denials); add app-layer rate limiting on the ingest rather than relying only on the S4 edge;
+  document that under public-demo the credential scope is not enforced and the edge + co-located replay runner is
+  the boundary; reconcile the stale <code>replay-only-runner.md:99</code> claim with the pinned
+  <code>deploymentProfile: public-demo-readonly</code>.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s2"><span class="no">2</span>Quality Studio</h2>
+<p class="dim">Audited at HEAD <code>e31089c</code>: QualityStudio.Api (the public-facing review API) and
+AgentOrchestrator.CodeQuality (review runner, sensors, handover). Focus: untrusted-repo content into
+prompts/renderers/sensors, review workspace filesystem reach, model-API-key handling, boundary-sensor scale,
+RequireHttps/AUTH modes, the SpendRequestsPerMinute limiter, and the AllowedRoots confinement boundary. Static
+call-chain analysis; no services were run.</p>
+<p class="surface-count"><b>Confirmed on this surface: 3 medium.</b> Low/info: three items (Appendix&nbsp;B).</p>
+
+<div class="finding" id="f3">
+  <h3>F3 · <code>AllowedRoots</code> widened to <code>C:\Projects</code> — QS-53/R-09 recurrence, live in the working tree</h3>
+  <div class="tags">
+    <span class="pill confirmed">CONFIRMED</span>
+    <span class="pill sev-med">Medium</span>
+    <span class="conf">confidence 0.8 &middot; down-rated from High &middot; confinement-boundary widening</span>
+  </div>
+  <p><span class="lbl">Where.</span> <code>src/QualityStudio.Api/appsettings.json:4-7</code> (uncommitted
+  working-tree edit) + <code>RepositoryRegistry.cs:60,342,330</code> + <code>ApiSecurity.cs:75-76,101</code> +
+  <code>scripts/dev-stack.mjs:139-147</code> + <code>.github/workflows/build.yml</code> (no policy).</p>
+  <p><span class="lbl">Mechanism.</span> <code>git diff</code> shows an uncommitted edit adding <code>"../../.."</code>
+  to the <code>AllowedRoots</code> array; HEAD <code>e31089c</code> has only <code>"../.."</code>. ContentRoot is
+  <code>src/QualityStudio.Api</code>, so <code>../../..</code> resolves to <code>C:\Projects</code>.
+  <code>RepositoryRegistry</code> resolves AllowedRoots relative to ContentRoot and admits any path
+  <code>IsWithin</code> an allowed root that exists and holds <code>.git</code> — every sibling repo qualifies.
+  <code>Security.Mode="Local"</code> makes <code>ApiSecurity.Authenticate</code> return a full-access
+  local-development identity with <code>CanRegisterRepositories=true</code> and bypass the <code>X-Client-Id</code>
+  mutation check, so registration needs no credential. The persisted registry already contains
+  <code>agent-studio → C:\Projects\agent-taskboard-devspace\agent-taskboard-stable</code>, a sibling outside
+  <code>../..</code> but inside <code>../../..</code>; under HEAD's config <code>ValidatePersistedEntry</code> would
+  throw at startup, so the widened root is load-bearing for the app to boot. A local caller (or the review data
+  path) can register <code>C:\Projects\agent-taskboard-devspace</code> and read its files — including the memucho
+  secret-rotation handoff artifacts — a path unreachable under HEAD's <code>../..</code>.</p>
+  <p><span class="lbl">Survived refutation.</span> The mechanism could not be refuted: the edit is live and
+  load-bearing, no guard/middleware/test/unreachable-path neutralizes the review data path, and the CI
+  recurrence-prevention gap is genuinely unimplemented. High was <b>down-rated to Medium</b>: the referenced
+  dossier rates this exact class (R-09) medium; dev-stack binds the API to <code>127.0.0.1</code> and Local mode
+  already authenticates every caller as the local operator, who has direct filesystem read of all of
+  <code>C:\Projects</code> anyway — the widened root grants the only reachable principal no new capability and
+  crosses no privilege boundary; CORS restricts cross-origin reads to <code>http://localhost:4200</code>; and the
+  still-open R-01 sensor-command chain already reads any file regardless of AllowedRoots, so the widening does not
+  amplify it. A real, reproducible boundary widening and a real CI gap — correctly Medium.</p>
+  <p><span class="lbl">Fix.</span> Revert the working-tree edit; keep <code>AllowedRoots</code> at
+  <code>../..</code> and move machine-specific roots to environment/secret-store config, or re-parent the reviewed
+  siblings under one intended base. Implement the tracked-config CI policy (and/or a unit test on the shipped
+  <code>appsettings</code> AllowedRoots) that fails on entries resolving above the repo root, containing
+  <code>../</code> chains, or holding absolute maintainer paths. Prefer resolving AllowedRoots relative to an
+  explicit narrow base rather than ContentRoot.</p>
+</div>
+
+<div class="finding" id="f4">
+  <h3>F4 · <code>SpendRequestsPerMinute</code> bypass: rate-limit partition keyed on an attacker-chosen <code>X-Client-Id</code></h3>
+  <div class="tags">
+    <span class="pill confirmed">CONFIRMED</span>
+    <span class="pill sev-med">Medium</span>
+    <span class="conf">confidence 0.88 &middot; practical exposure leans low (Local-only, localhost, CORS-blocked drive-by)</span>
+  </div>
+  <p><span class="lbl">Where.</span> <code>src/QualityStudio.Api/Program.cs:88-98</code> (spend policy) +
+  <code>ApiSecurity.cs:73-76,100-101</code>; default config <code>RepositoryOptions.cs:27,31</code>; async enqueue
+  <code>Program.cs:1062-1073</code>; unbounded queue <code>ReviewJobs.cs:118,125</code>.</p>
+  <p><span class="lbl">Mechanism.</span> The <code>spend</code> fixed-window limiter partitions on
+  <code>Request.Headers[X-Client-Id]</code> (fallback RemoteIp, then <code>local</code>). Local mode is the shipped
+  default; <code>Authenticate</code> returns a fixed wildcard identity and
+  <code>IsMutationClientHeaderValid</code> returns true unconditionally, so <code>X-Client-Id</code> is never
+  required or validated. A caller can send each <code>POST /api/review</code>, <code>/api/handover</code>, or
+  <code>/api/security/attack-coverage/judgements</code> with a fresh random <code>X-Client-Id</code> and obtain its
+  own 5/min window, defeating the aggregate cap. <code>StartReview</code> enqueues async and returns Accepted
+  immediately, the review Channel is unbounded, and the global limiter is a 32-permit concurrency limiter on a
+  constant key — so neither caps review starts; <code>MaxConcurrency=2</code> and the per-review token cap throttle
+  per-run, not aggregate, spend.</p>
+  <p><span class="lbl">Survived refutation.</span> The raw-header partition, the Local-mode default, and the
+  three-endpoint policy scope were all verified. The global limiter is concurrency (not rate) on a constant key;
+  the unbounded Channel plus <code>MaxConcurrency=2</code> and the 100k per-run token cap bound per-review spend,
+  not the number of runs; CORS blocks the browser cross-origin drive-by but not the primary local-process vector
+  or a same-origin/buggy frontend. The only spend-limiter test runs in Hosted mode, leaving the Local-mode path —
+  where the same per-header partition becomes attacker-controllable — untested. The control-is-present-yet-
+  ineffective logic flaw is real; practical exposure is genuinely narrowed by Local-only/localhost/CORS.</p>
+  <p><span class="lbl">Fix.</span> In Local mode partition on a fixed constant (or RemoteIp) and ignore any
+  client-supplied <code>X-Client-Id</code>; in Hosted mode partition on the server-resolved
+  <code>identity.Id</code>, never the raw header. Apply the <code>spend</code> policy to the other expensive
+  endpoints (<code>security/scan</code>, <code>sensors/{id}/scan</code>, <code>attack-coverage</code> GET), and
+  bound the review queue depth.</p>
+</div>
+
+<div class="finding" id="f5">
+  <h3>F5 · Default <code>dependencies</code> sensor runs <code>npm audit</code> / <code>dotnet list</code> in untrusted repos, honoring repo-controlled config</h3>
+  <div class="tags">
+    <span class="pill confirmed">CONFIRMED</span>
+    <span class="pill sev-med">Medium</span>
+    <span class="conf">confidence 0.7 &middot; exfil / SSRF / DoS &middot; gated on tool-presence precondition</span>
+  </div>
+  <p><span class="lbl">Where.</span> <code>src/AgentOrchestrator.CodeQuality/DependencyVulnerabilitySensor.cs:92-153</code>
+  (RunAsync) + <code>ProcessSensorCommandRunner</code> (same file <code>:23-61</code>); default-on at
+  <code>RepositoryRegistry.cs:373-374</code> with <code>Enabled=true</code> default (<code>:30-33</code>) and DI
+  registration <code>Program.cs:49</code>; reachable via <code>Program.cs:281-282/957-981</code>
+  (<code>POST /api/sensors/{id}/scan</code>) and <code>ReviewJobs.cs:591-597 → SecurityReviewEvidence.cs:161-183</code>.</p>
+  <p><span class="lbl">Mechanism.</span> On a deployment where both <code>dotnet</code> and <code>npm</code> resolve,
+  a repo inside AllowedRoots whose tracked content includes an attacker-crafted <code>.npmrc</code>
+  (<code>registry=http://attacker</code>) or <code>nuget.config</code> (malicious packageSources/auditSources)
+  causes <code>RunAsync</code> to run <code>npm audit --json</code> in each package-lock dir and
+  <code>dotnet list &lt;csproj&gt; package --vulnerable</code> per project. Those tools honor the repo-local config,
+  transmitting the dependency tree to the attacker endpoint (exfil/SSRF); and because
+  <code>ProcessSensorCommandRunner</code> sets no wall-clock timeout, no env allowlist, and reads stdout/stderr
+  with no size cap, a stalling attacker endpoint hangs the request/review indefinitely and can exhaust the
+  concurrency-limited host (<code>MaxConcurrentRequests=32, QueueLimit=0</code>).</p>
+  <p><span class="lbl">Survived refutation.</span> Default-on is verified; there is no
+  <code>UseRequestTimeouts</code>/<code>CancelAfter</code> anywhere, and no offline/registry-pin flags, so
+  repo-committed config is honored and a hung child is not time-bounded. Auth narrows but does not neutralize: the
+  default <code>appsettings.json</code> runs <code>Security.Mode=Local</code> (synthetic full-access identity, no
+  credential, RequireHttps forced off), so the default deployment is unauthenticated; even in Hosted mode the
+  threat is untrusted repo <i>content</i>, which is the product's own model. The strongest real barrier is the
+  ecosystem probe gate — a missing <code>npm</code> makes the sensor return <code>Unavailable</code> before running
+  <code>dotnet list</code>, which is exactly why it is inert on the assessed host (npm absent) — but that is
+  environmental, not a durable guard. Confidence held at 0.7 because exploitability is gated on the tool-presence
+  precondition and, in Hosted mode, on an authenticated principal.</p>
+  <p><span class="lbl">Fix.</span> Run ecosystem tools offline / with a host-pinned registry and ignore repo
+  <code>.npmrc</code>/<code>nuget.config</code>; enforce a wall-clock timeout and output-byte cap in
+  <code>ProcessSensorCommandRunner</code>; scrub the child environment; do not enable network-touching sensors by
+  default for untrusted repos; gate behind an isolated worker.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s3"><span class="no">3</span>Public websites</h2>
+<p class="dim">Audited read-only: ai-patterns.dev (Angular&nbsp;21 SSR app + data-validation pipeline) and
+agent-orchestrator-website (static HTML + Caddy hosting). Focus: the figure-markup denylist validator, the
+pattern-article JSON schema, the <code>bypassSecurityTrustHtml</code>/<code>innerHTML</code> sink, CSP/security
+headers across the SSR server + index.html + angular.json + release workflow, external asset inclusion, GitHub
+Actions deploy workflows and deploy-branch trust, and the self-hosted-fonts policy. The only command run was a
+local Node evaluation of the validator's own regexes against candidate payloads.</p>
+<p class="surface-count"><b>Confirmed on this surface: 1 high, 1 low.</b> Low/info: four items (Appendix&nbsp;B).</p>
+
+<div class="finding" id="f6">
+  <h3>F6 · Pattern figure-SVG validator is bypassable → stored XSS on ai-patterns.dev (empirically proven)</h3>
+  <div class="tags">
+    <span class="pill confirmed">CONFIRMED</span>
+    <span class="pill sev-high">High</span>
+    <span class="conf">confidence 0.9 &middot; stored XSS &middot; bypass reproduced in isolation</span>
+  </div>
+  <p><span class="lbl">Where.</span> <code>scripts/lib/catalog.mjs:110</code> (event-handler regex) and
+  <code>:112</code> (href regex); enforced at <code>:318-322</code>; injected at
+  <code>app/src/app/pages/pattern-detail/pattern-detail.page.ts:147</code> +
+  <code>pattern-detail.page.html:82</code>.</p>
+  <p><span class="lbl">Mechanism.</span> A crafted figure committed to
+  <code>data/patterns/&lt;id&gt;/article.json</code> passes the sole content-security gate
+  (<code>validate-data.mjs --strict</code>, run first in <code>npm run check</code> / <code>quality.yml</code>) and
+  is copied byte-for-byte by <code>build-data.mjs</code> into <code>app/public/data</code>, served at
+  <code>/data/patterns/&lt;id&gt;/article.json</code>. <code>pattern-detail</code> fetches it client-side and renders
+  <code>section.figure.svg</code> via <code>sanitizer.bypassSecurityTrustHtml</code> into <code>[innerHTML]</code>,
+  deliberately disabling Angular sanitization. The denylist is bypassable: the event-handler rule
+  <code>/\son[a-z]+\s*=/</code> anchors only on whitespace, and the href rule
+  <code>/(?:xlink:)?href\s*=\s*["']/</code> matches only quoted values. There is no CSP anywhere, so injected
+  handlers execute at runtime.</p>
+  <p><span class="lbl">Survived refutation.</span> Every angle failed. The sanitizer is explicitly bypassed; the
+  JSON schema only requires the payload to be wrapped in <code>&lt;svg&gt;…&lt;/svg&gt;</code>; CSP — the strongest
+  possible mitigation — is absent at every layer (server.ts, index.html meta, angular.json <code>autoCsp</code>,
+  release.yml, and any in-repo Caddy/nginx). The bypass was reproduced in Node: the control payload is blocked, all
+  five candidate payloads pass with zero errors. Reachability and the CI gate are confirmed, and the 0-PR model
+  removes compensating human review. A SMIL <code>&lt;animate onbegin begin=0s&gt;</code> auto-fires with no user
+  interaction. The only mitigating factor is the write precondition (landing a <code>data/</code> commit), which
+  the documented 0-PR agent-authored, externally-derived-content model makes materially weaker than a
+  human-reviewed repo.</p>
+  <p><span class="lbl">Fix.</span> Do not rely on regex denylisting for a <code>bypassSecurityTrustHtml</code>
+  sink. Parse each figure SVG with a strict XML/DOM parser (jsdom is already a devDependency) and allowlist
+  elements/attributes: reject any <code>on*</code> attribute regardless of separator, any non-fragment
+  <code>href</code>/<code>xlink:href</code> (quoted or not, entity-decoded), and any element outside a known-safe
+  SVG set. Add regression fixtures for the <code>/</code>-boundary, closing-quote-boundary, unquoted-href,
+  entity-encoded-javascript, and SMIL <code>onbegin</code> cases. Independently, re-enable Angular sanitization (or
+  pre-sanitize figures to static assets) and add a strict CSP without <code>unsafe-inline</code>/<code>unsafe-hashes</code>
+  as defense in depth.</p>
+</div>
+
+<div class="finding" id="f7">
+  <h3>F7 · ai-patterns.dev ships with no Content-Security-Policy or security headers at the app layer</h3>
+  <div class="tags">
+    <span class="pill confirmed">CONFIRMED</span>
+    <span class="pill sev-low">Low</span>
+    <span class="conf">confidence 0.8 &middot; hardening gap (downgraded from Medium: exploitability rests on F6)</span>
+  </div>
+  <p><span class="lbl">Where.</span> <code>app/src/index.html:1-18</code> (no CSP meta) and
+  <code>app/src/server.ts:30-48</code> (Express serves static + SSR with no header middleware). Verified:
+  <code>angular.json</code> security = <code>allowedHosts</code> only (no <code>autoCsp</code>); no in-repo proxy or
+  static-host header config (Caddyfile/nginx/_headers/staticwebapp.config.json/vercel.json/netlify.toml/firebase.json
+  all absent); <code>release.yml</code> only tarballs the build.</p>
+  <p><span class="lbl">Mechanism.</span> Factually the app layer emits zero security headers and
+  <code>index.html</code> has no CSP meta — a confirmed, unmitigated hardening gap. The exploit framing is what was
+  refuted: the exfiltration chain is pure defense-in-depth and only bites if F6 is reachable (it is), and the
+  clickjacking angle has no target because ai-patterns.dev is a read-only content library with no authentication,
+  forms, accounts, or state-changing UI.</p>
+  <p><span class="lbl">Survived refutation.</span> The core factual claim cannot be refuted — every layer where a
+  header or CSP could originate was checked and found empty. It is not <i>mitigated</i> (no guard exists) and not a
+  <i>false-positive</i> (the headers really are missing). Severity was downgraded Medium → Low because standalone
+  exploitability is not reproducible independent of F6.</p>
+  <p><span class="lbl">Fix.</span> Add a strict CSP
+  (<code>default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'</code>)
+  plus <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy</code>, and HSTS, via Express middleware
+  in <code>server.ts</code> or the fronting Caddy/nginx that also terminates TLS. Alternatively enable Angular's
+  opt-in <code>autoCsp</code>.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="s4"><span class="no">4</span>Runner host</h2>
+<p class="dim">Audited: the Linux runner host and the Windows reverse-tunnel keeper — <code>runner/*.cs</code>,
+<code>deploy/agent-host/*</code>, <code>deploy/windows/agent-runner-tunnel/*</code>, and
+<code>deploy/release/agent-host/runner.env.template</code>.</p>
+<p class="surface-count"><b>Confirmed on this surface: none.</b> The trust boundary held up under review; the
+observations are low/info hardening items and one explicit "verified clean" note — all in Appendix&nbsp;B.</p>
+<p>No candidate on this surface claimed a live exploit that survived into the confirmed set. The strongest item is
+a defense-in-depth RCE gap (F6-class in shape, but low): the runner clones server-provided repository URLs with no
+local scheme/protocol guard, trusting the Task Server's own <code>ValidateRepositoryUrl</code> — a
+single point where the codebase trusts the server without its usual re-validation. Two more low items (a
+reverse-tunnel forward not explicitly bound to remote loopback, and a card-controlled <code>ThinkingLevel</code>
+interpolated unescaped into a legacy codex argument) and three informational notes, including a positive
+"boundary is otherwise solid" verification of sudoers, the deploy script, and the fenced-lease client, are recorded
+in <a href="#appendix-b">Appendix&nbsp;B</a>.</p>
+
+<!-- ============================================================ -->
+<h2 id="s5"><span class="no">5</span>Chat &amp; Token Economy</h2>
+<p class="dim">Audited: coding-agent-chat (Angular npm library, v0.4.1 / consumed at 0.3.2) and
+coding-agent-token-economy (.NET/NuGet + website pricing sync). Focus: postinstall patch scripts, the
+XSS/sanitizer pipeline, eval/dynamic-require, supply-chain publishing, and secret handling in the pricing sync.</p>
+<p class="surface-count"><b>Confirmed on this surface: none.</b> Two low sanitizer-contract items and four
+informational notes (mostly "verified clean") — all in Appendix&nbsp;B.</p>
+<p>The rendering pipeline's primary escaping holds and the supply chain is strong (OIDC Trusted Publishing with
+provenance, an integrity manifest, no stored registry tokens, no <code>eval</code>/dynamic require, dependency
+floors above the known-vulnerable versions). The two low items are sanitizer-contract gaps —
+<code>ChatRowComponent.bodyHtml</code> accepts a raw string that is <code>bypassSecurityTrustHtml</code>'d with no
+library-side sanitization, and <code>sanitizeHtml()</code> is a pass-through under SSR — both defense-in-depth
+rather than a reproduced exploit. Details in <a href="#appendix-b">Appendix&nbsp;B</a>.</p>
+
+<!-- ============================================================ -->
+<h2 id="remediation"><span class="no">&nbsp;</span>Prioritized remediation</h2>
+<p class="dim">The seven confirmed findings, most-actionable first. Every row is a confirmed finding. The
+verified-mitigated pre-launch item (Appendix&nbsp;A) and the low/informational observations
+(Appendix&nbsp;B) are follow-ups, not part of this table.</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th>#</th><th>Finding</th><th>Severity</th><th>Surface</th><th>Location</th><th>Mitigation</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="rank">1</td>
+      <td><b>F6</b> · Bypassable figure-SVG validator → stored XSS <span class="pill confirmed">CONFIRMED</span></td>
+      <td><span class="pill sev-high">High</span></td>
+      <td>Public websites</td>
+      <td><code>scripts/lib/catalog.mjs:110,112</code>; sink <code>pattern-detail.page.ts:147</code></td>
+      <td>Replace regex denylist with strict DOM allowlist (jsdom); re-enable Angular sanitization; add strict CSP.</td>
+    </tr>
+    <tr>
+      <td class="rank">2</td>
+      <td><b>F3</b> · <code>AllowedRoots</code> widened to <code>C:\Projects</code> (live in working tree) <span class="pill confirmed">CONFIRMED</span></td>
+      <td><span class="pill sev-med">Medium</span></td>
+      <td>Quality Studio</td>
+      <td><code>src/QualityStudio.Api/appsettings.json:4-7</code>; <code>RepositoryRegistry.cs:60</code></td>
+      <td>Revert the edit; keep <code>../..</code>; add a CI/unit policy on shipped AllowedRoots; resolve from a narrow base, not ContentRoot.</td>
+    </tr>
+    <tr>
+      <td class="rank">3</td>
+      <td><b>F1</b> · Absolute server paths leak from anonymous reads <span class="pill confirmed">CONFIRMED</span></td>
+      <td><span class="pill sev-med">Medium</span></td>
+      <td>Public demo</td>
+      <td><code>TaskInfo.cs:30,32</code>; <code>TaskCrudEndpoints.cs:112-115</code></td>
+      <td>Public-demo projection that strips <code>WatchPath</code>/<code>FolderPath</code> (+ feed/cycle-time); opaque handle.</td>
+    </tr>
+    <tr>
+      <td class="rank">4</td>
+      <td><b>F5</b> · <code>dependencies</code> sensor runs npm/dotnet in untrusted repos <span class="pill confirmed">CONFIRMED</span></td>
+      <td><span class="pill sev-med">Medium</span></td>
+      <td>Quality Studio</td>
+      <td><code>DependencyVulnerabilitySensor.cs:92-153</code>; runner <code>:23-61</code></td>
+      <td>Offline/host-pinned registry, ignore repo config; wall-clock timeout + output cap; scrub env; isolated worker.</td>
+    </tr>
+    <tr>
+      <td class="rank">5</td>
+      <td><b>F4</b> · <code>SpendRequestsPerMinute</code> partition on attacker-chosen header <span class="pill confirmed">CONFIRMED</span></td>
+      <td><span class="pill sev-med">Medium</span></td>
+      <td>Quality Studio</td>
+      <td><code>Program.cs:88-98</code>; <code>ApiSecurity.cs:73-76,100-101</code></td>
+      <td>Local mode: partition on a constant/RemoteIp, ignore client header. Hosted: partition on <code>identity.Id</code>. Extend spend policy; bound the queue.</td>
+    </tr>
+    <tr>
+      <td class="rank">6</td>
+      <td><b>F2</b> · <code>demo.replay</code> scope defense inert in live profile <span class="pill confirmed">CONFIRMED</span></td>
+      <td><span class="pill sev-med">Medium</span></td>
+      <td>Public demo</td>
+      <td><code>AccessSecurityMiddleware.cs:35</code> vs <code>:179</code>; test <code>:331</code></td>
+      <td>Route-matrix test under <code>public-demo-readonly</code>; app-layer rate limit on the ingest; reconcile the stale doc.</td>
+    </tr>
+    <tr>
+      <td class="rank">7</td>
+      <td><b>F7</b> · No CSP / security headers at the app layer <span class="pill confirmed">CONFIRMED</span></td>
+      <td><span class="pill sev-low">Low</span></td>
+      <td>Public websites</td>
+      <td><code>app/src/index.html:1-18</code>; <code>server.ts:30-48</code></td>
+      <td>Strict CSP + nosniff + Referrer-Policy + HSTS via <code>server.ts</code> or the fronting Caddy/nginx; or Angular <code>autoCsp</code>.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="appendix-a"><span class="no">A</span>Appendix — Verified-mitigated &amp; false-positives</h2>
+<p class="dim">What was checked and set aside, so the reader sees the dismissals as well as the confirmations. Of the
+eight candidate exploit findings that entered adversarial verification, one was reclassified here and none
+collapsed into an outright false-positive.</p>
+
+<div class="finding" id="m1">
+  <h3>M1 · <code>public-demo-readonly</code> does not make the instance read-only — verified-mitigated</h3>
+  <div class="tags">
+    <span class="pill mitigated">VERIFIED-MITIGATED</span>
+    <span class="pill sev-high">originally High</span>
+    <span class="conf">confidence 0.6 &middot; no live exploit path in any sanctioned deployment</span>
+  </div>
+  <p><span class="lbl">Where.</span> <code>TaskCrudEndpoints.cs:702</code> (DELETE <code>/{jobId}</code>),
+  <code>:688</code> (DELETE orphan-folder), <code>:709</code> (create), <code>:827</code> (reorder),
+  <code>:855</code> (move-to-top), <code>:864</code> (change-project); <code>AccessSecurityMiddleware.cs:35</code>;
+  <code>ClientIdentityMiddleware.cs:31,86</code>; <code>Host/EndpointMapping.cs:25,92</code>;
+  <code>docs/operations/demo-instanz/index.html:978,986</code>.</p>
+  <p><span class="lbl">Claim.</span> Under the profile, AccessSecurity returns at line 35 (no auth), the execution
+  lock passes any route lacking <code>ExecutionRouteMetadata</code> (CRUD is not marked), ClientIdentity lets
+  <code>/api/clients/register</code> through anonymously and then accepts any registered <code>X-Client-Id</code>,
+  and ManagementMode passes in normal mode. So at the app layer one could mint a client id and then
+  create/delete/reorder/retitle/change-project a task with no control stopping it.</p>
+  <p><span class="lbl">Why it was dismissed as a live exploit.</span> The technical core is correct and could not
+  be refuted with any app-layer guard, middleware, or test — but the acute exploit (an anonymous internet visitor
+  destroying the demo) is not reachable in any sanctioned deployment. S4 (read-only TLS edge + endpoint allowlist +
+  rate limiting) and S6 (hosting/DNS) are marked "Not started" under a hard launch invariant — "the public demo
+  does not start until S4 closes the edge" — read-only is by design an edge property (allowlist = GET +
+  <code>POST /api/runner/replay/events</code>), and the only running instance is a localhost-only test stack.
+  The caveat is that this mitigation is deployment/operational, not app-layer, and the S4 edge is not built
+  (documented intent, not a technically-enforced gate). It is therefore a legitimate pre-launch defense-in-depth
+  item, not a false positive.</p>
+  <p><span class="lbl">Pre-launch action (tracked AGT-2669).</span> Add a real app-layer default-deny read-only
+  gate under public-demo (reject every unsafe method except the specific replay POST), and/or build the S4 edge to
+  allow only GET plus <code>POST /api/runner/replay/events</code>, verified by a deploy probe-hook. Treat
+  execution-denial (S2) and write-denial as separate properties.</p>
+</div>
+
+<div class="box ok">
+  <h4>False-positives: none</h4>
+  <p>All eight candidates that entered adversarial verification were either confirmed (seven) or reclassified to
+  verified-mitigated (one). No candidate was found to be factually wrong. The verification pass also confirmed
+  several defenses as robust rather than defective — see the "verified clean" informational notes in
+  Appendix&nbsp;B (the runner-host trust boundary; the public-demo deny policy, startup gates, and replay admission
+  policy; the chat library's absence of dynamic code execution; and the token-economy supply chain).</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="appendix-b"><span class="no">B</span>Appendix — Low &amp; informational observations</h2>
+<p class="dim">Hardening notes and "verified clean" records from the single-surface deep audits. These were not part
+of the adversarial cross-verification set; they are recorded as the surface audits reported them. Ten low, twelve
+informational.</p>
+
+<h3>B.1 · Public demo — Studio backend</h3>
+<ul>
+  <li><span class="pill sev-low">Low</span> <b>Execution-deny coverage is opt-in per-route metadata.</b>
+      <code>PublicDemoExecutionLock.cs:66-78</code> denies a route only if it carries
+      <code>ExecutionRouteMetadata</code>; the startup inventory and count tripwire (=78) enumerate only marked
+      routes. Service-layer <code>admission.Demand()</code> backstops exist for Start/Continue/Chat but not for
+      Claim/Review/Preview/PostStep — a future unmarked route in those classes would execute in the public demo.
+      <i>Fix:</i> move to default-deny for mutating methods, or add service-layer Demand() guards to those classes.</li>
+  <li><span class="pill sev-info">Info</span> <b>S4 read-only edge, endpoint allowlist, CSP, security headers, and
+      rate limiting are absent (acknowledged Not-started).</b> <code>demo-instanz/index.html:978,986</code>;
+      <code>frontend/src/index.html</code> has no CSP meta; <code>Program.cs:820</code> gates <code>UseHsts</code>
+      to the networked profile; no Caddyfile/nginx in the repo. This is the outstanding launch gate (AGT-2669);
+      the edge allowlist must be GET-only plus the single replay POST, add CSP/HSTS/X-Frame-Options/Referrer-Policy
+      and rate limiting, and the reset-runtime probe-hook must assert the browse/denial matrix.</li>
+  <li><span class="pill sev-info">Info</span> <b>Verified clean: the pure deny policy, startup gates, and replay
+      admission policy hold up.</b> <code>ExecutionAdmissionPolicy.Decide</code> has no allow branch for
+      public-demo (trim + ordinal-ignore-case), an unknown profile refuses startup, the route inventory fails boot
+      on any uncovered class, public-demo boot skips the execution workers, and
+      <code>DemoReplayAdmissionPolicy</code> verifies the seal against the pinned trace identity with strict
+      monotonic anti-replay. No change needed to these components.</li>
+</ul>
+
+<h3>B.2 · Quality Studio</h3>
+<ul>
+  <li><span class="pill sev-low">Low</span> <b>RequireHttps is ineffective behind a TLS-terminating proxy, and
+      Local mode never enforces loopback.</b> <code>ApiSecurity.cs:67-68</code> + <code>Program.cs:133-149</code>
+      (no <code>UseForwardedHeaders</code>). Behind Caddy terminating TLS, every proxied request is plain HTTP, so
+      either all <code>/api</code> calls 400 or the operator disables RequireHttps and runs believing TLS is
+      enforced. Separately, nothing rejects a non-loopback bind while <code>Mode=Local</code> —
+      <code>dotnet run --urls http://0.0.0.0:PORT</code> exposes the wildcard-registrar Local identity to the
+      network. <i>Fix:</i> honor forwarded proto with a trusted-proxy allowlist; fail startup on a non-loopback
+      Local bind; add an Origin/anti-CSRF check on state-changing no-body endpoints.</li>
+  <li><span class="pill sev-info">Info</span> <b>Boundary sensor and sidecar index remain unbounded; the
+      attack-coverage GET is an un-rate-limited amplifier.</b> <code>BoundaryInventorySensor.cs:138-193</code>
+      (2&nbsp;MiB/file cap only, no aggregate/time bound — timed out &gt;300s on the 1269-file agent-studio repo),
+      reachable directly via <code>GET /api/security/attack-coverage</code> (<code>Program.cs:867</code>, no rate
+      limit); <code>ReviewMetaIndex.cs:42-44,94-107</code> retains a full <code>JsonElement.Clone</code> per sidecar
+      with no size bound plus a recursive watcher per root. <i>Fix:</i> per-sensor wall-clock/output budgets, a
+      typed degrade, sidecar byte/count caps, and rate-limit the attack-coverage GET.</li>
+  <li><span class="pill sev-info">Info</span> <b>No model API key isolation — review auth is delegated to the
+      operator's shared signed-in CLI home.</b> <code>ReviewAgent.cs:75-84</code> launches the CLI with
+      <code>ContextMode='shared'</code>; <code>read-only</code> prevents writes but gives no filesystem/credential/
+      egress isolation, so a successful prompt injection from untrusted repo bytes can read every credential the
+      CLI identity can read. There is no key to protect; the protection must be the process boundary. <i>Fix (S1):</i>
+      run the agent under a clean one-run CLI context with a short-lived brokered credential behind an
+      OS/container boundary with provider-only egress.</li>
+</ul>
+
+<h3>B.3 · Public websites</h3>
+<ul>
+  <li><span class="pill sev-low">Low</span> <b>ai-patterns.dev loads fonts from Google's CDN, violating the
+      self-hosted-fonts / no-external-request policy.</b> <code>app/src/index.html:11-13</code> (preconnect +
+      stylesheet to fonts.googleapis.com / fonts.gstatic.com; no self-hosted <code>@font-face</code>). Every visitor
+      leaks IP and User-Agent to Google — a GDPR concern for an EU-operated site with a legal imprint — and it is
+      the reason a tight <code>default-src 'self'</code> CSP cannot be applied. <i>Fix:</i> self-host the WOFF2
+      files and reference them via local <code>@font-face</code>.</li>
+  <li><span class="pill sev-low">Low</span> <b>agent-orchestrator-website deploy workflow uses an unpinned action
+      tag while holding <code>contents: write</code>.</b> <code>.github/workflows/deploy.yml:17</code>
+      (<code>actions/checkout@v4</code>) with <code>permissions: contents: write</code> (<code>:10-11</code>); the
+      job force-pushes the deploy branch the production server auto-pulls. If the mutable tag were repointed,
+      attacker code would run in a job that can poison the live site. The sibling ai-patterns.dev pins every action
+      by full SHA. <i>Fix:</i> pin <code>actions/checkout</code> to a full commit SHA; enable Dependabot for
+      github-actions.</li>
+  <li><span class="pill sev-low">Low</span> <b>agent-orchestrator.dev Caddy config sets no CSP/X-Frame-Options;
+      the deploy-branch archive is unpacked and served with symlink following.</b>
+      <code>hosting/Caddyfile:7-11</code> (HSTS + nosniff + Referrer-Policy only) and
+      <code>hosting/scripts/pull-and-swap.sh:25</code> (<code>git archive | tar -x</code>, then file_server). The
+      static pages are framable; and a deploy branch carrying a symlink that escapes the release dir could make
+      Caddy serve arbitrary server-readable files. Both require write access to a deployed repo — defense-in-depth.
+      <i>Fix:</i> add CSP + X-Frame-Options: DENY + Permissions-Policy; strip/reject symlinks after extraction.</li>
+  <li><span class="pill sev-info">Info</span> <b>CI external-link audit fetches data-controlled URLs and follows
+      redirects (mild SSRF-in-CI).</b> <code>scripts/check-external-links.mjs:129-145</code> fetches every
+      <code>url</code>/<code>oss_url</code> from the data tree with <code>redirect: 'follow'</code>. Impact is
+      negligible — ephemeral GitHub runner, http(s)-only, read-only token, not release-blocking. <i>Fix (optional):</i>
+      block private/link-local ranges and cap redirect depth.</li>
+</ul>
+
+<h3>B.4 · Runner host</h3>
+<ul>
+  <li><span class="pill sev-low">Low</span> <b>Runner clones server-provided repository URLs with no local
+      scheme/protocol guard (defense-in-depth RCE gap).</b> <code>runner/GitWorkspace.cs:105</code> (also
+      <code>:312, :216</code>); <code>RemoteReviewWorkspace.cs:132</code>. URLs go straight into
+      <code>git clone</code> with no validation and no <code>protocol.ext.allow=never</code>; a URL like
+      <code>ext::sh -c '…'</code> executes as the <code>agent</code> user. Safety rests entirely on the Task
+      Server's <code>ValidateRepositoryUrl</code> — a manual on-disk registry edit or a buggy server bypasses it.
+      <i>Fix:</i> reject non-http/https/ssh schemes and leading-dash values at the runner, and invoke git with
+      <code>-c protocol.ext.allow=never</code> against untrusted registry URLs.</li>
+  <li><span class="pill sev-low">Low</span> <b>Reverse-tunnel forward is not explicitly bound to remote loopback.</b>
+      <code>deploy/windows/agent-runner-tunnel/tunnel-keeper.ps1:23</code> builds
+      <code>-R 15031:127.0.0.1:5031</code> with no remote bind-address prefix. If the runner host's sshd has
+      <code>GatewayPorts clientspecified/yes</code>, the listener binds <code>0.0.0.0:15031</code> and an
+      <code>AUTH=none</code> Task Server becomes network-reachable. <i>Fix:</i> use
+      <code>-R 127.0.0.1:15031:127.0.0.1:5031</code> and document <code>GatewayPorts=no</code>.</li>
+  <li><span class="pill sev-low">Low</span> <b>Card-controlled <code>ThinkingLevel</code> interpolated unescaped into
+      a codex <code>-c model_reasoning_effort="…"</code> argument (legacy engine).</b>
+      <code>runner/AgentCliProcess.cs:111</code>. The value is only trimmed; a double-quote could append further
+      codex config keys (e.g. <code>sandbox_mode</code>), weakening the agent sandbox. Reachable only on
+      <code>RUNNER_EXEC_ENGINE=legacy</code> (opt-in, slated for deletion in AGT-2373). <i>Fix:</i> allowlist
+      ThinkingLevel, or drop the legacy string construction.</li>
+  <li><span class="pill sev-info">Info</span> <b>Coding agent CLI process inherits the daemon's full ambient
+      environment.</b> <code>runner/DurableAgentProcess.cs:118-134, :436-467</code> (<code>clearEnvironment:false</code>).
+      Any secret in the daemon env is visible to agent-authored actions; in particular a
+      <code>RUNNER_AUTH_TOKEN</code> set via env (instead of the recommended <code>RUNNER_AUTH_TOKEN_FILE</code>).
+      Well-mitigated by default (token-in-file keeps it out of env; Codex workers get the Claude token stripped; the
+      review path spawns hermetically). <i>Fix:</i> spawn the coding CLI from a curated allowlist environment.</li>
+  <li><span class="pill sev-info">Info</span> <b>Repository URLs logged without the runner's own credential
+      redaction.</b> <code>runner/GitWorkspace.cs:353-355</code> and <code>:214</code> log fetch/push URLs verbatim
+      while a <code>CredentialedHttpUrl</code> redactor exists (<code>RemoteTaskRunner.cs:1425</code>) but is applied
+      only to failure diagnostics. Impact bounded — local stderr/journal, and the documented setup uses
+      credential-less HTTPS + SSH push. <i>Fix:</i> route these lines through the existing redactor.</li>
+  <li><span class="pill sev-info">Info</span> <b>Verified clean: the runner-host trust boundary is otherwise solid.</b>
+      sudoers grants exact-arg commands only; <code>agent-runner-deploy</code> runs root with an EUID guard, flock,
+      symlink/non-regular rejection, root-owned staging, a deps-closure validator, an <code>env -i</code> boot smoke
+      test, immutable release dirs, and crash-loop detection; the config helper is a re-validating allowlist;
+      <code>TaskServerClient</code> enforces non-loopback HTTPS + bearer, pins the server cert by SHA-256, and
+      validates fenced lease/permit authority before adopting work; the result-envelope handoff is atomic. No defect.</li>
+</ul>
+
+<h3>B.5 · Chat &amp; Token Economy</h3>
+<ul>
+  <li><span class="pill sev-low">Low</span> <b><code>ChatRowComponent.bodyHtml</code> (string) is
+      <code>bypassSecurityTrustHtml</code>'d with no library-side sanitization.</b>
+      <code>history/src/chat-row/chat-row.component.ts:79-85</code>. A raw string is marked trusted without running
+      through <code>sanitizeHtml</code>; a consumer routing untrusted agent/LLM output through <code>bodyHtml</code>
+      (instead of the sanitizing <code>cac-markdown</code> path) gets stored XSS. <i>Fix:</i> pass the string branch
+      through <code>sanitizeHtml()</code>, or narrow the input type to <code>SafeHtml</code> only.</li>
+  <li><span class="pill sev-low">Low</span> <b><code>sanitizeHtml()</code> is a pass-through outside a browser DOM
+      (SSR defense-in-depth gap).</b> <code>markdown/src/markdown-utils.ts:384-404</code> returns raw unmodified
+      when <code>window</code>/<code>document</code> are undefined. Under platform-server SSR/SSG the second
+      (DOMPurify) layer is absent exactly where output becomes trusted server HTML; no concrete bypass was found
+      because the marked renderer independently escapes tokens, hrefs, and attributes. <i>Fix:</i> run DOMPurify
+      under SSR against a jsdom window, or guarantee markdown is never server-rendered into trusted HTML.</li>
+  <li><span class="pill sev-info">Info</span> <b>Published library is monkey-patched on disk at consumer install
+      time (postinstall), including the render path.</b>
+      <code>frontend/scripts/patch-coding-agent-chat-technical-blocks.mjs</code> (wired via <code>postinstall</code>).
+      Audited and found SAFE — resolves via createRequire (no network), hard-pins the exact version, uses
+      occurrence-counted exact replacement, no eval/child_process, writes only inside packageRoot, and the injected
+      transform runs before marked so sanitization still runs last. Residual concern is process, not code: the
+      effective sanitizer lives in a mutated on-disk artifact. <i>Fix:</i> upstream the features and retire the
+      patches so audited source equals shipped bytes.</li>
+  <li><span class="pill sev-info">Info</span> <b>Verified clean: no eval / dynamic require / process execution, and
+      no vulnerable dependency floor in the shipped library.</b> A repo-wide grep found only <code>RegExp.exec</code>;
+      the published <code>package.json</code> declares no scripts block; dompurify ^3.4.2 / marked ^18.0.3 /
+      highlight.js ^11.11.1 / lowlight ^3.3.0 all sit above the known-advisory versions;
+      <code>NodeChatAttachmentStorage</code> confines reads/writes to projectRoot with a robust guard.</li>
+  <li><span class="pill sev-info">Info</span> <b>Verified clean: release/publish supply chain uses OIDC Trusted
+      Publishing, provenance, and an integrity manifest (no stored registry tokens).</b> npm and NuGet publish via
+      OIDC with <code>--provenance</code>; release is gated on tag==version, <code>HEAD==GITHUB_SHA</code>, and a
+      clean tree; a sha512 manifest is re-checked before publish; token-economy CI uses <code>pull_request</code>
+      (not <code>pull_request_target</code>) with no secrets, and the website deploy pins the SSH host key. <i>Optional:</i>
+      enforce branch/tag protection on <code>v*</code> tags.</li>
+  <li><span class="pill sev-info">Info</span> <b>Verified clean: token-economy pricing sync has no secret handling
+      and no network; deserialization is System.Text.Json only.</b> Prices load from an embedded resource; the
+      website projection reads only checked-in JSON and validates with <code>--check</code>; there is no
+      HttpClient/live provider fetch and no Newtonsoft <code>TypeNameHandling</code>; path inputs are guarded by
+      <code>ResolveWithin</code>. Nothing to rotate or leak in this component today.</li>
+</ul>
+
+</main>
+</body>
+</html>
