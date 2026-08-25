@@ -62,40 +62,66 @@ internal static class BashExecutable
         //    Windows exposes git.exe from <root>\cmd (the default PATH entry),
         //    <root>\bin, <root>\mingw64\bin or <root>\usr\bin; bash.exe sits
         //    in <root>\bin and <root>\usr\bin.
+        // Windows layouts are parsed with Windows semantics regardless of the
+        // host OS: the build/test gate runs on the Linux runner but resolves a
+        // Windows Git install when isWindows is true, so System.IO.Path (whose
+        // separator follows the HOST) must not touch these paths - a backslash
+        // is a separator here by contract.
         foreach (var entry in (pathVariable ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var dir = entry.Trim().TrimEnd('\\', '/');
             if (dir.Length == 0) continue;
-            var leaf = System.IO.Path.GetFileName(dir);
+            var leaf = WinLeaf(dir);
             if (!leaf.Equals("cmd", StringComparison.OrdinalIgnoreCase)
                 && !leaf.Equals("bin", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
-            var root = System.IO.Path.GetDirectoryName(dir);
+            var root = WinParent(dir);
             if (string.IsNullOrEmpty(root)) continue;
-            var rootLeaf = System.IO.Path.GetFileName(root);
+            var rootLeaf = WinLeaf(root);
             if (rootLeaf.Equals("mingw64", StringComparison.OrdinalIgnoreCase)
                 || rootLeaf.Equals("usr", StringComparison.OrdinalIgnoreCase))
             {
-                root = System.IO.Path.GetDirectoryName(root);
+                root = WinParent(root);
                 if (string.IsNullOrEmpty(root)) continue;
             }
-            yield return System.IO.Path.Combine(root, "bin", "bash.exe");
-            yield return System.IO.Path.Combine(root, "usr", "bin", "bash.exe");
+            yield return WinJoin(root, "bin", "bash.exe");
+            yield return WinJoin(root, "usr", "bin", "bash.exe");
         }
 
         // 2. Standard per-machine and per-user install locations.
         foreach (var baseDir in new[] { programFiles, programFilesX86 })
         {
             if (string.IsNullOrWhiteSpace(baseDir)) continue;
-            yield return System.IO.Path.Combine(baseDir, "Git", "bin", "bash.exe");
-            yield return System.IO.Path.Combine(baseDir, "Git", "usr", "bin", "bash.exe");
+            yield return WinJoin(baseDir, "Git", "bin", "bash.exe");
+            yield return WinJoin(baseDir, "Git", "usr", "bin", "bash.exe");
         }
         if (!string.IsNullOrWhiteSpace(localAppData))
         {
-            yield return System.IO.Path.Combine(localAppData, "Programs", "Git", "bin", "bash.exe");
-            yield return System.IO.Path.Combine(localAppData, "Programs", "Git", "usr", "bin", "bash.exe");
+            yield return WinJoin(localAppData, "Programs", "Git", "bin", "bash.exe");
+            yield return WinJoin(localAppData, "Programs", "Git", "usr", "bin", "bash.exe");
         }
     }
+
+    // Windows-semantics path helpers: a backslash or forward slash is always a
+    // separator here, independent of the host OS this process runs on.
+    private static readonly char[] WinSeparators = { '\\', '/' };
+
+    private static string WinLeaf(string path)
+    {
+        var trimmed = path.TrimEnd('\\', '/');
+        var idx = trimmed.LastIndexOfAny(WinSeparators);
+        return idx < 0 ? trimmed : trimmed[(idx + 1)..];
+    }
+
+    private static string WinParent(string path)
+    {
+        var trimmed = path.TrimEnd('\\', '/');
+        var idx = trimmed.LastIndexOfAny(WinSeparators);
+        return idx < 0 ? string.Empty : trimmed[..idx];
+    }
+
+    private static string WinJoin(string root, params string[] parts)
+        => root.TrimEnd('\\', '/') + "\\" + string.Join("\\", parts);
 }
