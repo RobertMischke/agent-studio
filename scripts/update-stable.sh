@@ -85,7 +85,8 @@ node "$task_server_probe_script" \
   --config-only
 
 if [ "$head_before" = "$target" ]; then
-  log "Stable already matches $stable_remote/$stable_branch; verifying the supervised Task Server."
+  log "Stable already matches $stable_remote/$stable_branch; reconciling the supervised Task Server."
+  "$task_server_deploy_script" "$stable_checkout" "$target"
   "$task_server_start_script"
   node "$task_server_probe_script" \
     --config "$task_server_config" \

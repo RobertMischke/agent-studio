@@ -33,6 +33,10 @@ if ($normalizedDataDirectory.Equals(
 if (-not (Test-Path -LiteralPath $project)) { throw "Task Server project not found: $project" }
 if (-not (Test-Path -LiteralPath $registerScript)) { throw "Registration script not found: $registerScript" }
 if (-not (Test-Path -LiteralPath $supervisorScript)) { throw "Supervisor script not found: $supervisorScript" }
+$sourceSha = (& git -C $source rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $sourceSha.Equals($ReleaseSha, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "SourceCheckout HEAD '$sourceSha' does not match ReleaseSha '$ReleaseSha'."
+}
 if ([string]::IsNullOrWhiteSpace($StableConfigurationPath)) {
     $StableConfigurationPath = Join-Path $source 'backend\appsettings.Local.json'
 }

@@ -182,11 +182,13 @@ if git -C "$stable_checkout" symbolic-ref --quiet --short HEAD >/dev/null; then
 fi
 
 # The failed cutover remains held at the target SHA. The no-op verification
-# path must supervise Task Server and attach main only after all probes pass.
-rm -f -- "$task_server_start_marker"
+# path must reconcile and supervise Task Server, then attach main only after
+# all probes pass.
+rm -f -- "$task_server_start_marker" "$task_server_deploy_marker"
 noop_output=$(run_update)
 test -f "$task_server_start_marker"
-printf '%s' "$noop_output" | grep -q 'verifying the supervised Task Server'
+test -f "$task_server_deploy_marker"
+printf '%s' "$noop_output" | grep -q 'reconciling the supervised Task Server'
 test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
 
 printf '%s\n' 'update-stable tests passed'

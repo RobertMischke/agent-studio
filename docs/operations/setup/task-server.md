@@ -137,6 +137,8 @@ It reconciles `LISTEN_URL`, `STORE_PATH`, and `BACKUP_PATH` in an existing
 `server.env` while preserving its authentication settings. The versioned
 package includes the detached supervisor script, so the registered Scheduled
 Task does not execute service code from a mutable Studio checkout.
+The helper also refuses to publish when the checkout HEAD differs from
+`ReleaseSha`, so the installed package and the Stable candidate cannot drift.
 
 `register-task-server.ps1` registers `AgentOrchestrator-TaskServer` as an
 `AtStartup`-triggered Scheduled Task under an `S4U` principal - services never
@@ -432,7 +434,9 @@ as a release hold until all of these steps have durable evidence:
    Task Server, proves direct readiness, starts the API, then proves the proxy
    and browser boot. A detached held checkout stays detached at the candidate
    SHA until every cutover probe passes, then it is attached to `main`. A failed
-   candidate remains detached for operator recovery.
+   candidate remains detached for operator recovery. Retrying the same
+   candidate repeats the idempotent Task Server install before probing it, so a
+   partial first installation does not require another Stable release.
 5. Exercise one fenced coding claim through completion, one immutable review
    claim through report and cleanup, result-finalization and report artifact
    submission, and the board projection for the same task. Save request IDs,
