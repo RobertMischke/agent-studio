@@ -17,6 +17,11 @@
 #   ATP_BOOT_PROBE_SCRIPT        browser probe implementation
 #   ATP_BOOT_PROBE_TIMEOUT_MS    total browser probe deadline
 #   ATP_BOOT_PROBE_SETTLE_MS     time to collect deferred page errors
+#   ATP_TASK_SERVER_START_SCRIPT host-owned Scheduled Task start wrapper
+#   ATP_TASK_SERVER_DEPLOY_SCRIPT host-owned package/install wrapper
+#   ATP_TASK_SERVER_URL          standalone Task Server origin
+#   ATP_STABLE_BACKEND_URL       Stable API origin used for proxy verification
+#   ATP_TASK_SERVER_PROBE_SCRIPT config, readiness, and proxy probe
 
 set -Eeuo pipefail
 
@@ -34,7 +39,11 @@ stable_remote=${ATP_STABLE_REMOTE:-origin}
 stable_branch=${ATP_STABLE_BRANCH:-main}
 stop_script=${ATP_STOP_SCRIPT:-$devspace_dir/stop-stable.sh}
 start_script=${ATP_START_SCRIPT:-$devspace_dir/start-stable.sh}
+task_server_start_script=${ATP_TASK_SERVER_START_SCRIPT:-$devspace_dir/start-task-server.sh}
+task_server_deploy_script=${ATP_TASK_SERVER_DEPLOY_SCRIPT:-$devspace_dir/deploy-task-server.sh}
 frontend_url=${ATP_STABLE_FRONTEND_URL:-http://127.0.0.1:4011}
+backend_url=${ATP_STABLE_BACKEND_URL:-http://127.0.0.1:5031}
+task_server_url=${ATP_TASK_SERVER_URL:-http://127.0.0.1:5071}
 probe_timeout_ms=${ATP_BOOT_PROBE_TIMEOUT_MS:-180000}
 probe_settle_ms=${ATP_BOOT_PROBE_SETTLE_MS:-2000}
 
@@ -52,8 +61,14 @@ stable_checkout=$(cd "$stable_checkout" && pwd)
 
 [ -x "$stop_script" ] || fail "Stable stop script is not executable: $stop_script"
 [ -x "$start_script" ] || fail "Stable start script is not executable: $start_script"
+[ -x "$task_server_start_script" ] || fail "Task Server start script is not executable: $task_server_start_script"
+[ -x "$task_server_deploy_script" ] || fail "Task Server deploy script is not executable: $task_server_deploy_script"
 
 probe_script=${ATP_BOOT_PROBE_SCRIPT:-$stable_checkout/scripts/stable-frontend-boot-probe.mjs}
+task_server_probe_script=${ATP_TASK_SERVER_PROBE_SCRIPT:-$script_dir/task-server-cutover-probe.mjs}
+task_server_config=${ATP_TASK_SERVER_CONFIG:-$stable_checkout/backend/appsettings.Local.json}
+[ -f "$task_server_probe_script" ] || fail "Task Server cutover probe not found: $task_server_probe_script"
+[ -f "$task_server_config" ] || fail "Stable Task Server proxy configuration not found: $task_server_config"
 
 if [ -n "$(git -C "$stable_checkout" status --porcelain)" ]; then
   fail "Stable checkout has local changes; refusing to update."
@@ -64,8 +79,26 @@ log "Fetching $stable_remote/$stable_branch"
 git -C "$stable_checkout" fetch --quiet "$stable_remote" "$stable_branch"
 target=$(git -C "$stable_checkout" rev-parse "$stable_remote/$stable_branch")
 
+node "$task_server_probe_script" \
+  --config "$task_server_config" \
+  --task-server-url "$task_server_url" \
+  --config-only
+
 if [ "$head_before" = "$target" ]; then
-  log "Stable already matches $stable_remote/$stable_branch; nothing to update."
+  log "Stable already matches $stable_remote/$stable_branch; verifying the supervised Task Server."
+  "$task_server_start_script"
+  node "$task_server_probe_script" \
+    --config "$task_server_config" \
+    --task-server-url "$task_server_url" \
+    --backend-url "$backend_url"
+  stable_head_branch=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
+  if [ -z "$stable_head_branch" ]; then
+    git -C "$stable_checkout" checkout --quiet -B "$stable_branch" "$target"
+    log "Attached the verified Stable checkout to $stable_branch"
+  elif [ "$stable_head_branch" != "$stable_branch" ]; then
+    fail "Stable is attached to unexpected branch '$stable_head_branch'; expected '$stable_branch'."
+  fi
+  log "Stable and Task Server are healthy at $target"
   exit 0
 fi
 
@@ -85,7 +118,15 @@ log "Stopping Stable"
 "$stop_script"
 
 log "Fast-forwarding Stable to $target"
-git -C "$stable_checkout" merge --quiet --ff-only "$target"
+stable_head_branch=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
+if [ -z "$stable_head_branch" ]; then
+  git -C "$stable_checkout" checkout --quiet --detach "$target"
+  log "Advanced the pinned Stable checkout to $target; it remains detached pending verification"
+elif [ "$stable_head_branch" = "$stable_branch" ]; then
+  git -C "$stable_checkout" merge --quiet --ff-only "$target"
+else
+  fail "Stable is attached to unexpected branch '$stable_head_branch'; expected '$stable_branch'."
+fi
 
 if [ "$install_frontend" -eq 1 ]; then
   log "Installing frontend dependencies"
@@ -110,6 +151,16 @@ fi
 
 [ -f "$probe_script" ] || fail "Frontend boot probe not found: $probe_script"
 
+log "Packaging and installing Task Server $target"
+"$task_server_deploy_script" "$stable_checkout" "$target"
+
+log "Starting supervised Task Server before Stable API"
+"$task_server_start_script"
+node "$task_server_probe_script" \
+  --config "$task_server_config" \
+  --task-server-url "$task_server_url" \
+  --direct-only
+
 log "Starting Stable"
 DETACH=1 "$start_script"
 
@@ -120,4 +171,14 @@ node "$probe_script" \
   --timeout-ms "$probe_timeout_ms" \
   --settle-ms "$probe_settle_ms"
 
-log "Stable started and healthy at $target"
+node "$task_server_probe_script" \
+  --config "$task_server_config" \
+  --task-server-url "$task_server_url" \
+  --backend-url "$backend_url"
+
+if [ -z "$stable_head_branch" ]; then
+  git -C "$stable_checkout" checkout --quiet -B "$stable_branch" "$target"
+  log "Attached the verified Stable checkout to $stable_branch"
+fi
+
+log "Stable and Task Server started and healthy at $target"
