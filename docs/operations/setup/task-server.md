@@ -152,6 +152,102 @@ targeting the installed executable, mirroring
 C:\AgentOrchestrator\current\task-server.exe backup --name manual
 ```
 
+### Planned local Windows cutover from OrchestratorApi
+
+The first local cutover is a maintenance operation, not a routine Stable
+update. Keep the release hold in place until all steps below have evidence.
+In particular, do not point OrchestratorApi at an empty Task Server store and
+do not allow both processes to accept task writes.
+
+1. Publish and install the candidate from the development checkout. The
+   installer uses a versioned directory, a `current` junction, a dedicated
+   data directory under the devspace, and the non-interactive S4U supervisor.
+   It also writes `TaskServer:BaseUrl` to Stable's gitignored local settings,
+   so do not restart the still-running legacy Stable process until import is
+   complete.
+
+   ```powershell
+   .\deploy\windows\task-server\install-task-server.ps1 `
+       -SourceRoot C:\Projects\agent-taskboard-devspace\agent-taskboard-dev `
+       -Version (git rev-parse origin/main) `
+       -DataDirectory C:\Projects\agent-taskboard-devspace\task-server-data `
+       -StudioConfig C:\Projects\agent-taskboard-devspace\agent-taskboard-stable\backend\appsettings.Local.json
+   ```
+
+2. Before the writer freeze, rehearse the exact `LegacyMigrationService`
+   inventory and import against a copied legacy root and an isolated Task
+   Server store. Preserve the emitted JSON with the task evidence. A passing
+   rehearsal has equal project, task, event, and artifact counts, a non-empty
+   integrity digest, a pre-import backup, and no invariant failure.
+   The rehearsal also inspects `identities/*.json` and
+   `.metadata/attempt-authority.json`. It fails closed with
+   `legacy-authority-import-not-implemented` if the legacy root contains any
+   identity, run attempt, review attempt, lease fence, or attempt fence that
+   the current migration contract cannot import. Do not waive this result:
+   extending `LegacyMigrationService` and its count/integrity evidence is a
+   prerequisite to cutting over such a store without forking authority.
+
+   ```powershell
+   .\deploy\windows\task-server\rehearse-legacy-migration.ps1 `
+       -TaskServerExecutable C:\AgentOrchestrator\current\task-server.exe `
+       -LegacyRoot C:\Projects\agent-taskboard-workspace `
+       -WorkspaceName 'Agent Studio for Software' `
+       -EvidenceFile C:\Projects\agent-taskboard-devspace\cutover-evidence\legacy-rehearsal.json
+   ```
+
+3. Drain runners and reviews, wait for all active coding and review attempts to
+   settle, stop Stable through its outer wrapper, and confirm no legacy writer
+   or runner process remains. Inventory the untouched production root, enter
+   `Maintenance`, and import with `freezeConfirmed:true` and the exact returned
+   migration ID. Save the response and its rollback backup identity. If the
+   source changes between inventory and import, the import fails closed and the
+   freeze remains in force.
+
+   ```powershell
+   $headers = @{ 'X-Task-Protocol-Version' = '1'; 'X-Actor-Id' = 'planned-cutover' }
+   $base = 'http://127.0.0.1:5071'
+   $request = @{
+       legacyRoot = 'C:\Projects\agent-taskboard-workspace'
+       workspaceName = 'Agent Studio for Software'
+       freezeConfirmed = $true
+       preserveEvidenceGit = $true
+   }
+   $inventory = Invoke-RestMethod -Method Post -Headers $headers -ContentType application/json `
+       -Uri "$base/api/v1/management/migrations/legacy/inventory" `
+       -Body ($request | ConvertTo-Json)
+   Invoke-RestMethod -Method Put -Headers $headers -ContentType application/json `
+       -Uri "$base/api/v1/management/mode" `
+       -Body (@{ mode = 'Maintenance'; reason = 'exclusive legacy writer freeze confirmed' } | ConvertTo-Json)
+   $request.expectedMigrationId = $inventory.migrationId
+   $import = Invoke-RestMethod -Method Post -Headers $headers -ContentType application/json `
+       -Uri "$base/api/v1/management/migrations/legacy/import" `
+       -Body ($request | ConvertTo-Json)
+   [pscustomobject]@{ inventory = $inventory; import = $import } |
+       ConvertTo-Json -Depth 20 |
+       Set-Content .\cutover-evidence\production-import.json
+   ```
+
+4. Return Task Server to `Normal`, then run the versioned updater from outside
+   Stable. `scripts/update-stable.sh` installs and starts Task Server before
+   OrchestratorApi, attaches a clean detached Stable checkout back to `main`,
+   and refuses to report success until direct Task Server health, Task Server
+   readiness, Stable API health, the proxied protocol route, and a real browser
+   boot all pass. `ATP_TASK_SERVER_REQUIRED=0` is not permitted for this
+   cutover.
+
+5. Submit one disposable task through the board and preserve the end-to-end
+   history showing coding claim and lease, runner events and artifacts, coding
+   completion, immutable review subject, review claim, fenced report, cleanup,
+   and the final board projection. Also save `/api/v1/management/status`,
+   `/api/v1/management/invariants`, Scheduled Task state, process identities,
+   the updater output, and the Stable branch name and HEAD. Only then remove
+   the rollout hold.
+
+The rollback boundary remains the pre-import Task Server backup and the
+untouched frozen legacy root. Roll back before either authority accepts a new
+write. Once the standalone authority has accepted a claim or report, never
+reactivate the legacy writer for the same logical tasks.
+
 ## Configuration and health
 
 The production binary consumes one host-owned `server.env` bootstrap contract.

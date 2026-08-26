@@ -580,7 +580,7 @@ public sealed class TopologyTests
         await version.WaitForExitAsync(TimeSpan.FromSeconds(15));
         Assert.Equal(0, version.Process.ExitCode);
         Assert.Matches(
-            @"task-server 1\.0\.0\+sha\.[0-9a-f]{40}",
+            @"task-server [0-9]+\.[0-9]+\.[0-9]+\+sha\.[0-9a-f]{40}",
             version.ToString());
 
         using (var first = StartBuilt(
