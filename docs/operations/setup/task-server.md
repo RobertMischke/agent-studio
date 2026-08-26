@@ -116,6 +116,28 @@ from the Studio checkout:
     -EnvFile C:\ProgramData\AgentOrchestrator\server.env
 ```
 
+For a versioned Stable release, the packaged install helper publishes the
+matching SHA, creates or verifies the dedicated data and backup directories,
+repoints the guarded `current` junction, writes `TaskServer:BaseUrl` to the
+host-owned Stable configuration, and registers the Scheduled Task:
+
+```powershell
+.\deploy\windows\task-server\install-task-server-release.ps1 `
+    -SourceCheckout C:\Projects\agent-taskboard-stable `
+    -ReleaseSha <40-character-main-sha> `
+    -DataDirectory C:\Projects\agent-taskboard-devspace\task-server-data `
+    -StableConfigurationPath C:\Projects\agent-taskboard-stable\backend\appsettings.Local.json
+```
+
+Keep `DataDirectory` outside every versioned installation. `-WhatIf` previews
+the host mutations. The helper refuses to replace a non-junction `current`
+directory, rejects a data directory below the installation root, and refuses
+to reuse a release directory whose binary does not report the requested SHA.
+It reconciles `LISTEN_URL`, `STORE_PATH`, and `BACKUP_PATH` in an existing
+`server.env` while preserving its authentication settings. The versioned
+package includes the detached supervisor script, so the registered Scheduled
+Task does not execute service code from a mutable Studio checkout.
+
 `register-task-server.ps1` registers `AgentOrchestrator-TaskServer` as an
 `AtStartup`-triggered Scheduled Task under an `S4U` principal - services never
 run as session tasks bound to an interactive logon. Its action is
@@ -370,6 +392,57 @@ The automated acceptance suite rehearses inventory, freeze enforcement,
 transactional import, integrity verification, backup/restore, evidence Git
 preservation, restart fencing, protocol rejection, and separate process
 lifecycle.
+
+### Planned local Windows cutover
+
+Treat a move from the OrchestratorApi-owned v1 routes to the standalone service
+as a release hold until all of these steps have durable evidence:
+
+1. Copy the complete legacy `TaskRepository`, including `identities/`,
+   `.metadata/attempt-authority.json`, and every
+   `.metadata/attempt-authority.archive-*.json`, to a rehearsal root while Stable is
+   still on the held release. Inventory and import that copy into an empty
+   rehearsal Task Server store. The inventory and import counts must agree for
+   runner identities, tasks, coding attempts, review attempts, and leases, and the returned
+   authority epoch and integrity SHA-256 must be recorded. Any missing or
+   unreadable live or archived attempt-authority store aborts the cutover. Imported live leases
+   become `process-unknown`; they are never made claimable merely because the
+   owner process was stopped.
+
+   Set `requireAttemptAuthority:true` on both migration requests. This converts
+   a missing authority file from an inventory warning into the blocking
+   `legacy-attempt-authority-required` conflict used by this cutover.
+2. Freeze the real legacy writer, repeat inventory against the real root, enter
+   Task Server `Maintenance`, and import with the exact migration ID. Retain
+   the untouched frozen root and the returned pre-import backup until the
+   rollout is accepted. Resolve every `process-unknown` coding authority only
+   with positive containment proof. Review authority can follow the fenced
+   review reclaim contract.
+3. Set Stable's gitignored `backend/appsettings.Local.json`
+   `TaskServer:BaseUrl` to `http://127.0.0.1:5071`. Configure the matching proxy
+   credential when bearer authentication is enabled. Do not restart
+   OrchestratorApi until Task Server `/readyz` and the management status route
+   are green.
+4. Install two host-owned shell wrappers beside the dev and Stable checkouts.
+   `deploy-task-server.sh <stable-checkout> <target-sha>` invokes
+   `install-task-server-release.ps1`; `start-task-server.sh` invokes
+   `Start-ScheduledTask`. Point `ATP_TASK_SERVER_DEPLOY_SCRIPT` and
+   `ATP_TASK_SERVER_START_SCRIPT` at them when their paths differ from the
+   devspace defaults. The versioned updater stops Stable, installs and starts
+   Task Server, proves direct readiness, starts the API, then proves the proxy
+   and browser boot. A detached held checkout stays detached at the candidate
+   SHA until every cutover probe passes, then it is attached to `main`. A failed
+   candidate remains detached for operator recovery.
+5. Exercise one fenced coding claim through completion, one immutable review
+   claim through report and cleanup, result-finalization and report artifact
+   submission, and the board projection for the same task. Save request IDs,
+   task and attempt IDs, fences, response statuses, management status, the
+   deployed SHA, Scheduled Task status, and the final attached Stable branch in
+   the task's collected `results/` directory.
+
+The release hold is cleared only after step 5. A successful process health
+check without the claim, review, report, and board round trip is not cutover
+evidence.
 
 ## Release topology rehearsal
 

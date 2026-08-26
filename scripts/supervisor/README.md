@@ -56,8 +56,18 @@ On trigger the watcher delegates to the versioned
 `coding-agent-chat` postinstall patch changed. After an install it removes
 `frontend/.angular/cache`, because the postinstall bridge changes dependency
 bytes without changing Vite's optimizer cache key. It then launches Stable
-detached and uses `playwright-core` to load the frontend. Any browser
-`pageerror` makes the update fail; an open port alone is not health evidence.
+and uses `playwright-core` to load the frontend. Any browser `pageerror` makes
+the update fail; an open port alone is not health evidence. The updater also
+requires host-owned `deploy-task-server.sh` and `start-task-server.sh` wrappers.
+After Stable is stopped, it installs the matching Task Server package, starts
+the non-interactive Scheduled Task before the API, waits for `/readyz`, and
+verifies the management plane both directly and through OrchestratorApi. It
+refuses to proceed unless Stable's gitignored
+`backend/appsettings.Local.json` selects the same loopback origin. This also
+applies to the main-advance watchdog path, so the watcher cannot roll out a
+claim-path decoupling release into the old monolith topology. A checkout held
+at a detached release stays detached until the Task Server, proxy, and browser
+probes all pass; a failed candidate is not attached to `main`.
 The watcher does not call `git pull` or `git fetch` directly.
 
 Older devspaces may still have an unversioned root-level `update-stable.sh`.
@@ -67,6 +77,12 @@ versioned script:
 ```sh
 install -m 0755 agent-taskboard-dev/scripts/update-stable.sh ./update-stable.sh
 ```
+
+On the Windows host, the deploy wrapper invokes
+`deploy/windows/task-server/install-task-server-release.ps1` with the checkout
+and target SHA passed by `update-stable.sh`. The start wrapper calls
+`Start-ScheduledTask -TaskName AgentOrchestrator-TaskServer`. Both wrappers run
+outside interactive sessions and propagate failures.
 
 The versioned updater can also run in place and remains the source of truth.
 `scripts/test-update-stable.sh` covers both the stale prebundle regression and
