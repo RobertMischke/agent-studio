@@ -212,10 +212,22 @@ public sealed class LegacyMigrationService(TaskServerStore store)
 
             var runs = ReadArray(json, "runAttempts")
                 .Select(ReadCodingAttempt)
-                .ToArray();
+                .ToList();
             var reviews = ReadArray(json, "reviewAttempts")
                 .Select(ReadReviewAttempt)
-                .ToArray();
+                .ToList();
+            foreach (var archivePath in Directory
+                         .EnumerateFiles(Path.GetDirectoryName(path)!, "attempt-authority.archive-*.json")
+                         .Order(StringComparer.Ordinal))
+            {
+                sourceFiles.Add(archivePath);
+                await using var archiveStream = File.OpenRead(archivePath);
+                using var archive = await JsonDocument.ParseAsync(archiveStream, cancellationToken: ct);
+                runs.AddRange(ReadArray(archive.RootElement, "runAttempts").Select(ReadCodingAttempt));
+                reviews.AddRange(ReadArray(archive.RootElement, "reviewAttempts").Select(ReadReviewAttempt));
+            }
+            RequireUniqueAttemptIds(runs.Select(item => item.AttemptId), "coding");
+            RequireUniqueAttemptIds(reviews.Select(item => item.AttemptId), "review");
             return new LegacyAuthorityImport(
                 epoch,
                 fences,
@@ -229,6 +241,16 @@ public sealed class LegacyMigrationService(TaskServerStore store)
                 $"Legacy attempt authority '{path}' could not be inventoried; refusing a cutover that would reset fences.",
                 exception);
         }
+    }
+
+    private static void RequireUniqueAttemptIds(IEnumerable<string> attemptIds, string kind)
+    {
+        var duplicate = attemptIds
+            .GroupBy(id => id, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new InvalidDataException(
+                $"Legacy {kind} attempt '{duplicate.Key}' occurs more than once across live and archived authority.");
     }
 
     private static async Task<IReadOnlyList<LegacyRunnerIdentityImport>> ReadRunnerIdentitiesAsync(
