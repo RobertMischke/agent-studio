@@ -387,6 +387,26 @@ public sealed record RemoteRunCompletionResponse(
     string? ReviewSubjectId = null,
     string? FailureClassification = null);
 
+/// <summary>Runner -> Server: non-terminal provider-account wait.</summary>
+public sealed record ProviderLimitWaitRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string CliType,
+    DateTimeOffset DetectedAt,
+    DateTimeOffset RetryAt,
+    string Reason,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
+
+public sealed record ProviderLimitWaitResponse(
+    string TaskKey,
+    string State,
+    string Phase,
+    DateTimeOffset RetryAt);
+
 /// <summary>One consolidated output line, shaped to the server's CliOutputLine JSON.</summary>
 public sealed record CliOutputLine(DateTime Timestamp, string Stream, string Text);
 

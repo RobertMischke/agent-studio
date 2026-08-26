@@ -12,6 +12,20 @@ public sealed record RemoteQueueStarvationItem
     public string? BlockReason { get; init; }
 }
 
+public sealed record ProviderLimitVisibility
+{
+    public string CliType { get; init; } = "";
+    public string Detail { get; init; } = "";
+    public string? ProjectName { get; init; }
+}
+
+public sealed record PickupPauseVisibility
+{
+    public string ProjectName { get; init; } = "";
+    public string Reason { get; init; } = "";
+    public DateTime? ChangedAt { get; init; }
+}
+
 public sealed record RemoteQueueStarvationSnapshot
 {
     public bool Active { get; init; }
@@ -22,6 +36,10 @@ public sealed record RemoteQueueStarvationSnapshot
     public DateTime? LastSuccessfulClaimAt { get; init; }
     public bool HasRejections { get; init; }
     public int BuildProfileGateBlockedTaskCount { get; init; }
+    public int ProviderLimitedTaskCount { get; init; }
+    public string ClaimProgressState { get; init; } = "healthy";
+    public IReadOnlyList<ProviderLimitVisibility> LimitedProviders { get; init; } = [];
+    public IReadOnlyList<PickupPauseVisibility> PickupPauses { get; init; } = [];
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
@@ -36,7 +54,8 @@ public static class RemoteQueueStarvationPolicy
         IEnumerable<TaskInfo> tasks,
         Func<string, ProjectSettings> projectSettings,
         TaskReferenceIndex references,
-        IEnumerable<ClientIdentity> runners)
+        IEnumerable<ClientIdentity> runners,
+        IEnumerable<ProviderLimitVisibility>? providerLimits = null)
     {
         var liveRunners = runners
             .Where(runner => string.Equals(
@@ -80,10 +99,21 @@ public static class RemoteQueueStarvationPolicy
         var claimProgressStalled = progressReferenceAt is { } referenceAt
                                    && now - referenceAt >= threshold;
 
+        var limitedProviders = (providerLimits ?? [])
+            .Where(limit => !string.IsNullOrWhiteSpace(limit.CliType))
+            .GroupBy(limit => limit.CliType, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
         var items = routedReadyTasks
-            .Select(task => (Task: task, Gate: BuildProfileGate.Evaluate(
-                projectSettings(task.ProjectName).BuildProfile)))
-            .Where(candidate => !candidate.Gate.AllowsPickup
+            .Select(task =>
+            {
+                var gate = BuildProfileGate.Evaluate(projectSettings(task.ProjectName).BuildProfile);
+                var providerLimit = limitedProviders.FirstOrDefault(limit =>
+                    string.Equals(limit.CliType, CliTypes.Normalize(task.CliType), StringComparison.OrdinalIgnoreCase));
+                return (Task: task, Gate: gate, ProviderLimit: providerLimit);
+            })
+            .Where(candidate => candidate.ProviderLimit is not null
+                           || !candidate.Gate.AllowsPickup
                            || candidate.Task.RemoteDispatchRejection is not null
                            || (claimProgressStalled
                                && now - candidate.Task.EnteredLaneAt.ToUniversalTime() >= threshold))
@@ -96,17 +126,22 @@ public static class RemoteQueueStarvationPolicy
                 Title = candidate.Task.Title,
                 EnteredLaneAt = candidate.Task.EnteredLaneAt,
                 LastRejection = candidate.Task.RemoteDispatchRejection,
-                BlockReasonCode = candidate.Gate.AllowsPickup ? null : "build-profile-gate",
-                BlockReason = candidate.Gate.AllowsPickup ? null : candidate.Gate.Reason,
+                BlockReasonCode = candidate.ProviderLimit is not null
+                    ? "provider-limited"
+                    : candidate.Gate.AllowsPickup ? null : "build-profile-gate",
+                BlockReason = candidate.ProviderLimit?.Detail
+                              ?? (candidate.Gate.AllowsPickup ? null : candidate.Gate.Reason),
             })
             .ToList();
         var hasRejections = items.Any(item => item.LastRejection is not null);
+        var providerLimitedTaskCount = items.Count(item =>
+            string.Equals(item.BlockReasonCode, "provider-limited", StringComparison.Ordinal));
 
         return new RemoteQueueStarvationSnapshot
         {
             Active = items.Count > 0
                      && (availableSlots > 0 || items.Any(item =>
-                         string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal))),
+                         item.BlockReasonCode is "build-profile-gate" or "provider-limited")),
             WaitingTaskCount = items.Count,
             AvailableSlots = availableSlots,
             ThresholdMinutes = Math.Max(1, (int)Math.Ceiling(threshold.TotalMinutes)),
@@ -115,6 +150,11 @@ public static class RemoteQueueStarvationPolicy
             HasRejections = hasRejections,
             BuildProfileGateBlockedTaskCount = items.Count(item =>
                 string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)),
+            ProviderLimitedTaskCount = providerLimitedTaskCount,
+            ClaimProgressState = providerLimitedTaskCount > 0
+                ? "limited"
+                : claimProgressStalled ? "stalled" : "healthy",
+            LimitedProviders = limitedProviders,
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
@@ -135,6 +175,7 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
     private readonly TaskScannerService _scanner;
     private readonly ProjectSettingsService _settings;
     private readonly ClientIdentityStore _clients;
+    private readonly V1ReviewExecutorRegistry _runnerCapabilities;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RemoteQueueStarvationWatchdog> _logger;
     private readonly object _gate = new();
@@ -146,12 +187,14 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
         TaskScannerService scanner,
         ProjectSettingsService settings,
         ClientIdentityStore clients,
+        V1ReviewExecutorRegistry runnerCapabilities,
         IConfiguration configuration,
         ILogger<RemoteQueueStarvationWatchdog> logger)
     {
         _scanner = scanner;
         _settings = settings;
         _clients = clients;
+        _runnerCapabilities = runnerCapabilities;
         _configuration = configuration;
         _logger = logger;
     }
@@ -170,13 +213,25 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
             1,
             24 * 60);
         var snapshot = _scanner.GetLiveSnapshotWithReferenceIndex();
+        var providerLimits = _runnerCapabilities.ListCapabilitySnapshots()
+            .SelectMany(snapshot => snapshot.Capabilities)
+            .Where(capability => capability.IsFresh
+                                 && capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal)
+                                 && string.Equals(capability.AdvertisedStatus, "limited", StringComparison.OrdinalIgnoreCase))
+            .Select(capability => new ProviderLimitVisibility
+            {
+                CliType = capability.Key["provider-auth:".Length..],
+                Detail = capability.Detail ?? $"{capability.Key}: limited",
+            })
+            .ToArray();
         var next = RemoteQueueStarvationPolicy.Evaluate(
             now,
             TimeSpan.FromMinutes(thresholdMinutes),
             snapshot.Live,
             _settings.Get,
             snapshot.References,
-            _clients.ListAll());
+            _clients.ListAll(),
+            providerLimits);
 
         lock (_gate)
         {
@@ -256,7 +311,8 @@ public static class RemoteQueueStarvationEndpoints
         app.MapGet("/api/runner/queue-starvation", (
             HttpContext context,
             RemoteQueueStarvationWatchdog watchdog,
-            ProjectRegistry projects) =>
+            ProjectRegistry projects,
+            TaskRunnerService taskRunners) =>
         {
             var snapshot = watchdog.Refresh();
             if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human)
@@ -265,15 +321,48 @@ public static class RemoteQueueStarvationEndpoints
             var visibleItems = snapshot.Items
                 .Where(item => ProjectAccessAuthorization.Allows(human.User, item.ProjectName, projects))
                 .ToList();
+            var runnerStatuses = taskRunners.GetStatus().Projects.Values;
+            var pickupPauses = runnerStatuses
+                .Where(status => status.Mode is "manual" or "paused"
+                                 && string.Equals(status.ModeSource, "circuit-breaker", StringComparison.OrdinalIgnoreCase))
+                .Where(status => ProjectAccessAuthorization.Allows(human.User, status.ProjectName, projects))
+                .Select(status => new PickupPauseVisibility
+                {
+                    ProjectName = status.ProjectName,
+                    Reason = status.ModeReason ?? status.BreakerReason ?? "infra circuit-breaker",
+                    ChangedAt = status.ModeChangedAt,
+                })
+                .ToArray();
+            var localProviderLimits = runnerStatuses
+                .Where(status => ProjectAccessAuthorization.Allows(human.User, status.ProjectName, projects))
+                .SelectMany(status => status.ProviderLimits.Select(limit => new ProviderLimitVisibility
+                {
+                    CliType = limit.CliType,
+                    Detail = limit.Reason,
+                    ProjectName = status.ProjectName,
+                }))
+                .ToArray();
+            var visibleProviderLimits = snapshot.LimitedProviders
+                .Concat(localProviderLimits)
+                .DistinctBy(limit => (limit.ProjectName?.ToLowerInvariant(), limit.CliType.ToLowerInvariant()))
+                .ToArray();
+            var providerLimitedTaskCount = visibleItems.Count(item =>
+                string.Equals(item.BlockReasonCode, "provider-limited", StringComparison.Ordinal));
             return Results.Ok(snapshot with
             {
-                Active = visibleItems.Count > 0
+                Active = pickupPauses.Length > 0 || localProviderLimits.Length > 0 || (visibleItems.Count > 0
                          && (snapshot.AvailableSlots > 0 || visibleItems.Any(item =>
-                             string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal))),
+                             item.BlockReasonCode is "build-profile-gate" or "provider-limited"))),
                 WaitingTaskCount = visibleItems.Count,
                 HasRejections = visibleItems.Any(item => item.LastRejection is not null),
                 BuildProfileGateBlockedTaskCount = visibleItems.Count(item =>
                     string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)),
+                ProviderLimitedTaskCount = providerLimitedTaskCount,
+                ClaimProgressState = visibleProviderLimits.Length > 0
+                    ? "limited"
+                    : snapshot.ClaimProgressStalled ? "stalled" : "healthy",
+                LimitedProviders = visibleProviderLimits,
+                PickupPauses = pickupPauses,
                 OldestEnteredLaneAt = visibleItems.FirstOrDefault()?.EnteredLaneAt,
                 Items = visibleItems,
             });

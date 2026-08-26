@@ -23,6 +23,10 @@ interface RemoteQueueStarvationSnapshot {
   lastSuccessfulClaimAt: string | null;
   hasRejections: boolean;
   buildProfileGateBlockedTaskCount: number;
+  providerLimitedTaskCount?: number;
+  claimProgressState?: 'healthy' | 'limited' | 'stalled' | string;
+  limitedProviders?: { cliType: string; detail: string; projectName?: string | null }[];
+  pickupPauses?: { projectName: string; reason: string; changedAt: string | null }[];
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
@@ -56,6 +60,25 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
     this.visibleItems().some(item => item.lastRejection != null));
   readonly buildProfileGateBlockedCount = computed(() =>
     this.visibleItems().filter(item => item.blockReasonCode === 'build-profile-gate').length);
+  readonly providerLimitedItems = computed(() =>
+    this.visibleItems().filter(item => item.blockReasonCode === 'provider-limited'));
+  readonly limitedProviders = computed(() => {
+    const snapshot = this.snapshot();
+    if (!snapshot?.active) return [];
+    const projects = this.projects();
+    if (projects.length === 0) return snapshot.limitedProviders ?? [];
+    const visible = new Set(projects.map(project => project.toLowerCase()));
+    return (snapshot.limitedProviders ?? []).filter(limit =>
+      !limit.projectName || visible.has(limit.projectName.toLowerCase()));
+  });
+  readonly pickupPauses = computed(() => {
+    const snapshot = this.snapshot();
+    if (!snapshot?.active) return [];
+    const projects = this.projects();
+    if (projects.length === 0) return snapshot.pickupPauses ?? [];
+    const visible = new Set(projects.map(project => project.toLowerCase()));
+    return (snapshot.pickupPauses ?? []).filter(pause => visible.has(pause.projectName.toLowerCase()));
+  });
 
   ngOnInit(): void {
     this.refresh();

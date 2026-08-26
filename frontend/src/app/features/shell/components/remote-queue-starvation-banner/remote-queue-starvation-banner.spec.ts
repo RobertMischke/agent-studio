@@ -130,4 +130,93 @@ describe('RemoteQueueStarvationBannerComponent', () => {
     fixture.destroy();
     http.verify();
   });
+
+  it('names a Claude provider limit and distinguishes it from stalled capacity', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Agent Studio']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      waitingTaskCount: 1,
+      availableSlots: 3,
+      thresholdMinutes: 30,
+      claimProgressStalled: true,
+      claimProgressState: 'limited',
+      providerLimitedTaskCount: 1,
+      limitedProviders: [{
+        cliType: 'claude',
+        detail: 'claude: limited until 2026-08-24T00:20:00.0000000Z',
+        projectName: 'Agent Studio',
+      }],
+      pickupPauses: [],
+      lastSuccessfulClaimAt: '2026-08-23T21:59:00Z',
+      hasRejections: false,
+      oldestEnteredLaneAt: '2026-08-23T22:00:00Z',
+      observedAt: '2026-08-23T22:05:00Z',
+      items: [{
+        taskKey: 'AGT-2680',
+        taskId: 'limit-aware-fleet',
+        projectName: 'Agent Studio',
+        title: 'Limit-aware fleet',
+        enteredLaneAt: '2026-08-23T22:00:00Z',
+        blockReasonCode: 'provider-limited',
+        blockReason: 'claude: limited until 2026-08-24T00:20:00.0000000Z',
+      }],
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-starvation-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('Provider claims limited');
+    expect(banner.textContent).toContain('claude: limited until 2026-08-24T00:20:00');
+    expect(banner.textContent).toContain('Other CLI cards remain eligible');
+    expect(banner.textContent).not.toContain('waiting despite free Runner capacity');
+    fixture.destroy();
+    http.verify();
+  });
+
+  it('surfaces an infra-breaker pickup pause reason', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Quality Studio']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      waitingTaskCount: 0,
+      availableSlots: 0,
+      thresholdMinutes: 30,
+      claimProgressStalled: false,
+      claimProgressState: 'healthy',
+      limitedProviders: [],
+      pickupPauses: [{
+        projectName: 'Quality Studio',
+        reason: 'infra breaker, 5 failures cliType=claude at 2026-08-23T22:06:00Z',
+        changedAt: '2026-08-23T22:06:00Z',
+      }],
+      lastSuccessfulClaimAt: null,
+      hasRejections: false,
+      oldestEnteredLaneAt: null,
+      observedAt: '2026-08-23T22:07:00Z',
+      items: [],
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-starvation-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('Pickup paused: infra breaker');
+    expect(banner.textContent).toContain('5 failures cliType=claude');
+    fixture.destroy();
+    http.verify();
+  });
 });

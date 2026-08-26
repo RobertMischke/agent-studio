@@ -128,10 +128,44 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Evaluate_LabelsProviderLimitedInsteadOfStalled_AndLeavesOtherCliEligible()
+    {
+        var claude = ReadyTask(1) with { CliType = CliTypes.Claude };
+        var codex = ReadyTask(1) with
+        {
+            Id = "task-2",
+            Key = "AGT-2",
+            TaskKey = "task-2",
+            CliType = CliTypes.Codex,
+        };
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [claude, codex],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([claude, codex]),
+            [Runner(2, 0, lastClaimMinutesAgo: 1)],
+            [new ProviderLimitVisibility
+            {
+                CliType = CliTypes.Claude,
+                Detail = "claude: limited until 2026-08-24T00:20:00Z",
+            }]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal("limited", snapshot.ClaimProgressState);
+        Assert.Equal(1, snapshot.ProviderLimitedTaskCount);
+        var item = Assert.Single(snapshot.Items);
+        Assert.Equal("AGT-1", item.TaskKey);
+        Assert.Equal("provider-limited", item.BlockReasonCode);
+    }
+
+    [Fact]
     public void Watchdog_LogsWarningOnceForAnAcuteQueueAndRecoveryWhenItClears()
     {
         var logger = new CapturingLogger();
         var watchdog = new RemoteQueueStarvationWatchdog(
+            null!,
             null!,
             null!,
             null!,

@@ -144,6 +144,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet observed in production; AGT-2525 introduces the stable store and its retention owner.
 - **Notes:** Attempt teardown only refreshes last use. A fresh home whose CLI launch was never adopted is deleted immediately. Ownership shape and task-marker validation prevent the sweep or a continuation from adopting another task's directory.
 
+### provider-limit.recovery-probe
+
+- **Kind:** Tick
+- **Where:** [`backend/Features/Runner/ProviderQuotaWaitMonitor.cs`](../../../backend/Features/Runner/ProviderQuotaWaitMonitor.cs) `ExecuteAsync` and `TickAsync`, plus local-runner recovery in `ProjectRunner.TickProviderLimitRecoveryAsync`.
+- **Re-entry trigger:** The 15-second server tick, or the existing local project-runner tick, observes a durable `provider-limit` quota wait whose reported reset is due.
+- **Budget:** `ProviderQuotaWaitPolicy.MaxCardsPerTick = 100`; `ProviderQuotaWaitPolicy.DefaultIntervalSeconds = 15`. A failed or inconclusive provider probe schedules a later tick and never immediately loops.
+- **Action when budget exhausted:** Stop the bounded pass after 100 cards. Remaining waits stay durable for the next scheduled tick. A failed move retains its marker and schedules another pass; it never escalates or consumes a task failure budget.
+- **Breaker test:** [`backend.Tests/Architecture/ProviderLimitRecoveryBreakerTest.cs`](../../../backend.Tests/Architecture/ProviderLimitRecoveryBreakerTest.cs), plus [`backend.Tests/ProviderQuotaWaitPolicyTests.cs`](../../../backend.Tests/ProviderQuotaWaitPolicyTests.cs) and `runner.Tests/ProviderLimitStateTests.cs`.
+- **Last fired:** 2026-08-23/24, AGT-2680 motivating incident. A shared Claude session limit caused a fleet outage and escalation storm, then the pickup breaker stayed paused after reset.
+- **Notes:** Provider limits persist across backend and daemon restart. The gate is CLI-scoped, so mixed Codex work remains eligible. One half-open provider claim is the recovery probe. Manual project pauses remain manual.
+
 ## Candidates (LLM-proposed, human-reviewed)
 
 This section mirrors `loop-inventory.md.candidates` once the weekly `LoopDiscoveryTest` starts running. Items move from candidates to **Entries** above only after a human review confirms the loop is real and assigns a budget + test. Empty for now.

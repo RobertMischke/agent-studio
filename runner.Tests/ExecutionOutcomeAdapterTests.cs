@@ -5,6 +5,42 @@ namespace AgentRunner.Tests;
 
 public sealed class ExecutionOutcomeAdapterTests
 {
+    [Fact]
+    public void Claude_session_limit_is_typed_with_the_reported_reset_time()
+    {
+        var observedAt = new DateTimeOffset(2026, 8, 23, 22, 0, 0, TimeSpan.Zero);
+        var berlin = TimeZoneInfo.FindSystemTimeZoneById("Europe/Berlin");
+
+        var evidence = ProviderLimitParser.Parse(
+            "You've hit your session limit · resets 12:20am (Europe/Berlin)",
+            observedAt,
+            berlin);
+        var decision = ExecutionOutcomeAdapter.Classify(Coding(
+            ExitCode: 1,
+            StdErr: "You've hit your session limit · resets_at=2026-08-23T22:20:00Z"));
+
+        Assert.True(evidence.Limited);
+        Assert.Equal(new DateTimeOffset(2026, 8, 23, 22, 20, 0, TimeSpan.Zero), evidence.ResetAt);
+        Assert.Equal(ExecutionOutcomeKind.QuotaExceeded, decision.Outcome);
+        Assert.Equal(ExecutionRecoveryAction.WaitForCapabilityRecovery, decision.RecoveryAction);
+        Assert.Equal(new DateTimeOffset(2026, 8, 23, 22, 20, 0, TimeSpan.Zero), decision.RetryAt);
+        Assert.True(decision.IsInfrastructureOutcome);
+        Assert.False(decision.ConsumesProductDefectBudget);
+        Assert.False(decision.ConsumesCompletionBudget);
+        Assert.False(decision.ConsumesCodingReworkBudget);
+    }
+
+    [Fact]
+    public void Allowed_warning_rate_limit_telemetry_is_not_an_exhausted_limit()
+    {
+        var evidence = ProviderLimitParser.Parse(
+            """{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1777999999}}""",
+            new DateTimeOffset(2026, 8, 23, 22, 0, 0, TimeSpan.Zero));
+
+        Assert.False(evidence.Limited);
+        Assert.Null(evidence.ResetAt);
+    }
+
     public static TheoryData<string, ExecutionRawFacts, ExecutionOutcomeKind, ExecutionRecoveryAction> ReplayCases => new()
     {
         {

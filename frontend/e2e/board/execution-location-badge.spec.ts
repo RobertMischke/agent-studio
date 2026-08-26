@@ -157,7 +157,11 @@ async function expectNoticeCopySharesWideLine(page: Page, banner: Locator): Prom
   await page.setViewportSize({ width: 720, height: 800 });
 }
 
-async function installRoutes(page: Page, currentTasks: () => typeof initialTasks): Promise<void> {
+async function installRoutes(
+  page: Page,
+  currentTasks: () => typeof initialTasks,
+  starvationSnapshot?: () => unknown,
+): Promise<void> {
   await page.route('**/api/**', route => {
     const url = route.request().url();
     const taskDetail = new URL(url).pathname.match(/^\/api\/tasks\/([^/]+)$/);
@@ -186,6 +190,7 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
     if (url.includes('/api/clients')) return json(route, [{ id: 'local-default', displayName: 'Local', kind: 'agent-instance' }]);
     if (url.includes('/api/runner/status')) return json(route, { projects: {} });
     if (url.includes('/api/runner/queue-starvation')) {
+      if (starvationSnapshot) return json(route, starvationSnapshot());
       const waiting = currentTasks().filter(item => item.state === '2-ready');
       return json(route, {
         active: waiting.length > 0,
@@ -319,6 +324,98 @@ test('shows a durable build-profile gate refusal on the card and the starvation 
       fullPage: false,
     });
   }
+});
+
+test('shows a Claude limit as limited capacity while other CLIs remain eligible', async ({ page }) => {
+  mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 960, height: 720 });
+  await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
+  })));
+  await installRoutes(page, () => initialTasks, () => ({
+    active: true,
+    waitingTaskCount: 1,
+    availableSlots: 3,
+    thresholdMinutes: 30,
+    claimProgressStalled: true,
+    claimProgressState: 'limited',
+    providerLimitedTaskCount: 1,
+    limitedProviders: [{
+      cliType: 'claude',
+      detail: 'claude: limited until 2026-08-24T00:20:00.0000000Z',
+      projectName: PROJECT,
+    }],
+    pickupPauses: [],
+    lastSuccessfulClaimAt: '2026-08-23T21:59:00Z',
+    hasRejections: false,
+    oldestEnteredLaneAt: '2026-08-23T22:00:00Z',
+    observedAt: '2026-08-23T22:05:00Z',
+    items: [{
+      taskKey: 'AGT-2680', taskId: 'limit-aware-fleet', projectName: PROJECT,
+      title: 'Limit-aware fleet', enteredLaneAt: '2026-08-23T22:00:00Z',
+      blockReasonCode: 'provider-limited',
+      blockReason: 'claude: limited until 2026-08-24T00:20:00.0000000Z',
+    }],
+  }));
+  await page.goto('/?includeFixtures=true');
+  await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
+
+  const banner = page.getByTestId('remote-queue-starvation-banner');
+  await expect(banner).toContainText('Provider claims limited.');
+  await expect(banner).toContainText('claude: limited until 2026-08-24T00:20:00');
+  await expect(banner).toContainText('Other CLI cards remain eligible');
+  await expect(banner).not.toContainText('waiting despite free Runner capacity');
+  await expectFlatFullBleedNoticeBar(banner);
+
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await dismissDevErrorDialog(page);
+    await page.screenshot({
+      path: join(RESULTS, `provider-limit-banner--${theme}--mocked.png`),
+      fullPage: false,
+    });
+  }
+});
+
+test('shows the recorded reason for an infra-breaker pickup pause', async ({ page }) => {
+  mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 960, height: 720 });
+  await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
+  })));
+  await installRoutes(page, () => initialTasks, () => ({
+    active: true,
+    waitingTaskCount: 0,
+    availableSlots: 0,
+    thresholdMinutes: 30,
+    claimProgressStalled: false,
+    claimProgressState: 'healthy',
+    providerLimitedTaskCount: 0,
+    limitedProviders: [],
+    pickupPauses: [{
+      projectName: PROJECT,
+      reason: 'infra breaker, 5 failures cliType=claude at 2026-08-23T22:06:00Z',
+      changedAt: '2026-08-23T22:06:00Z',
+    }],
+    lastSuccessfulClaimAt: null,
+    hasRejections: false,
+    oldestEnteredLaneAt: null,
+    observedAt: '2026-08-23T22:07:00Z',
+    items: [],
+  }));
+  await page.goto('/?includeFixtures=true');
+  await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
+
+  const banner = page.getByTestId('remote-queue-starvation-banner');
+  await expect(banner).toContainText('Pickup paused: infra breaker.');
+  await expect(banner).toContainText('5 failures cliType=claude at 2026-08-23T22:06:00Z');
+  await expectFlatFullBleedNoticeBar(banner);
+  await setTheme(page, 'dark');
+  await dismissDevErrorDialog(page);
+  await page.screenshot({
+    path: join(RESULTS, 'infra-breaker-pause-banner--dark--mocked.png'),
+    fullPage: false,
+  });
 });
 
 test('shows accepted deliveries that remain unintegrated beyond the threshold', async ({ page }) => {

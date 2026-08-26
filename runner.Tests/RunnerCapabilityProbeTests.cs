@@ -148,6 +148,56 @@ public sealed class RunnerCapabilityProbeTests
                 item => item.Key == CapabilityProtocol.ProviderAuthentication("codex")).Status);
     }
 
+    [Fact]
+    public async Task Provider_limit_advertisement_blocks_claude_while_codex_stays_ready()
+    {
+        using var temp = new TempDirectory();
+        var claude = Path.Combine(temp.Path, "claude");
+        var codex = Path.Combine(temp.Path, "codex");
+        await File.WriteAllTextAsync(claude, "");
+        await File.WriteAllTextAsync(codex, "");
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = temp.Path,
+            BaseBranch = "main",
+            CliBin = codex,
+            ClaudeCliBin = claude,
+            CodexCliBin = codex,
+            CliArgs = "",
+        };
+        var auth = new ProviderAuthProbe(
+            (_, _, _) => Task.FromResult(new ProcessResult(0, "Logged in", "")),
+            File.Exists);
+        await auth.RefreshAsync(claude, CancellationToken.None);
+        await auth.RefreshAsync(codex, CancellationToken.None);
+        var limits = new ProviderLimitState();
+        limits.ObserveLimit(
+            AgentCliProcess.ClaudeCli,
+            "You've hit your session limit; resets_at=2030-08-24T09:00:00Z",
+            new DateTimeOffset(2030, 8, 24, 8, 0, 0, TimeSpan.Zero));
+
+        var advertised = RunnerCapabilityProbe.Advertise(
+            options,
+            gitPushReady: true,
+            providerAuth: auth,
+            providerLimits: limits);
+
+        var claudeCapability = Assert.Single(advertised, item =>
+            item.Key == CapabilityProtocol.ProviderAuthentication(AgentCliProcess.ClaudeCli));
+        Assert.Equal(ProviderLimitState.LimitedStatus, claudeCapability.Status);
+        Assert.Contains("limited until", claudeCapability.Detail!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            ProviderAuthProbe.Ready,
+            Assert.Single(advertised, item =>
+                item.Key == CapabilityProtocol.ProviderAuthentication(AgentCliProcess.CodexCli)).Status);
+    }
+
     [Theory]
     [InlineData(true, ProviderAuthProbe.Ready)]
     [InlineData(false, ProviderAuthProbe.Unavailable)]

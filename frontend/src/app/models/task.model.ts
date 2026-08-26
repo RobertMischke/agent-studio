@@ -317,6 +317,7 @@ export interface TaskInfo {
     resetAt: string;
     thresholdMinutes: number;
     reason: string;
+    kind?: 'provider-limit' | 'library' | 'admission' | 'quota' | string;
   } | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
@@ -1617,6 +1618,14 @@ export interface ProjectRunnerStatus {
   quotaFallbackModel?: string | null;
   quotaFallbackReason?: string | null;
   queuedJobIds: string[];
+  /** Provider account limits currently excluding only the matching CLI from pickup. */
+  providerLimits?: {
+    cliType: string;
+    detectedAt: string;
+    retryAt: string;
+    reason: string;
+    state: string;
+  }[];
   /**
    * Human-readable reason recorded the last time the runner mode changed
    * (e.g. `auto-failure circuit-breaker: 3x same job 'foo' did not reach

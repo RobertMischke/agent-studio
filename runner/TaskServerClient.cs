@@ -1317,6 +1317,40 @@ public sealed class TaskServerClient : IDisposable
         return new RemoteRunCompletionResponse(req.TaskKey, typedOutcome, "4-auto-review");
     }
 
+    public async Task<ProviderLimitWaitResponse?> ReportProviderLimitAsync(
+        ProviderLimitWaitRequest request,
+        CancellationToken ct)
+    {
+        if (!_useV1)
+        {
+            return await PostJsonAsync<ProviderLimitWaitRequest, ProviderLimitWaitResponse>(
+                "/api/runner/provider-limit",
+                request,
+                ct);
+        }
+
+        var authority = V1Authority(request.TaskKey);
+        var detail = JsonSerializer.Serialize(request, Json);
+        await PostJsonAsync<Contract.EventIngestRequest, Contract.EventDto>(
+            $"/api/v1/runs/{Uri.EscapeDataString(authority.RunId)}/events",
+            new Contract.EventIngestRequest(
+                $"evt_{Guid.NewGuid():N}",
+                "provider-limit-wait",
+                detail,
+                request.IdempotencyKey ?? $"provider-limit:{authority.RunId}:{request.CliType}",
+                authority.Lease.FencingToken,
+                request.DetectedAt.UtcDateTime,
+                authority.Lease.RunnerId,
+                authority.InstanceId,
+                authority.Lease.LeaseId),
+            ct);
+        return new ProviderLimitWaitResponse(
+            request.TaskKey,
+            "2-ready",
+            "quota-waiting",
+            request.RetryAt);
+    }
+
     public async Task<ResultHandoffAck> AcknowledgeResultHandoffAsync(
         RunOutboxAuthority authority,
         RunOutboxItem item,

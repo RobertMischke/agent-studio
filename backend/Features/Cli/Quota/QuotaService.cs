@@ -196,7 +196,11 @@ public sealed class QuotaService
     /// Returns the re-probe task so callers that care (tests) can await it;
     /// the runner fires it and forgets.
     /// </summary>
-    public Task InvalidateForGroundTruthLimit(string cliType, string reason, CancellationToken ct = default)
+    public Task InvalidateForGroundTruthLimit(
+        string cliType,
+        string reason,
+        CancellationToken ct = default,
+        bool refreshImmediately = true)
     {
         if (string.IsNullOrWhiteSpace(cliType)) return Task.CompletedTask;
 
@@ -210,10 +214,13 @@ public sealed class QuotaService
         };
         PersistCache();
         _logger.LogWarning(
-            "quota_snapshot_invalidated cli={Cli} reason={Reason}: launch hit a usage limit, re-probing now (bypassing TTL)",
-            cliType, reason);
+            refreshImmediately
+                ? "quota_snapshot_invalidated cli={Cli} reason={Reason}: launch hit a usage limit, re-probing now (bypassing TTL)"
+                : "quota_snapshot_invalidated cli={Cli} reason={Reason}: launch hit a usage limit; re-probe deferred until the reported reset",
+            cliType,
+            reason);
 
-        return RefreshAsync(cliType, ct);
+        return refreshImmediately ? RefreshAsync(cliType, ct) : Task.CompletedTask;
     }
 
     /// <summary>

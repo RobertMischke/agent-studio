@@ -147,6 +147,15 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- Provider session, usage, and rate-limit rejections are account capability
+  outcomes, not task failures. The local and Remote runners close only the
+  matching `provider-auth:<cliType>` capability, persist the current card as a
+  quota wait, and leave cards for other CLIs eligible. A reported reset time
+  schedules a half-open recovery probe; a successful probe clears the limit and
+  returns waiting cards to Ready automatically. Runner status and the board
+  starvation banner expose `limited` separately from `stalled`, including the
+  next probe time. Circuit-breaker pickup pauses expose their recorded reason;
+  operator pauses remain manual.
 - Remote provider credentials use one protected host file,
   `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
   `root:agent` mode `640`, loaded by both Coding and Review units after their

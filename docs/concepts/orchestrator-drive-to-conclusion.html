@@ -2134,6 +2134,30 @@
             replay queue.
           </td>
         </tr>
+        <tr id="case-agt-2680">
+          <td>2026-08-23/24</td>
+          <td><code>AGT-2680</code><br><span class="small">shared Claude session limit drained the fleet</span></td>
+          <td>
+            The operator account reached its Claude session limit around 22:00. Every Claude card used the same account,
+            so the runner treated the repeated CLI rejections as card failures and escalated 32 cards before the morning.
+            The protective pickup breaker then paused two projects without a visible halt reason and did not resume after
+            the provider window reset. Codex capacity was not allowed to make independent progress.
+          </td>
+          <td>
+            Provider exhaustion had no account-level outcome in the run classifier or CLI-scoped claim gate. It flowed
+            through per-card failure, escalation, and breaker budgets. Capability advertisements could report only
+            provider authentication readiness, the waiting card had no durable quota-wait projection, and recovery
+            required an operator mode change instead of a reset-time probe.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> session and rate limits now reach a non-terminal capability wait:
+            the matching CLI closes until its reported reset, other CLIs remain claimable, the current card records
+            <code>quota-waiting</code> without a failed completion or escalation, and one half-open probe automatically
+            reopens the provider and requeues waiting cards. Runner status and the board distinguish
+            <code>limited</code> from <code>stalled</code>, and circuit-breaker pauses surface their reason. Terminal:
+            <strong>none</strong>, because account exhaustion is not a task verdict.
+          </td>
+        </tr>
       </tbody>
     </table>
 
@@ -2262,8 +2286,9 @@
     <ul>
       <li><strong>Cooldown shape.</strong> Reuse <code>RapidCrashBreaker.Backoff</code> as-is (15s / 60s / 240s) for zero delta,
           or a gentler infra-specific curve (e.g. 30s / 120s) that is cleaner semantically?</li>
-      <li><strong>QuotaCapExceeded.</strong> Should it count as an infra crash (retry) or escalate immediately? A quota cap will
-          just re-hit on an immediate retry, so it may deserve its own category rather than burning 3 attempts.</li>
+      <li><strong>QuotaCapExceeded.</strong> Resolved by AGT-2680: an account-level provider limit is a non-terminal,
+          CLI-scoped capability wait. It does not consume retry, failure, rework, or escalation budgets. The reported reset
+          schedules a half-open probe, while cards for other CLIs remain eligible.</li>
       <li><strong>Inconclusive track.</strong> Does <code>OrchestratorInconclusive</code> deserve its own card track / reason
           string distinct from a plain logical NeedsReview, or is one honest reason text enough? (Affects the UI step.)</li>
       <li><strong>Budget across resume-fallback.</strong> Should a retry that had to rebuild-from-job-folder (session genuinely

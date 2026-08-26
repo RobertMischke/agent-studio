@@ -12,6 +12,7 @@ namespace AgentStudio.Runner;
 public sealed record QuotaWaitRecord
 {
     [JsonPropertyName("version")] public int Version { get; init; } = 1;
+    [JsonPropertyName("kind")] public string Kind { get; init; } = "quota";
     [JsonPropertyName("cliType")] public string CliType { get; init; } = "";
     [JsonPropertyName("startedAt")] public DateTime StartedAt { get; init; } = DateTime.UtcNow;
     [JsonPropertyName("resetAt")] public DateTime ResetAt { get; init; }
@@ -81,5 +82,6 @@ public static class QuotaWaitMarker
             marker.StartedAt,
             marker.ResetAt,
             marker.ThresholdMinutes,
-            marker.Reason);
+            marker.Reason,
+            marker.Kind);
 }

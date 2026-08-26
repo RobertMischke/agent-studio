@@ -98,6 +98,79 @@ public static class LeaseEndpoints
                         "AttemptId, AuthorityEpoch, and IdempotencyKey are required for lease release.")))
             .WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
 
+        app.MapPost("/api/runner/provider-limit", (
+            ProviderLimitWaitRequest req,
+            HttpContext context,
+            TaskScannerService scanner,
+            RunLeaseService leases,
+            AttemptAuthorityService authority,
+            TaskMutationService mutations,
+            TimelineLog timeline) =>
+        {
+            if (!RunnerMatches(context, req.RunnerId)) return Results.Unauthorized();
+            if (!CanonicalLeaseWritePresent(req.AttemptId, req.AuthorityEpoch, req.IdempotencyKey))
+                return Results.Conflict(new { error = "AttemptId, AuthorityEpoch, and IdempotencyKey are required." });
+            if (!leases.IsCurrent(req.TaskKey, req.LeaseId, req.FencingToken, req.RunnerId))
+                return Results.Conflict(new { error = "Lease id, fencing token, or runner id does not match the current holder." });
+            var task = scanner.ScanAllJobs().FirstOrDefault(item =>
+                string.Equals(item.TaskKey, req.TaskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item.Id, req.TaskKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item.Key, req.TaskKey, StringComparison.OrdinalIgnoreCase));
+            if (task is null) return Results.NotFound();
+            if (!string.Equals(task.State, TaskStates.Progress, StringComparison.Ordinal))
+                return Results.Conflict(new { error = "Provider-limit waits can only hold an in-progress card." });
+
+            var now = DateTimeOffset.UtcNow;
+            var retryAt = req.RetryAt <= now
+                ? now.AddMinutes(1)
+                : req.RetryAt > now.AddDays(8)
+                    ? now.AddDays(8)
+                    : req.RetryAt;
+            var cliType = CliTypes.Normalize(req.CliType);
+            var write = new AttemptWriteReference(
+                req.AttemptId!,
+                req.FencingToken,
+                req.AuthorityEpoch!.Value,
+                req.IdempotencyKey!);
+            var accepted = authority.ExecuteRunWrite(
+                write,
+                "provider-limit-wait",
+                task.TaskKey,
+                () =>
+                {
+                    QuotaWaitMarker.Write(task.FolderPath, new QuotaWaitRecord
+                    {
+                        Kind = "provider-limit",
+                        CliType = cliType,
+                        StartedAt = req.DetectedAt.UtcDateTime,
+                        ResetAt = retryAt.UtcDateTime,
+                        ThresholdMinutes = Math.Max(1, (int)Math.Ceiling((retryAt - req.DetectedAt).TotalMinutes)),
+                        Reason = req.Reason,
+                    });
+                    mutations.SetJobPhase(task.FolderPath, LifecyclePhases.QuotaWaiting);
+                    timeline.Append(
+                        task.FolderPath,
+                        TimelineEventKinds.QuotaAdmissionDecision,
+                        TimelineActors.System,
+                        $"{cliType}: limited until {retryAt.UtcDateTime:O}",
+                        runId: req.AttemptId,
+                        details: new Dictionary<string, string>
+                        {
+                            ["outcome"] = "Wait",
+                            ["decision"] = "provider-limit-detected",
+                            ["cli"] = cliType,
+                            ["resetAt"] = retryAt.ToString("o"),
+                        });
+                });
+            if (!accepted.Accepted)
+                return Results.Conflict(new { error = accepted.Message, status = accepted.Status.ToString() });
+            return Results.Ok(new ProviderLimitWaitResponse(
+                req.TaskKey,
+                TaskStates.Progress,
+                LifecyclePhases.QuotaWaiting,
+                retryAt));
+        }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.PostStep);
+
         group.MapGet("/{taskKey}", (string taskKey, RunLeaseService leases) =>
             Results.Ok(leases.Peek(taskKey)));
 

@@ -12,7 +12,8 @@ internal static class RunnerCapabilityProbe
         bool gitWorkflowPushReady = true,
         string? gitDetail = null,
         ProviderAuthProbe? providerAuth = null,
-        TaskServerConnectivitySnapshot? connectivity = null)
+        TaskServerConnectivitySnapshot? connectivity = null,
+        ProviderLimitState? providerLimits = null)
     {
         var list = new List<AdvertisedCapabilityDto>
         {
@@ -46,7 +47,8 @@ internal static class RunnerCapabilityProbe
             AddCodingCliCapabilities(
                 list,
                 options,
-                providerAuth ?? ProviderAuthProbe.Shared);
+                providerAuth ?? ProviderAuthProbe.Shared,
+                providerLimits);
             list.Add(Capability(
                 CapabilityProtocol.GitPush,
                 "source",
@@ -82,7 +84,8 @@ internal static class RunnerCapabilityProbe
             AddCodingCliCapabilities(
                 list,
                 options,
-                providerAuth ?? ProviderAuthProbe.Shared);
+                providerAuth ?? ProviderAuthProbe.Shared,
+                providerLimits);
             list.Add(Capability(CapabilityProtocol.Vision, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.SemanticReview, "review", null, "remote-review"));
             list.Add(Capability(ReviewCapabilities.GitMaterialization, "review", ToolVersion("git"), "git"));
@@ -230,12 +233,14 @@ internal static class RunnerCapabilityProbe
     private static void AddCodingCliCapabilities(
         ICollection<AdvertisedCapabilityDto> capabilities,
         RunnerOptions options,
-        ProviderAuthProbe providerAuth)
+        ProviderAuthProbe providerAuth,
+        ProviderLimitState? providerLimits)
     {
         foreach (var (cliType, binary) in CodingCliBinaries(options))
         {
             var auth = providerAuth.Current(binary);
             var binaryAvailable = ProviderAuthProbe.ExecutableExists(binary);
+            var currentLimit = providerLimits?.Current(cliType, DateTimeOffset.UtcNow);
             capabilities.Add(Capability(
                 CapabilityProtocol.CliExecution(cliType),
                 "cli-execution",
@@ -250,8 +255,16 @@ internal static class RunnerCapabilityProbe
                 "provider-auth",
                 binaryAvailable ? "available" : null,
                 cliType,
-                auth.Status,
-                auth.Detail));
+                currentLimit is { } limit
+                    ? limit.ClaimEligible ? auth.Status : ProviderLimitState.LimitedStatus
+                    : auth.Status,
+                currentLimit is not null
+                    ? currentLimit.ClaimEligible
+                        ? string.Equals(auth.Status, ProviderAuthProbe.Ready, StringComparison.Ordinal)
+                            ? $"{cliType}: limit window elapsed; one recovery probe claim is eligible."
+                            : $"{cliType}: limit window elapsed, but provider authentication is not ready. {auth.Detail}"
+                        : currentLimit.Reason
+                    : auth.Detail));
         }
     }
 

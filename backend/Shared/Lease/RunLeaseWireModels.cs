@@ -263,3 +263,22 @@ public sealed record RemoteRunCompletionResponse(
     string? ReviewAttemptId = null,
     string? ReviewSubjectId = null,
     string? FailureClassification = null);
+
+public sealed record ProviderLimitWaitRequest(
+    string TaskKey,
+    string LeaseId,
+    long FencingToken,
+    string RunnerId,
+    string CliType,
+    DateTimeOffset DetectedAt,
+    DateTimeOffset RetryAt,
+    string Reason,
+    string? AttemptId = null,
+    long? AuthorityEpoch = null,
+    string? IdempotencyKey = null);
+
+public sealed record ProviderLimitWaitResponse(
+    string TaskKey,
+    string State,
+    string Phase,
+    DateTimeOffset RetryAt);

@@ -86,6 +86,7 @@ public sealed class RemoteRunnerDaemon
         shutdown = daemonStop.Token;
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var state = new RunnerStateStore(_options.StateDir);
+        var providerLimits = new ProviderLimitState(state.Root, _log);
         Task<string> RegisterAsync(CancellationToken ct) => _client.RegisterAsync(
             _options.RunnerName,
             "service",
@@ -129,7 +130,8 @@ public sealed class RemoteRunnerDaemon
                 _client,
                 _log,
                 state,
-                inventory);
+                inventory,
+                providerLimits);
             var observation = DurableAgentProcess.InspectForReattach(slot);
             var accepted = recoveredHostWork.FirstOrDefault(item =>
                 string.Equals(
@@ -299,7 +301,8 @@ public sealed class RemoteRunnerDaemon
                         gitCapability.CanPush,
                         gitCapability.CanPushWorkflows,
                         gitCapability.Detail,
-                        connectivity: connectivity.Snapshot),
+                        connectivity: connectivity.Snapshot,
+                        providerLimits: providerLimits),
                     RunnerCapabilityProbe.Telemetry(latestTelemetry),
                     capabilityGeneration,
                     ct);
@@ -369,7 +372,8 @@ public sealed class RemoteRunnerDaemon
             try
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
-                if (DateTime.UtcNow >= nextCapabilityAdvertisement)
+                var providerLimitChanged = providerLimits.ConsumeChanged();
+                if (DateTime.UtcNow >= nextCapabilityAdvertisement || providerLimitChanged)
                 {
                     var capabilityTelemetry = TakeTelemetry();
                     var generation = ++capabilityGeneration;
@@ -381,7 +385,8 @@ public sealed class RemoteRunnerDaemon
                                 gitCapability.CanPush,
                                 gitCapability.CanPushWorkflows,
                                 gitCapability.Detail,
-                                connectivity: connectivity.Snapshot),
+                                connectivity: connectivity.Snapshot,
+                                providerLimits: providerLimits),
                             RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
                             generation,
                             ct),
@@ -579,7 +584,13 @@ public sealed class RemoteRunnerDaemon
                             _client,
                             _log,
                             state,
-                            inventory);
+                            inventory,
+                            providerLimits);
+                        var permitCli = AgentCliProcess.NormalizeCliType(permitClaim.RunSpec?.CliType)
+                                        ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var permitProviderProbeClaim = providerLimits.TryBeginHalfOpenClaim(
+                            permitCli,
+                            DateTimeOffset.UtcNow);
                         claimedAny = true;
                         _log(
                             $"starting host permit {acceptance.PermitId} for " +
@@ -603,6 +614,11 @@ public sealed class RemoteRunnerDaemon
                                     permitClaim.LeaseInstanceId,
                                     permitClaim.RunSpec))));
                         idleWatchdog.RecordActiveSlots(active.Count);
+                        if (permitProviderProbeClaim)
+                        {
+                            nextCapabilityAdvertisement = DateTime.MinValue;
+                            break;
+                        }
                         continue;
                     }
 
@@ -639,7 +655,13 @@ public sealed class RemoteRunnerDaemon
                         _client,
                         _log,
                         state,
-                        inventory);
+                        inventory,
+                        providerLimits);
+                    var claimCli = AgentCliProcess.NormalizeCliType(claim.RunSpec?.CliType)
+                                   ?? AgentCliProcess.ConfiguredCliType(_options);
+                    var providerProbeClaim = providerLimits.TryBeginHalfOpenClaim(
+                        claimCli,
+                        DateTimeOffset.UtcNow);
                     if (shutdown.IsCancellationRequested)
                     {
                         var workspace = new GitWorkspace(
@@ -682,6 +704,11 @@ public sealed class RemoteRunnerDaemon
                             // its RUNNER_CLI_* configuration as before.
                             claim.RunSpec)));
                     idleWatchdog.RecordActiveSlots(active.Count);
+                    if (providerProbeClaim)
+                    {
+                        nextCapabilityAdvertisement = DateTime.MinValue;
+                        break;
+                    }
                 }
 
                 if (!claimedAny)

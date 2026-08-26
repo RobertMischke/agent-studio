@@ -372,6 +372,28 @@ public sealed class ProjectRunnerModeTests : IDisposable
         Assert.Null(runner.GetStatus().BreakerState);
     }
 
+    [Fact]
+    public async Task ProviderLimit_PausesOnlyMatchingCli_AndAutoRecoversWhenProbeIsDue()
+    {
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+        var retryAt = DateTime.UtcNow.AddMinutes(20);
+
+        runner.RecordProviderLimitForTest(CliTypes.Claude, retryAt);
+
+        var limited = Assert.Single(runner.GetStatus().ProviderLimits);
+        Assert.Equal(CliTypes.Claude, limited.CliType);
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.Null(runner.GetStatus().BreakerState);
+        Assert.Equal(0, runner.GetParkedFailedTaskCountForTest());
+
+        runner.ForceProviderLimitProbeDueForTest(CliTypes.Claude);
+        await runner.TickAsync(CancellationToken.None);
+
+        Assert.Empty(runner.GetStatus().ProviderLimits);
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+    }
+
     /// <summary>
     /// Mixed transient failures across DIFFERENT jobs (none repeating to the
     /// threshold) must not park a task and must not halt: the window resets and

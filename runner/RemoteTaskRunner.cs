@@ -25,19 +25,22 @@ public sealed class RemoteTaskRunner
     private readonly Action<string> _log;
     private readonly RunnerStateStore _state;
     private readonly RunnerProcessInventoryTracker _inventory;
+    private readonly ProviderLimitState? _providerLimits;
 
     public RemoteTaskRunner(
         RunnerOptions options,
         TaskServerClient client,
         Action<string> log,
         RunnerStateStore? state = null,
-        RunnerProcessInventoryTracker? inventory = null)
+        RunnerProcessInventoryTracker? inventory = null,
+        ProviderLimitState? providerLimits = null)
     {
         _options = options;
         _client = client;
         _log = log;
         _state = state ?? new RunnerStateStore(options.StateDir);
         _inventory = inventory ?? new RunnerProcessInventoryTracker();
+        _providerLimits = providerLimits;
     }
 
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
@@ -220,6 +223,7 @@ public sealed class RemoteTaskRunner
         var teardownAttempted = false;
         var resultTransferAcknowledged = false;
         var releaseOnly = false;
+        var releaseOnlyReason = "runner-process-missing";
         DurableArtifactManifest? artifactManifest = null;
         try
         {
@@ -230,6 +234,62 @@ public sealed class RemoteTaskRunner
             outcomeDecision = execution.Decision;
             outputLines = execution.OutputLines;
             await shipper.FlushAsync(stopRun.Token);
+
+            if (outcomeDecision.Outcome == ExecutionOutcomeKind.QuotaExceeded)
+            {
+                var cliType = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                              ?? AgentCliProcess.ConfiguredCliType(_options);
+                var observedAt = DateTimeOffset.UtcNow;
+                var limit = _providerLimits?.Current(cliType, observedAt)
+                            ?? _providerLimits?.ObserveLimit(
+                                cliType,
+                                $"{outcomeDecision.RawFacts.StdErr}\n{outcomeDecision.RawFacts.StdOut}",
+                                observedAt)
+                            ?? new ProviderLimitSnapshot(
+                                cliType,
+                                observedAt,
+                                outcomeDecision.RetryAt ?? observedAt.Add(ProviderLimitState.FallbackProbeDelay),
+                                outcomeDecision.Detail ?? $"{cliType}: provider account limited",
+                                ProviderLimitStates.Limited,
+                                false);
+                var wait = await _client.ReportProviderLimitAsync(new ProviderLimitWaitRequest(
+                    taskKey,
+                    lease.LeaseId,
+                    lease.FencingToken,
+                    _options.RunnerId,
+                    cliType,
+                    limit.DetectedAt,
+                    limit.RetryAt,
+                    limit.Reason,
+                    lease.AttemptId,
+                    lease.AuthorityEpoch,
+                    $"provider-limit:{lease.AttemptId}:{lease.FencingToken}"), stopRun.Token);
+                if (wait is null
+                    || !string.Equals(wait.Phase, "quota-waiting", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Provider-limit wait was not durably acknowledged for task '{taskKey}'.");
+                }
+                releaseOnly = true;
+                releaseOnlyReason = $"provider-limit-wait:{cliType}:{limit.RetryAt.UtcDateTime:O}";
+                _log(
+                    $"provider-limit wait recorded task={taskKey} cli={cliType} " +
+                    $"retryAt={limit.RetryAt.UtcDateTime:O}; no task failure completion was submitted");
+
+                teardownAttempted = true;
+                if (Directory.Exists(workspace.RepoPath))
+                {
+                    if (epicPlanning)
+                        sourceMutated = await workspace.TeardownReadOnlyAsync(CancellationToken.None);
+                    else
+                        _ = await workspace.TeardownAsync(
+                            "provider-limit-wait",
+                            lease.AttemptId,
+                            CancellationToken.None);
+                }
+                return 0;
+            }
+
             artifactManifest = await UploadResultsAsync(
                 taskKey,
                 lease,
@@ -382,6 +442,7 @@ public sealed class RemoteTaskRunner
         catch (DetachedWorkerLostException ex)
         {
             releaseOnly = true;
+            releaseOnlyReason = "runner-process-missing";
             _log($"detached worker lost; attempt will be released to Ready: {ex.Message}");
             return 3;
         }
@@ -568,7 +629,7 @@ public sealed class RemoteTaskRunner
             if (outbox is null || handedBack)
             {
                 var released = releaseOnly
-                    ? await ReleaseWithRetryAsync(lease, "runner-process-missing")
+                    ? await ReleaseWithRetryAsync(lease, releaseOnlyReason)
                     : await ReleaseAsync(lease, CancellationToken.None);
                 if (released)
                     _state.Delete(slot);
@@ -807,7 +868,9 @@ public sealed class RemoteTaskRunner
                             workspace,
                             processResult,
                             result.LaunchFailed,
-                            sameSessionResumeAttempts);
+                            sameSessionResumeAttempts,
+                            AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                            ?? AgentCliProcess.ConfiguredCliType(_options));
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
                     {
@@ -919,7 +982,8 @@ public sealed class RemoteTaskRunner
         GitWorkspace workspace,
         ProcessResult result,
         bool launchFailed,
-        int sameSessionResumeAttempts)
+        int sameSessionResumeAttempts,
+        string cliType)
     {
         var provider = ProviderOutputEvidenceExtractor.Extract(result.StdOut);
         // Resume stays gated on a configured RUNNER_CLI_RESUME_ARGS on BOTH
@@ -948,6 +1012,11 @@ public sealed class RemoteTaskRunner
             SessionId: provider.SessionId,
             SameSessionResumeAttempts: sameSessionResumeAttempts);
         var typed = ExecutionOutcomeAdapter.Classify(factsAfterExit);
+        _providerLimits?.ObserveOutcome(
+            cliType,
+            typed,
+            $"{result.StdErr}\n{result.StdOut}",
+            DateTimeOffset.UtcNow);
         var sentinelOutcome = SentinelScanner.Scan(result.StdOut);
         var outcome = typed.Outcome switch
         {

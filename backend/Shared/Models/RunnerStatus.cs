@@ -164,13 +164,22 @@ public record RunnerStatus
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);
 
+/// <summary>One provider CLI temporarily excluded from new claims.</summary>
+public sealed record ProviderLimitStatus(
+    string CliType,
+    DateTime DetectedAt,
+    DateTime RetryAt,
+    string Reason,
+    string State = "limited");
+
 /// <summary>Read-time projection of a task's intentional quota-reset wait.</summary>
 public sealed record QuotaWaitStatus(
     string CliType,
     DateTime StartedAt,
     DateTime ResetAt,
     int ThresholdMinutes,
-    string Reason);
+    string Reason,
+    string Kind = "quota");
 
 public record ProjectRunnerStatus
 {
@@ -188,6 +197,11 @@ public record ProjectRunnerStatus
     /// are deliberately absent.
     /// </summary>
     public List<string> QueuedJobIds { get; init; } = [];
+    /// <summary>
+    /// Account-level provider limits currently gating only their matching CLI.
+    /// Other CLI cards remain eligible for this project.
+    /// </summary>
+    public List<ProviderLimitStatus> ProviderLimits { get; init; } = [];
     /// <summary>
     /// Reason recorded the last time the runner mode changed. Mirrors the
     /// <c>reason</c> argument to <see cref="AgentStudio.Runner.ProjectRunner.SetMode"/>;
