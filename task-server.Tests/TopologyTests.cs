@@ -6,6 +6,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AgentStudio.TaskServer.Contracts;
 using Xunit;
 
@@ -579,8 +580,9 @@ public sealed class TopologyTests
             "--version");
         await version.WaitForExitAsync(TimeSpan.FromSeconds(15));
         Assert.Equal(0, version.Process.ExitCode);
+        var repositoryVersion = (await File.ReadAllTextAsync(Path.Combine(root, "VERSION"))).Trim();
         Assert.Matches(
-            @"task-server 1\.0\.0\+sha\.[0-9a-f]{40}",
+            $@"task-server {Regex.Escape(repositoryVersion)}\+sha\.[0-9a-f]{{40}}",
             version.ToString());
 
         using (var first = StartBuilt(
