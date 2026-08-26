@@ -36,6 +36,7 @@ import {
   normalizeWorkbenchDecisionResponses,
 } from '../../../../services/workbench-decision-markup.util';
 import { WorkbenchDecisionDraftStore } from '../../state/workbench-decision-draft.store';
+import { PublicDemoModeService } from '../../../../services/public-demo-mode.service';
 
 /**
  * Trusted host chrome around repository-authored HTML. The artifact receives an
@@ -61,6 +62,7 @@ export class WorkbenchViewerComponent {
   private readonly http = inject(HttpClient);
   private readonly hub = inject(JobsHubClient);
   private readonly decisionDrafts = inject(WorkbenchDecisionDraftStore);
+  private readonly publicDemo = inject(PublicDemoModeService);
   private readonly frame = viewChild<ElementRef<HTMLIFrameElement>>('workbenchFrame');
   private requestGeneration = 0;
 
@@ -75,6 +77,7 @@ export class WorkbenchViewerComponent {
   readonly lastUpdatedAtUtc = signal<string | null>(null);
   readonly liveConnected = this.hub.connected;
   readonly connectionChangedAtUtc = this.hub.connectionChangedAtUtc;
+  readonly readOnly = this.publicDemo.readOnly;
 
   readonly srcdoc = computed(() => {
     const document = this.document();
@@ -185,6 +188,7 @@ export class WorkbenchViewerComponent {
   }
 
   documentCurrent(): void {
+    if (this.readOnly()) return;
     const document = this.document();
     if (!document || !this.documentationReady() || this.documenting()) return;
     this.documenting.set(true);
@@ -217,7 +221,7 @@ export class WorkbenchViewerComponent {
       {
         type: WORKBENCH_DECISION_HYDRATE_MESSAGE,
         responses: this.decisionResponses(),
-        readonly: decision?.state === 'succeeded',
+        readonly: this.readOnly() || decision?.state === 'succeeded',
       },
       '*',
     );

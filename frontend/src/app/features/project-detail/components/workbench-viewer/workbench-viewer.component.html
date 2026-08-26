@@ -37,7 +37,7 @@
           <button
             type="button"
             data-testid="workbench-documentation-confirm"
-            [disabled]="doc.workingTreeModified"
+            [disabled]="readOnly() || doc.workingTreeModified"
             [appPendingButton]="documenting()"
             pendingLabel="Updating…"
             (click)="documentCurrent()"

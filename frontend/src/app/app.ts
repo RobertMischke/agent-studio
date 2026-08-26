@@ -120,6 +120,7 @@ import { StudioIconComponent } from './components/studio-icon/studio-icon.compon
 import { NotificationStackComponent } from './components/app-dialog/notification-stack/notification-stack.component';
 import { MediaLightboxComponent } from './components/media-lightbox/media-lightbox.component';
 import { OfflineBannerComponent } from './components/offline-banner/offline-banner.component';
+import { PublicDemoBannerComponent } from './components/public-demo-banner/public-demo-banner.component';
 import { UpdateClientService } from './services/update.service';
 import { UpdateNotificationBridge } from './services/update-notification-bridge.service';
 import { projectIdentity } from './services/project-identity.util';
@@ -179,6 +180,7 @@ const SHELL_PANES_FALLBACK: ShellPanesVisible = {
     NotificationStackComponent,
     MediaLightboxComponent,
     OfflineBannerComponent,
+    PublicDemoBannerComponent,
     ProjectTabsComponent,
     E2ECleanupDialogComponent,
     TagManagerDialogComponent,
@@ -1459,7 +1461,6 @@ export class App implements OnInit, OnDestroy {
     this.studioTriageOverflowAnchor.set(event.currentTarget as HTMLElement);
     this.studioTriageOverflowOpen.update(v => !v);
   }
-
   closeStudioTriageOverflow(): void {
     this.studioTriageOverflowOpen.set(false);
   }
@@ -1662,15 +1663,14 @@ export class App implements OnInit, OnDestroy {
       },
     });
   }
-
   openCreate(targetState?: string) {
+    if (this.updateClient.mutationsBlocked()) return;
     this.createJobForm.open({
       watchPaths: this.watchPaths(),
       activeProjects: this.activeProjects(),
       targetState,
     });
   }
-
   onSearchInput(event: Event) {
     const value = (event.target as HTMLInputElement).value;
     this.boardFilters.setSearchQuery(value);

@@ -13,7 +13,7 @@
       <input type="text"
              data-testid="workbench-decision-actor"
              [value]="actor()"
-             [disabled]="pending() || settled()"
+             [disabled]="readOnly() || pending() || settled()"
              (input)="updateActor($event)" />
     </label>
     <span class="decision-panel__provenance"
@@ -41,7 +41,11 @@
 
   @if (mutationBlocked() && !settled()) {
     <p class="decision-panel__notice" role="status" data-testid="workbench-decision-blocked">
-      Decisions require committed Dossier descriptor and HTML files.
+      @if (readOnly()) {
+        Decisions are disabled in the read-only public demo.
+      } @else {
+        Decisions require committed Dossier descriptor and HTML files.
+      }
     </p>
   } @else if (!gateReady()) {
     <p class="decision-panel__notice">

@@ -87,6 +87,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly job = input.required<TaskInfo>();
   readonly epicSubTasks = input<readonly TaskInfo[]>([]);
   readonly compact = input<boolean>(false);
+  readonly mutationsBlocked = input<boolean>(false);
   /**
    * F2: when set and matches this card's job id, the card renders the
    * "just created" pulse highlight and scrolls itself into view on the
@@ -149,13 +150,13 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   });
 
   /** True for cards where "Pick next" makes sense (front-of-queue promotion). */
-  readonly canPickNext = computed(() => this.job().state === TaskState.Ready);
+  readonly canPickNext = computed(() => this.job().state === TaskState.Ready && !this.mutationsBlocked());
 
   onPickNextClick(event: Event) {
     event.stopPropagation();
+    if (this.mutationsBlocked()) return;
     this.pickNextRequested.emit(this.job());
   }
-
   readonly ownerChip = computed(() => {
     const ownerId = this.job().ownerClientId;
     if (!ownerId) return null;
@@ -456,9 +457,8 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   /** Epics in this card's project, loaded on right-click for the assign submenu. */
   private readonly epicsForMenu = signal<EpicRollup[]>([]);
 
-  readonly cardCtxMenuItems = computed(() =>
-    buildCardCtxMenuItems(this.job(), this.isEpic(), this.epicsForMenu(), this.subTaskEpicId()),
-  );
+  readonly cardCtxMenuItems = computed(() => buildCardCtxMenuItems(
+    this.job(), this.isEpic(), this.epicsForMenu(), this.subTaskEpicId(), this.mutationsBlocked()));
 
   /** AGT-2029: open the dependency this card is waiting on (see resolveDependencyTarget). */
   navigateToDependency(chip: DependencyChip, event: MouseEvent): void {
@@ -502,7 +502,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     this.cardContextMenu.set({ x, y });
     // Refresh the assign list each open (only for task cards). Best-effort:
     // the section just shows "No epics" on failure.
-    if (!this.isEpic()) {
+    if (!this.isEpic() && !this.mutationsBlocked()) {
       const watchPath = this.job().watchPath;
       this.jobs.getEpics().subscribe({
         next: (list) => this.epicsForMenu.set((list ?? []).filter((e) => e.watchPath === watchPath)),
@@ -519,18 +519,21 @@ export class TaskCardComponent implements OnInit, OnDestroy {
     const job = this.job();
 
     if (ev.id === DELETE_ID) {
+      if (this.mutationsBlocked()) return;
       // Same flow as the old hover trash button: emit and let the parent own
       // the confirm/undo prompt. Delete semantics are unchanged.
       this.deleteRequested.emit(job);
       return;
     }
     if (ev.id.startsWith(EPIC_ASSIGN_PREFIX)) {
+      if (this.mutationsBlocked()) return;
       const epicId = ev.id.slice(EPIC_ASSIGN_PREFIX.length);
       if (epicId === this.subTaskEpicId()) return; // already in this epic
       this.assignEpic(epicId);
       return;
     }
     if (ev.id === EPIC_DETACH_ID) {
+      if (this.mutationsBlocked()) return;
       this.assignEpic(null);
       return;
     }
@@ -554,6 +557,7 @@ export class TaskCardComponent implements OnInit, OnDestroy {
 
   /** Way 2: attach (epicId) or detach (null) this task, then refresh the board. */
   private assignEpic(epicId: string | null): void {
+    if (this.mutationsBlocked()) return;
     const job = this.job();
     this.jobs.setJobEpic(job.id, epicId, job.watchPath).subscribe({
       next: () => {

@@ -30,7 +30,14 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = builder.Configuration.GetValue<long>("Security:MaxRequestBodyBytes", 25 * 1024 * 1024);
+    // A public-demo visitor never has a legitimate reason to send a large
+    // body - every mutation is denied at the edge before it would be read.
+    // The tighter default only bounds the cost of an oversized request
+    // reaching Kestrel in the first place; it is not the mutation boundary.
+    var publicDemoBodyCap = SecurityProfiles.IsPublicDemo(builder.Configuration);
+    options.Limits.MaxRequestBodySize = builder.Configuration.GetValue<long>(
+        publicDemoBodyCap ? "Security:PublicDemoMaxRequestBodyBytes" : "Security:MaxRequestBodyBytes",
+        publicDemoBodyCap ? 16 * 1024 : 25 * 1024 * 1024);
     options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(15);
 });
 
@@ -94,6 +101,7 @@ var publicDemoExecutionProfile = string.Equals(
     SecurityProfiles.PublicDemo,
     StringComparison.OrdinalIgnoreCase);
 builder.Services.AddSingleton(new StartupExecutionAdmission(startupSecurityProfile));
+builder.Services.AddSingleton<PublicDemoViewerSessionStore>();
 
 // Rolling backend file logger + crash marker (see Services/Diagnostics).
 // Built before WebApplication so the process-wide crash handlers below
@@ -798,6 +806,43 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(
         new System.Text.Json.Serialization.JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
 });
+// Public-demo request-rate ceiling (W34 §6 "Minimum mutation surface" /
+// "Transport and browser boundary"). The global limiter itself is always
+// registered so UseRateLimiter has one policy to run; the partition function
+// below is the only branch on profile, and it hands back an unlimited
+// partition for local/networked so this is a no-op there.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (rejected, token) =>
+    {
+        rejected.HttpContext.Response.ContentType = "application/json";
+        rejected.HttpContext.Response.Headers.CacheControl = "no-store";
+        await rejected.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = "public-demo-rate-limited",
+            message = "Too many requests. Slow down and try again shortly.",
+        }, token);
+    };
+
+    var publicDemoRateLimited = SecurityProfiles.IsPublicDemo(builder.Configuration);
+    var permitLimit = builder.Configuration.GetValue("Security:PublicDemoEdge:RateLimit:PermitLimit", 120);
+    var windowSeconds = builder.Configuration.GetValue("Security:PublicDemoEdge:RateLimit:WindowSeconds", 60);
+    options.GlobalLimiter = System.Threading.RateLimiting.PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        if (!publicDemoRateLimited)
+            return System.Threading.RateLimiting.RateLimitPartition.GetNoLimiter("unrestricted");
+        var partitionKey = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey,
+            _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = permitLimit,
+                Window = TimeSpan.FromSeconds(windowSeconds),
+                QueueLimit = 0,
+            });
+    });
+});
 builder.Services.AddSignalR();
 // Bridges TaskChangeNotifier + TaskTransitionService move events onto TaskHub
 // (jobCreated / jobUpdated / jobMoved / jobDeleted / jobsReordered /
@@ -819,13 +864,20 @@ if (SecurityProfiles.IsLocal(builder.Configuration))
 
 var app = builder.Build();
 var networkedSecurityProfile = SecurityProfiles.IsNetworked(app.Configuration);
+var projectScopedSignalRProfile = networkedSecurityProfile || publicDemoExecutionProfile;
 var includeExceptionDetails = SecurityProfiles.IsLocal(app.Configuration)
     && app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
 
 app.UseForwardedHeaders();
 app.UseRouting();
+if (networkedSecurityProfile || publicDemoExecutionProfile) app.UseHsts();
+app.UseRateLimiter();
 app.UsePublicDemoExecutionLock();
-if (networkedSecurityProfile) app.UseHsts();
+// Runs after the execution lock: a route S2 already denies by identity keeps
+// its specific execution-disabled code, and this is the broader net behind
+// it (blanket unsafe-method + explicit read-allowlist denial, TLS, headers,
+// viewer session). See PublicDemoEdgeMiddleware.
+app.UsePublicDemoReadOnlyEdge();
 
 app.UseExceptionHandler(exceptionApp =>
 {
@@ -1118,11 +1170,11 @@ try
         try { cache.OnAppended(workspace, msg); } catch (Exception ex) { SilentCatch.Note(ex, "BusAggregationCache.OnAppended"); }
         try
         {
-            var recipients = !networkedSecurityProfile
-                ? pushHub.Clients.All
-                : !string.IsNullOrWhiteSpace(msg.Project)
+            var recipients = projectScopedSignalRProfile
+                ? !string.IsNullOrWhiteSpace(msg.Project)
                     ? pushHub.Clients.Group(TaskHub.ProjectGroup(msg.Project, app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>()))
-                    : pushHub.Clients.Group(TaskHub.UnscopedSecurityGroup);
+                    : pushHub.Clients.Group(TaskHub.UnscopedSecurityGroup)
+                : pushHub.Clients.All;
             _ = recipients.SendAsync("busMessageAdded", msg);
         }
         catch (Exception ex) { SilentCatch.Note(ex, "busMessageAdded SignalR push"); }
@@ -1170,12 +1222,12 @@ var hubContext = app.Services.GetRequiredService<IHubContext<TaskHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
 var eventProjects = app.Services.GetRequiredService<AgentStudio.Registry.ProjectRegistry>();
 IClientProxy ProjectEventClients(string projectName)
-    => networkedSecurityProfile
+    => projectScopedSignalRProfile
         ? hubContext.Clients.Group(TaskHub.ProjectGroup(projectName, eventProjects))
         : hubContext.Clients.All;
 IClientProxy TaskEventClients(string jobId)
 {
-    if (!networkedSecurityProfile) return hubContext.Clients.All;
+    if (!projectScopedSignalRProfile) return hubContext.Clients.All;
     var task = app.Services.GetRequiredService<TaskScannerService>().FindJob(jobId);
     return task is null
         ? hubContext.Clients.Group("project:unresolved")

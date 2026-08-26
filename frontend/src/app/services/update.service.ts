@@ -2,6 +2,7 @@ import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { RollbackRequest, RollbackResponse, TriggerRequest, TriggerResponse, UpdateHistoryEntry, UpdateStatus } from '../models/update-service.model';
+import { PublicDemoModeService } from './public-demo-mode.service';
 
 /**
  * Talks to the standalone UpdateService (default port 5039). The endpoint
@@ -18,6 +19,7 @@ import { RollbackRequest, RollbackResponse, TriggerRequest, TriggerResponse, Upd
 @Injectable({ providedIn: 'root' })
 export class UpdateClientService {
   private readonly http = inject(HttpClient);
+  private readonly publicDemo = inject(PublicDemoModeService);
 
   /** Resolves the base URL for the UpdateService (host of the FE, port 5039). */
   private readonly baseUrl = (() => {
@@ -49,7 +51,7 @@ export class UpdateClientService {
    * blocked at the call site (job create / move / mode change) so the
    * banner and the actual behaviour stay aligned.
    */
-  readonly mutationsBlocked = computed(() => this.isRunning());
+  readonly mutationsBlocked = computed(() => this.isRunning() || this.publicDemo.readOnly());
 
   /** Whether the Update Center drawer is currently open. */
   readonly centerOpen = signal(false);
