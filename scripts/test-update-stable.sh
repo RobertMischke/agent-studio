@@ -15,13 +15,18 @@ devspace=$test_root/devspace
 fake_bin=$test_root/bin
 stop_marker=$test_root/stop-ran
 start_marker=$test_root/start-ran
+task_server_start_marker=$test_root/task-server-start-ran
+task_server_deploy_marker=$test_root/task-server-deploy-ran
+task_server_acceptance_marker=$test_root/task-server-acceptance-ran
+task_server_probe=$test_root/task-server-probe.mjs
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
 git -C "$source_checkout" config user.name 'Stable Update Test'
 git -C "$source_checkout" config user.email 'stable-update@example.invalid'
-mkdir -p "$source_checkout/frontend/scripts"
+mkdir -p "$source_checkout/frontend/scripts" "$source_checkout/backend"
 printf '%s\n' '/frontend/node_modules/' '/frontend/.angular/' > "$source_checkout/.gitignore"
+printf '%s\n' 'appsettings.Local.json' > "$source_checkout/backend/.gitignore"
 printf '%s\n' '{"name":"fixture","private":true}' > "$source_checkout/frontend/package.json"
 printf '%s\n' '{"lockfileVersion":3}' > "$source_checkout/frontend/package-lock.json"
 printf '%s\n' '// initial compatibility patch' > "$source_checkout/frontend/scripts/patch-coding-agent-chat-technical-blocks.mjs"
@@ -40,6 +45,7 @@ mkdir -p \
   "$stable_checkout/frontend/node_modules/playwright-core" \
   "$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022" \
   "$stable_checkout/frontend/.angular/cache"
+printf '%s\n' '{"TaskServer":{"BaseUrl":"http://127.0.0.1:5071"}}' > "$stable_checkout/backend/appsettings.Local.json"
 printf '%s\n' stale-prebundle > "$stable_checkout/frontend/.angular/cache/deps.js"
 printf '%s\n' unpatched > "$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs"
 
@@ -86,12 +92,42 @@ cat > "$devspace/start-stable.sh" <<'EOF'
 set -eu
 : > "$ATP_TEST_START_MARKER"
 EOF
+cat > "$devspace/start-task-server.sh" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+: > "$ATP_TEST_TASK_SERVER_START_MARKER"
+EOF
+cat > "$devspace/deploy-task-server.sh" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+test -d "$1"
+test -n "$2"
+: > "$ATP_TEST_TASK_SERVER_DEPLOY_MARKER"
+EOF
+cat > "$devspace/verify-task-server-cutover.sh" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+test -d "$1"
+test -n "$2"
+test "$3" = 'http://127.0.0.1:5071'
+test "$4" = 'http://127.0.0.1:5031'
+if [ "${ATP_TEST_ACCEPTANCE_FAIL:-}" = 1 ]; then
+  exit 42
+fi
+: > "$ATP_TEST_TASK_SERVER_ACCEPTANCE_MARKER"
+EOF
+cat > "$task_server_probe" <<'EOF'
+import { appendFileSync } from 'node:fs';
+appendFileSync(process.env.ATP_TEST_TASK_SERVER_PROBE_MARKER, `${process.argv.slice(2).join(' ')}\n`);
+EOF
 cat > "$fake_bin/npm" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 printf '%s\n' patched > "$ATP_TEST_PACKAGE_FILE"
 EOF
-chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$fake_bin/npm"
+chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" \
+  "$devspace/start-task-server.sh" "$devspace/deploy-task-server.sh" \
+  "$devspace/verify-task-server-cutover.sh" "$fake_bin/npm"
 
 run_update() {
   env \
@@ -99,10 +135,18 @@ run_update() {
     ATP_STABLE_CHECKOUT="$stable_checkout" \
     ATP_STOP_SCRIPT="$devspace/stop-stable.sh" \
     ATP_START_SCRIPT="$devspace/start-stable.sh" \
+    ATP_TASK_SERVER_START_SCRIPT="$devspace/start-task-server.sh" \
+    ATP_TASK_SERVER_DEPLOY_SCRIPT="$devspace/deploy-task-server.sh" \
+    ATP_TASK_SERVER_PROBE_SCRIPT="$task_server_probe" \
     ATP_BOOT_PROBE_SCRIPT="$probe" \
     ATP_BOOT_PROBE_SETTLE_MS=0 \
     ATP_TEST_STOP_MARKER="$stop_marker" \
     ATP_TEST_START_MARKER="$start_marker" \
+    ATP_TEST_TASK_SERVER_START_MARKER="$task_server_start_marker" \
+    ATP_TEST_TASK_SERVER_DEPLOY_MARKER="$task_server_deploy_marker" \
+    ATP_TEST_TASK_SERVER_ACCEPTANCE_MARKER="$task_server_acceptance_marker" \
+    ATP_TEST_ACCEPTANCE_FAIL="${ATP_TEST_ACCEPTANCE_FAIL:-}" \
+    ATP_TEST_TASK_SERVER_PROBE_MARKER="$test_root/task-server-probes.log" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
     ATP_TEST_STALE_CACHE="$stable_checkout/frontend/.angular/cache/deps.js" \
     PATH="$fake_bin:$PATH" \
@@ -118,17 +162,24 @@ git -C "$source_checkout" push --quiet origin main
 output=$(run_update)
 test -f "$stop_marker"
 test -f "$start_marker"
+test -f "$task_server_start_marker"
+test -f "$task_server_deploy_marker"
+test -f "$task_server_acceptance_marker"
 test ! -e "$stable_checkout/frontend/.angular/cache"
 grep -q '^patched$' "$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs"
 printf '%s' "$output" | grep -q 'Invalidated the Angular/Vite optimizer cache'
 printf '%s' "$output" | grep -q 'Boot completed without page errors'
-printf '%s' "$output" | grep -q 'Stable started and healthy'
+printf '%s' "$output" | grep -q 'Stable and Task Server started and healthy'
+grep -q -- '--config-only' "$test_root/task-server-probes.log"
+grep -q -- '--direct-only' "$test_root/task-server-probes.log"
+test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
 
 # A separate release injects an application boot crash. An open port and a
 # successful document response must not allow the updater to claim health.
 printf '%s\n' 'release with injected crash' > "$source_checkout/release.txt"
 git -C "$source_checkout" commit --quiet -am 'release with boot crash'
 git -C "$source_checkout" push --quiet origin main
+git -C "$stable_checkout" checkout --quiet --detach
 
 set +e
 crash_output=$(ATP_TEST_PAGEERROR='injected boot crash' run_update)
@@ -142,5 +193,31 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
+if git -C "$stable_checkout" symbolic-ref --quiet --short HEAD >/dev/null; then
+  printf '%s\n' 'failed cutover unexpectedly unpinned Stable before verification' >&2
+  exit 1
+fi
+
+# The failed cutover remains held at the target SHA. The no-op verification
+# path must remain detached when the functional acceptance gate fails.
+rm -f -- "$task_server_start_marker"
+rm -f -- "$task_server_acceptance_marker"
+set +e
+acceptance_output=$(ATP_TEST_ACCEPTANCE_FAIL=1 run_update)
+acceptance_rc=$?
+set -e
+test "$acceptance_rc" -ne 0
+test ! -f "$task_server_acceptance_marker"
+if git -C "$stable_checkout" symbolic-ref --quiet --short HEAD >/dev/null; then
+  printf '%s\n' 'failed acceptance unexpectedly unpinned Stable' >&2
+  exit 1
+fi
+
+# Once the complete gate passes, the recovery path may attach main.
+noop_output=$(run_update)
+test -f "$task_server_start_marker"
+test -f "$task_server_acceptance_marker"
+printf '%s' "$noop_output" | grep -q 'rerunning the complete cutover verification'
+test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
 
 printf '%s\n' 'update-stable tests passed'

@@ -50,4 +50,44 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("task-server backup --name timer", timerService);
         Assert.Contains("EnvironmentFile=/etc/agent-orchestrator/server.env", timerService);
     }
+
+    [Fact]
+    public void Windows_package_is_self_contained_and_runs_under_a_supervised_s4u_task()
+    {
+        var root = ProtocolTests.RepositoryRoot();
+        var profile = File.ReadAllText(Path.Combine(
+            root,
+            "task-server",
+            "Properties",
+            "PublishProfiles",
+            "win-x64.pubxml"));
+        Assert.Contains("<RuntimeIdentifier>win-x64</RuntimeIdentifier>", profile);
+        Assert.Contains("<SelfContained>true</SelfContained>", profile);
+        Assert.Contains("<PublishSingleFile>true</PublishSingleFile>", profile);
+
+        var registration = File.ReadAllText(Path.Combine(
+            root,
+            "deploy",
+            "windows",
+            "task-server",
+            "register-task-server.ps1"));
+        Assert.Contains("New-ScheduledTaskTrigger -AtStartup", registration);
+        Assert.Contains("-LogonType S4U", registration);
+        Assert.Contains("-RestartCount 3", registration);
+        Assert.DoesNotContain("-LogonType Interactive", registration, StringComparison.OrdinalIgnoreCase);
+
+        var installer = File.ReadAllText(Path.Combine(
+            root,
+            "deploy",
+            "windows",
+            "task-server",
+            "install-task-server-release.ps1"));
+        Assert.Contains("LISTEN_URL = $ListenUrl", installer);
+        Assert.Contains("STORE_PATH = $DataDirectory", installer);
+        Assert.Contains("sourceHead.Equals($ReleaseSha", installer);
+        Assert.Contains("Copy-Item -LiteralPath $supervisorScript", installer);
+        Assert.Contains("-StartScriptPath (Join-Path $current 'start-task-server.ps1')", installer);
+        Assert.Contains("TaskServer", installer);
+        Assert.Contains("BaseUrl", installer);
+    }
 }
