@@ -40,6 +40,8 @@ public record QuotaSnapshot
 {
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
+    /// <summary>Exact CLI version reported by the executable used for this probe.</summary>
+    public string? CliVersion { get; init; }
     /// <summary>"Pro" / "Pro+" / "Plus" / "Free" — null when unknown.</summary>
     public string? Plan { get; init; }
     public List<QuotaWindow> Windows { get; init; } = [];
@@ -49,6 +51,12 @@ public record QuotaSnapshot
     public string? RawSample { get; init; }
     /// <summary>Set when probing failed; <see cref="Plan"/>/<see cref="Windows"/> may still hold partial data.</summary>
     public string? Error { get; init; }
+
+    /// <summary>
+    /// UTC time of the latest failed probe. When this is set alongside quota
+    /// windows, those windows are the last-good values retained by the cache.
+    /// </summary>
+    public DateTime? ProbeFailedAt { get; init; }
 
     /// <summary>
     /// True when this snapshot is not yet trusted: either a single probe showed

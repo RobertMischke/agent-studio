@@ -24,6 +24,8 @@ export interface CliUsageQuotaRow {
   label: string;
   plan: string | null;
   fetchedAt: string | null;
+  cliVersion?: string | null;
+  probeFailedAt?: string | null;
   freshness: string;
   stale: boolean;
   source: string | null;
@@ -255,8 +257,11 @@ export class CliUsageStore {
   private buildRow(s: QuotaSnapshot, ttlMs: number, now: number): CliUsageQuotaRow {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
-    const freshness = !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
+    const probeFailedAt = s.probeFailedAt ?? null;
+    const stale = !!probeFailedAt || !s.fetchedAt || ageMs > ttlMs;
+    const freshness = probeFailedAt
+      ? this.probeFailureLabel(s.cliType, probeFailedAt, s.cliVersion ?? null)
+      : !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
     const primary = s.windows.length > 0
       ? [...s.windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1))[0]
       : null;
@@ -267,6 +272,8 @@ export class CliUsageStore {
       label: this.cliLabel(s.cliType),
       plan: s.plan,
       fetchedAt: s.fetchedAt,
+      cliVersion: s.cliVersion ?? null,
+      probeFailedAt,
       stale,
       freshness,
       source: s.source,
@@ -305,5 +312,14 @@ export class CliUsageStore {
     if (hr < 24) return `${hr} h ago`;
     const d = Math.floor(hr / 24);
     return `${d} d ago`;
+  }
+
+  private probeFailureLabel(cliType: string, failedAt: string, version: string | null): string {
+    const parsed = Date.parse(failedAt);
+    const time = Number.isFinite(parsed)
+      ? new Date(parsed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      : 'unknown time';
+    const normalizedVersion = (version ?? 'version unknown').replace(/^codex-cli\s+/i, '');
+    return `probe failed ${time}, ${cliType} ${normalizedVersion}`;
   }
 }

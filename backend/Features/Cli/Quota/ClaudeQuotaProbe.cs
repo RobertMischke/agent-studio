@@ -93,8 +93,10 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
 
     public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
     {
+        string? cliVersion = null;
         try
         {
+            cliVersion = ReadCliVersion();
             var trustPattern  = new Regex(@"trust\s*this\s*folder|Quick\s*safety\s*check", RegexOptions.IgnoreCase);
             var themePattern  = new Regex(@"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|match\s*terminal", RegexOptions.IgnoreCase);
             var upsellPattern = new Regex(@"fullscreen\s*renderer|Flicker-?free|Try\s*the\s*new|What'?s\s*new|Not\s*now|Esc\s*to\s*cancel", RegexOptions.IgnoreCase);
@@ -121,7 +123,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             //    snapshot we scrape). Two passes because the CLI can stack more than one.
             //  - send-usage is NOT guarded: if the ready-affordance text shifts in a future
             //    release we still fire /usage after the wait rather than hang forever.
-            var snap = await ProbeWithStepsAsync(
+            var capture = await ProbeWithStepsAsync(
             [
                 new ProbeStep("await-trust",      WaitForPattern: trustPattern,  WaitTimeoutMs: 4000, SendKeys: "1<Enter>",      SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
                 new ProbeStep("dismiss-theme",    WaitForPattern: themePattern,  WaitTimeoutMs: 3500, SendKeys: "<Enter>",       SettleIdleMs: 1000, SettleTimeoutMs: 5000, SendKeysOnlyIfMatched: true),
@@ -132,6 +134,8 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             ],
             initialIdleMs: 8000,
             ct);
+            var snap = capture.Snapshot;
+            cliVersion = capture.CliVersion;
 
             string? plan = PlanRegex.Match(snap) is { Success: true } pm
                 ? NormalizePlan(pm.Groups[1].Value)
@@ -186,6 +190,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = cliVersion,
                 Plan      = plan,
                 Source    = "/usage",
                 RawSample = TruncateForDebug(snap),
@@ -200,7 +205,14 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Claude quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/usage", Error = ex.Message };
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = cliVersion,
+                Source = "/usage",
+                Error = DescribeProbeException(ex),
+                ProbeFailedAt = DateTime.UtcNow
+            };
         }
     }
 

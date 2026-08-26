@@ -5,6 +5,38 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    public static TheoryData<string> VersionedStatusFixtures => new()
+    {
+        "codex-status-v0.144.1.txt",
+        "codex-status-v0.149.0.txt"
+    };
+
+    [Theory]
+    [MemberData(nameof(VersionedStatusFixtures))]
+    public void ParseStatusWindows_ReadsCapturedCliVersionFixture(string fixtureName)
+    {
+        var snapshot = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "quota", "codex", fixtureName));
+
+        Assert.True(CodexQuotaProbe.LooksLikeStatusPanel(snapshot));
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+
+        Assert.DoesNotContain(windows, window => window.Label == "5-hour");
+        Assert.Contains(windows, window =>
+            window.Label == "Weekly"
+            && window.UsedPct == 37
+            && window.ResetLabel == "17:12 on 1 Sep");
+        Assert.Contains(windows, window =>
+            window.Label == "Spark 5-hour"
+            && window.UsedPct == 0
+            && window.ResetLabel == "00:59 on 27 Aug");
+        Assert.Contains(windows, window =>
+            window.Label == "Spark Weekly"
+            && window.UsedPct == 0
+            && window.ResetLabel == "19:59 on 2 Sep");
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {

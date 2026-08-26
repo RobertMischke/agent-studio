@@ -21,6 +21,7 @@ public sealed class QuotaService
     private readonly ConcurrentDictionary<string, QuotaSnapshot> _cache = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
     private readonly TimeSpan _ttl;
+    private readonly TimeSpan _probeTimeout;
     private readonly QuotaCacheStore _store;
 
     public QuotaService(
@@ -33,6 +34,8 @@ public sealed class QuotaService
         _probes = probes.ToDictionary(p => p.CliType, StringComparer.OrdinalIgnoreCase);
         var ttlSec = int.TryParse(configuration["Quota:TtlSeconds"], out var t) ? t : 600;
         _ttl = TimeSpan.FromSeconds(ttlSec);
+        var timeoutSec = int.TryParse(configuration["Quota:ProbeTimeoutSeconds"], out var p) ? p : 20;
+        _probeTimeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSec, 5, 45));
         _store = store;
 
         // Hydrate the in-memory cache from disk on startup so the
@@ -84,14 +87,34 @@ public sealed class QuotaService
     /// Returns the cached snapshot for every probe immediately, kicking off a background
     /// re-probe for any entry that is missing or older than the TTL.
     /// </summary>
-    public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
+    public QuotaReport GetWithBackgroundRefresh()
     {
         foreach (var k in _probes.Keys)
         {
             var stale = !_cache.TryGetValue(k, out var s) || (DateTime.UtcNow - s.FetchedAt) > _ttl;
-            if (stale) _ = RefreshAsync(k, ct);
+            // This work deliberately outlives the HTTP request. A disconnected
+            // GET client must never cancel the shared cache refresh.
+            if (stale) QueueBackgroundRefresh(k);
         }
         return GetCached();
+    }
+
+    private void QueueBackgroundRefresh(string cliType)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshAsync(cliType, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                // RefreshAsync already converts expected probe failures into a
+                // stale snapshot. This protects the fire-and-forget boundary
+                // from any unexpected exception escaping unobserved.
+                _logger.LogWarning(ex, "Background quota refresh for {Cli} failed", cliType);
+            }
+        });
     }
 
     /// <summary>Force a re-probe of every CLI and await all of them.</summary>
@@ -114,7 +137,14 @@ public sealed class QuotaService
         try
         {
             _cache.TryGetValue(cliType, out var previous);
-            var snap = await ProbeOnceAsync(probe, ct);
+            var snap = await ProbeOnceAsync(probe, _probeTimeout, ct);
+            snap = RetainLastGoodOnFailure(previous, snap, DateTime.UtcNow);
+            if (snap.Error != null)
+            {
+                _cache[cliType] = snap;
+                PersistCache();
+                return snap;
+            }
             snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
             snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
             _cache[cliType] = snap;
@@ -128,13 +158,15 @@ public sealed class QuotaService
             // fails right after a ground-truth invalidation (AGT-2064) must not
             // silently drop the block and re-open the admission gate.
             _cache.TryGetValue(cliType, out var prior);
-            var snap = new QuotaSnapshot
+            var failed = new QuotaSnapshot
             {
                 CliType = cliType,
-                Error = ex.Message,
+                Error = FriendlyProbeError(ex),
+                ProbeFailedAt = DateTime.UtcNow,
                 Suspicious = prior?.Suspicious ?? false,
                 SuspiciousReason = prior?.Suspicious == true ? prior.SuspiciousReason : null
             };
+            var snap = RetainLastGoodOnFailure(prior, failed, failed.ProbeFailedAt.Value);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -142,12 +174,49 @@ public sealed class QuotaService
         finally { sem.Release(); }
     }
 
-    private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
+    private static async Task<QuotaSnapshot> ProbeOnceAsync(
+        IQuotaProbe probe, TimeSpan timeout, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(45));
+        cts.CancelAfter(timeout);
         return await probe.ProbeAsync(cts.Token);
     }
+
+    internal static QuotaSnapshot RetainLastGoodOnFailure(
+        QuotaSnapshot? previous, QuotaSnapshot candidate, DateTime failedAt)
+    {
+        if (string.IsNullOrWhiteSpace(candidate.Error)) return candidate;
+
+        var error = FriendlyProbeError(candidate.Error);
+        var hasLastGood = previous != null
+            && (previous.Windows.Count > 0 || !string.IsNullOrWhiteSpace(previous.Plan));
+        if (!hasLastGood)
+        {
+            return candidate with
+            {
+                Error = error,
+                ProbeFailedAt = candidate.ProbeFailedAt ?? failedAt
+            };
+        }
+
+        return previous! with
+        {
+            CliVersion = candidate.CliVersion ?? previous.CliVersion,
+            Error = error,
+            ProbeFailedAt = candidate.ProbeFailedAt ?? failedAt
+        };
+    }
+
+    internal static string FriendlyProbeError(Exception exception)
+        => exception is OperationCanceledException
+            ? "Quota probe timed out before the CLI status panel became ready."
+            : FriendlyProbeError(exception.Message);
+
+    internal static string FriendlyProbeError(string error)
+        => error.Contains("task was canceled", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("operation was canceled", StringComparison.OrdinalIgnoreCase)
+            ? "Quota probe timed out before the CLI status panel became ready."
+            : error;
 
     /// <summary>
     /// AGT-2064 plausibility gate. A single probe that shows a window jumping
@@ -168,7 +237,7 @@ public sealed class QuotaService
             "quota_snapshot_suspicious cli={Cli} reason={Reason}: re-probing to confirm before trusting the drop",
             cliType, suspicion.Reason);
 
-        var confirm = await ProbeOnceAsync(probe, ct);
+        var confirm = await ProbeOnceAsync(probe, _probeTimeout, ct);
         if (QuotaPlausibilityGate.AreConsistent(candidate, confirm))
         {
             _logger.LogInformation(
@@ -205,8 +274,7 @@ public sealed class QuotaService
         {
             CliType = cliType,
             Suspicious = true,
-            SuspiciousReason = reason,
-            FetchedAt = DateTime.UtcNow
+            SuspiciousReason = reason
         };
         PersistCache();
         _logger.LogWarning(

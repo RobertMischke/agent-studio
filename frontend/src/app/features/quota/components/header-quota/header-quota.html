@@ -31,7 +31,10 @@
       </span>
 
       @if (card.stale) {
-        <span class="hquota__stale-dot" aria-label="Stale snapshot">●</span>
+        <span class="hquota__stale-dot"
+              data-testid="hquota-stale"
+              aria-label="Stale snapshot"
+              [attr.title]="card.error ? card.freshness + ': ' + card.error : card.freshness">●</span>
       }
     </button>
   }

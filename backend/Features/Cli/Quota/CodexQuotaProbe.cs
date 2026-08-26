@@ -20,7 +20,9 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed class CodexQuotaProbe : QuotaProbeBase
 {
-    // "5h limit: [bar] NN% left (resets HH:MM[ on D Mon])"
+    // Legacy Codex rendered the reset on the limit row. Codex 0.149.0 renders
+    // it on the following row. \s* and [^()]* intentionally accept both forms.
+    // "5h limit: [bar] NN% left\n(resets HH:MM[ on D Mon])"
     private static readonly Regex FiveHourRegex = new(
         @"5h\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -53,6 +55,13 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         @"5h\s*(?<h5left>\d+)\s*%\s*[·•]\s*weekly\s*(?<wkleft>\d+)\s*%",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Codex 0.149.0 can omit the main 5-hour row and anchors the status panel
+    // with the usage-settings URL. The remaining alternatives cover older
+    // inline panels.
+    private static readonly Regex StatusPanelRegex = new(
+        @"chatgpt\.com/codex/settings/usage|5h\s*limit|Weekly\s*limit|Account:",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public CodexQuotaProbe(
         ILogger<CodexQuotaProbe> logger,
         CliRouter router,
@@ -63,28 +72,33 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
     public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
     {
+        string? cliVersion = null;
         try
         {
+            cliVersion = ReadCliVersion();
             var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
             var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
-            var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
 
-            var snap = await ProbeWithStepsAsync(
+            var capture = await ProbeWithStepsAsync(
             [
                 // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
                 // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
                 // stray "1" in the chat input box, which then prefixes the next slash
                 // command and turns "/status" into a chat message instead of a command.
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
-                // Clear the buffer so the await-welcome match only sees post-trust content.
-                new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
+                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 2500, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300, SendKeysOnlyIfMatched: true),
+                // The welcome screen may already be fully rendered when the optional trust
+                // wait finishes. Keep that buffer so a healthy CLI does not pay another
+                // full timeout before /status is submitted.
+                new ProbeStep("await-welcome", WaitForPattern: welcomePattern, WaitTimeoutMs: 6000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
                 // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
                 // Enter while it's still parsing the slash command.
                 new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
-                new ProbeStep("await-status",  WaitForPattern: statusPattern,  WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
+                new ProbeStep("await-status",  WaitForPattern: StatusPanelRegex, WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
             ],
             initialIdleMs: 8000,
             ct);
+            var snap = capture.Snapshot;
+            cliVersion = capture.CliVersion;
 
             string? plan = PlanRegex.Match(snap) is { Success: true } pm
                 ? pm.Groups["plan"].Value.Trim()
@@ -106,6 +120,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = cliVersion,
                 Plan      = plan,
                 Source    = "/status",
                 RawSample = TruncateForDebug(snap),
@@ -118,7 +133,14 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Codex quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = cliVersion,
+                Source = "/status",
+                Error = DescribeProbeException(ex),
+                ProbeFailedAt = DateTime.UtcNow
+            };
         }
     }
 
@@ -155,6 +177,9 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
         return windows;
     }
+
+    internal static bool LooksLikeStatusPanel(string snapshot)
+        => StatusPanelRegex.IsMatch(snapshot);
 
     private static void AddLimitWindow(List<QuotaWindow> windows, string snap, Regex regex, string label)
     {

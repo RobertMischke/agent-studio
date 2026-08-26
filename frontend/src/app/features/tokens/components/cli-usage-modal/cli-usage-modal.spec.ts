@@ -65,6 +65,27 @@ describe('CliUsageModalComponent', () => {
     expect(fixture.componentInstance.windows()).toHaveLength(2);
   });
 
+  it('shows last-good values with a stale marker and keeps the probe error in a tooltip', async () => {
+    const staleRow: CliUsageQuotaRow = {
+      ...row,
+      cliType: 'codex',
+      label: 'Codex',
+      cliVersion: 'codex-cli 0.149.0',
+      probeFailedAt: '2026-08-23T21:07:00Z',
+      freshness: 'probe failed 21:07, codex 0.149.0',
+      stale: true,
+      error: 'Quota probe timed out before the CLI status panel became ready.',
+    };
+
+    await build(staleRow, 'codex');
+    const marker = document.querySelector('[data-testid="cli-usage-stale"]') as HTMLElement;
+
+    expect(marker.textContent).toContain('Last-good values');
+    expect(marker.textContent).toContain('probe failed 21:07, codex 0.149.0');
+    expect(marker.title).toContain('Quota probe timed out');
+    expect(document.body.textContent).not.toContain('A task was canceled');
+  });
+
   it('falls back to the CLI label and "no data" when no row is given', async () => {
     const fixture = await build(null);
     const c = fixture.componentInstance;

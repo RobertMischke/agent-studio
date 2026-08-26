@@ -171,10 +171,13 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
-    const freshness = !s.fetchedAt
+    const staleLabel = s.probeFailedAt
+      ? this.probeFailureLabel(s.cliType, s.probeFailedAt, s.cliVersion ?? null)
+      : null;
+    const stale = !!staleLabel || !s.fetchedAt || ageMs > ttlMs;
+    const freshness = staleLabel ?? (!s.fetchedAt
       ? 'never refreshed'
-      : 'updated ' + this.formatAgo(ageMs);
+      : 'updated ' + this.formatAgo(ageMs));
     const label = this.cliLabel(s.cliType);
     const shortWindow = this.buildWindowDisplay(s.windows, 'five_hour');
     const weekWindow = this.buildWindowDisplay(s.windows, 'weekly');
@@ -186,7 +189,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, chips),
+      ariaLabel: this.cardAriaLabel(label, chips, staleLabel),
       chips,
       tone,
       state,
@@ -353,14 +356,15 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     return l.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'window';
   }
 
-  private cardAriaLabel(label: string, chips: QuotaChip[]): string {
+  private cardAriaLabel(label: string, chips: QuotaChip[], staleLabel: string | null): string {
     const real = chips.filter(c => c.windowKey !== 'none');
     if (real.length === 0) return `${label} quota: no data yet`;
     const parts = real.map(c => {
       const name = c.label ?? c.tag;
       return `${name ? name + ' ' : ''}${c.value}${c.value === 'Unknown' ? '' : ' used'}`;
     });
-    return `${label} quota: ${parts.join(', ')}`;
+    const quota = `${label} quota: ${parts.join(', ')}`;
+    return staleLabel ? `${quota}; stale, ${staleLabel}` : quota;
   }
 
   /**
@@ -402,7 +406,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     ww: QuotaWindowDisplay | undefined,
     primary: QuotaPrimaryDisplay,
   ): QuotaCardState {
-    if (hasError) return 'error';
+    if (hasError && !sw && !ww && !primary.hasValue) return 'error';
     if (!sw && !ww && !primary.hasValue) return 'unavailable';
     if (tone === 'hot') return 'hot';
     if (tone === 'warn') return 'warn';
@@ -430,5 +434,14 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     if (hr < 24) return `${hr} h ago`;
     const d = Math.floor(hr / 24);
     return `${d} d ago`;
+  }
+
+  private probeFailureLabel(cliType: string, failedAt: string, version: string | null): string {
+    const parsed = Date.parse(failedAt);
+    const time = Number.isFinite(parsed) ? new Date(parsed).toLocaleTimeString([], {
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }) : 'unknown time';
+    const normalizedVersion = (version ?? 'version unknown').replace(/^codex-cli\s+/i, '');
+    return `probe failed ${time}, ${cliType} ${normalizedVersion}`;
   }
 }

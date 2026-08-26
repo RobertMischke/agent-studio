@@ -74,13 +74,13 @@ public abstract class QuotaProbeBase : IQuotaProbe
     /// optionally waits for a regex pattern to appear, sends keys, then waits for output to settle.
     /// Returns the final ANSI-stripped snapshot.
     /// </summary>
-    protected async Task<string> ProbeWithStepsAsync(
+    protected async Task<ProbeCapture> ProbeWithStepsAsync(
         IEnumerable<ProbeStep> steps,
         int initialIdleMs,
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, cliVersion, resolvedPath) = cli.TestCliPath();
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 
@@ -135,8 +135,26 @@ public abstract class QuotaProbeBase : IQuotaProbe
 
         var snap = pty.SnapshotStripped();
         try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:140"); }
-        return snap;
+        return new ProbeCapture(snap, cliVersion);
     }
+
+    protected sealed record ProbeCapture(string Snapshot, string? CliVersion);
+
+    protected string? ReadCliVersion()
+    {
+        var (_, version, _) = _router.Get(CliType).TestCliPath();
+        return version;
+    }
+
+    /// <summary>
+    /// Cancellation from the service's bounded timeout is an expected probe
+    /// failure mode. Do not leak the runtime's generic "A task was canceled"
+    /// message into the operator UI.
+    /// </summary>
+    protected static string DescribeProbeException(Exception exception)
+        => exception is OperationCanceledException
+            ? "Quota probe timed out before the CLI status panel became ready."
+            : exception.Message;
 
     public sealed record ProbeStep(
         string Name,

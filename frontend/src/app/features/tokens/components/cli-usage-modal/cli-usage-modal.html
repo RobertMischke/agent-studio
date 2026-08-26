@@ -10,7 +10,14 @@
   (backdropClick)="closeRequest.emit()">
 
   <div class="cum" [attr.data-testid]="'cli-usage-modal-body-' + cliType()">
-    @if (row()?.error; as err) {
+    @if (row()?.probeFailedAt) {
+      <div class="cum__stale"
+           data-testid="cli-usage-stale"
+           [attr.title]="row()?.error">
+        <strong>Stale quota data</strong>
+        <span>Last-good values · {{ row()?.freshness }}</span>
+      </div>
+    } @else if (row()?.error; as err) {
       <div class="cum__error" role="alert">{{ err }}</div>
     }
 

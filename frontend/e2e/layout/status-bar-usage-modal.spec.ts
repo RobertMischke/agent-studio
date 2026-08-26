@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { setTheme } from '../helpers/theme';
+import { test, expect } from '../fixtures/dev-backend';
 
 /**
  * The bottom status-bar's quota strip now follows a single model:
@@ -217,5 +217,80 @@ test.describe('Status bar usage modal', () => {
     await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-light.png` });
     await setTheme(page, 'dark');
     await modal.screenshot({ path: `${SCREENSHOT_DIR}/status-bar-cli-modal-codex-corrected-dark.png` });
+  });
+
+  test('a failed Codex probe keeps last-good quota and exposes a stale marker', async ({ page, devBackend }) => {
+    const latencyStarted = performance.now();
+    const liveResponse = await fetch(`${devBackend.baseUrl}/api/cli/quota`);
+    const latencyMs = performance.now() - latencyStarted;
+    expect(liveResponse.status).toBe(200);
+    expect(latencyMs).toBeLessThan(1000);
+    writeFileSync(
+      `${SCREENSHOT_DIR}/quota-endpoint-latency.json`,
+      JSON.stringify({ endpoint: '/api/cli/quota', status: liveResponse.status, latencyMs }, null, 2),
+    );
+
+    let degraded = false;
+    await page.route('**/api/cli/quota**', async route => {
+      if (route.request().method() !== 'GET') return route.continue();
+      const base = {
+        cliType: 'codex',
+        fetchedAt: '2026-08-23T20:55:00Z',
+        cliVersion: 'codex-cli 0.149.0',
+        plan: 'Pro',
+        source: '/status',
+      };
+      await route.fulfill({
+        json: {
+          at: '2026-08-23T21:07:00Z',
+          ttlSeconds: 600,
+          snapshots: degraded
+            ? [{
+                ...base,
+                probeFailedAt: '2026-08-23T21:07:00Z',
+                error: 'Quota probe timed out before the CLI status panel became ready.',
+                windows: [
+                  { label: 'Weekly', usedPct: 37, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '17:12 on 1 Sep' },
+                  { label: 'Spark 5-hour', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '00:59 on 27 Aug' },
+                  { label: 'Spark Weekly', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '19:59 on 2 Sep' },
+                ],
+              }]
+            : [{
+                ...base,
+                error: 'A task was canceled.',
+                windows: [],
+              }],
+        },
+      });
+    });
+
+    // Reviewable reconstruction of the operator's pre-fix wire shape.
+    await page.reload();
+    await page.addStyleTag({ content: '[data-testid="crash-recovery-prompt-overlay"] { display: none !important; }' });
+    await page.getByTestId('hquota-card-codex').click();
+    const before = page.getByTestId('cli-usage-modal-codex');
+    await expect(before.getByText('A task was canceled.')).toBeVisible();
+    await before.screenshot({ path: `${SCREENSHOT_DIR}/quota-probe-before--mocked.png` });
+
+    // Post-fix payload: last-good values plus explicit probe failure metadata.
+    degraded = true;
+    await page.keyboard.press('Escape');
+    await page.reload();
+    await page.addStyleTag({ content: '[data-testid="crash-recovery-prompt-overlay"] { display: none !important; }' });
+    const card = page.getByTestId('hquota-card-codex');
+    await expect(card.getByTestId('hquota-stale')).toBeVisible();
+    await card.click();
+
+    const after = page.getByTestId('cli-usage-modal-codex');
+    const stale = after.getByTestId('cli-usage-stale');
+    await expect(stale).toContainText(/probe failed \d{2}:\d{2}, codex 0\.149\.0/);
+    await expect(after.getByText('37% used')).toBeVisible();
+    await expect(after.getByText('A task was canceled.')).toHaveCount(0);
+    await expect(stale).toHaveAttribute('title', /Quota probe timed out/);
+
+    await setTheme(page, 'light');
+    await after.screenshot({ path: `${SCREENSHOT_DIR}/quota-probe-after-light--mocked.png` });
+    await setTheme(page, 'dark');
+    await after.screenshot({ path: `${SCREENSHOT_DIR}/quota-probe-after-dark--mocked.png` });
   });
 });
