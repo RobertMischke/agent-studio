@@ -131,8 +131,9 @@ host-owned Stable configuration, and registers the Scheduled Task:
 
 Keep `DataDirectory` outside every versioned installation. `-WhatIf` previews
 the host mutations. The helper refuses to replace a non-junction `current`
-directory, rejects a data directory below the installation root, and refuses
-to reuse a release directory whose binary does not report the requested SHA.
+directory and rejects a data directory below the installation root. It refuses
+to publish a dirty or mismatched source checkout and rejects a newly published
+or existing release binary that does not report the requested SHA.
 It reconciles `LISTEN_URL`, `STORE_PATH`, and `BACKUP_PATH` in an existing
 `server.env` while preserving its authentication settings. The versioned
 package includes the detached supervisor script, so the registered Scheduled
@@ -430,8 +431,8 @@ as a release hold until all of these steps have durable evidence:
    `ATP_TASK_SERVER_START_SCRIPT` at them when their paths differ from the
    devspace defaults. The versioned updater stops Stable, installs and starts
    Task Server, proves direct readiness, starts the API, then proves the proxy
-   and browser boot. A detached held checkout is attached to `main` only after
-   the target has passed the fast-forward preflight.
+   and browser boot. A detached held checkout stays detached at the candidate
+   through those probes and is attached to `main` only after all of them pass.
 5. Exercise one fenced coding claim through completion, one immutable review
    claim through report and cleanup, result-finalization and report artifact
    submission, and the board projection for the same task. Save request IDs,

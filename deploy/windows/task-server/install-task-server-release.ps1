@@ -33,6 +33,15 @@ if ($normalizedDataDirectory.Equals(
 if (-not (Test-Path -LiteralPath $project)) { throw "Task Server project not found: $project" }
 if (-not (Test-Path -LiteralPath $registerScript)) { throw "Registration script not found: $registerScript" }
 if (-not (Test-Path -LiteralPath $supervisorScript)) { throw "Supervisor script not found: $supervisorScript" }
+$sourceHead = (& git -C $source rev-parse HEAD).Trim().ToLowerInvariant()
+if ($LASTEXITCODE -ne 0 -or $sourceHead -ne $ReleaseSha.ToLowerInvariant()) {
+    throw "Source checkout HEAD '$sourceHead' does not match requested release SHA '$ReleaseSha'."
+}
+$sourceChanges = @(& git -C $source status --porcelain)
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect source checkout status: $source" }
+if ($sourceChanges.Count -gt 0) {
+    throw "Source checkout has local changes; refusing to publish untracked release bytes: $source"
+}
 if ([string]::IsNullOrWhiteSpace($StableConfigurationPath)) {
     $StableConfigurationPath = Join-Path $source 'backend\appsettings.Local.json'
 }
@@ -50,6 +59,10 @@ if ($PSCmdlet.ShouldProcess($releaseDirectory, 'Publish and install the Task Ser
     if ($LASTEXITCODE -ne 0) { throw "Task Server publish failed with exit code $LASTEXITCODE." }
     $executable = Join-Path $staging 'task-server.exe'
     if (-not (Test-Path -LiteralPath $executable)) { throw "Published Task Server executable is missing: $executable" }
+    $publishedVersion = & $executable '--version'
+    if ($LASTEXITCODE -ne 0 -or $publishedVersion -notmatch [regex]::Escape($ReleaseSha)) {
+        throw "Published Task Server binary does not report the requested SHA '$ReleaseSha'."
+    }
     Copy-Item -LiteralPath $supervisorScript -Destination (Join-Path $staging 'start-task-server.ps1')
 
     if (-not (Test-Path -LiteralPath $releaseDirectory)) {

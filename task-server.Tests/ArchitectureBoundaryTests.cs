@@ -86,6 +86,9 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("STORE_PATH = $DataDirectory", installer);
         Assert.Contains("Copy-Item -LiteralPath $supervisorScript", installer);
         Assert.Contains("-StartScriptPath (Join-Path $current 'start-task-server.ps1')", installer);
+        Assert.Contains("git -C $source rev-parse HEAD", installer);
+        Assert.Contains("git -C $source status --porcelain", installer);
+        Assert.Contains("$publishedVersion = & $executable '--version'", installer);
         Assert.Contains("TaskServer", installer);
         Assert.Contains("BaseUrl", installer);
     }

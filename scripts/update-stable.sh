@@ -119,9 +119,11 @@ log "Stopping Stable"
 
 log "Fast-forwarding Stable to $target"
 stable_head_branch=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
+attach_after_verification=0
 if [ -z "$stable_head_branch" ]; then
-  git -C "$stable_checkout" checkout --quiet -B "$stable_branch" "$target"
-  log "Attached the previously pinned Stable checkout to $stable_branch"
+  git -C "$stable_checkout" checkout --quiet --detach "$target"
+  attach_after_verification=1
+  log "Advanced the pinned Stable checkout to the candidate while keeping it detached"
 elif [ "$stable_head_branch" = "$stable_branch" ]; then
   git -C "$stable_checkout" merge --quiet --ff-only "$target"
 else
@@ -175,5 +177,10 @@ node "$task_server_probe_script" \
   --config "$task_server_config" \
   --task-server-url "$task_server_url" \
   --backend-url "$backend_url"
+
+if [ "$attach_after_verification" -eq 1 ]; then
+  git -C "$stable_checkout" checkout --quiet -B "$stable_branch" "$target"
+  log "Attached the verified Stable checkout to $stable_branch"
+fi
 
 log "Stable and Task Server started and healthy at $target"

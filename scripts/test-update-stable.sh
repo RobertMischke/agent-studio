@@ -176,7 +176,10 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
-test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
+if git -C "$stable_checkout" symbolic-ref --quiet --short HEAD >/dev/null; then
+  printf '%s\n' 'failed rollout unpinned the held Stable checkout before verification' >&2
+  exit 1
+fi
 
 # A held checkout can already point at the target SHA while still detached.
 # The no-op verification path must supervise Task Server and attach main.
