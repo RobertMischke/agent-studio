@@ -241,10 +241,11 @@ These are Phase B work, not assumptions that operations can work around:
    only the versioned subset. Phase B must classify every Studio route as
    Task Server, local dev-seat helper, or retired, and prove all task,
    orchestration, host, file, event, and management paths remotely.
-2. **Current workspace migration.** `LegacyMigrationService` currently scans
-   `job.json`, while the active backend writes `task.json`. A production
-   inventory could therefore report a false zero. The migrator must consume the
-   current layout and add per-project and per-state counts before it is trusted.
+2. **Current workspace inventory acceptance.** `LegacyMigrationService` now
+   consumes canonical `task.json` files, prefers their stable `key`, and retains
+   `job.json` as a compatibility fallback. A production remote move still needs
+   per-project and per-state counts before its inventory can be accepted at the
+   larger Phase B boundary.
 3. **Scoped credentials.** The packaged install defaults to one shared bearer.
    It must support separate hash-only Studio, Engine, and per-Runner
    credentials with route authorization and revocation.
