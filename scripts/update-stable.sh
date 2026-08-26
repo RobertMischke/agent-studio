@@ -13,6 +13,10 @@
 #   ATP_STABLE_BRANCH            remote branch to deploy (default: main)
 #   ATP_STOP_SCRIPT              external Stable stop wrapper
 #   ATP_START_SCRIPT             external Stable start wrapper
+#   ATP_TASK_SERVER_START_SCRIPT host-owned Task Server start/ensure wrapper
+#   ATP_TASK_SERVER_READY_URL    readiness endpoint (default: http://127.0.0.1:5071/readyz)
+#   ATP_TASK_SERVER_READY_SECONDS readiness deadline (default: 60)
+#   ATP_STABLE_API_URL           Stable API origin used to prove the v1 proxy
 #   ATP_STABLE_FRONTEND_URL      page loaded by the boot probe
 #   ATP_BOOT_PROBE_SCRIPT        browser probe implementation
 #   ATP_BOOT_PROBE_TIMEOUT_MS    total browser probe deadline
@@ -34,6 +38,10 @@ stable_remote=${ATP_STABLE_REMOTE:-origin}
 stable_branch=${ATP_STABLE_BRANCH:-main}
 stop_script=${ATP_STOP_SCRIPT:-$devspace_dir/stop-stable.sh}
 start_script=${ATP_START_SCRIPT:-$devspace_dir/start-stable.sh}
+task_server_start_script=${ATP_TASK_SERVER_START_SCRIPT:-}
+task_server_ready_url=${ATP_TASK_SERVER_READY_URL:-http://127.0.0.1:5071/readyz}
+task_server_ready_seconds=${ATP_TASK_SERVER_READY_SECONDS:-60}
+stable_api_url=${ATP_STABLE_API_URL:-http://127.0.0.1:5031}
 frontend_url=${ATP_STABLE_FRONTEND_URL:-http://127.0.0.1:4011}
 probe_timeout_ms=${ATP_BOOT_PROBE_TIMEOUT_MS:-180000}
 probe_settle_ms=${ATP_BOOT_PROBE_SETTLE_MS:-2000}
@@ -45,6 +53,42 @@ log() {
 fail() {
   printf '[update-stable] ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+ensure_task_server() {
+  if [ -n "$task_server_start_script" ]; then
+    [ -x "$task_server_start_script" ] || fail "Task Server start script is not executable: $task_server_start_script"
+    log "Starting the supervised Task Server"
+    "$task_server_start_script"
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    log "Starting the supervised Task Server scheduled task"
+    powershell.exe -NoProfile -NonInteractive -Command \
+      "Start-ScheduledTask -TaskName 'AgentOrchestrator-TaskServer'" >/dev/null
+  else
+    fail "No Task Server supervisor is available. Set ATP_TASK_SERVER_START_SCRIPT."
+  fi
+
+  started=$(date +%s)
+  while ! curl -fsS --max-time 2 "$task_server_ready_url" >/dev/null 2>&1; do
+    now=$(date +%s)
+    if [ $((now - started)) -ge "$task_server_ready_seconds" ]; then
+      fail "Task Server did not become ready at $task_server_ready_url within ${task_server_ready_seconds}s. Stable API was not started."
+    fi
+    sleep 1
+  done
+  log "Task Server authority is ready at $task_server_ready_url"
+}
+
+probe_stable_proxy() {
+  started=$(date +%s)
+  while ! curl -fsS --max-time 2 "$stable_api_url/api/v1/protocol" >/dev/null 2>&1; do
+    now=$(date +%s)
+    if [ $((now - started)) -ge "$task_server_ready_seconds" ]; then
+      fail "Stable API did not proxy the Task Server protocol at $stable_api_url/api/v1/protocol within ${task_server_ready_seconds}s."
+    fi
+    sleep 1
+  done
+  log "Stable API proxy is connected to Task Server"
 }
 
 [ -e "$stable_checkout/.git" ] || fail "Stable checkout not found: $stable_checkout"
@@ -60,11 +104,16 @@ if [ -n "$(git -C "$stable_checkout" status --porcelain)" ]; then
 fi
 
 head_before=$(git -C "$stable_checkout" rev-parse HEAD)
+branch_before=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
 log "Fetching $stable_remote/$stable_branch"
 git -C "$stable_checkout" fetch --quiet "$stable_remote" "$stable_branch"
 target=$(git -C "$stable_checkout" rev-parse "$stable_remote/$stable_branch")
 
 if [ "$head_before" = "$target" ]; then
+  if [ "$branch_before" != "$stable_branch" ]; then
+    git -C "$stable_checkout" switch --quiet --force-create "$stable_branch" "$target"
+    log "Attached Stable to $stable_branch at $target"
+  fi
   log "Stable already matches $stable_remote/$stable_branch; nothing to update."
   exit 0
 fi
@@ -85,7 +134,12 @@ log "Stopping Stable"
 "$stop_script"
 
 log "Fast-forwarding Stable to $target"
-git -C "$stable_checkout" merge --quiet --ff-only "$target"
+if [ "$branch_before" = "$stable_branch" ]; then
+  git -C "$stable_checkout" merge --quiet --ff-only "$target"
+else
+  git -C "$stable_checkout" switch --quiet --force-create "$stable_branch" "$target"
+  log "Attached Stable to $stable_branch"
+fi
 
 if [ "$install_frontend" -eq 1 ]; then
   log "Installing frontend dependencies"
@@ -111,7 +165,9 @@ fi
 [ -f "$probe_script" ] || fail "Frontend boot probe not found: $probe_script"
 
 log "Starting Stable"
+ensure_task_server
 DETACH=1 "$start_script"
+probe_stable_proxy
 
 log "Loading $frontend_url in a headless browser"
 node "$probe_script" \

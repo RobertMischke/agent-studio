@@ -107,6 +107,12 @@ ATP_RESTART_THRESHOLD=5 ATP_WORKSPACE=/some/other/workspace \
 
 `update-stable.sh` stops stable, pulls, and restarts. The fresh backend comes back up in whatever runner mode it had before, so for the supervisor's pause-then-update-then-resume recipe the watcher needs an explicit verified resume after the restart finishes. A single missed `PUT /api/runner/<project>/mode` (transient backend-restart race or a missing `X-Client-Id`) silently leaves the project paused — that is the regression that motivated `resume-runner.sh`.
 
+For a standalone local Task Server, set `ATP_TASK_SERVER_READY_URL` to
+`http://127.0.0.1:5071/readyz` and `ATP_TASK_SERVER_START_SCRIPT` to the
+host-owned wrapper that starts `AgentOrchestrator-TaskServer`. Every watcher
+tick then ensures the supervised authority is started and ready before it
+observes or updates Stable. A failed authority probe holds the rollout.
+
 `restart-stable-after-batch.sh` calls `resume-runner.sh` automatically after a successful update. The helper:
 
 1. Polls `/healthz` until 200 (60 s ceiling; treats 503 as "still booting", not a failure).

@@ -111,6 +111,10 @@ Register and supervise the process with the scripts in
 from the Studio checkout:
 
 ```powershell
+.\deploy\windows\task-server\install-task-server.ps1 `
+    -Checkout C:\Projects\agent-taskboard-dev `
+    -DevspaceRoot C:\Projects\agent-orchestrator-devspace
+
 .\deploy\windows\task-server\register-task-server.ps1 `
     -InstallRoot C:\AgentOrchestrator\current `
     -EnvFile C:\ProgramData\AgentOrchestrator\server.env
@@ -127,6 +131,14 @@ stdout/stderr to timestamped files under
 `Restart=always` / `RestartSec=5s`) whenever it exits. The Scheduled Task's
 own `RestartCount`/`RestartInterval` settings add a second layer of recovery
 if the supervisor process itself is lost.
+
+`install-task-server.ps1` publishes the current checkout with the `win-x64`
+profile, installs it in a SHA-stamped version directory, points the `current`
+junction at that immutable package, writes the loopback bootstrap file, and
+registers the supervised task. Its default durable store is
+`C:\Projects\agent-orchestrator-devspace\task-server-data`, outside the
+versioned package and inside the operator-owned devspace. It refuses to replace
+a non-junction `current` path.
 
 The Scheduled Task owns process start, stop, restart, and upgrade:
 
@@ -357,8 +369,14 @@ become resource identity.
    changed after inventory.
 4. The server creates a pre-import backup, imports the inventory in one
    transaction, preserves task `results/`, timeline events, stable generated
-   identities, and copies evidence Git metadata into
+   identities, registered Runner identities, coding RunAttempts, review
+   attempts, lease IDs, the recorded source authority epoch, and monotonic
+   fences, and copies
+   evidence Git metadata into
    `migration-evidence/{migrationId}`.
+   A legacy `Leased` record is deliberately imported as `process-unknown`.
+   It cannot be reclaimed until the operator submits positive containment
+   proof, so the cutover cannot fork execution authority.
 5. Compare counts and save the returned integrity SHA-256. Start Task Server as
    the only writer, then point Studio/BFF and Runner at its URL.
 6. The rollback boundary is the returned pre-import backup plus the untouched,
@@ -370,6 +388,63 @@ The automated acceptance suite rehearses inventory, freeze enforcement,
 transactional import, integrity verification, backup/restore, evidence Git
 preservation, restart fencing, protocol rejection, and separate process
 lifecycle.
+
+Before touching the live store on Windows, prove the exact migration against a
+copy. This script uses `robocopy`, starts an isolated Task Server on port 15071,
+inventories and imports the copy, compares task, identity, RunAttempt, review,
+and lease counts, and writes a JSON report without modifying the source:
+
+```powershell
+.\deploy\windows\task-server\test-legacy-migration-copy.ps1 `
+    -LegacyRoot C:\Projects\agent-taskboard-workspace `
+    -ReportPath C:\Projects\agent-orchestrator-devspace\cutover-evidence\migration-rehearsal.json
+```
+
+Do not continue if the report contains warnings, a count mismatch, an empty
+integrity digest, or an unaccounted `process-unknown` attempt. For the live
+import, stop Stable and every legacy Runner first, repeat inventory and import
+against the frozen original root and the production Task Server, resolve every
+unknown attempt with containment evidence, then enter `Normal`. Never run the
+copy rehearsal and production service against the same `STORE_PATH`.
+
+## Local Windows cutover checklist
+
+The August 2026 claim-path cutover is a planned, fail-closed operation. Keep
+Stable pinned to the pre-decoupling release until every item below is green.
+
+1. Run `install-task-server.ps1`, then prove the scheduled task uses an S4U
+   principal and the server answers both `/healthz` and `/readyz` on
+   `127.0.0.1:5071`.
+2. Run `test-legacy-migration-copy.ps1` and retain its JSON report. Freeze all
+   legacy writers, perform the matching production inventory and import, and
+   retain the returned backup ID and integrity SHA-256.
+3. Configure the Stable checkout only after the standalone authority is ready:
+
+   ```powershell
+   .\deploy\windows\task-server\set-stable-proxy.ps1 `
+       -StableCheckout C:\Projects\agent-taskboard-stable
+   ```
+
+   The helper backs up `backend\appsettings.Local.json` and sets
+   `TaskServer:BaseUrl` to `http://127.0.0.1:5071`.
+4. Configure the host-owned `start-task-server.sh` wrapper to call
+   `Start-ScheduledTask AgentOrchestrator-TaskServer`, and export it as
+   `ATP_TASK_SERVER_START_SCRIPT` for `scripts/update-stable.sh`. The updater
+   now starts and probes Task Server before starting OrchestratorApi, then
+   proves that OrchestratorApi proxies `/api/v1/protocol` before its browser
+   boot probe. A missing supervisor, failed `/readyz`, or failed proxy probe
+   aborts the rollout before Stable is reported healthy.
+5. Roll out current `main`, then submit and retain one end-to-end canary that
+   proves all four paths: a coding Runner claim reaches Progress, a review
+   executor claims the immutable subject, its report is accepted, and the
+   board projection reaches the expected post-report lane. Also submit a small
+   result artifact and confirm it is present in task history.
+6. Record the release SHA, scheduled-task state, migration report, production
+   counts and integrity digest, probe responses, canary task/run/review IDs,
+   report receipt, board state, and rollback boundary in the task `results/`
+   directory. Only after those facts are green may Stable return to an attached
+   `main` branch checkout. A detached or release-pinned Stable checkout remains
+   a rollout hold, not a successful cutover.
 
 ## Release topology rehearsal
 

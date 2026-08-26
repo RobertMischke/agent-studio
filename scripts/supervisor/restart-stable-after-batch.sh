@@ -42,6 +42,9 @@
 #                            max wait for an active merge gate (default: 120)
 #   ATP_GATE_DRAIN_POLL_SECONDS
 #                            merge-gate poll interval (default: 2)
+#   ATP_TASK_SERVER_READY_URL standalone authority readiness URL. When set,
+#                            every tick starts its supervisor and requires ready.
+#   ATP_TASK_SERVER_START_SCRIPT host-owned supervisor start/ensure wrapper
 #
 # Exit codes:
 #   0  decision tick handled (no-op or successful restart)
@@ -71,6 +74,8 @@ DEPLOY_REMOTE="${ATP_DEPLOY_REMOTE:-origin}"
 UPDATE_SCRIPT="${ATP_UPDATE_SCRIPT:-$THIS_CHECKOUT/scripts/update-stable.sh}"
 GATE_DRAIN_TIMEOUT="${ATP_GATE_DRAIN_TIMEOUT_SECONDS:-120}"
 GATE_DRAIN_POLL="${ATP_GATE_DRAIN_POLL_SECONDS:-2}"
+TASK_SERVER_READY_URL="${ATP_TASK_SERVER_READY_URL:-}"
+TASK_SERVER_START_SCRIPT="${ATP_TASK_SERVER_START_SCRIPT:-}"
 
 LANE_DIR="$WORKSPACE/projects/$PROJECT/${ATP_RESTART_LANE:-4-auto-review}"
 LOG_DIR="$WORKSPACE/logs"
@@ -79,6 +84,31 @@ SNAPSHOT="$STATE_DIR/snapshot.txt"
 JSONL="$LOG_DIR/stable-restarts.jsonl"
 
 log() { printf '[restart-watcher] %s\n' "$*" >&2; }
+
+ensure_task_server_ready() {
+  [ -n "$TASK_SERVER_READY_URL" ] || return 0
+  if [ -n "$TASK_SERVER_START_SCRIPT" ]; then
+    if [ ! -x "$TASK_SERVER_START_SCRIPT" ]; then
+      log "Task Server supervisor is not executable: $TASK_SERVER_START_SCRIPT"
+      return 1
+    fi
+    "$TASK_SERVER_START_SCRIPT" >/dev/null 2>&1 || {
+      log "Task Server supervisor start failed"
+      return 1
+    }
+  elif command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -NonInteractive -Command \
+      "Start-ScheduledTask -TaskName 'AgentOrchestrator-TaskServer'" >/dev/null 2>&1 || return 1
+  else
+    log "Task Server supervision is configured without a start mechanism"
+    return 1
+  fi
+  if ! curl -fsS --max-time 5 "$TASK_SERVER_READY_URL" >/dev/null 2>&1; then
+    log "Task Server is not ready at $TASK_SERVER_READY_URL; holding Stable rollout"
+    return 1
+  fi
+  return 0
+}
 
 iso_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
@@ -202,6 +232,10 @@ if [ "$GATE_DRAIN_POLL" -eq 0 ]; then
 fi
 
 mkdir -p "$STATE_DIR" "$LOG_DIR"
+
+if ! ensure_task_server_ready; then
+  exit 0
+fi
 
 target_main=""
 new_count=0

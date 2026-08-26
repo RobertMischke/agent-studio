@@ -411,6 +411,28 @@ public sealed class TaskServerStoreTests
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "prompt.md"), "Migrated prompt");
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "timeline.jsonl"), "{\"kind\":\"created\",\"timestamp\":\"2026-07-17T10:00:00Z\"}\n");
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "results", "evidence.txt"), "proof");
+                Directory.CreateDirectory(Path.Combine(legacy.Path, "identities"));
+                Directory.CreateDirectory(Path.Combine(legacy.Path, ".metadata"));
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, "identities", "runner-01.json"), """
+                    {"id":"runner-01","displayName":"Runner 01","runnerDaemonState":"legacy-host",
+                     "registeredAt":"2026-07-17T09:00:00Z","lastSeenAt":"2026-07-17T10:01:00Z"}
+                    """);
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"), """
+                    {
+                      "schemaVersion":4,
+                      "authorityEpoch":7,
+                      "lastFenceByTask":{"AGT-1":12},
+                      "runAttempts":[{
+                        "attemptId":"run_legacy","taskKey":"AGT-1","repositoryId":"repo-1","state":1,
+                        "lastFence":12,"authorityEpoch":7,"createdAt":"2026-07-17T10:00:00Z",
+                        "lease":{"leaseId":"lease-legacy","fence":12,"authorityEpoch":7,
+                          "executorId":"runner-01","hostId":"legacy-host","leaseInstanceId":"instance-old",
+                          "acquiredAt":"2026-07-17T10:00:00Z","expiresAt":"2026-07-17T10:02:00Z",
+                          "lastHeartbeat":"2026-07-17T10:01:00Z"}
+                      }],
+                      "reviewAttempts":[]
+                    }
+                    """);
 
                 var store = Store(data.Path);
                 await store.InitializeAsync();
@@ -421,6 +443,10 @@ public sealed class TaskServerStoreTests
                 Assert.Equal(1, inventory.Tasks);
                 Assert.Equal(1, inventory.Events);
                 Assert.Equal(1, inventory.Artifacts);
+                Assert.Equal(1, inventory.RunnerIdentities);
+                Assert.Equal(1, inventory.RunAttempts);
+                Assert.Equal(1, inventory.CodingLeases);
+                Assert.Equal(7, inventory.SourceAuthorityEpoch);
 
                 request = request with { ExpectedMigrationId = inventory.MigrationId };
                 await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "single-writer cutover"), "operator", default);
@@ -436,6 +462,28 @@ public sealed class TaskServerStoreTests
                 Assert.Equal("Migrated prompt", migrated.Body);
                 Assert.Single(await store.ListEventsAsync(string.Empty, 0, default));
                 Assert.Single(await store.ListArtifactsAsync(string.Empty, default));
+                Assert.Equal(1, result.RunnerIdentities);
+                Assert.Equal(1, result.RunAttempts);
+                Assert.Equal(1, result.CodingLeases);
+                Assert.Equal(7, result.SourceAuthorityEpoch);
+
+                await using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(
+                    $"Data Source={store.DatabasePath};Pooling=False"))
+                {
+                    await connection.OpenAsync();
+                    await using var command = connection.CreateCommand();
+                    command.CommandText = """
+                        SELECT r.status || '|' || l.status || '|' || l.lease_id || '|' ||
+                               l.runner_id || '|' || l.instance_id || '|' || l.fence || '|' || f.last_fence
+                          FROM runs r
+                          JOIN leases l ON l.run_id = r.id
+                          JOIN fence_counters f ON f.task_id = r.task_id
+                         WHERE r.id = 'run_legacy';
+                        """;
+                    Assert.Equal(
+                        "process-unknown|process-unknown|lease-legacy|runner-01|instance-old|12|12",
+                        Assert.IsType<string>(await command.ExecuteScalarAsync()));
+                }
 
                 var migrationBackup = Assert.Single(Directory.EnumerateFiles(
                     store.BackupDirectory,

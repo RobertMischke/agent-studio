@@ -15,6 +15,8 @@ devspace=$test_root/devspace
 fake_bin=$test_root/bin
 stop_marker=$test_root/stop-ran
 start_marker=$test_root/start-ran
+task_server_marker=$test_root/task-server-ran
+start_order=$test_root/start-order
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
@@ -85,13 +87,25 @@ cat > "$devspace/start-stable.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 : > "$ATP_TEST_START_MARKER"
+printf '%s\n' stable >> "$ATP_TEST_START_ORDER"
+EOF
+cat > "$devspace/start-task-server.sh" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+: > "$ATP_TEST_TASK_SERVER_MARKER"
+printf '%s\n' task-server >> "$ATP_TEST_START_ORDER"
 EOF
 cat > "$fake_bin/npm" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 printf '%s\n' patched > "$ATP_TEST_PACKAGE_FILE"
 EOF
-chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$fake_bin/npm"
+cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+exit 0
+EOF
+chmod +x "$devspace/stop-stable.sh" "$devspace/start-stable.sh" "$devspace/start-task-server.sh" "$fake_bin/npm" "$fake_bin/curl"
 
 run_update() {
   env \
@@ -99,10 +113,14 @@ run_update() {
     ATP_STABLE_CHECKOUT="$stable_checkout" \
     ATP_STOP_SCRIPT="$devspace/stop-stable.sh" \
     ATP_START_SCRIPT="$devspace/start-stable.sh" \
+    ATP_TASK_SERVER_START_SCRIPT="$devspace/start-task-server.sh" \
+    ATP_TASK_SERVER_READY_SECONDS=1 \
     ATP_BOOT_PROBE_SCRIPT="$probe" \
     ATP_BOOT_PROBE_SETTLE_MS=0 \
     ATP_TEST_STOP_MARKER="$stop_marker" \
     ATP_TEST_START_MARKER="$start_marker" \
+    ATP_TEST_TASK_SERVER_MARKER="$task_server_marker" \
+    ATP_TEST_START_ORDER="$start_order" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
     ATP_TEST_STALE_CACHE="$stable_checkout/frontend/.angular/cache/deps.js" \
     PATH="$fake_bin:$PATH" \
@@ -118,10 +136,15 @@ git -C "$source_checkout" push --quiet origin main
 output=$(run_update)
 test -f "$stop_marker"
 test -f "$start_marker"
+test -f "$task_server_marker"
+test "$(sed -n '1p' "$start_order")" = task-server
+test "$(sed -n '2p' "$start_order")" = stable
 test ! -e "$stable_checkout/frontend/.angular/cache"
 grep -q '^patched$' "$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs"
 printf '%s' "$output" | grep -q 'Invalidated the Angular/Vite optimizer cache'
 printf '%s' "$output" | grep -q 'Boot completed without page errors'
+printf '%s' "$output" | grep -q 'Task Server authority is ready'
+printf '%s' "$output" | grep -q 'Stable API proxy is connected to Task Server'
 printf '%s' "$output" | grep -q 'Stable started and healthy'
 
 # A separate release injects an application boot crash. An open port and a
@@ -142,5 +165,12 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
+
+# A rollback may leave Stable detached at the selected release. Once that SHA
+# is current main, a no-op update must still remove the pin and attach main.
+git -C "$stable_checkout" switch --quiet --detach
+attach_output=$(run_update)
+test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
+printf '%s' "$attach_output" | grep -q 'Attached Stable to main'
 
 printf '%s\n' 'update-stable tests passed'
