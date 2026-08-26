@@ -147,6 +147,35 @@
           <td><span class="status-badge status-applied">Applied</span></td>
         </tr>
         <tr>
+          <td>26 Aug 2026</td>
+          <td>
+            <p><strong>Execution hosts grouping and disclosure</strong></p>
+            <p><code>#/workspace/settings/execution-hosts</code></p>
+          </td>
+          <td class="thumb-cell">
+            <div class="thumb-wrap">
+              <svg viewBox="0 0 240 90" aria-label="Execution hosts round-two before and after thumbnails">
+                <rect width="240" height="42" fill="var(--bad-soft)" rx="3"/>
+                <text x="6" y="12" font-size="8" font-weight="700" fill="var(--bad)">BEFORE</text>
+                <rect x="6" y="17" width="228" height="8" fill="var(--strong)" rx="2"/>
+                <rect x="6" y="28" width="228" height="8" fill="var(--strong)" rx="2"/>
+                <text x="12" y="24" font-size="6" fill="var(--ink)">runner-01 · 61%</text>
+                <text x="12" y="35" font-size="6" fill="var(--ink)">runner-01-review · 37%</text>
+                <rect y="48" width="240" height="42" fill="var(--good-soft)" rx="3"/>
+                <text x="6" y="60" font-size="8" font-weight="700" fill="var(--good)">AFTER</text>
+                <text x="6" y="72" font-size="7" font-weight="700" fill="var(--ink)">runner-01 · one machine load</text>
+                <text x="16" y="82" font-size="6" fill="var(--muted)">Coding 0/2 · Review 0/6 · Actions …</text>
+              </svg>
+            </div>
+          </td>
+          <td>
+            <p>Runner identities sharing one advertised physical host render below one machine row. Role-local capacities and actions remain on sub-rows; machine load and immutable release identity appear once. Retired roles are hidden by default, narrow actions use a complete text overflow menu, missing values follow ADM-17, and the host disclosure opens to five compact section summaries before diagnostic detail.</p>
+            <p>Evidence: <code>before/execution-hosts-before-light--mocked.png</code>, <code>execution-hosts-after-light--mocked.png</code>, dark and narrow variants, plus expanded-summary light/dark captures.</p>
+          </td>
+          <td><span class="card-key">AGT-2681</span></td>
+          <td><span class="status-badge status-applied">Applied</span></td>
+        </tr>
+        <tr>
           <td>11 Aug 2026</td>
           <td>
             <p><strong>Activity stream</strong></p>

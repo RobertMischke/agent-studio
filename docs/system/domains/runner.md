@@ -208,6 +208,11 @@ state.
   accepted active-slot count immediately. A renewal that first encounters the
   restarted server retries this exact registration once before treating a
   404/409 as lease loss; a stale or superseded authority still fails closed.
+  Registration advertises the physical machine `HostId`, the role-local
+  `RUNNER_MAX_PARALLELISM`, and the immutable release directory selected by
+  `/opt/agent-host/current`. Management projections retain those per-runner
+  facts so Studio can group Coding and Review below one machine without
+  inventing capacity or displaying the assembly package version as a release.
   Operator runbook:
   [docs/operations/setup/linux-runner-host.md](../../operations/setup/linux-runner-host.md).
 - `runner/RemoteTaskRunner.cs` and
@@ -527,6 +532,10 @@ state.
   and load include both pools and unrelated processes, so neither is inferred
   from lane membership or from CPU percentage. This keeps claim/lane drift
   visible instead of silently folding it into a slot count.
+  The management snapshot also preserves each service role's declared
+  `RUNNER_MAX_PARALLELISM`. Review uses that value directly; Coding separately
+  reports its effective adopted versioned host ceiling. These role-local slot
+  facts never create a second machine load value.
 
 - `RuntimeCapacitySettingsService` in the Task Server owns the versioned host
   ceiling, target load, and ramp strategy. The first Runner registration seeds

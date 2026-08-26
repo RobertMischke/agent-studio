@@ -12,6 +12,7 @@
       <span aria-hidden="true">›</span>
     </button>
     <strong class="host__name" data-testid="remote-host-name">{{ h.name }}</strong>
+    <span class="host__role-count">{{ roles().length }} {{ roles().length === 1 ? 'role' : 'roles' }}</span>
   </td>
   <td>
     <span class="host__status" data-testid="remote-host-status">
@@ -19,69 +20,67 @@
       <span>{{ statusLabel() }}</span>
     </span>
   </td>
-  <td class="host__number" data-testid="remote-host-slots-summary">
-    {{ occupiedSlots() }} / {{ slotTotal() ?? 'n/a' }}
-  </td>
+  <td><span class="host__placeholder" title="Shown per runner role">–</span></td>
   <td class="host__load" data-testid="remote-host-load">
-    <span class="host__load-track" aria-hidden="true">
-      @if (loadPct() !== null) {
+    @if (loadPct() !== null) {
+      <span class="host__load-track" aria-hidden="true">
         <span [style.width.%]="loadPct()"></span>
-      }
-    </span>
-    <span class="host__number">{{ loadLabel() }}</span>
+      </span>
+      <span class="host__number">{{ loadLabel() }}</span>
+    } @else {
+      <span class="host__placeholder" title="Not reported">–</span>
+    }
   </td>
   <td class="host__activity" data-testid="remote-host-heartbeat"
       [attr.title]="h.lastHeartbeatAt ? (h.lastHeartbeatAt | date:'medium') : 'No heartbeat reported'">
     {{ heartbeatLabel() }}
   </td>
-  <td class="host__release" data-testid="remote-host-release" [appTooltip]="releaseLabel()">
-    <code>{{ releaseLabel() }}</code>
-  </td>
-  <td class="host__actions">
-    @if (retired()) {
-      <button class="host__btn host__btn--primary" type="button"
-              data-testid="remote-host-action-revive"
-              [disabled]="!!h.busyAction"
-              (click)="emit('revive')">
-        {{ h.busyAction === 'revive' ? 'Reviving…' : 'Revive' }}
-      </button>
+  <td class="host__release" data-testid="remote-host-release"
+      [appTooltip]="releaseLabel()" appTooltipTestId="remote-host-release-tooltip">
+    @if (releaseLabel(); as release) {
+      <code>{{ release }}</code>
     } @else {
-      <button class="host__btn" type="button"
-              data-testid="remote-host-action-drain"
-              title="Stop new leases. Running work continues until it finishes; the host then remains drained."
-              [disabled]="!!h.busyAction || h.status === 'draining'"
-              (click)="emit('drain')">
-        {{ h.busyAction === 'drain' ? 'Draining…' : 'Drain' }}
-      </button>
-      <button class="host__btn host__btn--danger" type="button"
-              data-testid="remote-host-action-retire"
-              [disabled]="!!h.busyAction"
-              (click)="emit('retire')">
-        {{ h.busyAction === 'retire' ? 'Retiring…' : 'Retire' }}
-      </button>
+      <span class="host__placeholder" title="Not reported">–</span>
     }
   </td>
+  <td class="host__actions"><span class="host__placeholder" title="Actions are per runner role">–</span></td>
 </tr>
+
+@for (role of roles(); track role.id) {
+  <tr appRemoteHostRoleRow
+      [host]="role"
+      [activeSlots]="activeSlotsFor(role)"
+      (action)="action.emit($event)"></tr>
+}
 
 @if (expanded()) {
   <tr class="host__detail-row" data-testid="remote-host-detail-row">
     <td colspan="7">
       <div class="host__details" [id]="detailId()">
-        <section class="detail" aria-labelledby="identity-title-{{ h.id }}">
-          <h3 [id]="'identity-title-' + h.id">Identity</h3>
+        <details class="detail" data-testid="remote-host-detail-identity">
+          <summary>
+            <strong>Identity</strong>
+            <span>{{ identitySummary() }}</span>
+          </summary>
+          <div class="detail__body">
           <dl class="detail__facts">
             <div><dt>Role</dt><dd class="host__role" [attr.data-role]="h.role">{{ roleLabel() }}</dd></div>
             <div><dt>Host ID</dt><dd><code>{{ h.capacityHostId || h.id }}</code></dd></div>
             <div><dt>Client ID</dt><dd><code>{{ h.clientId }}</code></dd></div>
-            <div><dt>Instance ID</dt><dd><code>{{ h.runnerInstanceId || 'Not reported' }}</code></dd></div>
-            <div><dt>Protocol</dt><dd>{{ h.runnerProtocolVersion ?? 'Not reported' }}</dd></div>
+            <div><dt>Instance ID</dt><dd><code>{{ h.runnerInstanceId || '–' }}</code></dd></div>
+            <div><dt>Protocol</dt><dd>{{ h.runnerProtocolVersion ?? '–' }}</dd></div>
             <div><dt>System</dt><dd>{{ h.os }}</dd></div>
-            <div><dt>Uptime</dt><dd>{{ h.uptimeLabel || 'Not reported' }}</dd></div>
+            <div><dt>Uptime</dt><dd>{{ h.uptimeLabel || '–' }}</dd></div>
           </dl>
-        </section>
+          </div>
+        </details>
 
-        <section class="detail" aria-labelledby="connection-title-{{ h.id }}">
-          <h3 [id]="'connection-title-' + h.id">Connection</h3>
+        <details class="detail" data-testid="remote-host-detail-connection">
+          <summary>
+            <strong>Connection</strong>
+            <span>{{ connectionSummary() }}</span>
+          </summary>
+          <div class="detail__body">
           <dl class="detail__facts" data-testid="remote-host-activity">
             <div><dt>Address / tunnel</dt><dd><code>{{ h.address || 'Local process' }}</code></dd></div>
             <div><dt>Task inflow</dt><dd>{{ taskInflowLabel() }}</dd></div>
@@ -112,10 +111,15 @@
               </button>
             }
           </div>
-        </section>
+          </div>
+        </details>
 
-        <section class="detail detail--wide" aria-labelledby="capabilities-title-{{ h.id }}">
-          <h3 [id]="'capabilities-title-' + h.id">Capabilities and authentication</h3>
+        <details class="detail detail--wide" data-testid="remote-host-detail-capabilities">
+          <summary>
+            <strong>Capabilities and authentication</strong>
+            <span>{{ capabilitySummary() }}</span>
+          </summary>
+          <div class="detail__body">
           @if (providerAuthBadges().length) {
             <div class="provider-auth" data-testid="remote-host-provider-auth" aria-label="Provider authentication">
               @for (auth of providerAuthBadges(); track auth.id) {
@@ -166,10 +170,15 @@
           }
           <app-git-token-capability mode="warning" [status]="h.gitPushStatus" [detail]="h.gitPushDetail" />
           <app-capability-health [host]="h" />
-        </section>
+          </div>
+        </details>
 
-        <section class="detail detail--wide" aria-labelledby="capacity-title-{{ h.id }}">
-          <h3 [id]="'capacity-title-' + h.id">Capacity and leases</h3>
+        <details class="detail detail--wide" data-testid="remote-host-detail-capacity">
+          <summary>
+            <strong>Capacity and leases</strong>
+            <span>{{ capacitySummary() }}</span>
+          </summary>
+          <div class="detail__body">
           @if (h.role === 'remote' && !retired()) {
             <app-runtime-capacity-editor
               [host]="h"
@@ -186,16 +195,24 @@
             [gateWork]="gateWorkLabel()" />
           @if (failedProjectPreflights().length) {
             <div class="host__delivery-failures" data-testid="remote-host-project-preflight-failures">
-              <strong>Project delivery blocked</strong>
               @for (preflight of failedProjectPreflights(); track preflight.projectId) {
-                <p><b>{{ preflight.projectName }}{{ preflight.targetBranch ? ' · ' + preflight.targetBranch : '' }}</b> {{ preflight.detail }}</p>
+                <p>
+                  <strong>{{ preflight.projectName }}{{ preflight.targetBranch ? ' · ' + preflight.targetBranch : '' }}</strong>
+                  <span>{{ preflight.detail }}</span>
+                  <a href="#/workspace/settings/project-sources">Open project sources</a>
+                </p>
               }
             </div>
           }
-        </section>
+          </div>
+        </details>
 
-        <section class="detail detail--wide" aria-labelledby="load-title-{{ h.id }}">
-          <h3 [id]="'load-title-' + h.id">System load</h3>
+        <details class="detail detail--wide" data-testid="remote-host-detail-system-load">
+          <summary>
+            <strong>System load</strong>
+            <span>{{ systemSummary() }}</span>
+          </summary>
+          <div class="detail__body">
           @if (stale() && !retired()) {
             <p class="host__stale" data-testid="remote-host-stale">
               Stale: last seen {{ heartbeatLabel() }}. Live metrics are hidden; the last slot sample is marked stale.
@@ -220,7 +237,8 @@
           @if (!stale() && h.telemetry && h.telemetry.points.length) {
             <app-host-telemetry-history [host]="h" [now]="now()" />
           }
-        </section>
+          </div>
+        </details>
       </div>
     </td>
   </tr>

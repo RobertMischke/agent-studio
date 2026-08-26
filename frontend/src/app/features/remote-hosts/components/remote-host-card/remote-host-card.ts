@@ -8,6 +8,10 @@ import { GitTokenCapabilityComponent } from '../git-token-capability/git-token-c
 import { HostWorkloadSummaryComponent } from '../host-workload-summary/host-workload-summary';
 import { HostTelemetryHistoryComponent } from '../host-telemetry-history/host-telemetry-history';
 import {
+  RemoteHostRoleRowComponent,
+  roleSlotTotal,
+} from '../remote-host-role-row/remote-host-role-row';
+import {
   RuntimeCapacityEditorComponent,
   type HostProjectPolicyChange,
   type RuntimeCapacityChange,
@@ -63,6 +67,7 @@ interface Meter {
     HostWorkloadSummaryComponent,
     HostTelemetryHistoryComponent,
     RuntimeCapacityEditorComponent,
+    RemoteHostRoleRowComponent,
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
@@ -76,6 +81,8 @@ interface Meter {
 })
 export class RemoteHostCardComponent {
   readonly host = input.required<RemoteHost>();
+  readonly roles = input<readonly RemoteHost[]>([]);
+  readonly roleActiveSlots = input<Readonly<Record<string, number>>>({});
   /** Board-local process runs or remote leased runs attributed to this host. */
   readonly boardActiveSlots = input(0);
   /**
@@ -193,16 +200,38 @@ export class RemoteHostCardComponent {
     (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
   );
   readonly providerAuthBadges = computed(() => providerAuthBadgesForHost(this.host(), this.now()));
+  readonly identitySummary = computed(() => {
+    const roles = this.roles();
+    return `${roles.length} ${roles.length === 1 ? 'role' : 'roles'} · ${this.host().os}`;
+  });
+  readonly connectionSummary = computed(() =>
+    `${this.daemonLabel()} · inflow ${this.taskInflowLabel()} · Task Server ${this.taskServerRouteLabel()}`,
+  );
+  readonly capabilitySummary = computed(() => {
+    const capabilities = this.host().capabilityHealth ?? [];
+    const count = capabilities.length || this.host().capabilities.length;
+    if (!count) return 'No capabilities advertised';
+    const label = count === 1 ? 'capability' : 'capabilities';
+    const unhealthy = capabilities.filter(capability =>
+      !capability.isFresh || capability.healthState !== 'healthy' || capability.advertisedStatus !== 'ready').length;
+    return unhealthy ? `${count} ${label} · ${unhealthy} need attention` : `${count} ${label} ok`;
+  });
+  readonly capacitySummary = computed(() => {
+    const roles = this.roles();
+    const active = roles.reduce((total, role) => total + this.activeSlotsFor(role), 0);
+    const capacity = roles.reduce((total, role) => total + (roleSlotTotal(role) ?? 0), 0);
+    const slots = capacity > 0 ? `${active} / ${capacity} role slots` : `${active} active · capacity unknown`;
+    const blocked = this.failedProjectPreflights().length;
+    return blocked ? `${slots} · ${blocked} delivery ${blocked === 1 ? 'block' : 'blocks'}` : slots;
+  });
+  readonly systemSummary = computed(() => {
+    if (this.host().telemetryLoading) return 'Loading telemetry';
+    const meters = this.meters();
+    if (!meters.length) return this.retired() ? 'Historical host · no live telemetry' : 'No live telemetry';
+    return meters.map(meter => `${meter.label} ${meter.pct}%`).join(' · ');
+  });
   readonly slotTotal = computed(() => {
-    const host = this.host();
-    if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
-    if (host.effectiveMaxParallelism !== null && host.effectiveMaxParallelism !== undefined) {
-      return host.effectiveMaxParallelism;
-    }
-    if (host.activeTaskCount !== undefined && host.availableSlots !== undefined) {
-      return host.activeTaskCount + host.availableSlots;
-    }
-    return null;
+    return roleSlotTotal(this.host());
   });
   readonly occupiedSlots = computed(() => this.boardActiveSlots());
   readonly loadPct = computed(() => {
@@ -211,7 +240,7 @@ export class RemoteHostCardComponent {
     return load === null || load === undefined ? null : Math.round(clampPct(load));
   });
   readonly loadLabel = computed(() => this.loadPct() === null ? 'Not reported' : `${this.loadPct()}%`);
-  readonly releaseLabel = computed(() => this.host().releaseId?.trim() || 'Not reported');
+  readonly releaseLabel = computed(() => this.host().releaseId?.trim() || null);
   readonly detailId = computed(() => `remote-host-detail-${this.host().id.replace(/[^a-zA-Z0-9_-]/g, '-')}`);
 
   latestAuthTransition(badge: ProviderAuthBadge) {
@@ -229,6 +258,10 @@ export class RemoteHostCardComponent {
   emit(kind: HostActionKind): void {
     if (this.host().busyAction) return;
     this.action.emit({ kind, id: this.host().id });
+  }
+
+  activeSlotsFor(role: RemoteHost): number {
+    return this.roleActiveSlots()[role.id] ?? 0;
   }
 
   requestSetup(): void {

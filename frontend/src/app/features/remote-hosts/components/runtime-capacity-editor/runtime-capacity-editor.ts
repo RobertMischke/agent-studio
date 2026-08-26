@@ -85,7 +85,7 @@ export class RuntimeCapacityEditorComponent {
   readonly slotsLabel = computed(() => {
     const ceiling = this.ceiling();
     return ceiling === null
-      ? `${this.activeSlots()} active / capacity not reported`
+      ? `${this.activeSlots()} active · capacity –`
       : `${this.activeSlots()} active / ${this.freeSlots()} free / ${ceiling} total`;
   });
   /** Slots held by projects the board can name; the rest are unattributed. */

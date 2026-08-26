@@ -138,7 +138,7 @@ describe('RuntimeCapacityEditorComponent', () => {
 
     const slots = fixture.nativeElement
       .querySelector('[data-testid="remote-host-slots"]')?.textContent;
-    expect(slots).toContain('7 active / capacity not reported');
+    expect(slots).toContain('7 active · capacity –');
     expect(slots).not.toContain('total');
     expect(fixture.nativeElement.querySelector('[data-testid="remote-host-capacity-input"]'))
       .toBeNull();

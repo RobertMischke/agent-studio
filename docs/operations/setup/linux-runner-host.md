@@ -377,6 +377,12 @@ release id plus an operator one-liner that re-points `current` and restarts both
 units. The failed release remains immutable for investigation. The helper does
 not add a rollback command or any new sudo argument shape.
 
+At startup, the runner resolves the final target of the `current` symlink and
+advertises that immutable release directory name to Studio. This deployment id,
+for example `agt-2650b-20260812T064049Z-ca5cbd6ff`, is the Release value shown in
+Execution Hosts. `RUNNER_RELEASE_ID` is an explicit override for installations
+that do not use the standard release-directory layout.
+
 ## 3. Configure
 
 Every value has an environment-variable default (systemd-friendly); the per-task

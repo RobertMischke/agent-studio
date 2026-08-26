@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import type { RemoteHost } from '../../models/remote-host.model';
+import type { PhysicalHostGroup } from '../../models/physical-host-group';
 
 export type RemoteHostSortKey = 'name' | 'status' | 'slots' | 'load' | 'activity' | 'release';
 export type RemoteHostSortDirection = 'asc' | 'desc';
@@ -68,9 +69,9 @@ export class RemoteHostTableState {
   }
 
   sort(
-    hosts: readonly RemoteHost[],
+    hosts: readonly PhysicalHostGroup[],
     occupiedSlots: (host: RemoteHost) => number,
-  ): RemoteHost[] {
+  ): PhysicalHostGroup[] {
     const key = this.sortKey();
     const direction = this.direction() === 'asc' ? 1 : -1;
     return hosts
@@ -98,19 +99,28 @@ export class RemoteHostTableState {
 }
 
 function compareHosts(
-  left: RemoteHost,
-  right: RemoteHost,
+  left: PhysicalHostGroup,
+  right: PhysicalHostGroup,
   key: RemoteHostSortKey,
   occupiedSlots: (host: RemoteHost) => number,
 ): number {
+  const leftMachine = left.machine;
+  const rightMachine = right.machine;
   switch (key) {
-    case 'status': return COLLATOR.compare(left.status, right.status);
-    case 'slots': return occupiedSlots(left) - occupiedSlots(right);
-    case 'load': return load(left) - load(right);
-    case 'activity': return timestamp(left.lastHeartbeatAt) - timestamp(right.lastHeartbeatAt);
-    case 'release': return COLLATOR.compare(left.releaseId ?? '', right.releaseId ?? '');
+    case 'status': return COLLATOR.compare(leftMachine.status, rightMachine.status);
+    case 'slots': return totalSlots(left, occupiedSlots) - totalSlots(right, occupiedSlots);
+    case 'load': return load(leftMachine) - load(rightMachine);
+    case 'activity': return timestamp(leftMachine.lastHeartbeatAt) - timestamp(rightMachine.lastHeartbeatAt);
+    case 'release': return COLLATOR.compare(leftMachine.releaseId ?? '', rightMachine.releaseId ?? '');
     case 'name': return COLLATOR.compare(left.name, right.name);
   }
+}
+
+function totalSlots(
+  group: PhysicalHostGroup,
+  occupiedSlots: (host: RemoteHost) => number,
+): number {
+  return group.roles.reduce((total, role) => total + occupiedSlots(role), 0);
 }
 
 function load(host: RemoteHost): number {

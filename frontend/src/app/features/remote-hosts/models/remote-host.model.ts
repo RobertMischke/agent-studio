@@ -14,6 +14,7 @@ import type { RunnerProjectPreflight } from '../../../models/task.model';
 
 /** Where a host sits relative to the operator. */
 export type HostRole = 'local' | 'remote';
+export type RunnerServiceRole = 'local' | 'coding' | 'review' | 'runner';
 
 /**
  * Heartbeat-derived liveness. Ordered loosely from healthiest to gone:
@@ -225,6 +226,8 @@ export interface TaskServerRunnerCapabilitySnapshot {
   runtimeCapacityAppliedAt?: string | null;
   runtimeCapacityAppliedVersion?: number | null;
   projectPolicy?: NonNullable<RemoteHost['projectPolicy']> | null;
+  /** Role-local RUNNER_MAX_PARALLELISM declared by this runner process. */
+  roleMaxParallelism?: number | null;
 }
 
 export interface RemoteHostAdmission {
@@ -242,6 +245,8 @@ export interface RemoteHost {
   /** Display name / hostname. */
   name: string;
   role: HostRole;
+  /** Executor role advertised by this runner identity. */
+  serviceRole?: RunnerServiceRole;
   /** SSH target for remote hosts; null for the local machine. */
   address: string | null;
   /** Task-server client identity used as X-Client-Id by this host. */
@@ -293,6 +298,8 @@ export interface RemoteHost {
   runtimeCapacity?: RuntimeCapacitySettings | null;
   /** Latest capacity value reported as adopted by this daemon process. */
   effectiveMaxParallelism?: number | null;
+  /** Role-local ceiling advertised from RUNNER_MAX_PARALLELISM. */
+  roleMaxParallelism?: number | null;
   runtimeCapacityAppliedAt?: string | null;
   /** Exact Task Server policy version confirmed by this daemon. */
   runtimeCapacityAppliedVersion?: number | null;
@@ -387,6 +394,17 @@ export type HostExecutorRole = 'coding' | 'review';
 export function hostExecutorRole(host: RemoteHost): HostExecutorRole {
   const executor = host.capabilityHealth?.find(entry => entry.category === 'executor');
   return executor?.key === 'executor:review' ? 'review' : 'coding';
+}
+
+/** Human label for a runner process nested below its physical host. */
+export function runnerServiceRoleLabel(role: RunnerServiceRole | null | undefined): string {
+  switch (role) {
+    case 'local': return 'Local';
+    case 'coding': return 'Coding';
+    case 'review': return 'Review';
+    case 'runner':
+    default: return 'Runner';
+  }
 }
 
 /** Used RAM as a rounded 0-100 percentage, or null when stats are unknown. */

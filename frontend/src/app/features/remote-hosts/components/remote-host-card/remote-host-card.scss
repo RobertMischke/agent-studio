@@ -38,6 +38,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.host__role-count {
+  flex: 0 0 auto;
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
 
 .host__disclosure {
   display: grid;
@@ -94,6 +101,7 @@
   background: var(--studio-accent);
 }
 .host__activity { color: var(--studio-fg-dim) !important; white-space: nowrap; }
+.host__placeholder { color: var(--studio-fg-muted); }
 .host__release code {
   display: block;
   overflow: hidden;
@@ -129,24 +137,51 @@
 }
 .host__details {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--studio-spacing-5);
-  padding: var(--studio-spacing-4) var(--studio-spacing-5) var(--studio-spacing-5);
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--studio-spacing-3) var(--studio-spacing-5) var(--studio-spacing-4);
 }
-.detail { min-width: 0; }
-.detail--wide { grid-column: 1 / -1; }
-.detail h3 {
-  margin: 0 0 var(--studio-spacing-3);
+.detail {
+  min-width: 0;
+  border-top: 1px solid var(--studio-border);
+}
+.detail:first-child { border-top: 0; }
+.detail > summary {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.35fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--studio-spacing-3);
+  min-height: 38px;
+  cursor: pointer;
+  list-style: none;
+}
+.detail > summary::-webkit-details-marker { display: none; }
+.detail > summary::after {
+  color: var(--studio-fg-muted);
+  content: '›';
+  font-size: 16px;
+  transform: rotate(0deg);
+  transition: transform 0.16s ease;
+}
+.detail[open] > summary::after { transform: rotate(90deg); }
+.detail > summary:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+.detail > summary strong {
   color: var(--studio-fg-strong);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.detail--wide {
-  padding-top: var(--studio-spacing-4);
-  border-top: 1px solid var(--studio-border);
+.detail > summary span {
+  overflow: hidden;
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.detail[open] > summary {
+  border-bottom: 1px solid var(--studio-border);
+}
+.detail__body { padding: var(--studio-spacing-3) 0 var(--studio-spacing-4); }
 
 .detail__facts { display: grid; gap: var(--studio-spacing-2); margin: 0; }
 .detail__facts > div {
@@ -201,12 +236,21 @@
 .host__no-stats { margin: 0; color: var(--studio-fg-muted); font-size: 11px; }
 .host__delivery-failures {
   margin-top: var(--studio-spacing-3);
-  padding: var(--studio-spacing-3);
-  background: var(--notify-error-tint);
-  color: var(--notify-error-icon-fg);
+  padding-top: var(--studio-spacing-3);
+  border-top: 1px solid var(--studio-border);
+  color: var(--studio-fg);
   font-size: 11px;
 }
-.host__delivery-failures p { margin: var(--studio-spacing-1) 0 0; }
+.host__delivery-failures p {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--studio-spacing-2);
+  margin: 0;
+}
+.host__delivery-failures strong { color: var(--notify-error-icon-fg); }
+.host__delivery-failures span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host__delivery-failures a { color: var(--studio-accent-strong); white-space: nowrap; }
 
 .meters { display: grid; gap: var(--studio-spacing-2); }
 .meter {
@@ -223,10 +267,26 @@
 .meter__track span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--studio-accent); }
 
 @media (max-width: 760px) {
-  .host__details { grid-template-columns: 1fr; }
-  .detail--wide { grid-column: auto; }
+  .host__details { padding-inline: var(--studio-spacing-3); }
+  .detail > summary { grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto; }
+  .host__delivery-failures p { grid-template-columns: minmax(0, 1fr) auto; }
+  .host__delivery-failures p span { grid-column: 1 / -1; }
+}
+
+@container remote-host-table (max-width: 54rem) {
+  .host__activity { display: none; }
+}
+
+@container remote-host-table (max-width: 46rem) {
+  .host__release { display: none; }
+  .host__role-count { display: none; }
+}
+
+@container remote-host-table (max-width: 36rem) {
+  .host__load { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .host__disclosure span { transition-duration: 0s; }
+  .host__disclosure span,
+  .detail > summary::after { transition-duration: 0s; }
 }

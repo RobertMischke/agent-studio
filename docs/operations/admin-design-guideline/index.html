@@ -418,6 +418,13 @@
           <p>A lane or comparable compact header MUST use one UI font family and one vertical centerline. The name is primary at 13 px and 600 weight. Count and operational summary are secondary at 11 px, with tabular figures. The name receives flexible width before trailing decoration. At narrow component widths, summary prose MUST switch to compact notation such as <code>0/10</code>, with the complete meaning available in an accessible tooltip. Optional decoration collapses next; name ellipsis is the last resort.</p>
         </div>
       </article>
+      <article class="rule">
+        <div class="rule-id">ADM-17</div>
+        <div>
+          <h4>Absence stays typographic</h4>
+          <p>An optional table fact that is unavailable or not reported MUST use one small dim dash with an accessible explanation. It MUST NOT render as a full-width gray bar, boxed placeholder, empty progress track, or pill after loading has completed. Structural skeletons are reserved for an active loading state and disappear when the response resolves.</p>
+        </div>
+      </article>
     </div>
 
     <h3>Decision provenance</h3>
@@ -435,6 +442,7 @@
           <tr><td>ADM-10</td><td>Product typography has no runtime dependency on a third-party font host.</td><td>Operator mandate for this dossier.</td></tr>
           <tr><td>ADM-11</td><td>Push panels use a distinct shell layer, one fixed header row, and collision-free transcript controls.</td><td>AGT-2613 and operator evidence from 11.08.</td></tr>
           <tr><td>ADM-12</td><td>Compact headers use one type hierarchy and centerline, protect the name before decoration, and abbreviate secondary status before truncating identity.</td><td>AGT-2642 name-first tree rows and AGT-2644 operator evidence from 11.08.</td></tr>
+          <tr><td>ADM-17</td><td>Missing table facts use a dim dash; placeholder bars and boxes must not consume the column.</td><td>AGT-2653 and operator evidence from 12.08.</td></tr>
         </tbody>
       </table>
     </div>
@@ -683,7 +691,7 @@
 
     <div class="adoption-flow" role="list" aria-label="Incremental adoption flow">
       <div class="adoption-step" role="listitem"><span>01 · READ</span><p>Load the hard rules and this dossier before admin UI design or implementation.</p></div>
-      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-12 to the new or changed surface and its immediate family.</p></div>
+      <div class="adoption-step" role="listitem"><span>02 · TOUCH</span><p>Apply ADM-01 through ADM-17 to the new or changed surface and its immediate family.</p></div>
       <div class="adoption-step" role="listitem"><span>03 · PROVE</span><p>Capture light, dark, wide, narrow, collapsed, and expanded states as applicable.</p></div>
       <div class="adoption-step" role="listitem"><span>04 · DEFER</span><p>Record unrelated legacy drift as a named finding or card. Do not widen the implementation.</p></div>
     </div>
@@ -699,6 +707,7 @@
       <li>Rows track stable identity and use the same grid for comparable entries.</li>
       <li>Both themes and relevant widths are covered by Playwright and preserved screenshots.</li>
       <li>Push-panel boundaries, fixed header geometry, ellipsis behavior, and transcript overlays remain collision-free where applicable.</li>
+      <li>Resolved missing values use a dim typographic dash, never a placeholder bar, box, pill, or empty meter.</li>
       <li>Any intentional exception names the user need, scope, and review evidence. Existing drift is not precedent.</li>
     </ol>
   </section>
@@ -962,7 +971,7 @@
     <p class="muted">Evidence: deterministic mocked before and after captures for light and dark themes at wide and narrow widths in the AGT-2606 results.</p>
   </section>
 
-  <footer>Prepared 10 August 2026; flat outcome-summary, panel keyboard containment, lane-header, and Dossier-list guidance extended 12 August 2026; promoted to living standard with visual dos-and-donts and applied-surfaces subpages by AGT-2617 on 16 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, AGT-2606, AGT-2638, AGT-2642, AGT-2643, and AGT-2644. Multi-page format (index.html + pages/) introduced by AGT-2617; task-header status pair added by AGT-2637.</footer>
+  <footer>Prepared 10 August 2026; flat outcome-summary, panel keyboard containment, lane-header, and Dossier-list guidance extended 12 August 2026; promoted to living standard with visual dos-and-donts and applied-surfaces subpages by AGT-2617 on 16 August 2026; missing-value guidance restored from AGT-2653 by AGT-2681 on 26 August 2026. Source card AGT-2583. Related evidence: AGT-2565, AGT-2567, AGT-2568, AGT-2549, AGT-2579, AGT-2606, AGT-2638, AGT-2642, AGT-2643, AGT-2644, AGT-2653, and AGT-2681. Multi-page format (index.html + pages/) introduced by AGT-2617; task-header status pair added by AGT-2637.</footer>
 </main>
 </body>
 </html>
