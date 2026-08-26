@@ -439,6 +439,16 @@ public static class LeaseEndpoints
                 foreach (var interrupted in scanner.ScanAllJobs()
                              .Where(t => !t.Fixture && t.State == TaskStates.Progress))
                 {
+                    var quotaWait = QuotaWaitMarker.TryRead(interrupted.FolderPath, logger);
+                    if (quotaWait is not null && quotaWait.ResetAt.ToUniversalTime() > now)
+                    {
+                        logger.LogDebug(
+                            "remote-provider-limit-wait task={TaskKey} cli={CliType} resetAt={ResetAt:o}",
+                            interrupted.Key ?? interrupted.TaskKey ?? interrupted.Id,
+                            quotaWait.CliType,
+                            quotaWait.ResetAt);
+                        continue;
+                    }
                     var project = settings.Get(interrupted.ProjectName);
                     if (!ProjectExecutionPolicy.AllowsAutomaticPickup(project)
                         || !ProjectExecutionPolicy.IsAssignedRemote(project, req.RunnerId, req.RunnerName))
@@ -856,6 +866,7 @@ public static class LeaseEndpoints
                     return Results.Ok(WithCapacity(new RunnerClaimResponse(
                         RunnerClaimStatus.Empty, Message: $"claim move refused: {move.Status} {move.Message}")));
                 }
+                QuotaWaitMarker.Clear(move.NewFolderPath ?? candidate.FolderPath, logger);
                 logger.LogInformation(
                     "remote-runner-task-claimed project={Project} projectId={ProjectId} task={TaskKey} runner={Runner} lease={LeaseId} token={FencingToken} repositorySource={RepositorySource} defaultBranch={DefaultBranch}",
                     candidate.ProjectName, repository.ProjectId, taskKey, req.RunnerName, acquire.Lease.LeaseId,
@@ -1016,6 +1027,7 @@ public static class LeaseEndpoints
             await ClaimGate.WaitAsync(ct);
             try
             {
+            var logger = loggerFactory.CreateLogger("AgentStudio.Tasks.RemoteRunnerCompletion");
             var remoteClaimFailures = new RemoteClaimFailureBudget(
                 loggerFactory.CreateLogger<RemoteClaimFailureBudget>());
             var remoteDeliveryFailures = new RemoteDeliveryFailureStore(
@@ -1029,19 +1041,25 @@ public static class LeaseEndpoints
                 return Results.NotFound(new RemoteRunCompletionResponse(
                     req.TaskKey, reportedOutcome, TaskStates.Progress, $"No task '{req.TaskKey}'."));
 
-            var outcome = reportedOutcome.Trim().ToLowerInvariant();
+            var providerLimitWait = req.OutcomeDecision?.Outcome ==
+                                    AgentStudio.TaskServer.Contracts.ExecutionOutcomeKind.QuotaExceeded
+                                    && req.OutcomeDecision.ProviderLimit is not null;
+            var outcome = providerLimitWait
+                ? "quotawait"
+                : reportedOutcome.Trim().ToLowerInvariant();
             var isEpicPlanning = TaskKinds.IsEpic(task.Kind);
             var targetState = outcome switch
             {
                 "done" or "noop" => TaskStates.AutoReview,
                 "blocked" or "needsinput" or "unknown" => TaskStates.Escalated,
                 "environmentfailure" => TaskStates.Ready,
+                "quotawait" => TaskStates.Progress,
                 _ => string.Empty,
             };
             if (targetState.Length == 0)
                 return Results.BadRequest(new RemoteRunCompletionResponse(
                     req.TaskKey, reportedOutcome, TaskStates.Progress,
-                    "Outcome must be Done, NoOp, Blocked, NeedsInput, Unknown, or EnvironmentFailure."));
+                    "Outcome must be Done, NoOp, Blocked, NeedsInput, Unknown, EnvironmentFailure, or a typed provider quota wait."));
 
             // AGT-2178: Epic planning is source-read-only - it produces no commit
             // and therefore no fenced ResultSha. The 2177 ResultSha gate only
@@ -1577,6 +1595,50 @@ public static class LeaseEndpoints
                 req.FencingToken,
                 epoch,
                 $"lane-completion:{completionKey}");
+
+            if (providerLimitWait)
+            {
+                var limit = req.OutcomeDecision!.ProviderLimit!;
+                var resetAt = limit.RetryAt.UtcDateTime;
+                var reason = $"{limit.Provider}: limited until {resetAt:u}. {limit.Reason}";
+                QuotaWaitMarker.Write(task.FolderPath, new QuotaWaitRecord
+                {
+                    CliType = limit.Provider,
+                    StartedAt = limit.ObservedAt.UtcDateTime,
+                    ResetAt = resetAt,
+                    ThresholdMinutes = Math.Max(
+                        1,
+                        (int)Math.Ceiling((resetAt - limit.ObservedAt.UtcDateTime).TotalMinutes)),
+                    Reason = reason,
+                }, logger);
+                mutations.SetJobPhase(task.FolderPath, LifecyclePhases.QuotaWaiting);
+                remoteClaimFailures.Reset(task);
+                timeline.Append(
+                    task.FolderPath,
+                    TimelineEventKinds.QuotaAdmissionDecision,
+                    TimelineActors.System,
+                    summary: reason,
+                    runId: attemptId,
+                    details: new Dictionary<string, string>
+                    {
+                        ["outcome"] = "Wait",
+                        ["decision"] = "provider-limit-wait",
+                        ["cli"] = limit.Provider,
+                        ["resetAt"] = resetAt.ToString("o"),
+                    });
+                logger.LogWarning(
+                    "remote-provider-limit-paused project={Project} task={TaskKey} cli={CliType} resetAt={ResetAt:o}; no escalation recorded",
+                    task.ProjectName,
+                    req.TaskKey,
+                    limit.Provider,
+                    resetAt);
+                return Results.Ok(new RemoteRunCompletionResponse(
+                    req.TaskKey,
+                    "QuotaWait",
+                    TaskStates.Progress,
+                    reason,
+                    RunAttemptId: attemptId));
+            }
 
             if (claimFailure is not null)
             {

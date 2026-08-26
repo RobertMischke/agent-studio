@@ -6,6 +6,97 @@ import { describe, expect, it } from 'vitest';
 import { RemoteQueueStarvationBannerComponent } from './remote-queue-starvation-banner';
 
 describe('RemoteQueueStarvationBannerComponent', () => {
+  it('names a provider limit and its automatic recovery without calling it stalled', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Agent Studio']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      waitingTaskCount: 2,
+      availableSlots: 3,
+      thresholdMinutes: 30,
+      claimProgressStalled: true,
+      lastSuccessfulClaimAt: '2026-08-23T20:00:00Z',
+      hasRejections: true,
+      buildProfileGateBlockedTaskCount: 0,
+      providerLimitedTaskCount: 2,
+      state: 'limited',
+      providerLimitReason: 'claude: limited until 2026-08-24T00:20:00Z',
+      oldestEnteredLaneAt: '2026-08-23T20:01:00Z',
+      observedAt: '2026-08-23T22:00:00Z',
+      items: [{
+        taskKey: 'AGT-1',
+        taskId: 'one',
+        projectName: 'Agent Studio',
+        title: 'One',
+        enteredLaneAt: '2026-08-23T20:01:00Z',
+        blockReasonCode: 'provider-limited',
+        blockReason: 'claude: limited until 2026-08-24T00:20:00Z',
+      }],
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-starvation-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('Claude claims paused: provider limit');
+    expect(banner.textContent).toContain('1 card is waiting without escalation');
+    expect(banner.textContent).toContain('Other CLI types remain eligible');
+    expect(banner.textContent).toContain('probed automatically');
+    expect(banner.textContent).not.toContain('stalled');
+    fixture.destroy();
+    http.verify();
+  });
+
+  it('surfaces a breaker pause reason and automatic recovery at board level', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Agent Studio']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      waitingTaskCount: 0,
+      availableSlots: 3,
+      thresholdMinutes: 30,
+      claimProgressStalled: false,
+      lastSuccessfulClaimAt: null,
+      hasRejections: false,
+      buildProfileGateBlockedTaskCount: 0,
+      providerLimitedTaskCount: 0,
+      state: 'paused',
+      providerLimitReason: null,
+      pickupPausedProjectCount: 1,
+      pickupPauses: [{
+        projectName: 'Agent Studio',
+        reason: 'pickup paused: infra breaker, 2 failures cliType=claude at 2026-08-24T00:01:00Z',
+        pausedAt: '2026-08-24T00:01:00Z',
+      }],
+      oldestEnteredLaneAt: null,
+      observedAt: '2026-08-24T00:01:00Z',
+      items: [],
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-starvation-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('Pickup paused: infrastructure breaker');
+    expect(banner.textContent).toContain('2 failures cliType=claude');
+    expect(banner.textContent).toContain('Recovery is probed automatically');
+    expect(banner.textContent).toContain('Manual pauses remain manual');
+    fixture.destroy();
+    http.verify();
+  });
+
   it('describes stalled claim progress without inventing a rejection', async () => {
     await TestBed.configureTestingModule({
       imports: [RemoteQueueStarvationBannerComponent],

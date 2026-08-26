@@ -1400,6 +1400,9 @@ public sealed partial class TaskServerStore
                 "completion",
                 ct);
             var now = UtcNow;
+            var providerLimitWait = request.OutcomeDecision?.Outcome == ExecutionOutcomeKind.QuotaExceeded
+                                    && request.OutcomeDecision.ProviderLimit is not null;
+            var nextTaskState = providerLimitWait ? "2-ready" : "4-auto-review";
             if (request.OutcomeDecision is not null)
             {
                 if (!string.Equals(request.OutcomeDecision.RawFacts.AttemptId, runId, StringComparison.Ordinal))
@@ -1436,7 +1439,7 @@ public sealed partial class TaskServerStore
                        source_bundle_artifact_id = NULL,
                        source_bundle_sha256 = $bundleSha
                  WHERE id = $run;
-                UPDATE tasks SET state = '4-auto-review', version = version + 1, updated_at = $now WHERE id = $task;
+                UPDATE tasks SET state = $nextTaskState, version = version + 1, updated_at = $now WHERE id = $task;
                 UPDATE work_permits SET status = 'completed'
                  WHERE run_id = $run AND status = 'accepted';
                 INSERT INTO run_completions(
@@ -1453,21 +1456,25 @@ public sealed partial class TaskServerStore
                 ("$sequence", request.Sequence),
                 ("$key", request.IdempotencyKey),
                 ("$now", Iso(now)),
+                ("$nextTaskState", nextTaskState),
                 ("$task", lease.TaskId),
                 ("$resultSha", resultHandoff?.Envelope.ResultSha),
                 ("$repositoryId", resultHandoff?.Envelope.RepositoryId),
                 ("$repositoryUrl", resultHandoff?.Envelope.RepositoryUrl),
                 ("$resultRef", resultHandoff?.Envelope.ImmutableRemoteRef),
                 ("$bundleSha", resultHandoff?.Envelope.SourceBundleDigest));
-            await ResolveCanarySuccessAsync(
-                connection,
-                transaction,
-                request.RunnerId,
-                runId,
-                RequiresResultEnvelope(request.Outcome)
-                    ? "coding canary completed with an immutable result handoff"
-                    : "coding canary reached an authoritative typed terminal without a capability failure",
-                ct);
+            if (!providerLimitWait)
+            {
+                await ResolveCanarySuccessAsync(
+                    connection,
+                    transaction,
+                    request.RunnerId,
+                    runId,
+                    RequiresResultEnvelope(request.Outcome)
+                        ? "coding canary completed with an immutable result handoff"
+                        : "coding canary reached an authoritative typed terminal without a capability failure",
+                    ct);
+            }
             await AppendLifecycleEventAsync(
                 connection,
                 transaction,
@@ -1480,22 +1487,26 @@ public sealed partial class TaskServerStore
                     request.Outcome,
                     request.Summary,
                     authority = "task-server",
-                    nextState = "4-auto-review",
+                    nextState = nextTaskState,
+                    providerLimit = request.OutcomeDecision?.ProviderLimit,
                 },
                 ct);
-            await AppendLifecycleEventAsync(
-                connection,
-                transaction,
-                runId,
-                lease.TaskId,
-                lease.Fence,
-                LifecycleEventKinds.PostProcessingCompleted,
-                new
-                {
-                    artifacts = "canonical-store",
-                    reviewAuthority = "task-server",
-                },
-                ct);
+            if (!providerLimitWait)
+            {
+                await AppendLifecycleEventAsync(
+                    connection,
+                    transaction,
+                    runId,
+                    lease.TaskId,
+                    lease.Fence,
+                    LifecycleEventKinds.PostProcessingCompleted,
+                    new
+                    {
+                        artifacts = "canonical-store",
+                        reviewAuthority = "task-server",
+                    },
+                    ct);
+            }
             await AuditAsync(connection, transaction, actorId, "run.completed", "run", runId,
                 JsonSerializer.Serialize(new
                 {

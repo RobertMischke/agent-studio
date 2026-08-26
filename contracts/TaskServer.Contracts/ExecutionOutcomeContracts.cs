@@ -111,7 +111,16 @@ public sealed record ExecutionRawFacts(
     string? DurableOutputReference = null,
     int SameSessionResumeAttempts = 0,
     int FreshSalvageAttempts = 0,
-    ImmutableReviewSubject? ReviewSubject = null);
+    ImmutableReviewSubject? ReviewSubject = null,
+    string? Provider = null,
+    DateTimeOffset? ObservedAt = null);
+
+public sealed record ProviderLimitInfo(
+    string Provider,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset RetryAt,
+    string Reason,
+    bool ResetTimeReported);
 
 public sealed record ExecutionOutcomeDecision(
     string ClassifierVersion,
@@ -125,7 +134,8 @@ public sealed record ExecutionOutcomeDecision(
     bool ConsumesCodingReworkBudget,
     bool InvokesCodingModel,
     ExecutionRawFacts RawFacts,
-    string? Detail = null);
+    string? Detail = null,
+    ProviderLimitInfo? ProviderLimit = null);
 
 public sealed record ProviderOutputEvidence(
     string? TerminalEvent,
@@ -154,7 +164,11 @@ public static class ExecutionOutcomeAdapter
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex Quota = new(
-        @"(?:\b429\b|quota\s+(?:exceeded|exhausted)|rate\s*limit(?:ed| exceeded)?|usage\s+limit|insufficient_quota|too\s+many\s+requests)",
+        @"(?:\b429\b|quota\s+(?:exceeded|exhausted)|session\s+limit|hit\s+your\s+session\s+limit|rate\s*limit(?:ed| exceeded)?|usage\s+limit|insufficient_quota|too\s+many\s+requests)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex ResetTime = new(
+        @"(?:reset(?:s|ting)?|try\s+again)\s+(?:at\s+|after\s+)?(?<time>\d{1,2}:\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex InvalidConfiguration = new(
@@ -224,7 +238,17 @@ public static class ExecutionOutcomeAdapter
         if (!honestTerminal && Authentication.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.AuthenticationFailure, OutcomeConfidence.High, null, infrastructure: true);
         if (!honestTerminal && Quota.IsMatch(diagnostic))
-            return Decide(facts, ExecutionOutcomeKind.QuotaExceeded, OutcomeConfidence.High, null, infrastructure: true);
+        {
+            var providerLimit = ParseProviderLimit(facts, diagnostic);
+            return Decide(
+                facts,
+                ExecutionOutcomeKind.QuotaExceeded,
+                OutcomeConfidence.High,
+                null,
+                infrastructure: true,
+                detail: providerLimit.Reason,
+                providerLimit: providerLimit);
+        }
         if (!honestTerminal && InvalidConfiguration.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.InvalidModelOrConfiguration, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.LaunchFailed)
@@ -273,7 +297,8 @@ public static class ExecutionOutcomeAdapter
         OutcomeConfidence confidence,
         string? ambiguity,
         bool infrastructure,
-        string? detail = null)
+        string? detail = null,
+        ProviderLimitInfo? providerLimit = null)
     {
         var recovery = SelectRecovery(facts, outcome);
         var invokesCoding = facts.AttemptKind == ExecutionAttemptKind.Coding
@@ -291,7 +316,46 @@ public static class ExecutionOutcomeAdapter
             ConsumesCodingReworkBudget: false,
             InvokesCodingModel: invokesCoding,
             RawFacts: facts,
-            Detail: detail);
+            Detail: detail,
+            ProviderLimit: providerLimit);
+    }
+
+    private static ProviderLimitInfo ParseProviderLimit(ExecutionRawFacts facts, string diagnostic)
+    {
+        var observedAt = facts.ObservedAt ?? DateTimeOffset.Now;
+        var provider = string.IsNullOrWhiteSpace(facts.Provider)
+            ? "unknown"
+            : facts.Provider.Trim().ToLowerInvariant();
+        var reset = ResetTime.Match(diagnostic);
+        var retryAt = observedAt.AddMinutes(15);
+        var reported = false;
+        if (reset.Success
+            && DateTime.TryParseExact(
+                Regex.Replace(reset.Groups["time"].Value, @"\s+", "").Replace(".", "", StringComparison.Ordinal).ToUpperInvariant(),
+                ["h:mmtt", "hh:mmtt", "H:mm", "HH:mm"],
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AllowWhiteSpaces,
+                out var parsed))
+        {
+            retryAt = new DateTimeOffset(
+                observedAt.Year,
+                observedAt.Month,
+                observedAt.Day,
+                parsed.Hour,
+                parsed.Minute,
+                0,
+                observedAt.Offset);
+            if (retryAt <= observedAt) retryAt = retryAt.AddDays(1);
+            reported = true;
+        }
+
+        var firstLine = diagnostic
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(line => Quota.IsMatch(line));
+        var reason = string.IsNullOrWhiteSpace(firstLine)
+            ? $"{provider} provider session/rate limit"
+            : firstLine.Length <= 500 ? firstLine : firstLine[..500];
+        return new ProviderLimitInfo(provider, observedAt, retryAt, reason, reported);
     }
 
     private static ExecutionRecoveryAction SelectRecovery(

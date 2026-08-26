@@ -191,10 +191,12 @@ public class ProjectRunner
     // spawns again — a transient CLI break (half-healed npm shim, mid-update)
     // must degrade the runner temporarily, not permanently. Cleared by ANY
     // explicit SetMode (an operator/system decision supersedes the pending
-    // auto-resume) and after a successful resume. Deliberately NOT set by the
-    // circuit-breaker paths — those own their own cooldown semantics.
+    // auto-resume) and after a successful resume. Cross-slug infrastructure
+    // breaker pauses also arm it; the global failure breaker owns a separate
+    // time-based cooldown.
     private string? _autoResumeCliAfterPause;
     private DateTime _autoResumeNextProbeUtc = DateTime.MinValue;
+    private Task<QuotaSnapshot?>? _autoResumeQuotaProbeTask;
     private RunnerCircuitBreakerOptions _circuitBreakerOptions = RunnerCircuitBreakerOptions.Default;
     private DateTime? _globalBreakerCooldownUntil;
     private string? _globalBreakerReason;
@@ -564,6 +566,7 @@ public class ProjectRunner
         // auto-resume (the pause path re-arms the marker right after its own
         // SetMode call).
         _autoResumeCliAfterPause = null;
+        _autoResumeQuotaProbeTask = null;
         _logger.LogInformation(
             "Runner '{Project}' mode '{From}' -> '{To}' because '{Reason}' (source={Source})",
             ProjectName, fromMode, mode, effectiveReason, _modeSource);
@@ -574,22 +577,26 @@ public class ProjectRunner
 
     /// <summary>
     /// Restores the operator's durable mode after a CLI-unspawnable pickup
-    /// pause, once the CLI spawns again. Armed only by the spawn-failure pause
-    /// path (never by circuit-breaker trips, which own their cooldown
-    /// semantics). Probes at most once per minute because the availability
-    /// check launches <c>&lt;cli&gt; --version</c>. The resume target is
+    /// pause, once the CLI and provider probe recover. Armed by spawn-failure
+    /// pauses and cross-slug infrastructure breaker trips. Probes at most once
+    /// per minute because the availability check launches
+    /// <c>&lt;cli&gt; --version</c>. The resume target is
     /// <see cref="ProjectSettings.DesiredRunnerMode"/> — the value the boot
     /// restore would use — so a restart and an in-place recovery land in the
     /// same mode. Public-ish via TickAsync; internal for tests.
     /// </summary>
-    internal void TickCliRecoveryResume()
+    internal async Task TickCliRecoveryResumeAsync(CancellationToken ct = default)
     {
         var cli = _autoResumeCliAfterPause;
         if (cli == null) return;
-        if (_mode != "manual") { _autoResumeCliAfterPause = null; return; }
+        if (_mode != "manual")
+        {
+            _autoResumeCliAfterPause = null;
+            _autoResumeQuotaProbeTask = null;
+            return;
+        }
         var now = DateTime.UtcNow;
-        if (now < _autoResumeNextProbeUtc) return;
-        _autoResumeNextProbeUtc = now.AddSeconds(60);
+        if (_autoResumeQuotaProbeTask is null && now < _autoResumeNextProbeUtc) return;
 
         string? desired;
         try { desired = _projectSettings.Get(ProjectName).DesiredRunnerMode; }
@@ -605,14 +612,55 @@ public class ProjectRunner
             return;
         }
 
-        bool available;
-        try { available = _router.Get(cli).IsAvailable(); }
-        catch (Exception ex)
+        if (_autoResumeQuotaProbeTask is null)
         {
-            _logger.LogDebug(ex, "CLI-recovery resume: availability probe for '{Cli}' threw", cli);
+            _autoResumeNextProbeUtc = now.AddSeconds(60);
+            bool available;
+            try { available = _router.Get(cli).IsAvailable(); }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "CLI-recovery resume: availability probe for '{Cli}' threw", cli);
+                return;
+            }
+            if (!available) return;
+
+            // Do not hold the project pickup tick while a provider probe runs.
+            // Quota probes may take up to 45 seconds, so retain the task and
+            // inspect it on a later tick while unrelated CLIs keep moving.
+            _autoResumeQuotaProbeTask = _quotaService.RefreshAsync(cli, ct);
             return;
         }
-        if (!available) return;
+
+        if (!_autoResumeQuotaProbeTask.IsCompleted) return;
+
+        // Binary availability alone is not enough for a provider-limit pause:
+        // `claude --version` succeeds while the shared account is still
+        // limited. Force the existing provider quota probe and keep the breaker
+        // closed until that request returns a usable, non-blocked snapshot.
+        // A CLI without a registered quota probe retains the binary-only
+        // recovery contract used by ordinary launch failures.
+        QuotaSnapshot? quota;
+        try { quota = await _autoResumeQuotaProbeTask; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "CLI-recovery resume: provider probe for '{Cli}' threw", cli);
+            _autoResumeQuotaProbeTask = null;
+            return;
+        }
+        _autoResumeQuotaProbeTask = null;
+        if (quota is not null
+            && (!string.IsNullOrWhiteSpace(quota.Error)
+                || quota.Suspicious
+                || _quotaCaps.Evaluate(quota).Blocked))
+        {
+            _logger.LogInformation(
+                "CLI-recovery resume: provider probe for '{Cli}' has not proved recovery (error={Error}, suspicious={Suspicious})",
+                cli,
+                quota.Error,
+                quota.Suspicious);
+            return;
+        }
 
         _logger.LogInformation(
             "Runner '{Project}': the {Cli} CLI is available again; restoring desired mode '{Mode}' after the pickup pause",
@@ -987,11 +1035,11 @@ public class ProjectRunner
         // for hangs. Cheap (one timestamp arithmetic per active job).
         TickWatchdog();
 
-        // CLI-recovery auto-resume: if the unspawnable-CLI pickup pause forced
-        // this runner to manual, probe the CLI (throttled to once per minute)
-        // and restore the operator's durable mode as soon as it spawns again.
-        // No-op unless the pause path armed the marker.
-        TickCliRecoveryResume();
+        // CLI-recovery auto-resume: if an unspawnable-CLI or cross-slug breaker
+        // pause forced this runner to manual, probe the CLI and provider
+        // (throttled to once per minute) and restore the operator's durable
+        // mode only after recovery. No-op unless a system pause armed it.
+        await TickCliRecoveryResumeAsync(ct);
 
         // Continuous decision review (ADR-0027): scan the active job's live
         // output buffer for an unresolved [[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]
@@ -5516,6 +5564,59 @@ public class ProjectRunner
                     jobId, cliType);
                 _ = _quotaService.InvalidateForGroundTruthLimit(
                     cliType, $"launch {jobId} died with a usage-limit error");
+
+                // Account-level provider limits are admission state, not task
+                // failures. Keep this card in Progress with the existing durable
+                // quotaWait projection and let the per-CLI quota probe reopen it
+                // after the reported reset. Other CLI cards remain eligible.
+                if (activeInfo is not null)
+                {
+                    var rawLimitOutput = string.Join(
+                        Environment.NewLine,
+                        liveOutputSnapshot.Select(line => line.Text ?? string.Empty));
+                    var typedLimit = AgentStudio.TaskServer.Contracts.ExecutionOutcomeAdapter.Classify(
+                        new AgentStudio.TaskServer.Contracts.ExecutionRawFacts(
+                            $"local-provider-limit:{jobId}:{Guid.NewGuid():N}",
+                            AgentStudio.TaskServer.Contracts.ExecutionAttemptKind.Coding,
+                            StdErr: rawLimitOutput,
+                            ExitCode: execution.ExitCode is 0 or null ? 1 : execution.ExitCode,
+                            Provider: cliType,
+                            ObservedAt: DateTimeOffset.Now));
+                    var limit = typedLimit.ProviderLimit;
+                    var resetAt = limit?.RetryAt.UtcDateTime ?? DateTime.UtcNow.AddMinutes(15);
+                    var reason = limit is null
+                        ? $"{cliType}: provider limit; retry after {resetAt:u}"
+                        : $"{limit.Provider}: limited until {resetAt:u}. {limit.Reason}";
+                    QuotaWaitMarker.Write(activeInfo.FolderPath, new QuotaWaitRecord
+                    {
+                        CliType = cliType,
+                        StartedAt = DateTime.UtcNow,
+                        ResetAt = resetAt,
+                        ThresholdMinutes = Math.Max(1, (int)Math.Ceiling((resetAt - DateTime.UtcNow).TotalMinutes)),
+                        Reason = reason,
+                    }, _logger);
+                    _mutations.SetJobPhase(activeInfo.FolderPath, LifecyclePhases.QuotaWaiting);
+                    _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
+                        $"[quota-wait] {reason} The card will resume automatically after a successful quota probe; no failure or escalation was recorded.");
+                    _timeline?.Append(
+                        activeInfo.FolderPath,
+                        TimelineEventKinds.QuotaAdmissionDecision,
+                        TimelineActors.System,
+                        summary: reason,
+                        details: new()
+                        {
+                            ["outcome"] = "Wait",
+                            ["decision"] = "provider-limit-wait",
+                            ["cli"] = cliType,
+                            ["resetAt"] = resetAt.ToString("o"),
+                        });
+                    _consecutiveFailNoProgress.TryRemove(jobId, out _);
+                    _rapidCrashBackoffUntil.TryRemove(jobId, out _);
+                    _logger.LogWarning(
+                        "provider-limit-paused project={Project} job={JobId} cli={CliType} resetAt={ResetAt:o}; auto-mode remains available to other CLIs",
+                        ProjectName, jobId, cliType, resetAt);
+                    return;
+                }
             }
 
             // Count the commits this run actually produced (HeadShaBefore..After).
@@ -8949,8 +9050,16 @@ public class ProjectRunner
         // mode is what's driving the picker.
         if (IsAutoMode(_mode))
         {
+            var pausedAt = now.ToUniversalTime();
             SetMode("manual",
-                $"cross-slug infra circuit-breaker on {cliType}: {string.Join(", ", trip.Slugs)}");
+                $"pickup paused: infra breaker, {trip.Slugs.Count} failures cliType={cliType} at {pausedAt:O}; " +
+                $"cross-slug infra circuit-breaker tasks={string.Join(",", trip.Slugs)}");
+            // Breaker pauses are system-owned and self-resuming. The recovery
+            // path probes both the CLI process and, where available, provider
+            // quota before restoring DesiredRunnerMode. Manual operator pauses
+            // never arm this marker and therefore stay manual.
+            _autoResumeCliAfterPause = cliType;
+            _autoResumeNextProbeUtc = now.AddSeconds(60);
             return true;
         }
         return false;

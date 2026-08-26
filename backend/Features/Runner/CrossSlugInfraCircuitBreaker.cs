@@ -26,8 +26,9 @@ namespace AgentStudio.Runner;
 /// This breaker is the additional layer that recognises the cascade as
 /// infra-shaped rather than task-shaped: when <see cref="SilentLimit"/>
 /// distinct slugs hit the per-slug dead-letter for the same <c>cliType</c>
-/// within <see cref="Window"/>, the runner halts pickup (mode → manual)
-/// and raises an infra-halt banner. The per-slug path keeps working as
+/// within <see cref="Window"/>, the runner pauses pickup (mode → manual),
+/// raises an infrastructure-halt banner, and probes for recovery before
+/// restoring the saved automatic mode. The per-slug path keeps working as
 /// before; this is an additional layer, not a replacement.
 /// </para>
 ///
@@ -285,9 +286,9 @@ public sealed class CrossSlugInfraCircuitBreaker
         return
             $"{cliType} CLI suspected broken: {slugs.Count} distinct slugs spawn-failed " +
             $"({slugList}) within {windowMinutes} minutes (limit {limit}). " +
-            $"Runner switched to manual mode. Suggested action: run tools/check-cli-shims.sh " +
-            $"and restart stable, or check {cliType} --version manually. " +
-            $"Switch the project back to auto mode after the fix.";
+            $"Runner switched to manual mode while recovery is probed automatically. " +
+            $"Suggested action if recovery does not arrive: run tools/check-cli-shims.sh " +
+            $"and restart stable, or check {cliType} --version manually.";
     }
 }
 
@@ -315,8 +316,8 @@ public sealed record TripOutcome(
         return
             $"Cross-slug pickup-failure cascade detected: {CliType} CLI suspected broken " +
             $"({Slugs.Count} distinct slugs spawn-failed within {WindowMinutes} minutes: {slugList}). " +
-            $"Runner switched to manual mode and will stay there until you switch it back. " +
-            $"Suggested action: run tools/check-cli-shims.sh and restart stable, " +
+            $"Runner switched to manual mode and will resume the saved automatic mode after a successful recovery probe. " +
+            $"Suggested action if recovery does not arrive: run tools/check-cli-shims.sh and restart stable, " +
             $"or check {CliType} --version manually.";
     }
 }

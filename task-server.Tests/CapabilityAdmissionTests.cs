@@ -211,6 +211,76 @@ public sealed class CapabilityAdmissionTests
     }
 
     [Fact]
+    public async Task Provider_limit_detail_blocks_only_claude_and_keeps_codex_claimable()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        await store.RegisterRunnerAsync(
+            "coding",
+            new RegisterRunnerRequest(
+                "coding",
+                "host-a",
+                "coding-instance",
+                "1.0",
+                TaskServerProtocol.Current,
+                [ReviewCapabilities.CodingExecutor]),
+            "coding",
+            default);
+        await store.AdvertiseCapabilitiesAsync(
+            new CapabilityAdvertisementRequest(
+                "coding",
+                "coding-instance",
+                CapabilityProtocol.CurrentSchemaVersion,
+                clock.GetUtcNow().UtcDateTime,
+                300,
+                1,
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        CapabilityProtocol.ProviderAuthentication("claude"),
+                        "provider-auth",
+                        "limited",
+                        Detail: "claude: limited until 2026-08-24 00:20Z"),
+                    new AdvertisedCapabilityDto(
+                        CapabilityProtocol.ProviderAuthentication("codex"),
+                        "provider-auth"),
+                ]),
+            "coding",
+            default);
+
+        var claude = await store.ClaimAsync(
+            new ClaimRequest(
+                "coding",
+                "coding-instance",
+                RequiredCapabilities:
+                [
+                    CapabilityProtocol.CodingExecutor,
+                    CapabilityProtocol.ProviderAuthentication("claude"),
+                ]),
+            "coding",
+            default);
+        var codex = await store.ClaimAsync(
+            new ClaimRequest(
+                "coding",
+                "coding-instance",
+                RequiredCapabilities:
+                [
+                    CapabilityProtocol.CodingExecutor,
+                    CapabilityProtocol.ProviderAuthentication("codex"),
+                ]),
+            "coding",
+            default);
+
+        Assert.Equal("empty", claude.Status);
+        Assert.Contains("advertised as limited", claude.Message);
+        Assert.Contains("claude: limited until", claude.Message);
+        Assert.Equal("claimed", codex.Status);
+    }
+
+    [Fact]
     public async Task Provider_auth_probe_transitions_are_retained_across_advertisements_and_restart()
     {
         using var temp = new TempDirectory();

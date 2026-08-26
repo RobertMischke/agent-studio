@@ -147,6 +147,19 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- Provider session and rate limits are provider-scoped admission state, not task
+  failures. The shared outcome adapter extracts the provider and reported reset
+  clock from CLI diagnostics. The daemon persists `provider-limits.json`,
+  advertises `provider-auth:<cliType>` as `limited` with the retry time, and
+  probes the provider after that time. A successful probe clears the capability
+  limit and claims resume automatically. The affected card waits without
+  escalation or failure-budget consumption; other CLI capabilities and claims
+  remain eligible. Queue visibility reports this state as `limited`, distinct
+  from a stalled claim plane.
+- Infrastructure breaker pauses publish their failure count, CLI type, and trip
+  time through runner status and the workspace banner. Breaker-owned pauses
+  probe CLI and provider recovery before restoring the saved automatic mode;
+  operator-owned manual or paused modes never arm automatic recovery.
 - Remote provider credentials use one protected host file,
   `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
   `root:agent` mode `640`, loaded by both Coding and Review units after their

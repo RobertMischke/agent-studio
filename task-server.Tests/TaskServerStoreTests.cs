@@ -660,6 +660,51 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Provider_limit_completion_waits_ready_without_review_and_can_be_claimed_after_recovery()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+        var decision = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
+            claim.Run!.RunId,
+            ExecutionAttemptKind.Coding,
+            StdErr: "You've hit your session limit · resets 12:20am",
+            ExitCode: 1,
+            Provider: "claude",
+            ObservedAt: new DateTimeOffset(2026, 8, 23, 22, 0, 0, TimeSpan.FromHours(2))));
+
+        await store.CompleteRunAsync(
+            claim.Run.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                "instance-a",
+                claim.Lease!.LeaseId,
+                claim.Lease.Fence,
+                decision.Outcome.ToString(),
+                "provider limit; waiting for automatic probe",
+                IdempotencyKey: $"completion:{claim.Run.RunId}:provider-limit",
+                Sequence: 1,
+                OutcomeDecision: decision),
+            "runner-a",
+            default);
+
+        Assert.Equal("2-ready", (await store.GetTaskAsync(project.ProjectId, task.TaskKey, default))!.State);
+        var events = await store.ListEventsAsync(claim.Run.RunId, 0, default);
+        Assert.DoesNotContain(events, item => item.Kind == LifecycleEventKinds.PostProcessingCompleted);
+
+        var resumed = await store.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "runner-a",
+            default);
+        Assert.Equal("claimed", resumed.Status);
+        Assert.Equal(task.TaskId, resumed.Task!.TaskId);
+        Assert.True(resumed.Lease!.Fence > claim.Lease.Fence);
+    }
+
+    [Fact]
     public async Task Typed_event_payloads_fail_before_persistence_when_the_bound_is_exceeded()
     {
         using var temp = new TempDirectory();

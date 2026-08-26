@@ -1,4 +1,5 @@
 using System.Net.Http;
+using AgentStudio.TaskServer.Contracts;
 
 namespace AgentRunner;
 
@@ -86,6 +87,7 @@ public sealed class RemoteRunnerDaemon
         shutdown = daemonStop.Token;
         var connectivity = new TaskServerConnectivityMonitor(_log);
         var state = new RunnerStateStore(_options.StateDir);
+        var providerLimits = new ProviderLimitTracker(_options.StateDir);
         Task<string> RegisterAsync(CancellationToken ct) => _client.RegisterAsync(
             _options.RunnerName,
             "service",
@@ -129,7 +131,8 @@ public sealed class RemoteRunnerDaemon
                 _client,
                 _log,
                 state,
-                inventory);
+                inventory,
+                providerLimits);
             var observation = DurableAgentProcess.InspectForReattach(slot);
             var accepted = recoveredHostWork.FirstOrDefault(item =>
                 string.Equals(
@@ -299,7 +302,8 @@ public sealed class RemoteRunnerDaemon
                         gitCapability.CanPush,
                         gitCapability.CanPushWorkflows,
                         gitCapability.Detail,
-                        connectivity: connectivity.Snapshot),
+                        connectivity: connectivity.Snapshot,
+                        providerLimits: providerLimits.Current),
                     RunnerCapabilityProbe.Telemetry(latestTelemetry),
                     capabilityGeneration,
                     ct);
@@ -336,6 +340,7 @@ public sealed class RemoteRunnerDaemon
             _options.ClaimMaxLoadPerCore,
             TimeSpan.FromSeconds(_options.LoadGateSustainedSeconds));
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+        var advertisedProviderLimitRevision = providerLimits.Revision;
         HostTelemetrySample? TakeTelemetry(bool force = false)
         {
             try
@@ -369,6 +374,21 @@ public sealed class RemoteRunnerDaemon
             try
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
+                foreach (var limited in providerLimits.Current)
+                {
+                    var probe = await providerLimits.ProbeIfDueAsync(
+                        limited.Provider,
+                        ProbeProviderLimitAsync,
+                        shutdown);
+                    if (probe is not null)
+                    {
+                        _log(probe.Recovered
+                            ? $"provider-limit-recovered provider={limited.Provider}; claims resume automatically"
+                            : $"provider-limit-still-active provider={limited.Provider} detail={probe.Detail}");
+                    }
+                }
+                if (providerLimits.Revision != advertisedProviderLimitRevision)
+                    nextCapabilityAdvertisement = DateTime.MinValue;
                 if (DateTime.UtcNow >= nextCapabilityAdvertisement)
                 {
                     var capabilityTelemetry = TakeTelemetry();
@@ -381,7 +401,8 @@ public sealed class RemoteRunnerDaemon
                                 gitCapability.CanPush,
                                 gitCapability.CanPushWorkflows,
                                 gitCapability.Detail,
-                                connectivity: connectivity.Snapshot),
+                                connectivity: connectivity.Snapshot,
+                                providerLimits: providerLimits.Current),
                             RunnerCapabilityProbe.Telemetry(capabilityTelemetry),
                             generation,
                             ct),
@@ -396,6 +417,7 @@ public sealed class RemoteRunnerDaemon
                         _log,
                         shutdown);
                     nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+                    advertisedProviderLimitRevision = providerLimits.Revision;
                 }
                 // Record the attempt before entering any claim-path HTTP call.
                 // A request which never returns must still count as the last
@@ -579,7 +601,8 @@ public sealed class RemoteRunnerDaemon
                             _client,
                             _log,
                             state,
-                            inventory);
+                            inventory,
+                            providerLimits);
                         claimedAny = true;
                         _log(
                             $"starting host permit {acceptance.PermitId} for " +
@@ -639,7 +662,8 @@ public sealed class RemoteRunnerDaemon
                         _client,
                         _log,
                         state,
-                        inventory);
+                        inventory,
+                        providerLimits);
                     if (shutdown.IsCancellationRequested)
                     {
                         var workspace = new GitWorkspace(
@@ -845,6 +869,60 @@ public sealed class RemoteRunnerDaemon
     {
         try { await Task.Delay(delay, shutdown); }
         catch (OperationCanceledException) { /* shutting down; the loop condition ends it */ }
+    }
+
+    private async Task<ProviderLimitProbeResult> ProbeProviderLimitAsync(
+        string provider,
+        CancellationToken ct)
+    {
+        var binary = RunnerCapabilityProbe.CodingCliBinaries(_options)
+            .FirstOrDefault(item => string.Equals(item.CliType, provider, StringComparison.OrdinalIgnoreCase))
+            .Binary;
+        if (string.IsNullOrWhiteSpace(binary))
+            return new ProviderLimitProbeResult(false, $"No configured binary can probe provider '{provider}'.");
+
+        IReadOnlyList<string>? arguments = provider switch
+        {
+            AgentCliProcess.ClaudeCli =>
+                ["-p", "Reply with exactly OK.", "--output-format", "json", "--max-turns", "1"],
+            _ => null,
+        };
+        if (arguments is null)
+            return new ProviderLimitProbeResult(false, $"No recovery probe is defined for provider '{provider}'.");
+
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        bounded.CancelAfter(TimeSpan.FromSeconds(45));
+        ProcessResult result;
+        try
+        {
+            var invocation = ProviderAuthProbe.LowPriorityInvocation(binary, arguments);
+            result = await ProcessRunner.RunAsync(invocation.FileName, invocation.Arguments, ct: bounded.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return new ProviderLimitProbeResult(false, $"{provider} recovery probe timed out.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new ProviderLimitProbeResult(false, $"{provider} recovery probe failed to start: {ex.Message}");
+        }
+
+        if (result.ExitCode == 0)
+            return new ProviderLimitProbeResult(true, $"{provider} recovery probe completed successfully.");
+
+        var decision = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
+            $"provider-limit-probe:{provider}:{Guid.NewGuid():N}",
+            ExecutionAttemptKind.Coding,
+            StdOut: result.StdOut,
+            StdErr: result.StdErr,
+            ExitCode: result.ExitCode,
+            Provider: provider,
+            ObservedAt: DateTimeOffset.Now));
+        return decision.ProviderLimit is { } limit
+            ? new ProviderLimitProbeResult(false, limit.Reason, limit)
+            : new ProviderLimitProbeResult(
+                false,
+                $"{provider} recovery probe exited {result.ExitCode} without proving recovery.");
     }
 
     private void AcknowledgeInventory(
