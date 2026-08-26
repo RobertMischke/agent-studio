@@ -61,6 +61,8 @@ describe('RemoteHostsPanelComponent', () => {
     const remote = el.querySelector('[data-host="agent-runner-01"]') as HTMLElement;
     (remote.querySelector('[data-testid="remote-host-disclosure"]') as HTMLButtonElement).click();
     fixture.detectChanges();
+    (remote.querySelector('[data-testid="remote-host-detail-toggle-connection"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
     const setupButton = remote.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
     setupButton.click();
     fixture.detectChanges();
