@@ -404,6 +404,8 @@ public sealed class TaskServerStoreTests
                 var taskDirectory = Path.Combine(legacy.Path, "projects", "agent-studio", "2-ready", "AGT-1");
                 Directory.CreateDirectory(Path.Combine(taskDirectory, "results"));
                 Directory.CreateDirectory(Path.Combine(legacy.Path, ".git"));
+                Directory.CreateDirectory(Path.Combine(legacy.Path, ".metadata"));
+                Directory.CreateDirectory(Path.Combine(legacy.Path, "identities"));
                 await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".git", "HEAD"), "ref: refs/heads/main\n");
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "job.json"), """
                     {"id":"AGT-1","title":"Migrated task","state":"2-ready","projectName":"Agent Studio"}
@@ -411,21 +413,124 @@ public sealed class TaskServerStoreTests
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "prompt.md"), "Migrated prompt");
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "timeline.jsonl"), "{\"kind\":\"created\",\"timestamp\":\"2026-07-17T10:00:00Z\"}\n");
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "results", "evidence.txt"), "proof");
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, "identities", "idle-runner.json"), """
+                    {
+                      "id": "idle-runner",
+                      "displayName": "Idle Runner",
+                      "kind": "service",
+                      "registeredAt": "2026-07-16T09:00:00Z",
+                      "lastSeenAt": "2026-07-17T09:59:00Z"
+                    }
+                    """);
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"), """
+                    {
+                      "schemaVersion": 4,
+                      "authorityEpoch": 7,
+                      "lastFenceByTask": { "AGT-1": 9 },
+                      "runAttempts": [
+                        {
+                          "attemptId": "run_legacy_1",
+                          "taskKey": "AGT-1",
+                          "repositoryId": "repo_legacy",
+                          "state": 2,
+                          "lastFence": 8,
+                          "authorityEpoch": 7,
+                          "createdAt": "2026-07-17T10:01:00Z",
+                          "terminalAt": "2026-07-17T10:03:00Z",
+                          "resultSha": "1111111111111111111111111111111111111111",
+                          "lease": {
+                            "leaseId": "lease_coding_1",
+                            "fence": 8,
+                            "authorityEpoch": 7,
+                            "executorId": "coding-runner",
+                            "hostId": "windows-host",
+                            "leaseInstanceId": "coding-instance",
+                            "acquiredAt": "2026-07-17T10:01:00Z",
+                            "expiresAt": "2026-07-17T10:02:00Z"
+                          }
+                        }
+                      ],
+                      "reviewAttempts": [
+                        {
+                          "attemptId": "review_legacy_1",
+                          "taskKey": "AGT-1",
+                          "repositoryId": "repo_legacy",
+                          "sourceRunAttemptId": "run_legacy_1",
+                          "state": 1,
+                          "lastFence": 3,
+                          "authorityEpoch": 7,
+                          "createdAt": "2026-07-17T10:04:00Z",
+                          "lease": {
+                            "leaseId": "lease_review_1",
+                            "fence": 3,
+                            "authorityEpoch": 7,
+                            "executorId": "review-runner",
+                            "hostId": "windows-host",
+                            "leaseInstanceId": "review-instance",
+                            "acquiredAt": "2026-07-17T10:04:00Z",
+                            "expiresAt": "2026-07-17T10:05:00Z"
+                          },
+                          "subject": {
+                            "subjectId": "subject_legacy_1",
+                            "repositoryId": "repo_legacy",
+                            "expectedResultSha": "1111111111111111111111111111111111111111",
+                            "sourceRunAttemptId": "run_legacy_1",
+                            "reviewPolicyHash": "policy-legacy",
+                            "createdAt": "2026-07-17T10:03:30Z",
+                            "plan": { "commands": [], "requiredAspects": [] }
+                          }
+                        }
+                      ]
+                    }
+                    """);
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.archive-2026-07-16.json"), """
+                    {
+                      "schemaVersion": 1,
+                      "archivedAt": "2026-07-16T12:00:00Z",
+                      "runAttempts": [
+                        {
+                          "attemptId": "run_legacy_archived",
+                          "taskKey": "AGT-1",
+                          "repositoryId": "repo_legacy",
+                          "state": 2,
+                          "lastFence": 4,
+                          "authorityEpoch": 6,
+                          "createdAt": "2026-07-16T10:01:00Z",
+                          "terminalAt": "2026-07-16T10:03:00Z",
+                          "resultSha": "2222222222222222222222222222222222222222"
+                        }
+                      ],
+                      "reviewAttempts": []
+                    }
+                    """);
 
                 var store = Store(data.Path);
                 await store.InitializeAsync();
                 var migration = new LegacyMigrationService(store);
-                var request = new LegacyMigrationRequest(legacy.Path, "Agent Studio for Software", true);
+                var request = new LegacyMigrationRequest(
+                    legacy.Path,
+                    "Agent Studio for Software",
+                    true,
+                    RequireAttemptAuthority: true);
                 var inventory = await migration.InventoryAsync(request, default);
                 Assert.Equal(1, inventory.Projects);
                 Assert.Equal(1, inventory.Tasks);
                 Assert.Equal(1, inventory.Events);
                 Assert.Equal(1, inventory.Artifacts);
+                Assert.Equal(2, inventory.CodingAttempts);
+                Assert.Equal(1, inventory.RunnerIdentities);
+                Assert.Equal(1, inventory.ReviewAttempts);
+                Assert.Equal(2, inventory.Leases);
+                Assert.Equal(7, inventory.AuthorityEpoch);
 
                 request = request with { ExpectedMigrationId = inventory.MigrationId };
                 await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "single-writer cutover"), "operator", default);
                 var result = await migration.ImportAsync(request, "operator", default);
                 Assert.True(result.Imported);
+                Assert.Equal(2, result.CodingAttempts);
+                Assert.Equal(1, result.RunnerIdentities);
+                Assert.Equal(1, result.ReviewAttempts);
+                Assert.Equal(2, result.Leases);
                 Assert.False(string.IsNullOrWhiteSpace(result.IntegritySha256));
                 Assert.Contains("Restore backup", result.RollbackBoundary);
                 Assert.True(Directory.Exists(Path.Combine(data.Path, "migration-evidence", result.MigrationId)));
@@ -443,6 +548,73 @@ public sealed class TaskServerStoreTests
                     SearchOption.TopDirectoryOnly));
                 AssertCanOpenExclusively(migrationBackup);
                 AssertCanOpenExclusively(store.DatabasePath);
+
+                await using var connection = new SqliteConnection($"Data Source={store.DatabasePath};Pooling=False");
+                await connection.OpenAsync();
+                Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM runs WHERE id = 'run_legacy_1' AND status = 'completed';"));
+                Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM runs WHERE id = 'run_legacy_archived' AND status = 'completed';"));
+                Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM leases WHERE lease_id = 'lease_coding_1' AND fence = 8;"));
+                Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM review_attempts WHERE id = 'review_legacy_1' AND status = 'process-unknown' AND fence = 3;"));
+                Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM runners WHERE id = 'idle-runner' AND name = 'Idle Runner';"));
+                Assert.Equal(9L, Scalar(connection, "SELECT last_fence FROM fence_counters WHERE task_id = (SELECT id FROM tasks WHERE task_key = 'AGT-1');"));
+            });
+        });
+    }
+
+    [Fact]
+    public async Task Legacy_migration_imports_the_current_task_layout_and_uses_the_stable_task_key()
+    {
+        await TempDirectory.RunAsync(async data =>
+        {
+            await TempDirectory.RunAsync(async legacy =>
+            {
+                var taskDirectory = Path.Combine(legacy.Path, "projects", "PROJ-002", "tasks", "002", "AGT-2663");
+                Directory.CreateDirectory(taskDirectory);
+                Directory.CreateDirectory(Path.Combine(legacy.Path, ".metadata"));
+                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "task.json"), """
+                    {
+                      "id": "task-server-cutover",
+                      "key": "AGT-2663",
+                      "title": "Cut over the local task server",
+                      "state": "3-progress",
+                      "createdAt": "2026-08-16T18:01:28Z"
+                    }
+                    """);
+                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "job.json"), """
+                    {"id":"WRONG-LEGACY-DUPLICATE","title":"Must not win","state":"2-ready"}
+                    """);
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"), """
+                    {"schemaVersion":4,"authorityEpoch":11,"lastFenceByTask":{"AGT-2663":14},"runAttempts":[],"reviewAttempts":[]}
+                    """);
+
+                var store = Store(data.Path);
+                await store.InitializeAsync();
+                var migration = new LegacyMigrationService(store);
+                var request = new LegacyMigrationRequest(
+                    legacy.Path,
+                    "Agent Studio",
+                    true,
+                    RequireAttemptAuthority: true);
+                var inventory = await migration.InventoryAsync(request, default);
+                Assert.Equal(1, inventory.Projects);
+                Assert.Equal(1, inventory.Tasks);
+                Assert.Equal(11, inventory.AuthorityEpoch);
+
+                await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "current-layout rehearsal"), "operator", default);
+                var result = await migration.ImportAsync(
+                    request with { ExpectedMigrationId = inventory.MigrationId },
+                    "operator",
+                    default);
+
+                Assert.True(result.Imported);
+                var project = Assert.Single(await store.ListProjectsAsync(null, default));
+                var task = Assert.Single(await store.ListTasksAsync(project.ProjectId, default));
+                Assert.Equal("AGT-2663", task.TaskKey);
+                Assert.Equal("Cut over the local task server", task.Title);
+
+                await using var connection = new SqliteConnection($"Data Source={store.DatabasePath};Pooling=False");
+                await connection.OpenAsync();
+                Assert.Equal(14L, Scalar(connection, "SELECT last_fence FROM fence_counters WHERE task_id = (SELECT id FROM tasks WHERE task_key = 'AGT-2663');"));
             });
         });
     }
@@ -475,6 +647,27 @@ public sealed class TaskServerStoreTests
 
         Assert.Equal("legacy-inventory-changed", conflict.Code);
         Assert.Empty(await store.ListProjectsAsync(null, default));
+    }
+
+    [Fact]
+    public async Task Legacy_cutover_can_require_attempt_authority_to_prevent_fence_reset()
+    {
+        using var data = new TempDirectory();
+        using var legacy = new TempDirectory();
+        Directory.CreateDirectory(Path.Combine(legacy.Path, "projects"));
+        var store = Store(data.Path);
+        await store.InitializeAsync();
+        var migration = new LegacyMigrationService(store);
+        var request = new LegacyMigrationRequest(
+            legacy.Path,
+            "Workspace",
+            true,
+            RequireAttemptAuthority: true);
+
+        var conflict = await Assert.ThrowsAsync<TaskServerConflictException>(
+            () => migration.InventoryAsync(request, default));
+
+        Assert.Equal("legacy-attempt-authority-required", conflict.Code);
     }
 
     [Fact]
@@ -1377,6 +1570,13 @@ public sealed class TaskServerStoreTests
         using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         Assert.True(stream.CanRead);
         Assert.True(stream.CanWrite);
+    }
+
+    private static long Scalar(SqliteConnection connection, string sql)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return Convert.ToInt64(command.ExecuteScalar());
     }
 
     private static async Task<(WorkspaceDto Workspace, ProjectDto Project, TaskDto Task)> SeedReadyTaskAsync(TaskServerStore store)
