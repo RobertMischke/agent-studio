@@ -166,6 +166,35 @@ describe('RemoteHostCardComponent', () => {
       .toContain('ready → unavailable');
   });
 
+  it('shows a quiet repair receipt and an alarm only for a current repair failure', () => {
+    const repaired = mount({
+      ...HOST,
+      role: 'local',
+      localCliRepair: {
+        cliType: 'claude', outcome: 'repaired', occurredAt: '2026-08-18T10:14:00Z',
+        versionBefore: '2.1.231', versionAfter: '2.1.234', detail: 'claude CLI repaired.',
+      },
+      localCliRepairAlarm: false,
+    }).nativeElement as HTMLElement;
+    expect(repaired.querySelector('[data-testid="remote-host-cli-repair-note"]')?.textContent)
+      .toContain('CLI repaired at');
+    expect(repaired.querySelector('[data-testid="remote-host-cli-repair-note"]')?.textContent)
+      .toContain('2.1.231 → 2.1.234');
+    expect(repaired.querySelector('[data-testid="remote-host-cli-repair-alarm"]')).toBeNull();
+
+    const failed = mount({
+      ...HOST,
+      role: 'local',
+      localCliRepair: {
+        cliType: 'codex', outcome: 'failed', occurredAt: '2026-08-18T11:00:00Z',
+        versionBefore: '0.42.0', versionAfter: null, detail: 'npm exited 1.',
+      },
+      localCliRepairAlarm: true,
+    }).nativeElement as HTMLElement;
+    expect(failed.querySelector('[data-testid="remote-host-cli-repair-alarm"]')?.textContent)
+      .toContain('CLI repair failed. npm exited 1.');
+  });
+
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
     const el: HTMLElement = mount({
       ...HOST,

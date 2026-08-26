@@ -33,6 +33,17 @@ Each entry uses the same fields:
 
 ## Entries
 
+### local-cli.missing-npm-shim-repair
+
+- **Kind:** Pre-Guard
+- **Where:** [`backend/Features/Cli/Execution/LocalCliSelfHealService.cs`](../../../backend/Features/Cli/Execution/LocalCliSelfHealService.cs) and [`NpmShimHealer.cs`](../../../backend/Features/Cli/Execution/NpmShimHealer.cs)
+- **Re-entry trigger:** The once-per-minute local capability probe, or an explicit local start/continue availability gate, observes that bare `claude` or `codex` fails its version probe.
+- **Budget:** One `npm install --global <package>` attempt per CLI per hour. Attempt timestamps are restored from `<TaskRepository>/logs/local-cli-repairs.jsonl`, so a backend restart does not reset the budget.
+- **Action when budget exhausted:** Keep the CLI unavailable, report the next eligible timestamp in capability detail, and do not run npm. Truly uninstalled packages, custom paths, and present-but-broken shims never enter the automatic repair branch.
+- **Breaker test:** [`backend.Tests/LocalCliSelfHealPolicyTests.cs`](../../../backend.Tests/LocalCliSelfHealPolicyTests.cs)
+- **Last fired:** The two manual precursor repairs occurred on 2026-08-13 and 2026-08-18. The automated loop had not shipped at those times.
+- **Notes:** Every actual attempt records package and CLI versions before and after, npm exit status, and secret-free npm debug-log timestamps, sizes, hashes, and normalized activity signals. Successful repair is quiet history; only current repair failure is an alarm.
+
 ### pickup.silent-runs-per-job
 
 - **Kind:** Pre-Guard

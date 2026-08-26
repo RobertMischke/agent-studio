@@ -116,6 +116,18 @@
 
         <section class="detail detail--wide" aria-labelledby="capabilities-title-{{ h.id }}">
           <h3 [id]="'capabilities-title-' + h.id">Capabilities and authentication</h3>
+          @if (h.localCliRepair?.outcome === 'repaired') {
+            <p class="provider-auth__history" data-testid="remote-host-cli-repair-note">
+              CLI repaired at {{ h.localCliRepair?.occurredAt | date:'shortTime' }}
+              @if (h.localCliRepair?.versionBefore || h.localCliRepair?.versionAfter) {
+                · {{ h.localCliRepair?.versionBefore || 'unknown' }} → {{ h.localCliRepair?.versionAfter || 'unknown' }}
+              }
+            </p>
+          } @else if (h.localCliRepairAlarm) {
+            <p class="host__delivery-failures" data-testid="remote-host-cli-repair-alarm">
+              CLI repair failed. {{ h.localCliRepair?.detail }}
+            </p>
+          }
           @if (providerAuthBadges().length) {
             <div class="provider-auth" data-testid="remote-host-provider-auth" aria-label="Provider authentication">
               @for (auth of providerAuthBadges(); track auth.id) {

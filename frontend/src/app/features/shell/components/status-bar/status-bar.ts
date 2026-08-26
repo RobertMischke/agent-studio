@@ -23,6 +23,7 @@ import { UsageHoverPanelComponent } from '../../../tokens';
 import {
   deriveBoardRunningTruth,
   freshRemoteTelemetrySlots,
+  LocalCliCapabilityService,
   RemoteHostsService,
   ReviewQueueService,
 } from '../../../remote-hosts';
@@ -69,6 +70,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
   private readonly reviewQueue = inject(ReviewQueueService);
+  private readonly localCliCapabilities = inject(LocalCliCapabilityService);
   private hostLoadRefreshHandle: VisibleIntervalHandle | null = null;
 
   readonly projectNames = input<string[]>([]);
@@ -204,11 +206,28 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     return null;
   });
 
+  readonly localCliRepair = computed(() => this.localCliCapabilities.snapshot()?.latestRepair ?? null);
+  readonly localCliRepairAlarm = computed(() => this.localCliCapabilities.snapshot()?.repairAlarm === true);
+  readonly localCliRepairLabel = computed(() => {
+    const repair = this.localCliRepair();
+    if (!repair) return null;
+    if (repair.outcome === 'failed') {
+      return this.localCliRepairAlarm() ? `${repair.cliType} CLI repair failed` : null;
+    }
+    const time = new Date(repair.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `CLI repaired at ${time}`;
+  });
+
   ngOnInit(): void {
     this.remoteHosts.refresh();
+    this.localCliCapabilities.refresh();
     this.reviewQueue.refresh();
     this.hostLoadRefreshHandle = setVisibleInterval(
-      () => { this.remoteHosts.refresh(); this.reviewQueue.refresh(); },
+      () => {
+        this.remoteHosts.refresh();
+        this.reviewQueue.refresh();
+        this.localCliCapabilities.refresh();
+      },
       HOST_LOAD_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {

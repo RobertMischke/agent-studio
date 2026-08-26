@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 namespace AgentStudio.Cli;
 
@@ -36,8 +38,216 @@ public sealed record HealOutcome(
     IReadOnlyList<string> Actions,
     string? Error);
 
+public sealed record NpmInstallResult(int? ExitCode, string? Error);
+
+public sealed record NpmActivityEvidence(
+    string Phase,
+    string FileName,
+    DateTimeOffset LastWriteAt,
+    long SizeBytes,
+    string Sha256,
+    IReadOnlyList<string> Signals);
+
 public static class NpmShimHealer
 {
+    public static string? TryReadPackageVersion(string packagePath)
+    {
+        try
+        {
+            var manifest = Path.Combine(packagePath, "package.json");
+            if (!File.Exists(manifest)) return null;
+            using var document = JsonDocument.Parse(File.ReadAllText(manifest));
+            return document.RootElement.TryGetProperty("version", out var version)
+                ? version.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Re-runs the package manager's supported global install flow. This is
+    /// intentionally separate from the legacy orphan-rename healer because a
+    /// missing canonical shim with an intact package needs npm to recreate all
+    /// launchers and rerun postinstall as one transaction.
+    /// </summary>
+    public static async Task<NpmInstallResult> ReinstallGlobalPackageAsync(
+        string packageName,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        if (!OperatingSystem.IsWindows())
+            return new NpmInstallResult(null, "global npm-shim reinstall is Windows-only");
+
+        try
+        {
+            var npmPath = GenericCliExecutionService.ResolveExecutable("npm");
+            var startInfo = new ProcessStartInfo
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            if (string.Equals(Path.GetExtension(npmPath), ".cmd", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Path.GetExtension(npmPath), ".bat", StringComparison.OrdinalIgnoreCase))
+            {
+                // CreateProcess cannot execute a batch shim directly when
+                // UseShellExecute is false. Keep output capture by invoking the
+                // resolved npm shim through the Windows command processor.
+                startInfo.FileName = Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe";
+                startInfo.ArgumentList.Add("/d");
+                startInfo.ArgumentList.Add("/s");
+                startInfo.ArgumentList.Add("/c");
+                startInfo.ArgumentList.Add($"\"{npmPath}\" install --global {packageName}");
+            }
+            else
+            {
+                startInfo.FileName = npmPath;
+                startInfo.ArgumentList.Add("install");
+                startInfo.ArgumentList.Add("--global");
+                startInfo.ArgumentList.Add(packageName);
+            }
+
+            using var process = new Process
+            {
+                StartInfo = startInfo,
+            };
+            if (!process.Start())
+                return new NpmInstallResult(null, "npm process did not start");
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromMinutes(5));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception ex) { SilentCatch.Note(ex, "NpmShimHealer: npm reinstall kill"); }
+                return new NpmInstallResult(null, "npm reinstall timed out after five minutes");
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception ex) { SilentCatch.Note(ex, "NpmShimHealer: cancelled npm reinstall kill"); }
+                throw;
+            }
+
+            _ = await stdoutTask;
+            var stderr = await stderrTask;
+            return process.ExitCode == 0
+                ? new NpmInstallResult(0, null)
+                : new NpmInstallResult(process.ExitCode, SummarizeNpmError(stderr));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "global npm reinstall failed to start for {PackageName}", packageName);
+            return new NpmInstallResult(null, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Captures bounded, secret-free evidence from npm's debug-log directory.
+    /// Raw lines are never persisted. File timestamp, size, content hash, and
+    /// normalized activity signals are sufficient to correlate an install or
+    /// updater pass with the missing-shim observation.
+    /// </summary>
+    public static IReadOnlyList<NpmActivityEvidence> CaptureRecentNpmActivity(
+        string packageName,
+        string cliType,
+        DateTimeOffset observedAt,
+        string phase)
+    {
+        var localAppData = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+        if (string.IsNullOrWhiteSpace(localAppData)) return Array.Empty<NpmActivityEvidence>();
+        var logDirectory = Path.Combine(localAppData, "npm-cache", "_logs");
+        if (!Directory.Exists(logDirectory)) return Array.Empty<NpmActivityEvidence>();
+
+        try
+        {
+            return Directory.GetFiles(logDirectory, "*.log")
+                .Select(path => new FileInfo(path))
+                .Where(file => observedAt - file.LastWriteTimeUtc <= TimeSpan.FromHours(2)
+                               && file.LastWriteTimeUtc <= observedAt.UtcDateTime.AddMinutes(1))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .Take(5)
+                .Select(file => ReadNpmEvidence(file, packageName, cliType, phase))
+                .Where(evidence => evidence.Signals.Count > 0)
+                .Take(3)
+                .ToArray();
+        }
+        catch
+        {
+            return Array.Empty<NpmActivityEvidence>();
+        }
+    }
+
+    private static NpmActivityEvidence ReadNpmEvidence(
+        FileInfo file,
+        string packageName,
+        string cliType,
+        string phase)
+    {
+        var text = file.Length <= 2 * 1024 * 1024
+            ? File.ReadAllText(file.FullName)
+            : string.Empty;
+        var signals = new List<string>();
+        if (text.Contains(packageName, StringComparison.OrdinalIgnoreCase))
+            signals.Add("package-mentioned");
+        if (text.Contains(cliType, StringComparison.OrdinalIgnoreCase))
+            signals.Add("cli-mentioned");
+        if (text.Contains("npm install", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("command:install", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("argv \"install\"", StringComparison.OrdinalIgnoreCase))
+        {
+            signals.Add("install");
+        }
+        if (text.Contains("npm update", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("command:update", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("argv \"update\"", StringComparison.OrdinalIgnoreCase))
+        {
+            signals.Add("update");
+        }
+        if (text.Contains("postinstall", StringComparison.OrdinalIgnoreCase))
+            signals.Add("postinstall");
+        if (text.Contains("auto-update", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("autoupdate", StringComparison.OrdinalIgnoreCase))
+        {
+            signals.Add("auto-update");
+        }
+
+        using var stream = file.OpenRead();
+        return new NpmActivityEvidence(
+            phase,
+            file.Name,
+            file.LastWriteTimeUtc,
+            file.Length,
+            Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(),
+            signals.Distinct(StringComparer.Ordinal).ToArray());
+    }
+
+    private static string SummarizeNpmError(string stderr)
+    {
+        if (string.IsNullOrWhiteSpace(stderr)) return "npm exited without an error message";
+        var line = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(item => item.Trim())
+            .FirstOrDefault(item => item.StartsWith("npm error", StringComparison.OrdinalIgnoreCase))
+            ?? "npm reinstall failed; inspect the npm debug log fingerprint recorded with this attempt";
+        if (line.Length > 240) line = line[..240];
+        return line;
+    }
+
     /// <summary>
     /// Repair the <c>claude</c> npm-shim install on Windows and smoke-test
     /// the resulting <c>claude.cmd</c>. No-op on non-Windows hosts (the
