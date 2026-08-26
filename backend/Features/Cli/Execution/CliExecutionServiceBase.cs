@@ -21,6 +21,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
     protected readonly IConfiguration _configuration;
     internal readonly ConcurrentDictionary<string, ProcInfo> _processes = new();
     private readonly CliBehavior _behavior;
+    private readonly LocalCliSelfHealService? _localCliSelfHeal;
 
     /// <summary>
     /// Per-task clean-context homes (jobKey → live preparation). Session-state
@@ -100,11 +101,16 @@ public partial class GenericCliExecutionService : ICliExecutionService
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
     }
 
-    internal GenericCliExecutionService(CliBehavior behavior, ILogger logger, IConfiguration configuration)
+    internal GenericCliExecutionService(
+        CliBehavior behavior,
+        ILogger logger,
+        IConfiguration configuration,
+        LocalCliSelfHealService? localCliSelfHeal = null)
     {
         _behavior = behavior;
         _logger = logger;
         _configuration = configuration;
+        _localCliSelfHeal = localCliSelfHeal;
     }
 
     /// <summary>
@@ -128,10 +134,11 @@ public partial class GenericCliExecutionService : ICliExecutionService
         IConfiguration configuration,
         CliUsageParserRegistry? usageParsers = null,
         ICliModelRegistry? modelRegistry = null,
-        ClaudeModelDiscovery? modelDiscovery = null)
+        ClaudeModelDiscovery? modelDiscovery = null,
+        LocalCliSelfHealService? localCliSelfHeal = null)
         => new GenericCliExecutionService(
             BuiltInCliBehaviors.Claude(usageParsers, modelRegistry ?? new CliModelRegistry(), modelDiscovery),
-            logger, configuration);
+            logger, configuration, localCliSelfHeal);
 
     /// <summary>Build a Codex engine from the per-CLI dependencies.</summary>
     internal static GenericCliExecutionService ForCodex(
@@ -139,10 +146,11 @@ public partial class GenericCliExecutionService : ICliExecutionService
         IConfiguration configuration,
         CodexModelDiscovery modelDiscovery,
         CliUsageParserRegistry usageParsers,
-        ICliModelRegistry modelRegistry)
+        ICliModelRegistry modelRegistry,
+        LocalCliSelfHealService? localCliSelfHeal = null)
         => new GenericCliExecutionService(
             BuiltInCliBehaviors.Codex(modelDiscovery, usageParsers, modelRegistry),
-            logger, configuration);
+            logger, configuration, localCliSelfHeal);
 
     /// <summary>Build an Antigravity/Gemini engine (no extra dependencies).</summary>
     internal static GenericCliExecutionService ForAntigravity(
@@ -377,7 +385,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
         });
     }
 
-    public Task<(CliExecution? Execution, string? Error)> StartAsync(
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(
         string jobId,
         string jobKey,
         string prompt,
@@ -392,10 +400,25 @@ public partial class GenericCliExecutionService : ICliExecutionService
         string? executionEngine = null,
         CancellationToken ct = default)
     {
+        if (_localCliSelfHeal is not null)
+        {
+            var preflight = await _localCliSelfHeal.ProbeAndRepairAsync(this, ct);
+            if (!preflight.Available)
+            {
+                var detail = preflight.Error ?? $"--version probe failed at '{preflight.Path}'";
+                _logger.LogError(
+                    "Local CLI capability preflight failed for {Cli} (job {JobId}): {Error}",
+                    CliType,
+                    jobId,
+                    detail);
+                return (null, $"{CliType} CLI not available: {detail}");
+            }
+        }
+
         var engine = CliExecutionEngines.Normalize(executionEngine);
         if (engine == CliExecutionEngines.Car && SupportsCarExecution)
         {
-            return StartCarAsync(
+            return await StartCarAsync(
                 jobId, jobKey, prompt, workingDirectory, sessionName,
                 resumeSession, model, thinkingLevel, jobFolderPath,
                 permissionMode, contextMode, ct);
@@ -408,7 +431,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
                 CliType);
         }
 
-        return StartLegacyAsync(
+        return await StartLegacyAsync(
             jobId, jobKey, prompt, workingDirectory, sessionName,
             resumeSession, model, thinkingLevel, jobFolderPath,
             permissionMode, contextMode, ct);
@@ -457,7 +480,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
         var invocationThinkingLevel = CliThinkingLevels.Normalize(CliType, invocationModel, thinkingLevel);
         var psi = BuildStartInfo(prompt, workingDirectory, sessionName, resumeSession, invocationModel, invocationThinkingLevel, permissionMode);
         psi.RedirectStandardOutput = true;
-        psi.RedirectStandardError  = true;
+        psi.RedirectStandardError = true;
         // ADR-0014: stdin is default-deny. We only redirect (and pipe a
         // payload through) when the per-CLI subclass returns a non-empty
         // GetPromptStdinPayload. The dominant suspect for the live
@@ -470,7 +493,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
         var stdinPayload = GetPromptStdinPayload(prompt, sessionName, resumeSession, invocationModel);
         psi.RedirectStandardInput = !string.IsNullOrEmpty(stdinPayload);
         psi.UseShellExecute = false;
-        psi.CreateNoWindow  = true;
+        psi.CreateNoWindow = true;
         psi.WorkingDirectory = workingDirectory;
         // Force UTF-8 on the redirected streams. Default on Windows is the
         // system code page (CP1252 here), which corrupts non-ASCII bytes from
@@ -478,12 +501,12 @@ public partial class GenericCliExecutionService : ICliExecutionService
         // prompt contained umlauts. Also tell the child process to emit UTF-8
         // by setting common env hints.
         psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
-        psi.StandardErrorEncoding  = System.Text.Encoding.UTF8;
-        psi.Environment["PYTHONIOENCODING"]   = "utf-8";
-        psi.Environment["LC_ALL"]             = "C.UTF-8";
-        psi.Environment["LANG"]               = "C.UTF-8";
+        psi.StandardErrorEncoding = System.Text.Encoding.UTF8;
+        psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        psi.Environment["LC_ALL"] = "C.UTF-8";
+        psi.Environment["LANG"] = "C.UTF-8";
         // claude-cli is a Node process; this disables Node's BOM/encoding quirks.
-        psi.Environment["NODE_NO_WARNINGS"]   = "1";
+        psi.Environment["NODE_NO_WARNINGS"] = "1";
 
         // ADR-0014 follow-up: env hardening derived from research/cli-orchestration-survey-2026-05.md
         // section "P5. Pre-emptive trust-store / settings hardening". These
@@ -492,14 +515,14 @@ public partial class GenericCliExecutionService : ICliExecutionService
         // would otherwise dominate the activity log. They are CLI-specific
         // but harmless when set globally; setting them in the base class
         // means all four CLIs benefit without per-driver duplication.
-        psi.Environment["NO_COLOR"]                       = "1";
-        psi.Environment["FORCE_COLOR"]                    = "0";
-        psi.Environment["CLAUDE_CODE_DISABLE_AUTOUPDATER"]= "1";
-        psi.Environment["GEMINI_NO_UPDATE_NOTIFIER"]      = "1";
-        psi.Environment["CODEX_DISABLE_TIP_OF_THE_DAY"]   = "1";
+        psi.Environment["NO_COLOR"] = "1";
+        psi.Environment["FORCE_COLOR"] = "0";
+        psi.Environment["CLAUDE_CODE_DISABLE_AUTOUPDATER"] = "1";
+        psi.Environment["GEMINI_NO_UPDATE_NOTIFIER"] = "1";
+        psi.Environment["CODEX_DISABLE_TIP_OF_THE_DAY"] = "1";
         // CI=1 is the conventional non-interactive marker. Most npm CLIs
         // respect it to skip prompts; harmless for the others.
-        psi.Environment["CI"]                             = "1";
+        psi.Environment["CI"] = "1";
 
         // dotnet build-server suppression. Agents that build/test a .NET repo
         // (this one dogfoods on itself) spawn `dotnet build`/`dotnet test`,
@@ -512,17 +535,17 @@ public partial class GenericCliExecutionService : ICliExecutionService
         // invocation tear its build processes down with the build, at the cost
         // of slightly colder builds. NOLOGO/TELEMETRY_OPTOUT keep output clean
         // and avoid a background telemetry process.
-        psi.Environment["MSBUILDDISABLENODEREUSE"]        = "1";
-        psi.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"]  = "0";
-        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"]    = "1";
-        psi.Environment["DOTNET_NOLOGO"]                  = "1";
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        psi.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        psi.Environment["DOTNET_NOLOGO"] = "1";
 
         // When running under the agent task orchestrator, set JOB_RESULTS_DIR
         // so tools like Playwright can harvest artifacts into the job folder.
         // Cleaned up in the task orchestrator's result directories.
         if (!string.IsNullOrEmpty(jobFolderPath))
         {
-            psi.Environment["JOB_RESULTS_DIR"]            = Path.Combine(jobFolderPath, "results");
+            psi.Environment["JOB_RESULTS_DIR"] = Path.Combine(jobFolderPath, "results");
         }
 
         // T1b (ASS-1742): clean context. When the run resolves to CLEAN and this

@@ -136,6 +136,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Wiki document companion schema | [schemas/wiki-document-companion.schema.json](../app/schemas/wiki-document-companion.schema.json) |
 | Wiki page lifecycle schema | [schemas/wiki-page-lifecycle.schema.json](../app/schemas/wiki-page-lifecycle.schema.json) |
 | Model qualification benchmark event schema | [schemas/model-qualification-event.schema.json](../app/schemas/model-qualification-event.schema.json) |
+| Local CLI repair journal schema | [schemas/cli-repair.schema.json](../app/schemas/cli-repair.schema.json) |
 | Model escalation and companion routing concept | [concepts/model-escalation-and-companion-routing.md](../concepts/model-escalation-and-companion-routing.md) |
 | Supported CLIs | [cli/supported-clis.md](../system/cli/supported-clis.md) |
 | CLI frame compatibility and capture corpus | [cli/frame-compatibility-matrix.md](../system/cli/frame-compatibility-matrix.md) |

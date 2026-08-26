@@ -173,6 +173,20 @@ immediately. Ready cards assigned to a host without usable matching auth show a
 provider sign-in wait reason. If the runner can advertise a known expiry,
 Studio warns during the final 14 days.
 
+On the local Windows control-plane host, a failed Claude or Codex availability
+probe also inspects the npm global package directory. A present
+`node_modules/@anthropic-ai/claude-code` or `node_modules/@openai/codex`
+directory paired with a missing `<cli>.cmd` is classified as a missing shim,
+not as an uninstalled CLI. The host runs one bounded
+`npm install --global <package>` repair per CLI per hour, verifies the result
+with the same `--version` probe, and journals both phases to
+`<workspace>/logs/cli-repairs.jsonl`. The journal captures package and CLI
+versions before and after, package-directory timestamps, missing shim names,
+the bounded npm result, and recent redacted npm debug-log activity. A successful
+repair is a quiet `CLI repaired at <time>` status-bar note; a failed repair is
+the only repair event rendered as an alert. Truly absent packages remain
+Unavailable and are never installed automatically.
+
 ### 2.8 Execution context (read-only observability)
 
 **Contract.** Every CLI loads context beyond the prompt the runner hands it — a memory / instruction-file chain walked up from the working directory, a session/transcript store, a global config directory, and (Claude) wired-in MCP servers. `DescribeContextSources(string jobKey)` returns a `CliExecutionContext` describing those sources for the live (or just-finished, still-tracked) run, plus the scalar header (model, effective permission mode, cwd). This is a **read-only** surface (ASS-1739 / T1a): producing it must never change what the CLI loads — policy changes are a separate task (T1b). The base implementation derives everything from the adapter invocation plus each CLI's documented config-path conventions and sets `Source = "convention"`; a driver with a richer self-report (Claude's stream-json `init` frame) overrides `DescribeContextSources`, merges the init-frame model / permission mode / cwd / MCP list on top, and sets `Source = "init-frame"`. Returns `null` for an unknown run; the interface default is a no-op so test stubs and not-yet-wired drivers stay compilable.

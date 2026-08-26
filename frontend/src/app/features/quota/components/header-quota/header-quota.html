@@ -1,4 +1,14 @@
 <div class="hquota">
+  @if (repairNote(); as note) {
+    <span class="hquota__repair-note"
+          data-testid="status-bar-cli-repair"
+          [class.hquota__repair-note--failed]="note.failed"
+          [attr.title]="note.tooltip"
+          [attr.role]="note.failed ? 'alert' : 'status'">
+      <span class="hquota__repair-dot" aria-hidden="true">●</span>
+      {{ note.label }}
+    </span>
+  }
   @for (card of cards(); track card.cliType) {
     <button type="button"
             class="hquota__card"

@@ -22,6 +22,34 @@
   align-items: center;
 }
 
+.hquota__repair-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  height: var(--statusbar-item-height, 20px);
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid var(--studio-border);
+  border-radius: var(--statusbar-item-radius, 6px);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hquota__repair-note--failed {
+  border-color: color-mix(in srgb, var(--severity-high) 50%, var(--studio-border));
+  background: color-mix(in srgb, var(--severity-high) 10%, var(--studio-bg-hover));
+  color: var(--severity-high);
+}
+
+.hquota__repair-dot {
+  color: var(--severity-pass);
+  font-size: 8px;
+}
+
+.hquota__repair-note--failed .hquota__repair-dot { color: var(--severity-high); }
+
 .hquota__card {
   // Button reset: the card is a <button> (click -> per-CLI modal), so
   // strip the UA chrome and inherit the status-bar typography.

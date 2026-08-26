@@ -83,8 +83,9 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         ILogger<ClaudeQuotaProbe> logger,
         CliRouter router,
         CliEnvironment env,
-        IConfiguration configuration)
-        : base(logger, router, env)
+        IConfiguration configuration,
+        LocalCliSelfHealService? localCliSelfHeal = null)
+        : base(logger, router, env, localCliSelfHeal)
     {
         _configuration = configuration;
     }
@@ -95,11 +96,11 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
     {
         try
         {
-            var trustPattern  = new Regex(@"trust\s*this\s*folder|Quick\s*safety\s*check", RegexOptions.IgnoreCase);
-            var themePattern  = new Regex(@"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|match\s*terminal", RegexOptions.IgnoreCase);
+            var trustPattern = new Regex(@"trust\s*this\s*folder|Quick\s*safety\s*check", RegexOptions.IgnoreCase);
+            var themePattern = new Regex(@"Choose\s*the\s*text\s*style|text\s*style\s*that\s*looks\s*best|match\s*terminal", RegexOptions.IgnoreCase);
             var upsellPattern = new Regex(@"fullscreen\s*renderer|Flicker-?free|Try\s*the\s*new|What'?s\s*new|Not\s*now|Esc\s*to\s*cancel", RegexOptions.IgnoreCase);
-            var readyPattern  = new Regex(@"\?\s*for\s*shortcuts|for\s*shortcuts|esc\s*to\s*interrupt", RegexOptions.IgnoreCase);
-            var usagePattern  = new Regex(
+            var readyPattern = new Regex(@"\?\s*for\s*shortcuts|for\s*shortcuts|esc\s*to\s*interrupt", RegexOptions.IgnoreCase);
+            var usagePattern = new Regex(
                 @"Current\s*session|Current\s*week|Settings\s*Status\s*Config\s*Usage\s*Stats",
                 RegexOptions.IgnoreCase);
 
@@ -149,13 +150,13 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             if (windows.Count == 0 && RateLimitResetRegex.Match(snap) is { Success: true } rm)
             {
                 var time = rm.Groups["time"].Value.Trim();
-                var tz   = rm.Groups["tz"].Success ? rm.Groups["tz"].Value.Trim() : null;
+                var tz = rm.Groups["tz"].Success ? rm.Groups["tz"].Value.Trim() : null;
                 windows.Add(new QuotaWindow
                 {
-                    Label      = $"Out of {rm.Groups["bucket"].Value} usage",
-                    UsedPct    = 100,
-                    Unit       = "%",
-                    ResetAt    = ParseResetTimeUtc(time, tz),
+                    Label = $"Out of {rm.Groups["bucket"].Value} usage",
+                    UsedPct = 100,
+                    Unit = "%",
+                    ResetAt = ParseResetTimeUtc(time, tz),
                     ResetLabel = tz != null ? $"{time} ({tz})" : time
                 });
             }
@@ -185,12 +186,12 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
 
             return new QuotaSnapshot
             {
-                CliType   = CliType,
-                Plan      = plan,
-                Source    = "/usage",
+                CliType = CliType,
+                Plan = plan,
+                Source = "/usage",
                 RawSample = TruncateForDebug(snap),
-                Windows   = windows,
-                Error     = windows.Count == 0 && LooksLikeOnboardingWizard(snap)
+                Windows = windows,
+                Error = windows.Count == 0 && LooksLikeOnboardingWizard(snap)
                     ? "Claude CLI is showing its first-run onboarding/feature wizard, so /usage never ran. Finish Claude Code onboarding, or update the quota probe's dismiss steps."
                     : (plan == null && windows.Count == 0)
                         ? "Could not parse plan or quota info from Claude /usage panel."
@@ -244,13 +245,13 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             && double.TryParse(sm.Groups["pct"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var sPct))
         {
             var time = sm.Groups["time"].Value.Trim();
-            var tz   = sm.Groups["tz"].Success ? sm.Groups["tz"].Value.Trim() : null;
+            var tz = sm.Groups["tz"].Success ? sm.Groups["tz"].Value.Trim() : null;
             windows.Add(new QuotaWindow
             {
-                Label      = "Current session (5h)",
-                UsedPct    = Math.Min(100, sPct),
-                Unit       = "%",
-                ResetAt    = ParseResetTimeUtc(time, tz),
+                Label = "Current session (5h)",
+                UsedPct = Math.Min(100, sPct),
+                Unit = "%",
+                ResetAt = ParseResetTimeUtc(time, tz),
                 ResetLabel = tz != null ? $"{time} ({tz})" : time
             });
         }
@@ -259,14 +260,14 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             && double.TryParse(wm.Groups["pct"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var wPct))
         {
             var reset = wm.Groups["reset"].Value.Trim();
-            var tz    = wm.Groups["tz"].Success ? wm.Groups["tz"].Value.Trim() : null;
+            var tz = wm.Groups["tz"].Success ? wm.Groups["tz"].Value.Trim() : null;
             var hasDate = Regex.IsMatch(reset, @"[A-Za-z]+\s*\d+", RegexOptions.IgnoreCase);
             windows.Add(new QuotaWindow
             {
-                Label      = "Weekly (all models)",
-                UsedPct    = Math.Min(100, wPct),
-                Unit       = "%",
-                ResetAt    = hasDate ? ParseResetDateUtc(reset, tz) : ParseResetTimeUtc(reset, tz),
+                Label = "Weekly (all models)",
+                UsedPct = Math.Min(100, wPct),
+                Unit = "%",
+                ResetAt = hasDate ? ParseResetDateUtc(reset, tz) : ParseResetTimeUtc(reset, tz),
                 ResetLabel = tz != null ? $"{reset} ({tz})" : reset
             });
         }
@@ -303,7 +304,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         try { tz = ianaTz != null ? TimeZoneInfo.FindSystemTimeZoneById(ianaTz) : TimeZoneInfo.Local; }
         catch { tz = TimeZoneInfo.Local; }
 
-        var nowInTz   = TimeZoneInfo.ConvertTime(DateTime.UtcNow, tz);
+        var nowInTz = TimeZoneInfo.ConvertTime(DateTime.UtcNow, tz);
         var resetInTz = new DateTime(nowInTz.Year, nowInTz.Month, nowInTz.Day, local.Hour, local.Minute, 0, DateTimeKind.Unspecified);
         if (resetInTz <= nowInTz) resetInTz = resetInTz.AddDays(1);
         return TimeZoneInfo.ConvertTimeToUtc(resetInTz, tz);

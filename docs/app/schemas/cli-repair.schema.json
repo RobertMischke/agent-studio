@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/cli-repair.schema.json",
+  "title": "CliRepairEvent",
+  "description": "One append-only row in <workspace>/logs/cli-repairs.jsonl. Rows capture a local Windows Claude or Codex missing-shim/package-present repair attempt and its terminal outcome.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["attemptId", "attemptedAt", "status", "cliType", "packageName", "missingShims", "npmActivityBefore", "npmActivityAfter", "message"],
+  "properties": {
+    "attemptId": { "type": "string", "minLength": 1, "description": "Stable id shared by the attempting and terminal rows." },
+    "attemptedAt": { "type": "string", "format": "date-time", "description": "UTC time when the hourly repair budget was consumed." },
+    "completedAt": { "type": ["string", "null"], "format": "date-time", "description": "UTC completion time; null on the attempting row." },
+    "status": { "type": "string", "enum": ["attempting", "repaired", "failed"], "description": "Attempt phase or terminal result." },
+    "cliType": { "type": "string", "enum": ["claude", "codex"], "description": "Local CLI whose Windows shim disappeared." },
+    "packageName": { "type": "string", "enum": ["@anthropic-ai/claude-code", "@openai/codex"], "description": "Already-present npm package reinstalled by the repair." },
+    "packagePath": { "type": ["string", "null"], "description": "Resolved global node_modules package directory." },
+    "versionBefore": { "type": ["string", "null"], "description": "Version read from package.json before reinstall." },
+    "versionAfter": { "type": ["string", "null"], "description": "Version returned by the repaired CLI, falling back to package.json." },
+    "packageModifiedAtBefore": { "type": ["string", "null"], "format": "date-time", "description": "Package-directory timestamp observed before repair." },
+    "packageModifiedAtAfter": { "type": ["string", "null"], "format": "date-time", "description": "Package-directory timestamp observed after repair." },
+    "missingShims": { "type": "array", "items": { "type": "string" }, "description": "Missing global shim filenames observed before repair." },
+    "npmActivityBefore": { "$ref": "#/$defs/npmActivity", "description": "Recent npm debug-log evidence captured before reinstall." },
+    "npmActivityAfter": { "$ref": "#/$defs/npmActivity", "description": "Recent npm debug-log evidence captured after reinstall." },
+    "npmExitCode": { "type": ["integer", "null"], "description": "npm process exit code when available." },
+    "npmStandardOutput": { "type": ["string", "null"], "description": "Bounded and credential-redacted npm stdout tail." },
+    "npmStandardError": { "type": ["string", "null"], "description": "Bounded and credential-redacted npm stderr tail." },
+    "message": { "type": "string", "description": "Short operator-facing outcome summary." },
+    "error": { "type": ["string", "null"], "description": "Failure detail on a failed terminal row." }
+  },
+  "$defs": {
+    "npmActivity": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fileName", "modifiedAt", "sizeBytes", "relevantLines"],
+        "properties": {
+          "fileName": { "type": "string", "description": "npm debug-log filename without its host directory." },
+          "modifiedAt": { "type": "string", "format": "date-time", "description": "UTC filesystem modification time." },
+          "sizeBytes": { "type": "integer", "minimum": 0, "description": "Debug-log size used to correlate installer activity." },
+          "relevantLines": { "type": "array", "items": { "type": "string" }, "maxItems": 8, "description": "Bounded credential-redacted command, install, update, package, or postinstall lines." }
+        }
+      },
+      "maxItems": 5
+    }
+  }
+}

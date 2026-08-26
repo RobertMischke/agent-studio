@@ -119,8 +119,14 @@ public static class CliEndpoints
             }
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
-        cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions, TaskRunnerService runners) =>
+        cliGroup.MapGet("/usage", async (
+            CliRouter router,
+            SessionRegistry sessions,
+            TaskRunnerService runners,
+            LocalCliSelfHealService selfHeal,
+            CancellationToken ct) =>
         {
+            await selfHeal.ProbeKnownAsync(router, ct);
             // Snapshot the runner's per-project active job so the
             // LinkedJob chip can render `active` (green) when the linked
             // session belongs to the project's currently-running task.
@@ -165,8 +171,13 @@ public static class CliEndpoints
         });
 
         // ── Quota: per-CLI subscription quota for the right-hand sidesheet ──
-        cliGroup.MapGet("/quota", (QuotaService quota, CancellationToken ct) =>
+        cliGroup.MapGet("/quota", async (
+            QuotaService quota,
+            CliRouter router,
+            LocalCliSelfHealService selfHeal,
+            CancellationToken ct) =>
         {
+            await selfHeal.ProbeKnownAsync(router, ct);
             return Results.Ok(quota.GetWithBackgroundRefresh(ct));
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 

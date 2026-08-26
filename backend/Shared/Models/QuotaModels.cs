@@ -71,4 +71,19 @@ public record QuotaReport
     /// <summary>Cache TTL (seconds) the backend is using; the UI computes a "stale" badge as <c>now - snapshot.fetchedAt &gt; ttlSeconds</c>.</summary>
     public int TtlSeconds { get; init; }
     public List<QuotaSnapshot> Snapshots { get; init; } = [];
+    /// <summary>
+    /// Latest completed local npm-shim repair. Successful repairs are a quiet
+    /// status note; only <c>failed</c> is an acute operator signal.
+    /// </summary>
+    public CliRepairNotice? LatestCliRepair { get; init; }
+}
+
+public record CliRepairNotice
+{
+    public string CliType { get; init; } = "";
+    public string Status { get; init; } = "";
+    public DateTime CompletedAt { get; init; }
+    public string? VersionBefore { get; init; }
+    public string? VersionAfter { get; init; }
+    public string? Message { get; init; }
 }

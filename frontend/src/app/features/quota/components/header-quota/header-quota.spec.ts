@@ -99,6 +99,76 @@ describe('HeaderQuotaComponent (reconnect hydration)', () => {
   });
 });
 
+describe('HeaderQuotaComponent (CLI repair notice)', () => {
+  it('renders a successful repair as a quiet status note', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeaderQuotaComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(HeaderQuotaComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/cli/quota').flush({
+      ttlSeconds: 600,
+      snapshots: [],
+      latestCliRepair: {
+        cliType: 'claude',
+        status: 'repaired',
+        completedAt: '2026-08-18T12:34:00Z',
+        versionBefore: '2.1.231',
+        versionAfter: '2.1.234',
+        message: 'CLI repaired and verified with --version.',
+      },
+    });
+    fixture.detectChanges();
+
+    const note = fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair"]') as HTMLElement;
+    expect(note.textContent).toContain('CLI repaired at');
+    expect(note.getAttribute('role')).toBe('status');
+    expect(note.classList.contains('hquota__repair-note--failed')).toBe(false);
+  });
+
+  it('uses an alert only when the repair failed', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeaderQuotaComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(HeaderQuotaComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/cli/quota').flush({
+      ttlSeconds: 600,
+      snapshots: [],
+      latestCliRepair: {
+        cliType: 'codex',
+        status: 'failed',
+        completedAt: '2026-08-18T12:34:00Z',
+        versionBefore: '1.0.0',
+        versionAfter: null,
+        message: 'CLI repair failed; operator attention is required.',
+      },
+    });
+    fixture.detectChanges();
+
+    const note = fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair"]') as HTMLElement;
+    expect(note.textContent).toContain('CLI repair failed at');
+    expect(note.getAttribute('role')).toBe('alert');
+    expect(note.classList.contains('hquota__repair-note--failed')).toBe(true);
+  });
+});
+
 /**
  * Status-bar quota-strip contract (2026-06-04 — ASS-696 follow-up).
  *

@@ -56,8 +56,9 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
     public CodexQuotaProbe(
         ILogger<CodexQuotaProbe> logger,
         CliRouter router,
-        CliEnvironment env)
-        : base(logger, router, env) { }
+        CliEnvironment env,
+        LocalCliSelfHealService? localCliSelfHeal = null)
+        : base(logger, router, env, localCliSelfHeal) { }
 
     public override string CliType => CliTypes.Codex;
 
@@ -65,9 +66,9 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
     {
         try
         {
-            var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
+            var trustPattern = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
             var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
-            var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
+            var statusPattern = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
 
             var snap = await ProbeWithStepsAsync(
             [
@@ -105,12 +106,12 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
             return new QuotaSnapshot
             {
-                CliType   = CliType,
-                Plan      = plan,
-                Source    = "/status",
+                CliType = CliType,
+                Plan = plan,
+                Source = "/status",
                 RawSample = TruncateForDebug(snap),
-                Windows   = windows,
-                Error     = (plan == null && windows.Count == 0)
+                Windows = windows,
+                Error = (plan == null && windows.Count == 0)
                     ? "Could not parse Codex /status output."
                     : null
             };
@@ -167,10 +168,10 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         var resetRaw = match.Groups["reset"].Value.Trim();
         windows.Add(new QuotaWindow
         {
-            Label      = label,
-            UsedPct    = 100 - left,
-            Unit       = "%",
-            ResetAt    = ParseResetUtc(resetRaw),
+            Label = label,
+            UsedPct = 100 - left,
+            Unit = "%",
+            ResetAt = ParseResetUtc(resetRaw),
             ResetLabel = resetRaw
         });
     }

@@ -22,18 +22,21 @@ public sealed class QuotaService
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
     private readonly TimeSpan _ttl;
     private readonly QuotaCacheStore _store;
+    private readonly LocalCliSelfHealService? _localCliSelfHeal;
 
     public QuotaService(
         ILogger<QuotaService> logger,
         IEnumerable<IQuotaProbe> probes,
         IConfiguration configuration,
-        QuotaCacheStore store)
+        QuotaCacheStore store,
+        LocalCliSelfHealService? localCliSelfHeal = null)
     {
         _logger = logger;
         _probes = probes.ToDictionary(p => p.CliType, StringComparer.OrdinalIgnoreCase);
         var ttlSec = int.TryParse(configuration["Quota:TtlSeconds"], out var t) ? t : 600;
         _ttl = TimeSpan.FromSeconds(ttlSec);
         _store = store;
+        _localCliSelfHeal = localCliSelfHeal;
 
         // Hydrate the in-memory cache from disk on startup so the
         // header / strip have something to render before the first
@@ -65,7 +68,8 @@ public sealed class QuotaService
             TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
                 .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
-                .ToList()
+                .ToList(),
+            LatestCliRepair = _localCliSelfHeal?.LatestNotice,
         };
     }
 

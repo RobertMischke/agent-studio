@@ -320,7 +320,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `git-tree-no-ng0600.spec.ts` | git file tree renders without NG0600 (signal write inside computed) |
 | `git-view-layout-shots.spec.ts` | AGT-2011 · Git-View layout shots (mocked) |
 
-### `layout/` - 26 specs
+### `layout/` - 27 specs
 
 | Spec | Summary |
 |------|---------|
@@ -335,6 +335,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `project-drag-between-workspaces.spec.ts` | Sidebar: drag a project onto a workspace folder |
 | `status-bar-and-header.spec.ts` | Status bar and header size |
 | `status-bar-claude-unknown-quota.spec.ts` | Status bar quota: Claude 2.1.202 unknown utilization |
+| `status-bar-cli-repair.spec.ts` | Status bar local CLI repair notice |
 | `status-bar-codex-percent-quota.spec.ts` | Status bar quota: Codex %-only payload |
 | `status-bar-codex-spark-quota.spec.ts` | Status bar quota: Codex Spark windows |
 | `status-bar-host-load.spec.ts` | Status bar execution-host load companion signal |

@@ -394,6 +394,8 @@ builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccessHost>(sp =>
 builder.Services.AddSingleton<CliEnvironment>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
 builder.Services.AddSingleton<ClaudeModelDiscovery>();
+builder.Services.AddSingleton<INpmGlobalInstaller, NpmGlobalInstaller>();
+builder.Services.AddSingleton<LocalCliSelfHealService>();
 // The per-CLI execution engines: one concrete GenericCliExecutionService per
 // CLI, parameterized by a CliBehavior from BuiltInCliBehaviors. Keyed by CLI
 // type so the router + the Claude-specific consumers (orchestrator runner,
@@ -405,14 +407,16 @@ builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Claude, 
         sp.GetRequiredService<IConfiguration>(),
         sp.GetService<CliUsageParserRegistry>(),
         sp.GetService<ICliModelRegistry>(),
-        sp.GetService<ClaudeModelDiscovery>()));
+        sp.GetService<ClaudeModelDiscovery>(),
+        sp.GetRequiredService<LocalCliSelfHealService>()));
 builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Codex, (sp, _) =>
     GenericCliExecutionService.ForCodex(
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.CodexCliService"),
         sp.GetRequiredService<IConfiguration>(),
         sp.GetRequiredService<CodexModelDiscovery>(),
         sp.GetRequiredService<CliUsageParserRegistry>(),
-        sp.GetRequiredService<ICliModelRegistry>()));
+        sp.GetRequiredService<ICliModelRegistry>(),
+        sp.GetRequiredService<LocalCliSelfHealService>()));
 builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Gemini, (sp, _) =>
     GenericCliExecutionService.ForAntigravity(
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.AntigravityCliService"),
@@ -1108,43 +1112,43 @@ catch (Exception ex)
 // a finished run instead of re-running the completed agent. Sync wait is
 // intentional: the runner must see the adopted state on its first scan.
 if (!publicDemoExecutionProfile) try
-{
-    app.Services.GetRequiredService<RunLivenessMonitor>().AdoptOnBootAsync().GetAwaiter().GetResult();
-}
-catch (Exception ex)
-{
-    crashRecorder.Record("RunLivenessMonitor.AdoptOnBoot", ex);
-}
+    {
+        app.Services.GetRequiredService<RunLivenessMonitor>().AdoptOnBootAsync().GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        crashRecorder.Record("RunLivenessMonitor.AdoptOnBoot", ex);
+    }
 
 if (!publicDemoExecutionProfile) try
-{
-    app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();
-}
-catch (Exception ex)
-{
-    // Recovery never blocks boot; a failure here is logged and surfaced
-    // through the crash recorder so the operator can find it.
-    crashRecorder.Record("CrashRecoveryService", ex);
-}
+    {
+        app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        // Recovery never blocks boot; a failure here is logged and surfaced
+        // through the crash recorder so the operator can find it.
+        crashRecorder.Record("CrashRecoveryService", ex);
+    }
 
 // After file-level crash recovery, sweep the 3-progress lane for folders that
 // have been wedged past the resume window. Pairs with crash recovery: that
 // rescues changes, this rescues the lane (one running job per project, ADR-0001).
 if (!publicDemoExecutionProfile) try
-{
-    var archiver = app.Services.GetRequiredService<StaleProgressArchiver>();
-    archiver.SweepAsync().GetAwaiter().GetResult();
-    // Failed-pickup-elimination (supersedes ADR-0028/0029): drain any folders
-    // that linger in the retired 3a-failed-pickup lane from before this change
-    // - real tasks back to 2-ready, debris to 7-archive - after the sweep so a
-    // folder requeued from 3-progress is never also drained. Idempotent once
-    // the lane is empty.
-    archiver.DrainFailedPickupLaneAsync().GetAwaiter().GetResult();
-}
-catch (Exception ex)
-{
-    crashRecorder.Record("StaleProgressArchiver", ex);
-}
+    {
+        var archiver = app.Services.GetRequiredService<StaleProgressArchiver>();
+        archiver.SweepAsync().GetAwaiter().GetResult();
+        // Failed-pickup-elimination (supersedes ADR-0028/0029): drain any folders
+        // that linger in the retired 3a-failed-pickup lane from before this change
+        // - real tasks back to 2-ready, debris to 7-archive - after the sweep so a
+        // folder requeued from 3-progress is never also drained. Idempotent once
+        // the lane is empty.
+        archiver.DrainFailedPickupLaneAsync().GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        crashRecorder.Record("StaleProgressArchiver", ex);
+    }
 
 // Seed the Agent Message Bus participant registry. Workspace-scoped, idempotent
 // across boots; safe to fire-and-forget. See docs/system/architecture/bus/agent-message-bus.md section 2.
