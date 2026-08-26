@@ -85,9 +85,16 @@ public class TunnelSupervisionPolicyTests
     }
 
     [Fact]
-    public void FailedHeal_IsAttention_EvenWhenTheFollowingProbePassed()
+    public void FailedHeal_BecomesQuietHistory_WhenTheFollowingProbePassed()
     {
         var snapshot = Snapshot(lastProbeResult: "ok", lastHealResult: "failed");
+        Assert.Equal(TunnelSupervisionStatuses.Healthy, TunnelSupervisionPolicy.Classify(snapshot, Now));
+    }
+
+    [Fact]
+    public void FailedHeal_WithoutRecoveryEvidence_IsAttention()
+    {
+        var snapshot = Snapshot(lastProbeResult: "starting", lastHealResult: "failed");
         Assert.Equal(TunnelSupervisionStatuses.Attention, TunnelSupervisionPolicy.Classify(snapshot, Now));
     }
 
