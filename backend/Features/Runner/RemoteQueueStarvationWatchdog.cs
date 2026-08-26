@@ -12,6 +12,13 @@ public sealed record RemoteQueueStarvationItem
     public string? BlockReason { get; init; }
 }
 
+public sealed record PickupPauseItem
+{
+    public string ProjectName { get; init; } = "";
+    public string Reason { get; init; } = "";
+    public DateTime? PausedAt { get; init; }
+}
+
 public sealed record RemoteQueueStarvationSnapshot
 {
     public bool Active { get; init; }
@@ -22,6 +29,11 @@ public sealed record RemoteQueueStarvationSnapshot
     public DateTime? LastSuccessfulClaimAt { get; init; }
     public bool HasRejections { get; init; }
     public int BuildProfileGateBlockedTaskCount { get; init; }
+    public int ProviderLimitedTaskCount { get; init; }
+    public string State { get; init; } = "healthy";
+    public string? ProviderLimitReason { get; init; }
+    public int PickupPausedProjectCount { get; init; }
+    public IReadOnlyList<PickupPauseItem> PickupPauses { get; init; } = [];
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
@@ -58,7 +70,11 @@ public static class RemoteQueueStarvationPolicy
             .FirstOrDefault();
 
         var routedReadyTasks = tasks
-            .Where(task => task.State == TaskStates.Ready && !task.Fixture)
+            .Where(task => !task.Fixture
+                           && (task.State == TaskStates.Ready
+                               || (task.State == TaskStates.Progress
+                                   && task.Phase == LifecyclePhases.QuotaWaiting
+                                   && task.QuotaWait is not null)))
             .Where(task =>
             {
                 var settings = projectSettings(task.ProjectName);
@@ -83,30 +99,49 @@ public static class RemoteQueueStarvationPolicy
         var items = routedReadyTasks
             .Select(task => (Task: task, Gate: BuildProfileGate.Evaluate(
                 projectSettings(task.ProjectName).BuildProfile)))
-            .Where(candidate => !candidate.Gate.AllowsPickup
+            .Where(candidate => candidate.Task.QuotaWait is not null
+                           || !candidate.Gate.AllowsPickup
                            || candidate.Task.RemoteDispatchRejection is not null
                            || (claimProgressStalled
                                && now - candidate.Task.EnteredLaneAt.ToUniversalTime() >= threshold))
             .OrderBy(candidate => candidate.Task.EnteredLaneAt)
-            .Select(candidate => new RemoteQueueStarvationItem
+            .Select(candidate =>
             {
-                TaskKey = candidate.Task.Key ?? candidate.Task.TaskKey ?? candidate.Task.Id,
-                TaskId = candidate.Task.Id,
-                ProjectName = candidate.Task.ProjectName,
-                Title = candidate.Task.Title,
-                EnteredLaneAt = candidate.Task.EnteredLaneAt,
-                LastRejection = candidate.Task.RemoteDispatchRejection,
-                BlockReasonCode = candidate.Gate.AllowsPickup ? null : "build-profile-gate",
-                BlockReason = candidate.Gate.AllowsPickup ? null : candidate.Gate.Reason,
+                var providerLimited = candidate.Task.QuotaWait is not null
+                                      || candidate.Task.RemoteDispatchRejection?.Reason?.Contains(
+                                          "advertised as limited",
+                                          StringComparison.OrdinalIgnoreCase) == true;
+                return new RemoteQueueStarvationItem
+                {
+                    TaskKey = candidate.Task.Key ?? candidate.Task.TaskKey ?? candidate.Task.Id,
+                    TaskId = candidate.Task.Id,
+                    ProjectName = candidate.Task.ProjectName,
+                    Title = candidate.Task.Title,
+                    EnteredLaneAt = candidate.Task.EnteredLaneAt,
+                    LastRejection = candidate.Task.RemoteDispatchRejection,
+                    BlockReasonCode = !candidate.Gate.AllowsPickup
+                        ? "build-profile-gate"
+                        : providerLimited ? "provider-limited" : null,
+                    BlockReason = !candidate.Gate.AllowsPickup
+                        ? candidate.Gate.Reason
+                        : providerLimited
+                            ? candidate.Task.QuotaWait?.Reason
+                              ?? candidate.Task.RemoteDispatchRejection?.Reason
+                            : null,
+                };
             })
             .ToList();
         var hasRejections = items.Any(item => item.LastRejection is not null);
+        var providerLimitedItems = items
+            .Where(item => string.Equals(item.BlockReasonCode, "provider-limited", StringComparison.Ordinal))
+            .ToList();
 
         return new RemoteQueueStarvationSnapshot
         {
             Active = items.Count > 0
                      && (availableSlots > 0 || items.Any(item =>
-                         string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal))),
+                         string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)
+                         || string.Equals(item.BlockReasonCode, "provider-limited", StringComparison.Ordinal))),
             WaitingTaskCount = items.Count,
             AvailableSlots = availableSlots,
             ThresholdMinutes = Math.Max(1, (int)Math.Ceiling(threshold.TotalMinutes)),
@@ -115,6 +150,9 @@ public static class RemoteQueueStarvationPolicy
             HasRejections = hasRejections,
             BuildProfileGateBlockedTaskCount = items.Count(item =>
                 string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)),
+            ProviderLimitedTaskCount = providerLimitedItems.Count,
+            State = providerLimitedItems.Count > 0 ? "limited" : items.Count > 0 ? "stalled" : "healthy",
+            ProviderLimitReason = providerLimitedItems.FirstOrDefault()?.BlockReason,
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
@@ -232,18 +270,29 @@ public sealed class RemoteQueueStarvationWatchdog : BackgroundService
             return;
         }
 
-        var signature = string.Join(',', next.Items.Select(item => item.TaskKey));
+        var signature = $"{next.State}:" + string.Join(',', next.Items.Select(item => item.TaskKey));
         var repeatDue = _lastWarningAt is null || now - _lastWarningAt >= TimeSpan.FromMinutes(30);
         if (string.Equals(signature, _warningSignature, StringComparison.Ordinal) && !repeatDue)
             return;
 
-        _logger.LogWarning(
-            "remote-ready-starvation waitingTasks={WaitingTaskCount} availableSlots={AvailableSlots} oldestEnteredLaneAt={OldestEnteredLaneAt} lastSuccessfulClaimAt={LastSuccessfulClaimAt} rejectedTasks={RejectedTaskCount}",
-            next.WaitingTaskCount,
-            next.AvailableSlots,
-            next.OldestEnteredLaneAt,
-            next.LastSuccessfulClaimAt,
-            next.Items.Count(item => item.LastRejection is not null));
+        if (string.Equals(next.State, "limited", StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "remote-provider-limited waitingTasks={WaitingTaskCount} availableSlots={AvailableSlots} reason={ProviderLimitReason}",
+                next.ProviderLimitedTaskCount,
+                next.AvailableSlots,
+                next.ProviderLimitReason);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "remote-ready-starvation waitingTasks={WaitingTaskCount} availableSlots={AvailableSlots} oldestEnteredLaneAt={OldestEnteredLaneAt} lastSuccessfulClaimAt={LastSuccessfulClaimAt} rejectedTasks={RejectedTaskCount}",
+                next.WaitingTaskCount,
+                next.AvailableSlots,
+                next.OldestEnteredLaneAt,
+                next.LastSuccessfulClaimAt,
+                next.Items.Count(item => item.LastRejection is not null));
+        }
         _warningSignature = signature;
         _lastWarningAt = now;
     }
@@ -256,24 +305,66 @@ public static class RemoteQueueStarvationEndpoints
         app.MapGet("/api/runner/queue-starvation", (
             HttpContext context,
             RemoteQueueStarvationWatchdog watchdog,
+            TaskRunnerService runner,
             ProjectRegistry projects) =>
         {
             var snapshot = watchdog.Refresh();
+            var pickupPauses = runner.GetStatus().Projects.Values
+                .Where(status => status.Mode is "manual" or "paused")
+                .Where(status => string.Equals(
+                    status.ModeSource,
+                    "circuit-breaker",
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(status => new PickupPauseItem
+                {
+                    ProjectName = status.ProjectName,
+                    Reason = status.ModeReason ?? status.BreakerReason ?? "pickup paused by infrastructure breaker",
+                    PausedAt = status.ModeChangedAt,
+                })
+                .OrderBy(item => item.ProjectName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
             if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human)
-                return Results.Ok(snapshot);
+            {
+                return Results.Ok(snapshot with
+                {
+                    Active = snapshot.Active || pickupPauses.Count > 0,
+                    PickupPausedProjectCount = pickupPauses.Count,
+                    PickupPauses = pickupPauses,
+                    State = snapshot.ProviderLimitedTaskCount > 0
+                        ? "limited"
+                        : pickupPauses.Count > 0 ? "paused" : snapshot.State,
+                });
+            }
 
             var visibleItems = snapshot.Items
                 .Where(item => ProjectAccessAuthorization.Allows(human.User, item.ProjectName, projects))
                 .ToList();
+            var visiblePickupPauses = pickupPauses
+                .Where(item => ProjectAccessAuthorization.Allows(human.User, item.ProjectName, projects))
+                .ToList();
+            var providerLimitedItems = visibleItems
+                .Where(item => string.Equals(item.BlockReasonCode, "provider-limited", StringComparison.Ordinal))
+                .ToList();
+            var buildProfileBlockedCount = visibleItems.Count(item =>
+                string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal));
             return Results.Ok(snapshot with
             {
-                Active = visibleItems.Count > 0
+                Active = visiblePickupPauses.Count > 0 || (visibleItems.Count > 0
                          && (snapshot.AvailableSlots > 0 || visibleItems.Any(item =>
-                             string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal))),
+                             string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)
+                             || string.Equals(item.BlockReasonCode, "provider-limited", StringComparison.Ordinal)))),
                 WaitingTaskCount = visibleItems.Count,
                 HasRejections = visibleItems.Any(item => item.LastRejection is not null),
-                BuildProfileGateBlockedTaskCount = visibleItems.Count(item =>
-                    string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)),
+                BuildProfileGateBlockedTaskCount = buildProfileBlockedCount,
+                ProviderLimitedTaskCount = providerLimitedItems.Count,
+                PickupPausedProjectCount = visiblePickupPauses.Count,
+                PickupPauses = visiblePickupPauses,
+                State = providerLimitedItems.Count > 0
+                    ? "limited"
+                    : visiblePickupPauses.Count > 0
+                        ? "paused"
+                        : visibleItems.Count > 0 ? "stalled" : "healthy",
+                ProviderLimitReason = providerLimitedItems.FirstOrDefault()?.BlockReason,
                 OldestEnteredLaneAt = visibleItems.FirstOrDefault()?.EnteredLaneAt,
                 Items = visibleItems,
             });

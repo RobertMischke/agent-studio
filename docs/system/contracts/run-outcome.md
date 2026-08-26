@@ -30,6 +30,16 @@ attempt from durable salvage; exhausted chains terminate visibly. Infrastructure
 outcomes set every product-defect, completion, and coding-rework budget flag to
 false.
 
+`QuotaExceeded` with `ProviderLimitInfo` is provider-scoped admission state,
+not a task terminal. The adapter extracts the provider, observed time, reported
+reset clock when present, and a bounded diagnostic. The current coding card
+enters durable `quotaWait`; no task failure, escalation, or failure-budget row
+is recorded. The runner advertises only that provider's authentication
+capability as `limited`, so other CLI types remain claimable. At the retry time,
+a real provider request probes recovery. A successful probe clears the limit
+and resumes claims automatically; a rejected or inconclusive probe keeps the
+provider closed and schedules another bounded probe.
+
 ### Repository identity
 
 `RepositoryIdentity` is the materializable Git repository identity, not the
@@ -152,8 +162,10 @@ escalating instead of parking it on first detection:
   `cli-launch-failed` category. It no longer parks straight to `5e` on the first
   launch failure.
 
-Non-retryable environmental members (`ModelInvalid`, `ContextOverflow`,
-`QuotaExhausted`, `EnvironmentBlocker`, `AuthRefreshFailed`) still escalate on
+Provider account limits no longer enter post-processing: the typed
+`QuotaExceeded` path above waits and resumes through provider capability
+recovery. Other non-retryable environmental members (`ModelInvalid`,
+`ContextOverflow`, `EnvironmentBlocker`, `AuthRefreshFailed`) still escalate on
 first detection with their own honest categories (AGT-1941) - re-running would
 hit the same wall.
 

@@ -165,6 +165,41 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Equal(new[] { "oldest", "middle", "newest" }, ordered.Select(c => c.Slug).ToArray());
     }
 
+    [Fact]
+    public void DisplayedPicker_SkipsFutureProviderLimitWaitAndKeepsOtherCliEligible()
+    {
+        WriteJob(TaskStates.Progress, "claude-limited");
+        var limitedFolder = Path.Combine(_watchPath, TaskStates.Progress, "claude-limited");
+        File.WriteAllText(
+            Path.Combine(limitedFolder, "task.json"),
+            $"{{\"id\":\"claude-limited\",\"title\":\"claude-limited\",\"state\":\"{TaskStates.Progress}\",\"order\":1,\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"}}");
+        QuotaWaitMarker.Write(limitedFolder, new QuotaWaitRecord
+        {
+            CliType = "claude",
+            StartedAt = DateTime.UtcNow.AddMinutes(-1),
+            ResetAt = DateTime.UtcNow.AddHours(2),
+            ThresholdMinutes = 120,
+            Reason = "claude: limited until reset",
+        });
+
+        WriteJob(TaskStates.Ready, "codex-ready");
+        var codexFolder = Path.Combine(_watchPath, TaskStates.Ready, "codex-ready");
+        File.WriteAllText(
+            Path.Combine(codexFolder, "task.json"),
+            $"{{\"id\":\"codex-ready\",\"title\":\"codex-ready\",\"state\":\"{TaskStates.Ready}\",\"order\":2,\"agent\":\"codex\",\"cliType\":\"codex\",\"ownerClientId\":\"local-default\"}}");
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        var picked = InvokeDisplayedPicker(runner);
+
+        Assert.NotNull(picked);
+        Assert.Equal("codex-ready", picked!.Id);
+        Assert.Contains("codex-ready", runner.GetStatus().LastPickReason);
+        Assert.True(Directory.Exists(limitedFolder));
+        Assert.NotNull(QuotaWaitMarker.TryRead(limitedFolder));
+    }
+
     // ===== Scenario 3: over-budget routing (no dead-letter lane) =====
 
     /// <summary>
@@ -593,7 +628,10 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         // Tick 2: stuck-b spawn-fails, the breaker's 2nd distinct slug trips it.
         InvokePickerLoop(runner);
-        Assert.Equal("manual", runner.GetStatus().Mode);
+        var status = runner.GetStatus();
+        Assert.Equal("manual", status.Mode);
+        Assert.Equal("circuit-breaker", status.ModeSource);
+        Assert.Contains("pickup paused: infra breaker, 2 failures cliType=copilot at ", status.ModeReason);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stuck-b")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-c")),
             "third folder must NOT have been touched after the cross-slug breaker tripped");
@@ -724,6 +762,15 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // TickAsync invokes; tests that need multiple ticks can call this
         // helper repeatedly.
         return method!.Invoke(runner, null) as TaskInfo;
+    }
+
+    private static TaskInfo? InvokeDisplayedPicker(ProjectRunner runner)
+    {
+        var method = typeof(ProjectRunner).GetMethod(
+            "PickNextDisplayedCandidate",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        return method!.Invoke(runner, [1]) as TaskInfo;
     }
 
     private void WriteJob(string state, string slug)

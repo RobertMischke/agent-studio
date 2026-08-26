@@ -1913,7 +1913,8 @@ public sealed class V1ReviewExecutorRegistry
                 if (!string.Equals(capability.AdvertisedStatus, "ready", StringComparison.Ordinal))
                     return CodingCapabilityAdmission.Blocked(
                         required,
-                        $"Required capability '{key}' is advertised as {capability.AdvertisedStatus}.");
+                        $"Required capability '{key}' is advertised as {capability.AdvertisedStatus}. " +
+                        (capability.Detail ?? capability.Reason ?? string.Empty));
             }
 
             if (_capabilityFailures.TryGetValue(runnerId, out var failures))

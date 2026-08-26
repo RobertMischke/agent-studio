@@ -1314,7 +1314,10 @@ public sealed class TaskServerClient : IDisposable
         _v1Leases.TryRemove(req.TaskKey, out _);
         _v1TaskBodies.TryRemove(req.TaskKey, out _);
         _hostAcceptedWork.TryRemove(req.TaskKey, out _);
-        return new RemoteRunCompletionResponse(req.TaskKey, typedOutcome, "4-auto-review");
+        var targetLane = req.OutcomeDecision?.ProviderLimit is null
+            ? "4-auto-review"
+            : "2-ready";
+        return new RemoteRunCompletionResponse(req.TaskKey, typedOutcome, targetLane);
     }
 
     public async Task<ResultHandoffAck> AcknowledgeResultHandoffAsync(

@@ -31,13 +31,16 @@ void Log(string message) => Console.Error.WriteLine($"[{DateTime.UtcNow:HH:mm:ss
 // Capability advertisements distinguish binary presence from provider login.
 // Keep the process boundary in the composition root and let the cached probe
 // decide when each bounded, low-contention status command needs to run.
-ProviderAuthProbe.Shared.UseLauncher(
-    (fileName, arguments, ct) =>
-    {
-        var invocation = ProviderAuthProbe.LowPriorityInvocation(fileName, arguments);
-        return ProcessRunner.RunAsync(invocation.FileName, invocation.Arguments, ct: ct);
-    },
-    Log);
+Task<ProcessResult> RunLowPriorityCliAsync(
+    string fileName,
+    IReadOnlyList<string> arguments,
+    CancellationToken ct)
+{
+    var invocation = ProviderAuthProbe.LowPriorityInvocation(fileName, arguments);
+    return ProcessRunner.RunAsync(invocation.FileName, invocation.Arguments, ct: ct);
+}
+
+ProviderAuthProbe.Shared.UseLauncher(RunLowPriorityCliAsync, Log);
 
 if (help)
 {
@@ -109,7 +112,7 @@ try
     }
     if (daemonMode)
     {
-        await new RemoteRunnerDaemon(options, client, Log).RunAsync(shutdown.Token);
+        await new RemoteRunnerDaemon(options, client, Log, RunLowPriorityCliAsync).RunAsync(shutdown.Token);
         Log("daemon stopped");
         return 0;
     }
