@@ -104,6 +104,18 @@ export interface CliUsageReport {
   sections: CliUsageSection[];
 }
 
+/** Latest durable local-host npm shim repair outcome. */
+export interface CliRepairStatus {
+  cliType: CliType;
+  event: 'repair-succeeded' | 'repair-failed';
+  occurredAt: string;
+  cliVersionBefore: string | null;
+  packageVersionBefore: string | null;
+  cliVersionAfter: string | null;
+  detail: string;
+  journalPath: string;
+}
+
 /**
  * On-demand deep read of a single session (mirror of the backend
  * `CliSessionDetail` record). Fetched lazily when a session row is expanded in

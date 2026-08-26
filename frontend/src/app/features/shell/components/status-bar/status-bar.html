@@ -38,6 +38,17 @@
         [tooltip]="'Quota fallback active: ' + fallback.quotaFallbackReason"
         testid="status-bar-quota-fallback" />
     }
+    @if (localCliRepair(); as repair) {
+      <app-statusbar-item
+        [button]="false"
+        icon="refresh"
+        [label]="repair.label"
+        [tooltip]="repair.tooltip"
+        [warning]="repair.failed"
+        warningLabel="CLI repair failed"
+        [signalTone]="repair.failed ? 'mismatch' : 'calm'"
+        testid="status-bar-cli-repair" />
+    }
   </div>
 
   <div class="statusbar__group statusbar__group--center statusbar__group--spacer"></div>

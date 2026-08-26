@@ -20,6 +20,7 @@ import {
   type VisibleIntervalHandle,
 } from '../../../../utils/visible-interval';
 import { UsageHoverPanelComponent } from '../../../tokens';
+import type { CliRepairStatus } from '../../../cli';
 import {
   deriveBoardRunningTruth,
   freshRemoteTelemetrySlots,
@@ -36,6 +37,30 @@ const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 const HOST_LOAD_REFRESH_MS = 30_000;
+const REPAIR_SUCCESS_VISIBILITY_MS = 24 * 60 * 60_000;
+
+export interface CliRepairPresentation {
+  label: string;
+  tooltip: string;
+  failed: boolean;
+}
+
+export function cliRepairPresentation(
+  status: CliRepairStatus | null,
+  nowMs = Date.now(),
+): CliRepairPresentation | null {
+  if (!status) return null;
+  const occurredAt = Date.parse(status.occurredAt);
+  if (!Number.isFinite(occurredAt)) return null;
+  const failed = status.event === 'repair-failed';
+  if (!failed && nowMs - occurredAt > REPAIR_SUCCESS_VISIBILITY_MS) return null;
+  const time = new Date(occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return {
+    label: failed ? 'CLI repair failed' : `CLI repaired at ${time}`,
+    tooltip: `${status.detail} Evidence: ${status.journalPath}`,
+    failed,
+  };
+}
 
 export function formatRunningLabel(
   local: number,
@@ -104,6 +129,8 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly defaultCli = signal<CliType>(this.readDefaultCli());
   readonly defaultModel = signal<string>(this.readDefaultModel(this.readDefaultCli()));
   readonly defaultThinkingLevel = signal<string | null>(this.readDefaultThinkingLevel(this.readDefaultCli()));
+  readonly localCliRepairStatus = signal<CliRepairStatus | null>(null);
+  readonly localCliRepair = computed(() => cliRepairPresentation(this.localCliRepairStatus()));
 
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
@@ -207,8 +234,13 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.remoteHosts.refresh();
     this.reviewQueue.refresh();
+    this.refreshLocalCliRepairStatus();
     this.hostLoadRefreshHandle = setVisibleInterval(
-      () => { this.remoteHosts.refresh(); this.reviewQueue.refresh(); },
+      () => {
+        this.remoteHosts.refresh();
+        this.reviewQueue.refresh();
+        this.refreshLocalCliRepairStatus();
+      },
       HOST_LOAD_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {
@@ -221,6 +253,13 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearVisibleInterval(this.hostLoadRefreshHandle);
+  }
+
+  private refreshLocalCliRepairStatus(): void {
+    this.jobService.getLocalCliRepairStatus().subscribe({
+      next: status => this.localCliRepairStatus.set(status),
+      error: () => { /* The repair surface is observability-only; keep the status bar usable. */ },
+    });
   }
 
   runningTooltip(): string {

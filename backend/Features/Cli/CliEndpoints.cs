@@ -119,8 +119,17 @@ public static class CliEndpoints
             }
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
-        cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions, TaskRunnerService runners) =>
+        cliGroup.MapGet("/usage", async (
+            CliRouter router,
+            SessionRegistry sessions,
+            TaskRunnerService runners,
+            LocalCliSelfHeal selfHeal,
+            CancellationToken ct) =>
         {
+            // This is the existing local capability inventory boundary. Heal a
+            // package-present/missing-shim install before building the report
+            // so the same request observes the restored CLI capability.
+            await selfHeal.ProbeAndRepairAllAsync(ct);
             // Snapshot the runner's per-project active job so the
             // LinkedJob chip can render `active` (green) when the linked
             // session belongs to the project's currently-running task.
@@ -132,6 +141,9 @@ public static class CliEndpoints
             }
             return Results.Ok(sessions.BuildReport(router, activeJobByProject));
         });
+
+        cliGroup.MapGet("/repairs/latest", (LocalCliSelfHeal selfHeal) =>
+            Results.Ok(selfHeal.Latest()));
 
         // Lazy deep-read of one session (row expand in the CLI-session tool).
         // Parses exactly one transcript on demand so the list report stays

@@ -4,7 +4,41 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { cliRepairPresentation, formatRunningLabel, StatusBarComponent } from './status-bar';
+
+describe('cliRepairPresentation', () => {
+  const occurredAt = '2026-08-18T10:15:00Z';
+
+  it('renders a successful repair as calm, timestamped history for 24 hours', () => {
+    const presentation = cliRepairPresentation({
+      cliType: 'claude', event: 'repair-succeeded', occurredAt,
+      cliVersionBefore: '2.1.231', packageVersionBefore: '2.1.234', cliVersionAfter: '2.1.234',
+      detail: 'claude npm shim restored; 2.1.231 -> 2.1.234.',
+      journalPath: 'C:/workspace/logs/cli-self-heal.jsonl',
+    }, Date.parse(occurredAt) + 60_000);
+
+    expect(presentation?.label).toContain('CLI repaired at');
+    expect(presentation?.failed).toBe(false);
+    expect(presentation?.tooltip).toContain('cli-self-heal.jsonl');
+  });
+
+  it('retires successful repair history after 24 hours', () => {
+    const status = {
+      cliType: 'claude' as const, event: 'repair-succeeded' as const, occurredAt,
+      cliVersionBefore: '2.1.231', packageVersionBefore: '2.1.234', cliVersionAfter: '2.1.234', detail: 'restored', journalPath: 'journal',
+    };
+    expect(cliRepairPresentation(status, Date.parse(occurredAt) + 24 * 60 * 60_000 + 1)).toBeNull();
+  });
+
+  it('keeps a failed repair acute until a newer outcome replaces it', () => {
+    const presentation = cliRepairPresentation({
+      cliType: 'codex', event: 'repair-failed', occurredAt,
+      cliVersionBefore: '0.70.0', packageVersionBefore: '0.70.1', cliVersionAfter: null,
+      detail: 'codex npm shim repair failed.', journalPath: 'journal',
+    }, Date.parse(occurredAt) + 7 * 24 * 60 * 60_000);
+    expect(presentation).toMatchObject({ label: 'CLI repair failed', failed: true });
+  });
+});
 
 describe('formatRunningLabel', () => {
   it.each([

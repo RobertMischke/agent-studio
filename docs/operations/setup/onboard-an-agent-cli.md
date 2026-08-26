@@ -29,7 +29,36 @@ The default runtime prompt that wraps every task already tells the agent to emit
 **Known quirks**:
 
 - **argv-length on Windows.** A multi-KB prompt passed as `-p <prompt>` on the Windows command line silently fails (empty CLI response). Production code paths use `ICliOneShot` ([../../backend/Services/Cli/OneShot/ICliOneShot.cs](../../../backend/Services/Cli/OneShot/ICliOneShot.cs)) or stdin-piped `Process.Start` to bypass this. The drift analyser in [`CodePatternDriftAnalysisService.cs`](../../../backend/Services/Drift/CodePatternDriftAnalysisService.cs) flags new `-p <multi-KB-string>` call sites as regressions.
-- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `%APPDATA%\npm\` (that is, `C:\Users\<you>\AppData\Roaming\npm\`). The fix is to reinstall the npm package (`npm install -g @anthropic-ai/claude-code`), which restores the shim and runs the postinstall step.
+- **Windows npm shim self-heal.** The local capability monitor distinguishes a
+  truly absent package from the observed half-install shape: the package still
+  exists under `%APPDATA%\npm\node_modules`, but its `.cmd` shim is missing.
+  For Claude or Codex in that exact state, Studio runs the matching
+  `npm install --global` repair automatically. Attempts are persisted and
+  limited to one per CLI per hour. A success appears quietly in the status bar
+  as `CLI repaired at <time>` for 24 hours; only a failed reinstall raises an
+  acute signal. The before/after package and CLI versions, shim and binary file
+  facts, recent npm/provider updater log excerpts, and bounded npm output are in
+  `<TaskRepository>/logs/cli-self-heal.jsonl`.
+
+### Windows break-and-heal rehearsal
+
+Use a host maintenance window. This rehearsal moves only the command shims and
+keeps them recoverable; it does not remove the installed package.
+
+1. Record `claude --version` (or `codex --version`) and confirm the package
+   directory exists under `%APPDATA%\npm\node_modules`.
+2. Move `<cli>`, `<cli>.cmd`, and `<cli>.ps1` from `%APPDATA%\npm` into a new
+   timestamped sibling backup directory. Do not delete them.
+3. Refresh the CLI inventory or wait up to one minute for the capability
+   monitor. Confirm the shim returns, `<cli> --version` succeeds, and the status
+   bar reads `CLI repaired at <time>`.
+4. Preserve the matching `repair-attempted` and `repair-succeeded` rows from
+   `cli-self-heal.jsonl`, including the before/after versions, with the task's
+   review evidence. Remove the backup only after comparing its files with the
+   restored shims.
+5. Restore the backup shims manually if the automatic reinstall fails. Keep the
+   `repair-failed` row and backend error event for diagnosis; the one-hour
+   budget deliberately prevents a reinstall loop.
 
 ## Codex
 
