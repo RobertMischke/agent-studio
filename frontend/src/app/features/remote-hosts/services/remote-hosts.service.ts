@@ -563,11 +563,15 @@ function statusFor(lastSeenAt: string | null, now: number): RemoteHost['status']
 }
 
 function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHost['status']): RemoteHost {
+  const effectiveStatus = client.cliRepair?.outcome === 'failed' && status !== 'retired'
+    ? 'degraded' as const
+    : status;
   return {
-    ...host, status, lastHeartbeatAt: client.lastSeenAt, stats: null, telemetry: null,
+    ...host, status: effectiveStatus, lastHeartbeatAt: client.lastSeenAt, stats: null, telemetry: null,
     liveDataState: 'ready', telemetryLoading: status !== 'retired' && !client.identityFileError,
     identityFileError: client.identityFileError ?? null,
     identityRestoreHint: client.identityRestoreHint ?? null,
+    cliRepair: client.cliRepair ?? null,
     gitPushStatus: client.runnerGitStatus ?? null, gitPushDetail: client.runnerGitDetail ?? null,
     gitPushCheckedAt: client.runnerGitCheckedAt ?? null,
     projectPreflights: client.runnerProjectPreflights ?? [],

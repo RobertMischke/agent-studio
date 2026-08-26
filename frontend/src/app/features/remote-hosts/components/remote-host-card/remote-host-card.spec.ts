@@ -135,6 +135,24 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelector('[data-testid="remote-host-status"]')?.textContent).toContain('Offline');
   });
 
+  it('shows a calm local CLI repair note with version evidence', () => {
+    const el: HTMLElement = mount({
+      ...HOST,
+      role: 'local',
+      cliRepair: {
+        cliType: 'claude',
+        outcome: 'repaired',
+        occurredAt: '2026-08-18T12:34:00Z',
+        beforeVersion: '2.1.231',
+        afterVersion: '2.1.234',
+      },
+    }).nativeElement;
+
+    const note = el.querySelector('[data-testid="remote-host-cli-repair-note"]');
+    expect(note?.textContent).toContain('CLI repaired at');
+    expect(note?.textContent).toContain('2.1.231 -> 2.1.234');
+  });
+
   it('shows the independent read-only badge when the startup push probe fails', () => {
     const fixture = mount({
       ...HOST,

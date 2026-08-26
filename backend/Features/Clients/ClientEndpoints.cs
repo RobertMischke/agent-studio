@@ -34,7 +34,8 @@ public static class ClientEndpoints
             ClientIdentityStore store,
             AgentStudio.Pipeline.RemoteGateActivityStore gateActivity,
             ProjectRegistry registry,
-            ProjectSettingsService projectSettings) =>
+            ProjectSettingsService projectSettings,
+            LocalCliSelfHealService cliSelfHeal) =>
         {
             var projects = registry.List();
             var now = DateTime.UtcNow;
@@ -47,6 +48,9 @@ public static class ClientEndpoints
                         projects,
                         projectSettings,
                         now),
+                    CliRepair = string.Equals(record.Id, DefaultClientIdentity.Id, StringComparison.OrdinalIgnoreCase)
+                        ? cliSelfHeal.Latest
+                        : null,
                 };
                 if (record.RunnerDaemonState is null && record.RunnerGitStatus is null)
                     return summary;

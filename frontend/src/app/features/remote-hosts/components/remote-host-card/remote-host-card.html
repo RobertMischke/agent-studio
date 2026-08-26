@@ -153,6 +153,7 @@
               @for (cap of h.capabilities; track cap) { <li>{{ cap }}</li> }
             </ul>
           }
+          @if (h.cliRepair) { <p class="detail__empty" data-testid="remote-host-cli-repair-note">{{ cliRepairNote() }}</p> }
           @if (h.cliQuotas.length) {
             <ul class="chips" aria-label="Per-CLI quota" data-testid="remote-host-quotas">
               @for (q of h.cliQuotas; track q.cliType + '|' + q.windowLabel) {

@@ -139,6 +139,19 @@ differences live in the
 
 **Contract.** `TestCliPath()` returns `(Available, Version, ResolvedPath)`. Availability and quota probes remain Studio services because they also feed settings and routing surfaces outside an active CAR run.
 
+**Local Windows npm-shim recovery.** The local host repeats the Claude and
+Codex availability probes once per minute. When a probe reports the command as
+missing, `LocalCliSelfHealService` distinguishes a genuinely absent package
+from an installed global npm package whose executable shim disappeared. Only
+the second state runs `npm install -g <package>`, with one attempt per CLI per
+hour. The attempt budget is restored from
+`<TaskRepository>/logs/local-cli-repairs.jsonl`, so a backend restart cannot
+reset it. Each record includes the package version and timestamp before repair,
+the CLI version after repair, nearby npm-log metadata, bounded command output,
+and the next allowed attempt. Execution Hosts and the status bar show the
+latest successful repair as quiet history; only a failed repair degrades the
+local host and raises an acute warning.
+
 **Authentication.** Studio-local CLIs may still authenticate out of band.
 Remote hosts use the protected provider-auth provisioning flow. Environment
 credentials live only in `/etc/agent-runner/provider-auth.env` on the selected

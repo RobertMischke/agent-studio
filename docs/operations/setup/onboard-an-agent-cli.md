@@ -29,7 +29,7 @@ The default runtime prompt that wraps every task already tells the agent to emit
 **Known quirks**:
 
 - **argv-length on Windows.** A multi-KB prompt passed as `-p <prompt>` on the Windows command line silently fails (empty CLI response). Production code paths use `ICliOneShot` ([../../backend/Services/Cli/OneShot/ICliOneShot.cs](../../../backend/Services/Cli/OneShot/ICliOneShot.cs)) or stdin-piped `Process.Start` to bypass this. The drift analyser in [`CodePatternDriftAnalysisService.cs`](../../../backend/Services/Drift/CodePatternDriftAnalysisService.cs) flags new `-p <multi-KB-string>` call sites as regressions.
-- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `%APPDATA%\npm\` (that is, `C:\Users\<you>\AppData\Roaming\npm\`). The fix is to reinstall the npm package (`npm install -g @anthropic-ai/claude-code`), which restores the shim and runs the postinstall step.
+- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `%APPDATA%\npm\` (that is, `C:\Users\<you>\AppData\Roaming\npm\`). The existing per-spawn healer restores known orphan and stub shapes. If both executable shims disappear while `node_modules/@anthropic-ai/claude-code/package.json` remains, the local capability monitor automatically runs `npm install -g @anthropic-ai/claude-code`, at most once per hour. A successful repair appears as `CLI repaired at <time>` in the status bar and Execution Hosts. A failed repair raises the local-host warning and records its bounded npm output in `<TaskRepository>/logs/local-cli-repairs.jsonl`.
 
 ## Codex
 
@@ -41,6 +41,11 @@ The default runtime prompt that wraps every task already tells the agent to emit
 | Local config | `~/.codex/config.toml` |
 | Auth | `codex` interactive login the first time. |
 | Deep ref | [../cli-skills/cli-codex.md](../../system/cli/skills/cli-codex.md) |
+
+The same local Windows missing-shim monitor covers Codex. It reinstalls
+`@openai/codex` only when the global package remains present but `codex.cmd`
+and `codex.exe` are absent. A truly uninstalled package and an unavailable
+explicit `CodexCli:Path` remain operator-owned configuration states.
 
 ### Codex on Windows: the sandbox quirk (read this)
 

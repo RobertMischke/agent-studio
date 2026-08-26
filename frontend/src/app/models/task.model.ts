@@ -691,6 +691,8 @@ export interface ClientSummary {
   /** Ceiling the live daemon reports as adopted. Telemetry, not policy. */
   runnerEffectiveMaxParallelism?: number | null;
   runnerEffectiveMaxParallelismAppliedAt?: string | null;
+  /** Latest local npm-shim recovery event; absent for remote identities. */
+  cliRepair?: LocalCliRepairStatus | null;
   runnerActiveGateCount?: number | null;
   runnerGateCapacity?: number | null;
   /** Present only for a synthetic row representing an unreadable identity file. */
@@ -699,6 +701,15 @@ export interface ClientSummary {
   identityFileModifiedAt?: string | null;
   identityFileSizeBytes?: number | null;
   identityRestoreHint?: string | null;
+}
+
+export interface LocalCliRepairStatus {
+  cliType: string;
+  outcome: 'repaired' | 'failed' | 'recovered' | string;
+  occurredAt: string;
+  beforeVersion?: string | null;
+  afterVersion?: string | null;
+  error?: string | null;
 }
 
 export interface RunnerProjectPreflight {

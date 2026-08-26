@@ -144,6 +144,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet observed in production; AGT-2525 introduces the stable store and its retention owner.
 - **Notes:** Attempt teardown only refreshes last use. A fresh home whose CLI launch was never adopted is deleted immediately. Ownership shape and task-marker validation prevent the sweep or a continuation from adopting another task's directory.
 
+### cli.local-missing-shim-repair
+
+- **Kind:** Tick
+- **Where:** [`backend/Features/Cli/Execution/LocalCliSelfHealService.cs`](../../../backend/Features/Cli/Execution/LocalCliSelfHealService.cs) `ProbeAllAsync`
+- **Re-entry trigger:** Backend startup and each one-minute local CLI capability tick. A failed Claude or Codex `--version` probe enters the repair branch only when the matching npm package is still present and its executable global shim is missing.
+- **Budget:** `LocalCliSelfHealService.RepairCooldown` (one repair attempt per CLI per hour, restored from the durable journal after restart).
+- **Action when budget exhausted:** Keep the current capability result and latest repair status. Do not invoke npm again until the recorded next-allowed instant. A true missing package or an unrelated explicit executable path never enters the loop.
+- **Breaker test:** [`backend.Tests/Architecture/LocalCliSelfHealBreakerTest.cs`](../../../backend.Tests/Architecture/LocalCliSelfHealBreakerTest.cs), plus portable classifier coverage in [`backend.Tests/LocalCliSelfHealTests.cs`](../../../backend.Tests/LocalCliSelfHealTests.cs).
+- **Last fired:** 2026-08-18 operator rehearsal preceded implementation. Claude 2.1.231 lost both npm shims while the package remained present; manual reinstall restored the CLI at 2.1.234.
+- **Notes:** Each attempt appends start and terminal records to `<TaskRepository>/logs/local-cli-repairs.jsonl`, including package and shim timestamps, nearby npm log metadata, the package version before repair, the CLI version after repair, bounded npm output, and the next-allowed instant. Success is quiet history in the status bar and Execution Hosts. Only a failed repair becomes an acute local-host alarm.
+
 ## Candidates (LLM-proposed, human-reviewed)
 
 This section mirrors `loop-inventory.md.candidates` once the weekly `LoopDiscoveryTest` starts running. Items move from candidates to **Entries** above only after a human review confirms the loop is real and assigns a budget + test. Empty for now.

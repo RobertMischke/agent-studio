@@ -249,6 +249,40 @@ test.describe('Execution Hosts settings section', () => {
     await expect(page.getByTestId('workspace-settings-card-remote-hosts')).toContainText('Execution Hosts');
   });
 
+  test('shows a successful local CLI repair quietly in the status bar and host details', async ({ page }) => {
+    const repairedAt = '2026-08-18T12:34:00Z';
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'local-default', displayName: 'operator-workstation', kind: 'human',
+        registeredAt: repairedAt, lastSeenAt: new Date().toISOString(),
+        cliRepair: {
+          cliType: 'claude', outcome: 'repaired', occurredAt: repairedAt,
+          beforeVersion: '2.1.231', afterVersion: '2.1.234', error: null,
+        },
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const status = page.getByTestId('status-bar-cli-repair');
+    await expect(status).toContainText('CLI repaired at');
+    await expect(status).toHaveAttribute('data-signal-tone', 'calm');
+    await expect(page.getByTestId('status-bar-cli-repair-divergence')).toHaveCount(0);
+
+    const local = page.getByTestId('remote-host-card').filter({ hasText: 'Local machine' });
+    await expandHost(local, true);
+    await local.getByTestId('remote-host-detail-toggle-capabilities').click();
+    await expect(local.getByTestId('remote-host-cli-repair-note'))
+      .toContainText('2.1.231 -> 2.1.234');
+
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'local-cli-repair-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: join(SHOT_DIR, 'local-cli-repair-dark--mocked.png'), fullPage: false });
+  });
+
   test('section lists one compact table row per host; summary reconciles to the rows (R3)', async ({ page }) => {
     await page.getByTestId('status-bar-settings').click();
     await dismissDevErrorDialog(page);

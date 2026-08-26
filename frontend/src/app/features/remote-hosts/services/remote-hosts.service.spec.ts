@@ -79,6 +79,35 @@ describe('RemoteHostsService', () => {
 });
 
 describe('RemoteHostsService client registry hydration', () => {
+  it('alarms only when the local CLI repair failed', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'local-default', displayName: 'Local Default', emoji: null, colour: null,
+      kind: 'human', registeredAt: now, lastSeenAt: now, tokenBudgetMonthly: null, notes: null,
+      cliRepair: {
+        cliType: 'claude', outcome: 'failed', occurredAt: now,
+        beforeVersion: '2.1.234', afterVersion: null, error: 'npm install exited 1',
+      },
+    }]);
+    http.expectOne('/api/clients/local-default/telemetry?window=14d').flush({
+      clientId: 'local-default', window: '14d', points: [], findings: [],
+    });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+
+    expect(svc.hosts().find(host => host.id === 'local')).toMatchObject({
+      status: 'degraded',
+      cliRepair: { outcome: 'failed', error: 'npm install exited 1' },
+    });
+    http.verify();
+  });
+
   it('surfaces a corrupt identity and does not request telemetry for it', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],

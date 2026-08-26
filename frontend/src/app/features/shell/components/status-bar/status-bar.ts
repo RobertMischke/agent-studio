@@ -140,6 +140,27 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly hostLoad = computed(() =>
     summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
 
+  readonly cliRepair = computed(() => this.remoteHosts.hosts()
+    .map(host => host.cliRepair)
+    .filter(repair => repair !== null && repair !== undefined)
+    .sort((a, b) => Date.parse(b!.occurredAt) - Date.parse(a!.occurredAt))[0] ?? null);
+  readonly cliRepairLabel = computed(() => {
+    const repair = this.cliRepair();
+    if (!repair) return '';
+    const time = new Date(repair.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (repair.outcome === 'failed') return `CLI repair failed at ${time}`;
+    if (repair.outcome === 'recovered') return `CLI available again at ${time}`;
+    return `CLI repaired at ${time}`;
+  });
+  readonly cliRepairTooltip = computed(() => {
+    const repair = this.cliRepair();
+    if (!repair) return '';
+    const versions = repair.beforeVersion || repair.afterVersion
+      ? ` Version ${repair.beforeVersion || 'unknown'} -> ${repair.afterVersion || 'unknown'}.`
+      : '';
+    return `${repair.cliType} on the local execution host.${versions}${repair.error ? ` ${repair.error}` : ''}`;
+  });
+
   readonly reviewSnapshot = computed(() => this.reviewQueue.snapshot());
 
   /** Active post-processing jobs (LLM orchestration workers running). */

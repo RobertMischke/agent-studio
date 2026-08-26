@@ -1,5 +1,6 @@
 import type { CliType } from '../../../models/task.model';
 import type { RunnerProjectPreflight } from '../../../models/task.model';
+import type { LocalCliRepairStatus } from '../../../models/task.model';
 
 /**
  * Remote-hosts registry model (AGT-1921).
@@ -276,6 +277,8 @@ export interface RemoteHost {
   /** Acute registry failure projected from a synthetic /api/clients row. */
   identityFileError?: string | null;
   identityRestoreHint?: string | null;
+  /** Latest local npm-shim repair event. History stays calm; failure is acute. */
+  cliRepair?: LocalCliRepairStatus | null;
   /** Telemetry has a separate request so runtime truth never waits on history. */
   telemetryLoading?: boolean;
   /** Latest daemon startup proof of contents and workflow write access. */

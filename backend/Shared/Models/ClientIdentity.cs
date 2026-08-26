@@ -227,6 +227,12 @@ public record ClientSummary
     public DateTime? RunnerCapacityUpdatedAt { get; init; }
     public int? RunnerEffectiveMaxParallelism { get; init; }
     public DateTime? RunnerEffectiveMaxParallelismAppliedAt { get; init; }
+    /// <summary>
+    /// Process-owned status of the latest local npm-shim repair. Populated only
+    /// on the synthetic local host projection; it is not persisted in the
+    /// operator-editable identity record.
+    /// </summary>
+    public LocalCliRepairStatus? CliRepair { get; init; }
     public int RunnerActiveGateCount { get; init; }
     public int RunnerGateCapacity { get; init; }
     /// <summary>Present only for a synthetic registry row representing an unreadable identity file.</summary>

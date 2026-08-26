@@ -242,6 +242,17 @@ export class RemoteHostCardComponent {
     if (unavailable) return `${ok} capabilities ok · ${unavailable} auth unavailable`;
     return `${ok} ${ok === 1 ? 'capability' : 'capabilities'} ok`;
   });
+  readonly cliRepairNote = computed(() => {
+    const repair = this.host().cliRepair;
+    if (!repair) return '';
+    const time = new Date(repair.occurredAt).toLocaleString();
+    const versions = repair.beforeVersion || repair.afterVersion
+      ? ` (${repair.beforeVersion || 'unknown'} -> ${repair.afterVersion || 'unknown'})`
+      : '';
+    if (repair.outcome === 'failed') return `CLI repair failed at ${time}${repair.error ? `: ${repair.error}` : ''}`;
+    if (repair.outcome === 'recovered') return `CLI available again at ${time}${versions}`;
+    return `CLI repaired at ${time}${versions}`;
+  });
   readonly capacitySummary = computed(() => {
     const total = this.roleSlotCapacity();
     return total === null

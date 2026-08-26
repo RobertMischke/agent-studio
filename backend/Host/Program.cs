@@ -531,6 +531,7 @@ builder.Services.AddSingleton<AgentStudio.Cli.ICliOneShot>(sp =>
 builder.Services.AddSingleton<AgentStudio.Cli.CliOneShotRegistry>();
 builder.Services.AddSingleton<CodePatternDriftAnalysisService>();
 builder.Services.AddSingleton<AgentStudio.Persistence.IJsonlAppender, AgentStudio.Persistence.JsonlAppender>();
+builder.Services.AddSingleton<AgentStudio.Cli.LocalCliSelfHealService>();
 builder.Services.AddSingleton<AgentStudio.Diagnostics.RunnerEventJournal>();
 builder.Services.AddSingleton<AgentStudio.DemoReplay.DemoReplayEpochLedger>();
 builder.Services.AddSingleton<AgentStudio.Runtime.ProductRuntimeEventStore>();
@@ -777,6 +778,8 @@ builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddSingleton<CliQuotaWaitPolicyService>();
 builder.Services.AddSingleton<CliQuotaFallbackService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskWatcherService>());
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentStudio.Cli.LocalCliSelfHealService>());
 if (!publicDemoExecutionProfile)
     builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 // F22: server-rendered conversation projection. The projector serves the
