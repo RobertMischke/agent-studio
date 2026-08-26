@@ -454,6 +454,16 @@ test.describe('Execution Hosts settings section', () => {
         fullPage: false,
       });
     }
+
+    await page.setViewportSize({ width: 720, height: 900 });
+    await expect(tunnelStep).toBeVisible();
+    const copyCommand = page.getByTestId('runner-setup-tunnel-copy');
+    await copyCommand.scrollIntoViewIfNeeded();
+    await expect(copyCommand).toBeVisible();
+    await page.screenshot({
+      path: join(SHOT_DIR, 'remote-host-tunnel-setup-narrow-dark--mocked.png'),
+      fullPage: false,
+    });
   });
 
   test('shows a corrupt identity with its restore path in both themes', async ({ page }) => {

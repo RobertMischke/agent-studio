@@ -102,7 +102,8 @@ public static class TunnelSupervisionPolicy
             || !string.Equals(snapshot.Watchdog.State, "Running", StringComparison.OrdinalIgnoreCase)
             || snapshot.Keeper.LastStatus == "unreachable"
             || snapshot.Watchdog.LastProbeResult == "failed"
-            || snapshot.Watchdog.LastHealResult == "failed";
+            || (snapshot.Watchdog.LastHealResult == "failed"
+                && snapshot.Watchdog.LastProbeResult != "ok");
 
         return attention ? TunnelSupervisionStatuses.Attention : TunnelSupervisionStatuses.Healthy;
     }
