@@ -13,14 +13,26 @@ $ErrorActionPreference = 'Stop'
 $source = (Resolve-Path -LiteralPath $SourceCheckout).Path
 $project = Join-Path $source 'task-server\TaskServer.csproj'
 $registerScript = Join-Path $source 'deploy\windows\task-server\register-task-server.ps1'
+$supervisorScript = Join-Path $source 'deploy\windows\task-server\start-task-server.ps1'
 $version = 'release-{0}' -f $ReleaseSha.ToLowerInvariant()
 $releaseDirectory = Join-Path $InstallBase $version
 $current = Join-Path $InstallBase 'current'
 $staging = Join-Path $InstallBase ('.staging-{0}' -f $ReleaseSha.ToLowerInvariant())
 $backupDirectory = Join-Path $DataDirectory 'backups'
+$normalizedInstallBase = [IO.Path]::GetFullPath($InstallBase).TrimEnd('\')
+$normalizedDataDirectory = [IO.Path]::GetFullPath($DataDirectory).TrimEnd('\')
+
+if ($normalizedDataDirectory.Equals(
+        $normalizedInstallBase,
+        [StringComparison]::OrdinalIgnoreCase) -or $normalizedDataDirectory.StartsWith(
+        $normalizedInstallBase + '\',
+        [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'DataDirectory must be outside the versioned Task Server installation root.'
+}
 
 if (-not (Test-Path -LiteralPath $project)) { throw "Task Server project not found: $project" }
 if (-not (Test-Path -LiteralPath $registerScript)) { throw "Registration script not found: $registerScript" }
+if (-not (Test-Path -LiteralPath $supervisorScript)) { throw "Supervisor script not found: $supervisorScript" }
 if ([string]::IsNullOrWhiteSpace($StableConfigurationPath)) {
     $StableConfigurationPath = Join-Path $source 'backend\appsettings.Local.json'
 }
@@ -38,6 +50,7 @@ if ($PSCmdlet.ShouldProcess($releaseDirectory, 'Publish and install the Task Ser
     if ($LASTEXITCODE -ne 0) { throw "Task Server publish failed with exit code $LASTEXITCODE." }
     $executable = Join-Path $staging 'task-server.exe'
     if (-not (Test-Path -LiteralPath $executable)) { throw "Published Task Server executable is missing: $executable" }
+    Copy-Item -LiteralPath $supervisorScript -Destination (Join-Path $staging 'start-task-server.ps1')
 
     if (-not (Test-Path -LiteralPath $releaseDirectory)) {
         Move-Item -LiteralPath $staging -Destination $releaseDirectory
@@ -47,18 +60,37 @@ if ($PSCmdlet.ShouldProcess($releaseDirectory, 'Publish and install the Task Ser
         if ($LASTEXITCODE -ne 0 -or $installedVersion -notmatch [regex]::Escape($ReleaseSha)) {
             throw "Existing release directory does not contain the requested SHA: $releaseDirectory"
         }
+        if (-not (Test-Path -LiteralPath (Join-Path $releaseDirectory 'start-task-server.ps1'))) {
+            throw "Existing release directory does not contain the packaged supervisor: $releaseDirectory"
+        }
     }
 
     $envParent = Split-Path -Parent $EnvFile
     New-Item -ItemType Directory -Path $envParent -Force | Out-Null
-    if (-not (Test-Path -LiteralPath $EnvFile)) {
-        @(
-            "LISTEN_URL=$ListenUrl"
-            "STORE_PATH=$DataDirectory"
-            "BACKUP_PATH=$backupDirectory"
-            'AUTH=none'
-        ) | Set-Content -LiteralPath $EnvFile -Encoding ascii
+    $environmentLines = if (Test-Path -LiteralPath $EnvFile) {
+        @(Get-Content -LiteralPath $EnvFile)
+    } else {
+        @()
     }
+    $requiredEnvironment = [ordered]@{
+        LISTEN_URL = $ListenUrl
+        STORE_PATH = $DataDirectory
+        BACKUP_PATH = $backupDirectory
+    }
+    foreach ($entry in $requiredEnvironment.GetEnumerator()) {
+        $matched = $false
+        for ($index = 0; $index -lt $environmentLines.Count; $index++) {
+            if ($environmentLines[$index] -match ('^\s*{0}\s*=' -f [regex]::Escape($entry.Key))) {
+                $environmentLines[$index] = '{0}={1}' -f $entry.Key, $entry.Value
+                $matched = $true
+            }
+        }
+        if (-not $matched) { $environmentLines += '{0}={1}' -f $entry.Key, $entry.Value }
+    }
+    if (-not ($environmentLines | Where-Object { $_ -match '^\s*AUTH\s*=' })) {
+        $environmentLines += 'AUTH=none'
+    }
+    $environmentLines | Set-Content -LiteralPath $EnvFile -Encoding ascii
 
     $configuration = Get-Content -LiteralPath $StableConfigurationPath -Raw | ConvertFrom-Json
     if ($null -eq $configuration.TaskServer) {
@@ -82,7 +114,10 @@ if ($PSCmdlet.ShouldProcess($releaseDirectory, 'Publish and install the Task Ser
     & cmd.exe /d /c "mklink /J `"$current`" `"$releaseDirectory`"" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Could not create Task Server current junction." }
 
-    & $registerScript -InstallRoot $current -EnvFile $EnvFile
+    & $registerScript `
+        -InstallRoot $current `
+        -EnvFile $EnvFile `
+        -StartScriptPath (Join-Path $current 'start-task-server.ps1')
     if ($LASTEXITCODE -ne 0) { throw "Task Server Scheduled Task registration failed." }
 
     [pscustomobject]@{
