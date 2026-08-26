@@ -425,8 +425,9 @@ as a release hold until all of these steps have durable evidence:
    `ATP_TASK_SERVER_START_SCRIPT` at them when their paths differ from the
    devspace defaults. The versioned updater stops Stable, installs and starts
    Task Server, proves direct readiness, starts the API, then proves the proxy
-   and browser boot. A detached held checkout is attached to `main` only after
-   the target has passed the fast-forward preflight.
+   and browser boot. A detached held checkout stays detached at the candidate
+   SHA until every cutover probe passes, then it is attached to `main`. A failed
+   candidate remains detached for operator recovery.
 5. Exercise one fenced coding claim through completion, one immutable review
    claim through report and cleanup, result-finalization and report artifact
    submission, and the board projection for the same task. Save request IDs,
