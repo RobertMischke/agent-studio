@@ -278,8 +278,8 @@ steer the pipeline in this policy version.
   Human Review. Its 15-minute sweep reports `attempted`, `merged`,
   `alreadyMerged`, and `failed` separately; `MergedAfterRebase` contributes to
   the existing `merged` and `integrated` counters. The same sweep evaluates the
-  30-minute accepted delivery invariant. The alert evaluates only current,
-  non-archived cards
+  30-minute accepted delivery invariant. The alert evaluates only accepted
+  terminal cards in Completed or Archive, never cards still in Human Review,
   whose acceptance has a native integration record or an operator-facing
   historical verification record. Verified legacy integration and explicit
   no-code delivery records never become acute alerts. Accepted cards without

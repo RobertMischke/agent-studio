@@ -112,6 +112,11 @@ written. Legacy `WatchPaths` seeding is eligible only when the registry file
 was absent at its initial load. Every persisted project-count reduction first
 copies the current file to `projects.json.quarantine-<UTC timestamp>` and logs
 `project-registry-shrink-quarantined`.
+During that one-time seed, a later WatchPaths entry whose display name matches
+an already discovered project is skipped and logged as
+`registry-bootstrap-watchpath-name-collision`. This prevents two storage paths
+with the same operator-facing name from creating a second, unconfigured ghost
+project.
 
 ## API-First Task Organization
 
