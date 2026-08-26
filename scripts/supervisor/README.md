@@ -65,7 +65,9 @@ verifies the management plane both directly and through OrchestratorApi. It
 refuses to proceed unless Stable's gitignored
 `backend/appsettings.Local.json` selects the same loopback origin. This also
 applies to the main-advance watchdog path, so the watcher cannot roll out a
-claim-path decoupling release into the old monolith topology.
+claim-path decoupling release into the old monolith topology. A checkout held
+at a detached release stays detached until the Task Server, proxy, and browser
+probes all pass; a failed candidate is not attached to `main`.
 The watcher does not call `git pull` or `git fetch` directly.
 
 Older devspaces may still have an unversioned root-level `update-stable.sh`.
