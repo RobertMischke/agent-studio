@@ -228,6 +228,9 @@ export class RemoteHostCardComponent {
   });
   readonly unavailableAuthCount = computed(() =>
     this.providerAuthBadges().filter(auth => auth.state === 'unavailable').length);
+  readonly latestCliRepair = computed(() => [...(this.host().cliRepairs ?? [])]
+    .filter(repair => repair.state === 'repaired' || repair.state === 'failed')
+    .sort((left, right) => Date.parse(right.attemptedAt ?? '') - Date.parse(left.attemptedAt ?? ''))[0] ?? null);
   readonly totalActiveSlots = computed(() => this.roles()
     .reduce((total, role) => total + this.activeSlotsFor(role), 0));
   readonly identitySummary = computed(() => {
@@ -260,6 +263,20 @@ export class RemoteHostCardComponent {
 
   latestAuthTransition(badge: ProviderAuthBadge) {
     return badge.history.at(-1) ?? null;
+  }
+
+  cliRepairLabel(): string | null {
+    const repair = this.latestCliRepair();
+    if (!repair) return null;
+    const at = repair.state === 'repaired' ? repair.repairedAt : repair.attemptedAt;
+    if (!at) return repair.detail;
+    const timestamp = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(new Date(at));
+    return repair.state === 'repaired'
+      ? `CLI repaired at ${timestamp}`
+      : `CLI repair failed at ${timestamp}`;
   }
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }

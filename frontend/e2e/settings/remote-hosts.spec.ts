@@ -65,6 +65,18 @@ async function stubBackgroundApis(page: Page) {
   }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
   const now = new Date().toISOString();
+  await page.route('**/api/cli/local-health', json({
+    at: now,
+    repairs: [{
+      cliType: 'claude',
+      state: 'repaired',
+      repairedAt: now,
+      attemptedAt: now,
+      packageVersion: '2.1.234',
+      cliVersion: '2.1.234',
+      detail: 'Package remained installed; npm restored the missing global shims.',
+    }],
+  }));
   await page.route('**/api/clients', json([
     { id: 'local-default', displayName: 'operator-workstation', kind: 'human', registeredAt: now, lastSeenAt: now },
     { id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service', registeredAt: now, lastSeenAt: now,
@@ -284,6 +296,21 @@ test.describe('Execution Hosts settings section', () => {
     await expect(page.getByTestId('remote-hosts-summary')).toContainText(String(count));
 
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section--mocked.png'), fullPage: false });
+  });
+
+  test('shows the local CLI repair receipt quietly in both themes', async ({ page }) => {
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const local = page.getByTestId('remote-host-card').filter({ hasText: 'Local machine' });
+    await expandHost(local);
+    const note = local.getByTestId('local-cli-repair-note');
+
+    await expect(note).toContainText('CLI repaired at');
+    await expect(note).toContainText('claude');
+    await expect(note).toHaveAttribute('data-state', 'repaired');
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'local-cli-repaired-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: join(SHOT_DIR, 'local-cli-repaired-dark--mocked.png'), fullPage: false });
   });
 
   test('sorts table columns and restores sort plus row disclosure after reload', async ({ page }) => {

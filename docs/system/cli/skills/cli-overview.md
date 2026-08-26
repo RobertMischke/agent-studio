@@ -162,7 +162,14 @@ The CLI frame catalogues diverge enough that a shared base switch would be a lea
 
 ## CAR 0.7.0 public API boundaries
 
-The bespoke Studio `WindowsHandleScrubSpawner` was removed. CAR owns npm healing for CAR-backed agent runs. Because CAR 0.7.0 keeps its healer internal, the existing Studio `NpmShimHealer` remains a temporary exception for the explicit legacy rollback and non-agent `ClaudeOneShot` only; T4 removes it with those paths. Studio uses the public `ICliProcessSpawner` seam for host bookkeeping and the Claude rules-file overlay. Do not copy CAR's internal Windows helpers into the backend.
+The bespoke Studio `WindowsHandleScrubSpawner` was removed. CAR owns its
+launch-internal npm hardening. Studio separately owns the local capability
+repair boundary in `LocalCliRepairService`: a Windows `claude` or `codex`
+availability failure triggers `npm install --global` only when the global
+package remains present and every command shim is missing. The attempt is
+hour-bounded and journaled. Studio uses the public `ICliProcessSpawner` seam for
+host bookkeeping and the Claude rules-file overlay. Do not copy CAR's internal
+Windows helpers into the backend.
 
 Four PROJ-011 cards track the seams still needed for a cleaner integration:
 

@@ -230,6 +230,22 @@ export interface TaskServerRunnerCapabilitySnapshot {
   roleMaxParallelism?: number | null;
 }
 
+/** Latest durable local npm-shim repair outcome from the control-plane host. */
+export interface LocalCliRepairStatus {
+  cliType: CliType;
+  state: 'repaired' | 'failed' | 'cooldown' | 'uninstalled' | 'shim-present-but-unusable';
+  repairedAt: string | null;
+  attemptedAt: string | null;
+  packageVersion: string | null;
+  cliVersion: string | null;
+  detail: string;
+}
+
+export interface LocalCliHealthSnapshot {
+  at: string;
+  repairs: LocalCliRepairStatus[];
+}
+
 export interface RemoteHostAdmission {
   hostId: string;
   admissionState: 'open' | 'automatic-draining' | 'operator-draining';
@@ -292,6 +308,8 @@ export interface RemoteHost {
   gateCapacity?: number;
   retireRequestedAt?: string | null;
   capabilityHealth?: readonly RemoteHostCapabilityHealth[];
+  /** Control-plane-only repair receipts; absent on standalone hosts. */
+  cliRepairs?: readonly LocalCliRepairStatus[];
   hostAdmission?: RemoteHostAdmission | null;
   /** Task Server host key and its centrally managed runtime slot policy. */
   capacityHostId?: string | null;

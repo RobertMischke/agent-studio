@@ -139,6 +139,16 @@ differences live in the
 
 **Contract.** `TestCliPath()` returns `(Available, Version, ResolvedPath)`. Availability and quota probes remain Studio services because they also feed settings and routing surfaces outside an active CAR run.
 
+On the Windows control-plane host, the shared availability probe distinguishes
+a true uninstall from the recurrent npm shape where the package remains under
+the global `node_modules` tree but all command shims are missing. Only the
+second shape is repaired automatically with `npm install --global` for Claude
+or Codex. The coordinator permits one attempt per CLI per hour, persists the
+attempt and bounded npm/update evidence to `logs/backend/cli-repairs.jsonl`,
+records the last observed and package-before/CLI-after versions, and exposes a
+quiet `CLI repaired at <time>` receipt in Execution Hosts. An unsuccessful
+repair is logged and presented as acute; a successful repair is informational.
+
 **Authentication.** Studio-local CLIs may still authenticate out of band.
 Remote hosts use the protected provider-auth provisioning flow. Environment
 credentials live only in `/etc/agent-runner/provider-auth.env` on the selected
@@ -219,7 +229,16 @@ Context mode resolution remains task override, then project setting, then the `c
 
 CAR 0.7.0 raises typed events before the matching raw-output callback. Studio must parse raw usage and session metadata before subscribers handle `TurnCompleted`, so [`CarCallbackBridge`](../../../backend/Features/Cli/Execution/BackendCarExecution.cs) buffers each typed batch, handles the raw line, and then publishes its events. This ordering is part of the token and cost ledger contract.
 
-The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns npm-shim healing for CAR-backed Claude launches. CAR 0.7.0 keeps its healer internal, so the existing Studio `NpmShimHealer` remains temporarily for the explicit legacy rollback and non-agent `ClaudeOneShot` only; T4 removes it with those paths. Studio uses the public `ICliProcessSpawner` seam only to attach host bookkeeping and the Claude rules-file overlay. The remaining public API gaps are tracked in PROJ-011 as `public-clean-context-lease`, `public-hardened-spawner-composition`, `public-cli-launch-overlay`, and `public-pre-spawn-health`. Do not solve CAR's internal Windows process helpers by copying them back into this repository.
+The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns its
+launch-internal npm hardening. The Studio-local capability coordinator is a
+separate host maintenance boundary: it runs a global npm reinstall only after
+the read-only probe proves package-present/missing-shim state, and it also
+serves capability and host-status consumers outside CAR. Studio uses the public
+`ICliProcessSpawner` seam only to attach host bookkeeping and the Claude
+rules-file overlay. The remaining public API gaps are tracked in PROJ-011 as
+`public-clean-context-lease`, `public-hardened-spawner-composition`,
+`public-cli-launch-overlay`, and `public-pre-spawn-health`. Do not solve CAR's
+internal Windows process helpers by copying them back into this repository.
 
 ---
 
@@ -241,7 +260,7 @@ The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns npm-
 
 **Quirks.**
 - The CAR path uses the CAR-A one-shot stdin prompt transport and closes stdin immediately after the full prompt is flushed. This keeps prompts of at least 200 KiB out of argv and process listings without leaving an interactive pipe open. The temporary `legacy` rollback retains the older argv transport from ADR-0014.
-- CAR performs its built-in npm-shim healing before a CAR-backed Claude launch. The explicit legacy rollback and non-agent one-shot paths retain the pre-existing Studio healer until T4 because CAR 0.7.0 exposes no public repair API. CAR-backed agent runs never call the Studio healer.
+- CAR retains its built-in launch hardening. Studio's separate local capability coordinator owns the package-present/missing-global-shim failure before local capability reporting and raw one-shot or legacy launch. It does not copy or replace CAR's internal process helper.
 - Studio adds its centrally managed rules file through the narrow launch decorator until PROJ-011 `public-cli-launch-overlay` is available.
 - Claude Code 2.1.202 renders `/usage` as a tabbed `Settings / Status / Config / Usage / Stats` view. API-billed accounts can show only session cost and token counts there, with no subscription utilization percentage. The probe recognizes that exact PTY shape and returns `Quota: Unknown` instead of an empty/error snapshot. Older `Current session` and `Current week` text remains supported.
 - Rate-limit frames accept both the original camelCase keys and forgiving snake_case aliases. Unknown fields and optional fields with unexpected types are ignored so telemetry drift cannot break the CLI output loop.

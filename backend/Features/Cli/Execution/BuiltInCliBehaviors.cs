@@ -71,7 +71,6 @@ internal static class BuiltInCliBehaviors
         // claude-code#771 (Claude reads stdin during init and blocks on a
         // connected pipe).
         GetPromptStdinPayload = (ctx, prompt, sessionName, resumeSession, model) => null,
-        EnsureCliHealthy = (ctx, ct) => ClaudeEnsureCliHealthyAsync(ctx, ct),
         CaptureRawLine = (ctx, jobKey, line) => ClaudeCaptureRawLine(ctx, usageParsers, modelRegistry, jobKey, line),
         MapLineToRunEvents = (ctx, jobKey, line) => ClaudeMapLineToRunEvents(ctx, usageParsers, modelRegistry, jobKey, line),
         StartSessionLiveness = (ctx, info, resumeSession, sessionName) =>
@@ -197,40 +196,6 @@ internal static class BuiltInCliBehaviors
         }
 
         return psi;
-    }
-
-    /// <summary>
-    /// Legacy-engine pre-spawn repair. The CAR engine owns Claude's npm-shim
-    /// repair through its built-in descriptor; this temporary exception exists
-    /// only so the explicit rollback path remains operational until T4 removes
-    /// that path. CAR-backed runs do not call the Studio healer.
-    /// </summary>
-    private static async Task<(bool Ok, string? Error)> ClaudeEnsureCliHealthyAsync(GenericCliExecutionService ctx, CancellationToken ct)
-    {
-        var probe = ctx.TestCliPath();
-        if (probe.Available) return (true, null);
-
-        ctx.Logger.LogWarning(
-            "claude --version failed pre-spawn at '{Path}'; running rollback NpmShimHealer", probe.Path);
-
-        var outcome = await NpmShimHealer.TryHealClaudeAsync(ctx.Logger, ct);
-        if (outcome.Actions.Count > 0)
-        {
-            ctx.Logger.LogInformation(
-                "Rollback NpmShimHealer actions for claude: {Actions}", string.Join("; ", outcome.Actions));
-        }
-        if (!outcome.Available)
-        {
-            return (false,
-                outcome.Error ?? "Rollback NpmShimHealer reported claude as unavailable after repair pass");
-        }
-
-        // Re-probe through the exact resolver the legacy spawn uses so a stale
-        // PATH or executable mismatch fails before Process.Start.
-        var verify = ctx.TestCliPath();
-        return verify.Available
-            ? (true, null)
-            : (false, $"claude --version still failing after rollback heal at '{verify.Path}'");
     }
 
     /// <summary>
