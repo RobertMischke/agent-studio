@@ -233,6 +233,21 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   gate failure, unavailable task-key validation, an invalid review subject,
   a missing task branch, and a generic integration error without changing the
   legacy top-level `conflict-skipped` compatibility status.
+- `AcceptanceRailHostedService` is the platform-owned mover for routine
+  post-integration progress. By default it runs immediately at backend startup
+  and every 180 seconds. It accepts a coding card from `5-human-review` only
+  when the same Git-derived projection says `integrated`; concept and other
+  no-code cards remain for human review. A recoverable `conflict-skipped` card
+  in `5-human-review` or `5e-escalated` receives the shared rebase steer and is
+  promoted to the top of `2-ready`. After five rail requeues it stays escalated
+  with an explicit exhaustion reason. The `orchestrator-hold` tag and entries
+  in `AcceptanceRail:HoldList` match task id, key, or tag and suppress every
+  automatic action. `AcceptanceRail:Enabled`, `IntervalSeconds`, and
+  `MaxRequeues` configure the bounded loop. Each action is written to
+  `timeline.jsonl`; the structured run log and
+  `GET /api/pipeline/acceptance-rail` expose lane depth, action counts, failure
+  count, and the last-run timestamp. Session orchestrators may observe these
+  facts but do not own the lane mutation.
 - The immutable current review subject selects the authoritative delivery
   generation for integration membership. When a reissue rebases an accepted
   commit to a replacement object id, target-branch ancestry of that reviewed

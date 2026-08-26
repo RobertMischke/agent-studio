@@ -280,6 +280,11 @@ public static class TimelineEventKinds
     /// </summary>
     public const string IntegrationRecoveryQueued = "integration_recovery_queued";
     /// <summary>
+    /// The platform-owned acceptance rail accepted, requeued, or boundedly
+    /// escalated this card without a session-bound orchestrator tick.
+    /// </summary>
+    public const string AcceptanceRailActed = "acceptance_rail_acted";
+    /// <summary>
     /// AGT-2220: the card's recorded <c>integrationBranch</c> disagreed with
     /// project truth when a review was claimed, so the review plane rewrote it.
     /// A stale field (still <c>refs/heads/main</c> after develop became the

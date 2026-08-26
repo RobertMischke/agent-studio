@@ -59,6 +59,17 @@ Local worktree runs and fenced Remote deliveries now share the same policy: a gr
   moves the card to the top of Ready, and lets the assigned remote runner
   resume its existing delivery ref, rebase it onto the current integration
   branch, resolve conflicts, and return a new fenced result for acceptance.
+- Deterministic acceptance rail: `AcceptanceRailHostedService` repeats the
+  post-integration acceptance and conflict-recovery decisions without depending
+  on a live orchestrator session. On its bounded timer it accepts only
+  Git-derived `integrated` coding cards, honors operator-decision markers and
+  the `orchestrator-hold` list, and sends recoverable `conflict-skipped` cards
+  from Human Review or Escalated through the same rebase-steer service used by
+  the operator endpoint. The retry receipt is durable timeline evidence; the
+  configured retry ceiling converts another requeue into an explicit
+  `integration-recovery-exhausted` escalation. Concept and report-only cards
+  remain in Human Review. The rail emits one action event per mutation plus a
+  structured sweep summary and a last-run/lane-depth read endpoint.
 - Push durability: `IntegrationPushQueue` remains in memory to keep network work off the request path. `IntegrationPushBackstopHostedService` re-drives any passed merge with a non-terminal push step after restart, so queue loss cannot leave the integration branch local-only.
 - Shutdown drain: once the accepted worker enters merge + build gate + possible rollback, it ignores host cancellation until that consistency boundary reaches a terminal result. `/healthz/drain` returns `gate-busy` during that window. The external stable restart watcher waits up to `ATP_GATE_DRAIN_TIMEOUT_SECONDS` before it invokes the hard update/restart path.
 
