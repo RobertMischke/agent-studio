@@ -186,6 +186,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = CurrentCliVersion,
                 Plan      = plan,
                 Source    = "/usage",
                 RawSample = TruncateForDebug(snap),
@@ -197,10 +198,21 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
                         : null
             };
         }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Claude quota probe timed out or was canceled");
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = CurrentCliVersion,
+                Source = "/usage",
+                Error = "Claude quota probe timed out before /usage finished rendering."
+            };
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Claude quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/usage", Error = ex.Message };
+            return new QuotaSnapshot { CliType = CliType, CliVersion = CurrentCliVersion, Source = "/usage", Error = ex.Message };
         }
     }
 

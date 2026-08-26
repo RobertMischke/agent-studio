@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Collections.Concurrent;
 
 namespace AgentStudio.Cli;
 
@@ -13,9 +14,13 @@ namespace AgentStudio.Cli;
 /// </summary>
 public abstract class QuotaProbeBase : IQuotaProbe
 {
+    private static readonly ConcurrentDictionary<string, string> ObservedVersions =
+        new(StringComparer.OrdinalIgnoreCase);
+
     protected readonly ILogger _logger;
     protected readonly CliRouter _router;
     protected readonly CliEnvironment _env;
+    protected string? CurrentCliVersion { get; private set; }
 
     protected QuotaProbeBase(ILogger logger, CliRouter router, CliEnvironment env)
     {
@@ -39,7 +44,8 @@ public abstract class QuotaProbeBase : IQuotaProbe
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, version, resolvedPath) = cli.TestCliPath();
+        ObserveVersion(version);
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 
@@ -80,7 +86,8 @@ public abstract class QuotaProbeBase : IQuotaProbe
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, version, resolvedPath) = cli.TestCliPath();
+        ObserveVersion(version);
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 
@@ -164,5 +171,37 @@ public abstract class QuotaProbeBase : IQuotaProbe
     {
         if (string.IsNullOrEmpty(snapshot)) return "";
         return snapshot.Length <= max ? snapshot : snapshot[^max..];
+    }
+
+    private void ObserveVersion(string? version)
+    {
+        CurrentCliVersion = string.IsNullOrWhiteSpace(version) ? null : version.Trim();
+        if (CurrentCliVersion == null) return;
+
+        while (true)
+        {
+            if (!ObservedVersions.TryGetValue(CliType, out var previous))
+            {
+                if (ObservedVersions.TryAdd(CliType, CurrentCliVersion))
+                {
+                    _logger.LogInformation(
+                        "CLI version observed cli={Cli} version={Version}",
+                        CliType,
+                        CurrentCliVersion);
+                    return;
+                }
+                continue;
+            }
+
+            if (string.Equals(previous, CurrentCliVersion, StringComparison.Ordinal)) return;
+            if (!ObservedVersions.TryUpdate(CliType, CurrentCliVersion, previous)) continue;
+
+            _logger.LogWarning(
+                "CLI version changed cli={Cli} previous={PreviousVersion} current={CurrentVersion}",
+                CliType,
+                previous,
+                CurrentCliVersion);
+            return;
+        }
     }
 }

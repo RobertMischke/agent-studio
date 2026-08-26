@@ -109,6 +109,65 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
         Assert.Equal(2, probe.Calls);             // did not wait for the TTL
     }
 
+    [Fact]
+    public async Task RefreshAsync_FailedProbeRetainsLastGoodValuesAndMarksThemStale()
+    {
+        var goodAt = new DateTime(2026, 8, 23, 19, 42, 0, DateTimeKind.Utc);
+        var probe = new ScriptedProbe(call => call == 1
+            ? Snap(37) with { FetchedAt = goodAt, CliVersion = "codex-cli 0.144.1" }
+            : new QuotaSnapshot
+            {
+                CliType = "codex",
+                CliVersion = "codex-cli 0.149.0",
+                Error = "Codex quota probe timed out before /status finished rendering."
+            });
+        var svc = NewService(probe);
+
+        await svc.RefreshAsync("codex");
+        var failedAt = DateTime.UtcNow;
+        var result = await svc.RefreshAsync("codex");
+
+        Assert.NotNull(result);
+        Assert.Equal(goodAt, result!.FetchedAt);
+        Assert.Equal(37, Assert.Single(result.Windows).UsedPct);
+        Assert.Equal("codex-cli 0.149.0", result.CliVersion);
+        Assert.NotNull(result.ProbeFailedAt);
+        Assert.True(result.ProbeFailedAt >= failedAt);
+        Assert.Contains("timed out", result.Error, StringComparison.OrdinalIgnoreCase);
+
+        var repeated = await svc.RefreshAsync("codex");
+        Assert.Equal(37, Assert.Single(repeated!.Windows).UsedPct);
+        Assert.Equal(goodAt, repeated.FetchedAt);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_TaskCanceledExceptionUsesAnOperatorFacingTimeoutMessage()
+    {
+        var svc = NewService(new ThrowingProbe(new TaskCanceledException("A task was canceled.")));
+
+        var result = await svc.RefreshAsync("codex");
+
+        Assert.NotNull(result);
+        Assert.Contains("timed out", result!.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("A task was canceled", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.ProbeFailedAt);
+    }
+
+    [Fact]
+    public void GetWithBackgroundRefresh_DoesNotRunTheProbeOnTheRequestThread()
+    {
+        var callerThread = Environment.CurrentManagedThreadId;
+        var probe = new ThreadRecordingProbe();
+        var svc = NewService(probe);
+
+        var report = svc.GetWithBackgroundRefresh();
+
+        Assert.Empty(report.Snapshots.Single().Windows);
+        Assert.True(probe.Entered.Wait(TimeSpan.FromSeconds(2)), "background probe did not start");
+        Assert.NotEqual(callerThread, probe.InvocationThread);
+        probe.Release.Set();
+    }
+
     private sealed class ScriptedProbe : IQuotaProbe
     {
         private readonly Func<int, QuotaSnapshot> _script;
@@ -139,6 +198,30 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
             if (Interlocked.Increment(ref _calls) == 1) return _first;
             await _gate;
             return _afterGate;
+        }
+    }
+
+    private sealed class ThrowingProbe : IQuotaProbe
+    {
+        private readonly Exception _error;
+        public ThrowingProbe(Exception error) => _error = error;
+        public string CliType => "codex";
+        public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct) => Task.FromException<QuotaSnapshot>(_error);
+    }
+
+    private sealed class ThreadRecordingProbe : IQuotaProbe
+    {
+        public string CliType => "codex";
+        public ManualResetEventSlim Entered { get; } = new(false);
+        public ManualResetEventSlim Release { get; } = new(false);
+        public int InvocationThread { get; private set; }
+
+        public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
+        {
+            InvocationThread = Environment.CurrentManagedThreadId;
+            Entered.Set();
+            Release.Wait(ct);
+            return Task.FromResult(Snap(12));
         }
     }
 }

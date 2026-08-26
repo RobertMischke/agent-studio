@@ -29,10 +29,10 @@ CLI execution tests.
 
 - [Model Routing Policy](./model-routing-policy.md) is the canonical selection
   policy above the live model catalog and quota fallback machinery.
-- `backend/Services/Cli/`: CLI drivers and shared execution base.
-- `backend/Services/Cli/CliRouter.cs`: `cliType` routing.
-- `backend/Services/Quota/*QuotaProbe.cs`: per-CLI quota probes.
-- `backend/Services/Quota/QuotaService.cs`: aggregate quota surface.
+- `backend/Features/Cli/Execution/`: CLI drivers and shared execution base.
+- `backend/Features/Cli/CliRouter.cs`: `cliType` routing.
+- `backend/Features/Cli/Quota/*QuotaProbe.cs`: per-CLI quota probes.
+- `backend/Features/Cli/Quota/QuotaService.cs`: aggregate quota surface.
 - `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
   endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
   (lazy single-transcript parse: model, thinking, message count, first prompt)
@@ -62,6 +62,11 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- `GET /api/cli/quota` is cache-only. Startup and periodic refreshes run in the
+  background with a bounded timeout. A failed refresh retains last-good values,
+  records `probeFailedAt`, `cliVersion`, and the diagnostic error, and renders as
+  explicitly stale. Request cancellation must never replace cached quota with
+  `A task was canceled.`
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

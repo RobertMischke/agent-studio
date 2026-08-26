@@ -267,10 +267,11 @@ locks default resolution in both cases plus vendor isolation.
 
 ## Quirks (and what to do about them)
 
-1. **Trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter.** Sending `1<Enter>` works but leaves a stray `1` in the input box that prefixes the next slash command. Use `<Enter>` alone when scripting Codex over a PTY (the quota probe does this).
-2. **`/status` PTY probe is fragile.** Trust + welcome + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. See comments in [`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` and lock with a fixture-based test.
-3. **Codex reports % left, we report % used.** The probe inverts the value so the UI's `UsedPct` semantics stay consistent across CLIs. Don't double-invert.
-4. **`--json` is required.** Without it, stdout is a colored panel that can't be parsed. The runner always passes it.
+1. **Update prompts must be declined without mutation.** Codex 0.149 can place an update chooser before trust. The quota probe moves to `Skip` and confirms; it must never accept the pre-selected `Update now` action.
+2. **Trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter.** Sending `1<Enter>` works but leaves a stray `1` in the input box that prefixes the next slash command. Use `<Enter>` alone when scripting Codex over a PTY (the quota probe does this).
+3. **`/status` PTY probe is fragile.** Update + trust + ready + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. See comments in [`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` and lock it with a fixture-based test named for the CLI version.
+4. **Codex reports % left, we report % used.** The probe inverts the value so the UI's `UsedPct` semantics stay consistent across CLIs. Don't double-invert.
+5. **`--json` is required.** Without it, stdout is a colored panel that can't be parsed. The runner always passes it.
 
 ## Watchdog parity with Claude (ADR-0030)
 
@@ -369,9 +370,9 @@ locked by:
 
 ## Quota probe
 
-[`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs) returns two windows: a 5-hour bucket and a weekly bucket. Implementation runs `codex` over a PTY, accepts the trust prompt, navigates to `/status`, scrapes the panel.
+[`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs) runs `codex` over a PTY, dismisses the non-mutating update and trust gates when present, waits for the ready prompt, navigates to `/status`, and scrapes every reported standard and Spark window. Codex can omit a standard window temporarily, so callers must not infer a missing 5-hour line from the Spark block.
 
-The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
+The probe reports `% used` (1 - `% left`). Source string is `/status`.
 
 **Spark-block split is version-agnostic (AGT-2064).** `/status` renders a
 `<model>-Spark limit:` sub-block with its own near-empty 5h/Weekly lines. The
@@ -396,6 +397,15 @@ dies with a usage-limit error invalidates the cached snapshot immediately
 (`QuotaService.InvalidateForGroundTruthLimit`, wired from
 `ProjectRunner.OnCliFinishedAsync` on `RunIssueKind.QuotaExhausted`) and
 re-probes now rather than waiting out the TTL.
+
+**Version drift and failure are explicit (AGT-2679).** Every snapshot records
+the CLI version returned by `codex --version`. Real, sanitized PTY fixtures for
+0.144.1 and 0.149.0 live under `backend.Tests/Fixtures/quota/codex/`; reset text
+on the next rendered row remains part of the parser contract. Startup and
+periodic quota refreshes log `CLI version changed` when the observed version
+differs. A timeout retains the last-good windows, adds `probeFailedAt` and the
+diagnostic error, and displays the versioned stale marker. The cache-only GET
+never waits for a live PTY probe.
 
 ## Common tasks
 

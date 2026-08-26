@@ -20,9 +20,10 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed class CodexQuotaProbe : QuotaProbeBase
 {
-    // "5h limit: [bar] NN% left (resets HH:MM[ on D Mon])"
+    // Codex <=0.144 rendered reset text on the limit row. Codex 0.149 can
+    // render it on the following row. The whitespace spans both layouts.
     private static readonly Regex FiveHourRegex = new(
-        @"5h\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        @"(?:5h|5[\s-]*hour)\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex WeeklyRegex = new(
@@ -65,30 +66,12 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
     {
         try
         {
-            var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
-            var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
-            var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
-
             var snap = await ProbeWithStepsAsync(
-            [
-                // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
-                // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
-                // stray "1" in the chat input box, which then prefixes the next slash
-                // command and turns "/status" into a chat message instead of a command.
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
-                // Clear the buffer so the await-welcome match only sees post-trust content.
-                new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
-                // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
-                // Enter while it's still parsing the slash command.
-                new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
-                new ProbeStep("await-status",  WaitForPattern: statusPattern,  WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
-            ],
+            BuildProbeSteps(),
             initialIdleMs: 8000,
             ct);
 
-            string? plan = PlanRegex.Match(snap) is { Success: true } pm
-                ? pm.Groups["plan"].Value.Trim()
-                : null;
+            string? plan = ParseStatusPlan(snap);
 
             var windows = ParseStatusWindows(snap);
 
@@ -106,6 +89,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = CurrentCliVersion,
                 Plan      = plan,
                 Source    = "/status",
                 RawSample = TruncateForDebug(snap),
@@ -115,10 +99,21 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
                     : null
             };
         }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogWarning(ex, "Codex quota probe timed out or was canceled");
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = CurrentCliVersion,
+                Source = "/status",
+                Error = "Codex quota probe timed out before /status finished rendering."
+            };
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Codex quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
+            return new QuotaSnapshot { CliType = CliType, CliVersion = CurrentCliVersion, Source = "/status", Error = ex.Message };
         }
     }
 
@@ -154,6 +149,39 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         }
 
         return windows;
+    }
+
+    public static string? ParseStatusPlan(string snap)
+        => PlanRegex.Match(snap) is { Success: true } match
+            ? match.Groups["plan"].Value.Trim()
+            : null;
+
+    internal static IReadOnlyList<ProbeStep> BuildProbeSteps()
+    {
+        var updatePattern = new Regex(@"Update\s*available|Skip\s*until\s*next\s*version", RegexOptions.IgnoreCase);
+        var trustPattern  = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
+        var readyPattern  = new Regex(@"Ask\s*Codex\s*to\s*do\s*anything|\?\s*for\s*shortcuts", RegexOptions.IgnoreCase);
+        var statusPattern = new Regex(
+            @"(?:5h|5[\s-]*hour)\s*limit|Weekly\s*limit|Account\s*:|rate\s*limits\s*and\s*credits",
+            RegexOptions.IgnoreCase);
+
+        return
+        [
+            // 0.149.x may put an update chooser in front of trust / ready.
+            // Move to "Skip" before confirming so a quota observation can
+            // never mutate the installed CLI.
+            new ProbeStep("dismiss-update", WaitForPattern: updatePattern, WaitTimeoutMs: 2000, SendKeys: "<Down><Enter>", SettleIdleMs: 800, SettleTimeoutMs: 4000, SendKeysOnlyIfMatched: true),
+            // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
+            // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
+            // stray "1" in the chat input box, which then prefixes the next slash
+            // command and turns "/status" into a chat message instead of a command.
+            new ProbeStep("await-trust", WaitForPattern: trustPattern, WaitTimeoutMs: 3000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300, SendKeysOnlyIfMatched: true),
+            new ProbeStep("await-ready", WaitForPattern: readyPattern, WaitTimeoutMs: 10000, RequirePattern: true, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800, SendKeysOnlyIfMatched: true),
+            // Send Enter separately because Codex sometimes drops a fast-following
+            // Enter while it is still parsing the slash command.
+            new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
+            new ProbeStep("await-status", WaitForPattern: statusPattern, WaitTimeoutMs: 10000, RequirePattern: true, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
+        ];
     }
 
     private static void AddLimitWindow(List<QuotaWindow> windows, string snap, Regex regex, string label)

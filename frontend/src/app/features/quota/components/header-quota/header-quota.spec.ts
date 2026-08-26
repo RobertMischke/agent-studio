@@ -251,6 +251,8 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     chips: Chip[];
     state: string;
     tone: string;
+    probeFailureLabel: string | null;
+    probeFailureTooltip: string | null;
   }
 
   // Real Codex shape: 4 windows, unit '%', used/limit both null, only usedPct.
@@ -309,5 +311,41 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     expect(session.tone).toBe('ok');
     // A fresh, error-free snapshot is never "unavailable".
     expect(codex.state).not.toBe('unavailable');
+  });
+
+  it('keeps last-good values and exposes an explicit versioned probe-failure marker', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeaderQuotaComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeaderQuotaComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/cli/quota').flush({
+      ttlSeconds: 600,
+      snapshots: [{
+        cliType: 'codex',
+        cliVersion: 'codex-cli 0.149.0',
+        fetchedAt: '2026-08-23T18:42:00Z',
+        probeFailedAt: '2026-08-23T19:07:00Z',
+        plan: 'Pro',
+        source: '/status',
+        error: 'Codex quota probe timed out before /status finished rendering.',
+        windows: codexWindows,
+      }],
+    });
+    fixture.detectChanges();
+
+    const cards = (fixture.componentInstance as unknown as { cards: () => CardModel[] }).cards();
+    const codex = cards.find((card) => card.cliType === 'codex')!;
+    expect(codex.chips.map((chip) => chip.value)).toEqual(['66%', '12%', '0%', '4%']);
+    expect(codex.probeFailureLabel).toMatch(/^probe failed \d{2}:\d{2}, codex 0\.149\.0$/);
+    expect(codex.probeFailureTooltip).toContain('timed out before /status finished rendering');
+    expect(codex.probeFailureTooltip).not.toContain('A task was canceled');
   });
 });

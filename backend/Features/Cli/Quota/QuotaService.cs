@@ -84,14 +84,33 @@ public sealed class QuotaService
     /// Returns the cached snapshot for every probe immediately, kicking off a background
     /// re-probe for any entry that is missing or older than the TTL.
     /// </summary>
-    public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
+    public QuotaReport GetWithBackgroundRefresh()
     {
         foreach (var k in _probes.Keys)
         {
             var stale = !_cache.TryGetValue(k, out var s) || (DateTime.UtcNow - s.FetchedAt) > _ttl;
-            if (stale) _ = RefreshAsync(k, ct);
+            if (stale) QueueBackgroundRefresh(k);
         }
         return GetCached();
+    }
+
+    private void QueueBackgroundRefresh(string cliType)
+    {
+        // Do not invoke RefreshAsync inline. Async methods execute synchronously
+        // until their first incomplete await, and CLI path/version detection can
+        // block before the PTY spawn yields. Scheduling the whole operation is
+        // what makes GET /api/cli/quota a cache-only boundary.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshAsync(cliType, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Background quota refresh failed cli={Cli}", cliType);
+            }
+        });
     }
 
     /// <summary>Force a re-probe of every CLI and await all of them.</summary>
@@ -114,9 +133,29 @@ public sealed class QuotaService
         try
         {
             _cache.TryGetValue(cliType, out var previous);
+            var attemptedAt = DateTime.UtcNow;
             var snap = await ProbeOnceAsync(probe, ct);
+            if (!string.IsNullOrWhiteSpace(snap.Error))
+            {
+                LogVersionChange(previous, snap);
+                snap = RetainLastGoodAfterFailure(previous, snap, attemptedAt);
+                _cache[cliType] = snap;
+                PersistCache();
+                return snap;
+            }
+
             snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
+            if (!string.IsNullOrWhiteSpace(snap.Error))
+            {
+                snap = RetainLastGoodAfterFailure(previous, snap, attemptedAt);
+                _cache[cliType] = snap;
+                PersistCache();
+                return snap;
+            }
+
             snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
+            snap = snap with { Error = null, ProbeFailedAt = null };
+            LogVersionChange(previous, snap);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -128,13 +167,15 @@ public sealed class QuotaService
             // fails right after a ground-truth invalidation (AGT-2064) must not
             // silently drop the block and re-open the admission gate.
             _cache.TryGetValue(cliType, out var prior);
-            var snap = new QuotaSnapshot
+            var failed = new QuotaSnapshot
             {
                 CliType = cliType,
-                Error = ex.Message,
+                CliVersion = prior?.CliVersion,
+                Error = FriendlyProbeError(cliType, ex),
                 Suspicious = prior?.Suspicious ?? false,
                 SuspiciousReason = prior?.Suspicious == true ? prior.SuspiciousReason : null
             };
+            var snap = RetainLastGoodAfterFailure(prior, failed, DateTime.UtcNow);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -148,6 +189,47 @@ public sealed class QuotaService
         cts.CancelAfter(TimeSpan.FromSeconds(45));
         return await probe.ProbeAsync(cts.Token);
     }
+
+    internal static QuotaSnapshot RetainLastGoodAfterFailure(
+        QuotaSnapshot? previous,
+        QuotaSnapshot failed,
+        DateTime attemptedAt)
+    {
+        var hasLastGood = previous != null
+            && (previous.Windows.Count > 0 || !string.IsNullOrWhiteSpace(previous.Plan));
+        var basis = hasLastGood ? previous! : failed;
+        return basis with
+        {
+            CliType = failed.CliType,
+            CliVersion = failed.CliVersion ?? previous?.CliVersion,
+            ProbeFailedAt = attemptedAt,
+            RawSample = failed.RawSample ?? basis.RawSample,
+            Error = string.IsNullOrWhiteSpace(failed.Error)
+                ? $"{failed.CliType} quota probe failed."
+                : failed.Error
+        };
+    }
+
+    private void LogVersionChange(QuotaSnapshot? previous, QuotaSnapshot current)
+    {
+        if (string.IsNullOrWhiteSpace(previous?.CliVersion)
+            || string.IsNullOrWhiteSpace(current.CliVersion)
+            || string.Equals(previous.CliVersion, current.CliVersion, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _logger.LogWarning(
+            "CLI version changed cli={Cli} previous={PreviousVersion} current={CurrentVersion}",
+            current.CliType,
+            previous.CliVersion,
+            current.CliVersion);
+    }
+
+    private static string FriendlyProbeError(string cliType, Exception ex)
+        => ex is OperationCanceledException
+            ? $"{cliType} quota probe timed out before the CLI panel finished rendering."
+            : ex.Message;
 
     /// <summary>
     /// AGT-2064 plausibility gate. A single probe that shows a window jumping

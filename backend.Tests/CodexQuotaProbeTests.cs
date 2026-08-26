@@ -5,6 +5,52 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "codex",
+            name));
+
+    [Theory]
+    [InlineData("codex-status-v0.144.1.txt", "v0.144.1")]
+    [InlineData("codex-status-v0.149.0.txt", "v0.149.0")]
+    public void ParseStatusWindows_ReadsVersionedRealPtyFixtures(string fixture, string versionMarker)
+    {
+        var snapshot = ReadFixture(fixture);
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+
+        Assert.Contains(versionMarker, snapshot, StringComparison.Ordinal);
+        Assert.Equal("Pro", CodexQuotaProbe.ParseStatusPlan(snapshot));
+        Assert.Equal(3, windows.Count);
+        Assert.DoesNotContain(windows, window => window.Label == "5-hour");
+        Assert.Contains(windows, window => window.Label == "Weekly" && window.UsedPct == 29);
+        Assert.Contains(windows, window => window.Label == "Spark 5-hour" && window.UsedPct == 0);
+        Assert.Contains(windows, window => window.Label == "Spark Weekly" && window.UsedPct == 0);
+    }
+
+    [Fact]
+    public void BuildProbeSteps_Codex0149UpdatePromptIsDeclinedWithoutBlindInput()
+    {
+        var steps = CodexQuotaProbe.BuildProbeSteps();
+        var updatePrompt = ReadFixture("codex-startup-v0.149.0.txt");
+
+        var update = Assert.Single(steps, step => step.Name == "dismiss-update");
+        Assert.Matches(update.WaitForPattern!, updatePrompt);
+        Assert.Equal("<Down><Enter>", update.SendKeys);
+        Assert.True(update.SendKeysOnlyIfMatched);
+
+        var trust = Assert.Single(steps, step => step.Name == "await-trust");
+        Assert.True(trust.SendKeysOnlyIfMatched);
+
+        var ready = Assert.Single(steps, step => step.Name == "await-ready");
+        Assert.True(ready.RequirePattern);
+        Assert.True(ready.SendKeysOnlyIfMatched);
+        Assert.Equal("/status", ready.SendKeys);
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {
