@@ -5516,6 +5516,59 @@ public class ProjectRunner
                     jobId, cliType);
                 _ = _quotaService.InvalidateForGroundTruthLimit(
                     cliType, $"launch {jobId} died with a usage-limit error");
+
+                // Account-level provider limits are admission state, not task
+                // failures. Keep this card in Progress with the existing durable
+                // quotaWait projection and let the per-CLI quota probe reopen it
+                // after the reported reset. Other CLI cards remain eligible.
+                if (activeInfo is not null)
+                {
+                    var rawLimitOutput = string.Join(
+                        Environment.NewLine,
+                        liveOutputSnapshot.Select(line => line.Text ?? string.Empty));
+                    var typedLimit = AgentStudio.TaskServer.Contracts.ExecutionOutcomeAdapter.Classify(
+                        new AgentStudio.TaskServer.Contracts.ExecutionRawFacts(
+                            $"local-provider-limit:{jobId}:{Guid.NewGuid():N}",
+                            AgentStudio.TaskServer.Contracts.ExecutionAttemptKind.Coding,
+                            StdErr: rawLimitOutput,
+                            ExitCode: execution.ExitCode is 0 or null ? 1 : execution.ExitCode,
+                            Provider: cliType,
+                            ObservedAt: DateTimeOffset.Now));
+                    var limit = typedLimit.ProviderLimit;
+                    var resetAt = limit?.RetryAt.UtcDateTime ?? DateTime.UtcNow.AddMinutes(15);
+                    var reason = limit is null
+                        ? $"{cliType}: provider limit; retry after {resetAt:u}"
+                        : $"{limit.Provider}: limited until {resetAt:u}. {limit.Reason}";
+                    QuotaWaitMarker.Write(activeInfo.FolderPath, new QuotaWaitRecord
+                    {
+                        CliType = cliType,
+                        StartedAt = DateTime.UtcNow,
+                        ResetAt = resetAt,
+                        ThresholdMinutes = Math.Max(1, (int)Math.Ceiling((resetAt - DateTime.UtcNow).TotalMinutes)),
+                        Reason = reason,
+                    }, _logger);
+                    _mutations.SetJobPhase(activeInfo.FolderPath, LifecyclePhases.QuotaWaiting);
+                    _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
+                        $"[quota-wait] {reason} The card will resume automatically after a successful quota probe; no failure or escalation was recorded.");
+                    _timeline?.Append(
+                        activeInfo.FolderPath,
+                        TimelineEventKinds.QuotaAdmissionDecision,
+                        TimelineActors.System,
+                        summary: reason,
+                        details: new()
+                        {
+                            ["outcome"] = "Wait",
+                            ["decision"] = "provider-limit-wait",
+                            ["cli"] = cliType,
+                            ["resetAt"] = resetAt.ToString("o"),
+                        });
+                    _consecutiveFailNoProgress.TryRemove(jobId, out _);
+                    _rapidCrashBackoffUntil.TryRemove(jobId, out _);
+                    _logger.LogWarning(
+                        "provider-limit-paused project={Project} job={JobId} cli={CliType} resetAt={ResetAt:o}; auto-mode remains available to other CLIs",
+                        ProjectName, jobId, cliType, resetAt);
+                    return;
+                }
             }
 
             // Count the commits this run actually produced (HeadShaBefore..After).

@@ -125,6 +125,29 @@ public sealed class ExecutionOutcomeAdapterTests
     }
 
     [Fact]
+    public void Claude_session_limit_carries_the_reported_next_reset()
+    {
+        var observedAt = new DateTimeOffset(2026, 8, 23, 22, 0, 0, TimeSpan.FromHours(2));
+        var result = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
+            "run-limit",
+            ExecutionAttemptKind.Coding,
+            StdErr: "You've hit your session limit · resets 12:20am",
+            ExitCode: 1,
+            Provider: "claude",
+            ObservedAt: observedAt));
+
+        Assert.Equal(ExecutionOutcomeKind.QuotaExceeded, result.Outcome);
+        Assert.Equal(ExecutionRecoveryAction.WaitForCapabilityRecovery, result.RecoveryAction);
+        Assert.False(result.ConsumesProductDefectBudget);
+        var limit = Assert.IsType<ProviderLimitInfo>(result.ProviderLimit);
+        Assert.Equal("claude", limit.Provider);
+        Assert.True(limit.ResetTimeReported);
+        Assert.Equal(
+            new DateTimeOffset(2026, 8, 24, 0, 20, 0, TimeSpan.FromHours(2)),
+            limit.RetryAt);
+    }
+
+    [Fact]
     public void Clean_done_completion_is_not_reclassified_by_diagnostic_text_mentions()
     {
         // Live incident 25.07.: agent CLIs narrate over stderr; a successful

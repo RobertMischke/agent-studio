@@ -103,6 +103,64 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Evaluate_DistinguishesProviderLimitedFromStalled()
+    {
+        var rejection = new RemoteDispatchRejection
+        {
+            Code = "runner-capability-unavailable",
+            RunnerId = "runner-01",
+            RunnerName = "Runner 01",
+            Reason = "Required capability 'provider-auth:claude' is advertised as limited. claude: limited until 2026-08-24T00:20:00Z",
+            RejectedAtUtc = Now.AddMinutes(-1),
+        };
+        var task = ReadyTask(45) with { RemoteDispatchRejection = rejection };
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0, lastClaimMinutesAgo: 45)]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal("limited", snapshot.State);
+        Assert.Equal(1, snapshot.ProviderLimitedTaskCount);
+        Assert.Contains("provider-auth:claude", snapshot.ProviderLimitReason);
+        Assert.Equal("provider-limited", Assert.Single(snapshot.Items).BlockReasonCode);
+    }
+
+    [Fact]
+    public void Evaluate_ShowsAProgressCardInDurableQuotaWaitWithoutAClaimRejection()
+    {
+        var task = ReadyTask(1) with
+        {
+            State = TaskStates.Progress,
+            Phase = LifecyclePhases.QuotaWaiting,
+            QuotaWait = new QuotaWaitStatus(
+                "claude",
+                Now.AddMinutes(-1),
+                Now.AddHours(2),
+                120,
+                "claude: limited until 2026-08-24 00:20Z"),
+        };
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(2, 0, lastClaimMinutesAgo: 1)]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal("limited", snapshot.State);
+        Assert.False(snapshot.ClaimProgressStalled);
+        Assert.Equal("claude: limited until 2026-08-24 00:20Z", snapshot.ProviderLimitReason);
+        Assert.Equal("provider-limited", Assert.Single(snapshot.Items).BlockReasonCode);
+    }
+
+    [Fact]
     public void Evaluate_CountsBuildProfileGateBlockedCardsImmediately()
     {
         var task = ReadyTask(1);

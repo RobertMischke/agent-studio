@@ -2134,6 +2134,29 @@
             replay queue.
           </td>
         </tr>
+        <tr id="case-agt-2680">
+          <td>2026-08-23/24</td>
+          <td><code>AGT-2680</code><br><span class="small">Claude shared session limit caused a fleet outage</span></td>
+          <td>
+            The shared Claude account reached its session limit at about 22:00. Every Claude card was treated as a task
+            failure and escalated until 32 cards occupied <span class="lane">5e-escalated</span>. The resulting pickup
+            breaker pause had no operator-visible reason and did not lift after the provider reset, so claims remained at
+            zero until a manual mode update the next morning.
+          </td>
+          <td>
+            Provider account limits were classified through the generic failure path. The runner had no durable,
+            provider-scoped admission state, no reset-aware recovery probe, and no distinction between a provider-limited
+            queue and a stalled claim plane. Protection therefore amplified one account limit into per-card escalation and
+            a manual whole-project pause.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> Claude session and rate limits now enter a durable provider capability
+            wait with the parsed reset time. The current card waits without escalation, Codex and other CLI claims remain
+            eligible, the board names the provider limit, and a successful scheduled probe resumes Claude automatically.
+            The observed incident reached <span class="lane">5e-escalated</span>; the corrected terminal is quota waiting
+            followed by an automatic retry after capability recovery.
+          </td>
+        </tr>
       </tbody>
     </table>
 

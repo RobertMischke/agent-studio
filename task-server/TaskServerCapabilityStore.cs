@@ -547,7 +547,8 @@ public sealed partial class TaskServerStore
                     $"Required capability '{key}' is stale since {capability.FreshUntil:O}.");
             if (!string.Equals(capability.AdvertisedStatus, "ready", StringComparison.Ordinal))
                 return CapabilityAdmission.Blocked(
-                    $"Required capability '{key}' is advertised as {capability.AdvertisedStatus}.");
+                    $"Required capability '{key}' is advertised as {capability.AdvertisedStatus}. " +
+                    (capability.Detail ?? capability.Reason ?? string.Empty));
             if (capability.HealthState == CapabilityHealthStates.Draining)
             {
                 if (capability.CooldownUntil is null || capability.CooldownUntil > UtcNow)
@@ -685,7 +686,7 @@ public sealed partial class TaskServerStore
         var rows = new List<CapabilityRow>();
         await using (var command = Command(connection, """
             SELECT capability_key, category, advertised_status, health_state,
-                   reason, advertised_at, fresh_until, first_failure_at,
+                   reason, detail, advertised_at, fresh_until, first_failure_at,
                    last_failure_at, cooldown_until, canary_claim_id,
                    consecutive_failures, recovery_history_json
               FROM runner_capabilities
@@ -777,7 +778,7 @@ public sealed partial class TaskServerStore
     {
         await using var command = Command(connection, """
             SELECT capability_key, category, advertised_status, health_state,
-                   reason, advertised_at, fresh_until, first_failure_at,
+                   reason, detail, advertised_at, fresh_until, first_failure_at,
                    last_failure_at, cooldown_until, canary_claim_id,
                    consecutive_failures, recovery_history_json
               FROM runner_capabilities
@@ -794,14 +795,15 @@ public sealed partial class TaskServerStore
             reader.GetString(2),
             reader.GetString(3),
             reader.IsDBNull(4) ? null : reader.GetString(4),
-            Parse(reader.GetString(5)),
+            reader.IsDBNull(5) ? null : reader.GetString(5),
             Parse(reader.GetString(6)),
-            reader.IsDBNull(7) ? null : Parse(reader.GetString(7)),
+            Parse(reader.GetString(7)),
             reader.IsDBNull(8) ? null : Parse(reader.GetString(8)),
             reader.IsDBNull(9) ? null : Parse(reader.GetString(9)),
-            reader.IsDBNull(10) ? null : reader.GetString(10),
-            reader.GetInt32(11),
-            DeserializeHistory(reader.GetString(12)));
+            reader.IsDBNull(10) ? null : Parse(reader.GetString(10)),
+            reader.IsDBNull(11) ? null : reader.GetString(11),
+            reader.GetInt32(12),
+            DeserializeHistory(reader.GetString(13)));
 
     private async Task<RemoteHostAdmissionDto> ReadHostAdmissionAsync(
         SqliteConnection connection,
@@ -905,6 +907,7 @@ public sealed partial class TaskServerStore
         string AdvertisedStatus,
         string HealthState,
         string? Reason,
+        string? Detail,
         DateTime AdvertisedAt,
         DateTime FreshUntil,
         DateTime? FirstFailureAt,

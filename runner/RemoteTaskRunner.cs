@@ -25,19 +25,22 @@ public sealed class RemoteTaskRunner
     private readonly Action<string> _log;
     private readonly RunnerStateStore _state;
     private readonly RunnerProcessInventoryTracker _inventory;
+    private readonly ProviderLimitTracker? _providerLimits;
 
     public RemoteTaskRunner(
         RunnerOptions options,
         TaskServerClient client,
         Action<string> log,
         RunnerStateStore? state = null,
-        RunnerProcessInventoryTracker? inventory = null)
+        RunnerProcessInventoryTracker? inventory = null,
+        ProviderLimitTracker? providerLimits = null)
     {
         _options = options;
         _client = client;
         _log = log;
         _state = state ?? new RunnerStateStore(options.StateDir);
         _inventory = inventory ?? new RunnerProcessInventoryTracker();
+        _providerLimits = providerLimits;
     }
 
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
@@ -801,13 +804,22 @@ public sealed class RemoteTaskRunner
                             $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized");
                     }
                     var classified = result.TimedOut
-                        ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)
+                        ? ClassifyTimedOutResult(slot, workspace, result, sameSessionResumeAttempts)
                         : ClassifyProcessResult(
+                            slot,
                             slot.Lease,
                             workspace,
                             processResult,
                             result.LaunchFailed,
                             sameSessionResumeAttempts);
+                    if (classified.Decision.ProviderLimit is { } providerLimit)
+                    {
+                        _providerLimits?.Record(providerLimit);
+                        var limitLine = $"[runner] provider-limit provider={providerLimit.Provider} " +
+                                        $"retryAt={providerLimit.RetryAt:o} resetReported={providerLimit.ResetTimeReported}";
+                        _log(limitLine);
+                        shipper.Add("system", limitLine);
+                    }
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
                     {
@@ -895,19 +907,20 @@ public sealed class RemoteTaskRunner
     }
 
     private RemoteExecutionResult ClassifyTimedOutResult(
-        RunLeaseInfoDto lease,
+        PersistedRunnerSlot slot,
         GitWorkspace workspace,
         DetachedJobResult result,
         int sameSessionResumeAttempts)
     {
         var decision = ExecutionOutcomeAdapter.Classify(Facts(
-            lease,
+            slot.Lease,
             workspace,
             StdOut: result.StdOut,
             StdErr: result.StdErr,
             ExitCode: result.ExitCode,
             TimedOut: true,
-            SameSessionResumeAttempts: sameSessionResumeAttempts));
+            SameSessionResumeAttempts: sameSessionResumeAttempts,
+            Provider: ProviderFor(slot)));
         return new RemoteExecutionResult(
             new RunOutcome(RunOutcomeKind.Unknown, decision.Outcome.ToString()),
             result.StdOut.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
@@ -915,6 +928,7 @@ public sealed class RemoteTaskRunner
     }
 
     private RemoteExecutionResult ClassifyProcessResult(
+        PersistedRunnerSlot slot,
         RunLeaseInfoDto lease,
         GitWorkspace workspace,
         ProcessResult result,
@@ -946,7 +960,8 @@ public sealed class RemoteTaskRunner
             LaunchFailed: launchFailed,
             SessionState: sessionState,
             SessionId: provider.SessionId,
-            SameSessionResumeAttempts: sameSessionResumeAttempts);
+            SameSessionResumeAttempts: sameSessionResumeAttempts,
+            Provider: ProviderFor(slot));
         var typed = ExecutionOutcomeAdapter.Classify(factsAfterExit);
         var sentinelOutcome = SentinelScanner.Scan(result.StdOut);
         var outcome = typed.Outcome switch
@@ -1493,7 +1508,8 @@ public sealed class RemoteTaskRunner
         ExecutionSessionState SessionState = ExecutionSessionState.Unsupported,
         string? SessionId = null,
         int SameSessionResumeAttempts = 0,
-        int FreshSalvageAttempts = 0)
+        int FreshSalvageAttempts = 0,
+        string? Provider = null)
         => new(
             lease.AttemptId ?? lease.LeaseId,
             ExecutionAttemptKind.Coding,
@@ -1515,7 +1531,14 @@ public sealed class RemoteTaskRunner
             DurableOutputState.LocalOnly,
             workspace.RepoPath,
             SameSessionResumeAttempts,
-            FreshSalvageAttempts);
+            FreshSalvageAttempts,
+            ReviewSubject: null,
+            Provider,
+            ObservedAt: DateTimeOffset.Now);
+
+    private string ProviderFor(PersistedRunnerSlot slot)
+        => AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+           ?? AgentCliProcess.ConfiguredCliType(_options);
 
     internal static async Task<T> RetryEnvironmentPreparationAsync<T>(
         Func<CancellationToken, Task<T>> prepare,

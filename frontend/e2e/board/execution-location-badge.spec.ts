@@ -71,6 +71,23 @@ const gateBlockedReadyTask = task(
   '2-ready',
 );
 
+const providerLimitedReadyTask = {
+  ...task(
+    'claude-limited',
+    'Claude work waits for account recovery',
+    location('awaiting-remote', 'agent-runner-01', 'remote', false, {
+      code: 'runner-capability-unavailable',
+      runnerId: 'agent-runner-01',
+      runnerName: 'agent-runner-01',
+      reason: "Required capability 'provider-auth:claude' is advertised as limited. claude: limited until 2026-08-24T00:20:00Z",
+      rejectedAtUtc: '2026-08-23T22:00:00Z',
+    }),
+    '2-ready',
+  ),
+  agent: 'claude',
+  cliType: 'claude',
+};
+
 const stalledAcceptedTask = {
   ...task(
     'accepted-stalled',
@@ -316,6 +333,57 @@ test('shows a durable build-profile gate refusal on the card and the starvation 
     await expect(rejection).toBeVisible();
     await page.screenshot({
       path: join(RESULTS, `notice-bar-after-starvation-narrow-${theme}--mocked.png`),
+      fullPage: false,
+    });
+  }
+});
+
+test('shows a provider-limited banner with automatic recovery and mixed-fleet guidance', async ({ page }) => {
+  mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 960, height: 800 });
+  await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
+  })));
+  await installRoutes(page, () => [providerLimitedReadyTask]);
+  await page.route('**/api/runner/queue-starvation', route => json(route, {
+    active: true,
+    waitingTaskCount: 1,
+    availableSlots: 7,
+    thresholdMinutes: 30,
+    claimProgressStalled: false,
+    lastSuccessfulClaimAt: '2026-08-23T21:59:00Z',
+    hasRejections: true,
+    buildProfileGateBlockedTaskCount: 0,
+    providerLimitedTaskCount: 1,
+    state: 'limited',
+    providerLimitReason: "Required capability 'provider-auth:claude' is advertised as limited. claude: limited until 2026-08-24T00:20:00Z",
+    oldestEnteredLaneAt: '2026-08-23T22:00:00Z',
+    observedAt: '2026-08-23T22:01:00Z',
+    items: [{
+      taskId: providerLimitedReadyTask.id,
+      taskKey: providerLimitedReadyTask.taskKey,
+      projectName: providerLimitedReadyTask.projectName,
+      title: providerLimitedReadyTask.title,
+      enteredLaneAt: '2026-08-23T22:00:00Z',
+      blockReasonCode: 'provider-limited',
+      blockReason: "Required capability 'provider-auth:claude' is advertised as limited. claude: limited until 2026-08-24T00:20:00Z",
+    }],
+  }));
+  await page.goto('/?includeFixtures=true');
+  await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
+
+  const banner = page.getByTestId('remote-queue-starvation-banner');
+  await expect(banner).toContainText('Claude claims paused: provider limit.');
+  await expect(banner).toContainText('1 card is waiting without escalation.');
+  await expect(banner).toContainText('Other CLI types remain eligible; recovery is probed automatically.');
+  await expectFlatFullBleedNoticeBar(banner);
+
+  for (const theme of ['dark', 'light'] as const) {
+    await setTheme(page, theme);
+    await dismissDevErrorDialog(page);
+    await expect(banner).toBeVisible();
+    await page.screenshot({
+      path: join(RESULTS, `provider-limit-banner-${theme}--mocked.png`),
       fullPage: false,
     });
   }

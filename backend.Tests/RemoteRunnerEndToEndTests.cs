@@ -247,6 +247,82 @@ public sealed class RemoteRunnerEndToEndTests : IDisposable
     }
 
     [Fact]
+    public async Task Provider_limit_completion_waits_without_escalation_and_resumes_after_reset()
+    {
+        SeedTask(
+            TaskStates.Ready,
+            TaskKey,
+            "Claude provider limit",
+            "Wait for provider recovery.",
+            cliType: "claude");
+        using var factory = BuildFactory(remoteRequeueGraceSeconds: 1);
+        using var http = factory.CreateClient();
+        using var client = new RClient(http, RunnerId, options: RunnerOptions("claude"));
+        await RegisterCodingRunnerAsync(client, http);
+        await AssignRemoteAsync(http);
+        await AddRepositoryUrlAsync(http, "https://github.com/agent-orc/agent-studio.git");
+        var claim = await ClaimWithSuccessfulPreflightAsync(client, new RClaim(
+            RunnerId,
+            ProjectName,
+            "hetzner-test",
+            4242,
+            "remote-runner",
+            IdempotencyKey: "provider-limit-claim"));
+        var observedAt = DateTimeOffset.UtcNow;
+        var decision = Contract.ExecutionOutcomeAdapter.Classify(new Contract.ExecutionRawFacts(
+            claim.Lease!.AttemptId!,
+            Contract.ExecutionAttemptKind.Coding,
+            StdErr: "You've hit your session limit · resets 12:20am",
+            ExitCode: 1,
+            Provider: "claude",
+            ObservedAt: observedAt));
+
+        var completion = await client.CompleteRunAsync(new RRemoteComplete(
+            claim.TaskKey!,
+            claim.Lease.LeaseId,
+            claim.Lease.FencingToken,
+            RunnerId,
+            "Unknown",
+            Reason: decision.Detail,
+            Source: ProjectName,
+            ExitCode: 1,
+            AttemptChainId: claim.Lease.LeaseId,
+            AttemptId: claim.Lease.AttemptId,
+            AuthorityEpoch: claim.Lease.AuthorityEpoch,
+            IdempotencyKey: "provider-limit-completion",
+            OutcomeDecision: decision), CancellationToken.None);
+
+        Assert.Equal(TaskStates.Progress, completion!.TargetState);
+        Assert.Equal("QuotaWait", completion.Outcome);
+        var progressFolder = Path.Combine(_watchPath, TaskStates.Progress, TaskKey);
+        Assert.True(Directory.Exists(progressFolder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, TaskKey)));
+        var marker = Assert.IsType<QuotaWaitRecord>(QuotaWaitMarker.TryRead(progressFolder));
+        Assert.Equal("claude", marker.CliType);
+        Assert.Equal(
+            LifecyclePhases.QuotaWaiting,
+            factory.Services.GetRequiredService<TaskScannerService>()
+                .FindJob(TaskKey, _watchPath)!.Phase);
+
+        QuotaWaitMarker.Write(progressFolder, marker with { ResetAt = DateTime.UtcNow.AddMinutes(-1) });
+        await Task.Delay(TimeSpan.FromMilliseconds(1100));
+        var resumed = await client.ClaimAsync(new RClaim(
+            RunnerId,
+            ProjectName,
+            "hetzner-test",
+            4242,
+            "remote-runner",
+            ActiveTaskKeys: [],
+            IdempotencyKey: "provider-limit-resume"), CancellationToken.None);
+
+        Assert.True(
+            resumed.Status == RClaimStatus.Claimed,
+            $"Expected quota-wait card to resume, got {resumed.Status}: {resumed.Message}; admission={resumed.AdmissionReason}");
+        Assert.Equal(TaskKey, resumed.JobId);
+        Assert.Null(QuotaWaitMarker.TryRead(Path.Combine(_watchPath, TaskStates.Progress, TaskKey)));
+    }
+
+    [Fact]
     public async Task Recognized_remote_task_done_uses_regular_runner_completion_not_external_completion()
     {
         const string resultSha = "589c462f589c462f589c462f589c462f589c462f";

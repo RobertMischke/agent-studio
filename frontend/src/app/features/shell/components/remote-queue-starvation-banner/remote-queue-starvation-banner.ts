@@ -23,6 +23,9 @@ interface RemoteQueueStarvationSnapshot {
   lastSuccessfulClaimAt: string | null;
   hasRejections: boolean;
   buildProfileGateBlockedTaskCount: number;
+  providerLimitedTaskCount: number;
+  state: 'healthy' | 'limited' | 'stalled';
+  providerLimitReason: string | null;
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
@@ -56,6 +59,17 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
     this.visibleItems().some(item => item.lastRejection != null));
   readonly buildProfileGateBlockedCount = computed(() =>
     this.visibleItems().filter(item => item.blockReasonCode === 'build-profile-gate').length);
+  readonly providerLimitedCount = computed(() =>
+    this.visibleItems().filter(item => item.blockReasonCode === 'provider-limited').length);
+  readonly providerLimitReason = computed(() =>
+    this.visibleItems().find(item => item.blockReasonCode === 'provider-limited')?.blockReason
+      ?? this.snapshot()?.providerLimitReason
+      ?? 'Provider recovery is pending.');
+  readonly limitedProvider = computed(() => {
+    const match = this.providerLimitReason().match(/provider-auth:([a-z0-9_-]+)/i);
+    const provider = match?.[1] ?? 'provider';
+    return provider.charAt(0).toUpperCase() + provider.slice(1);
+  });
 
   ngOnInit(): void {
     this.refresh();
