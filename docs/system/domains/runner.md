@@ -147,6 +147,14 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- Claude account-level session and rate limits are provider capability events,
+  not task failures. The runner parses a reset timestamp when the CLI supplies
+  one, advertises `provider-auth:claude` as `limited`, returns the interrupted
+  card to Ready with a durable `quota-wait` marker, and suppresses failure-budget
+  and escalation writes. Other CLI capabilities remain eligible. At reset the
+  limit expires into an automatic Claude recovery claim; another limit response
+  re-arms the wait. Queue starvation reports this condition as
+  `provider-limited`, distinct from a stalled claim loop.
 - Remote provider credentials use one protected host file,
   `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
   `root:agent` mode `640`, loaded by both Coding and Review units after their

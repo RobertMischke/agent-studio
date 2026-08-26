@@ -71,6 +71,23 @@ const gateBlockedReadyTask = task(
   '2-ready',
 );
 
+const providerLimitedReadyTask = {
+  ...task(
+    'claude-limited',
+    'Claude card waiting for provider reset',
+    location('awaiting-remote', 'agent-runner-01', 'remote', false, {
+      code: 'provider-limited',
+      runnerId: 'agent-runner-01',
+      runnerName: 'agent-runner-01',
+      reason: 'claude: limited until 2026-08-24T00:20:00Z',
+      rejectedAtUtc: '2026-08-23T22:00:00Z',
+    }),
+    '2-ready',
+  ),
+  agent: 'claude',
+  cliType: 'claude',
+};
+
 const stalledAcceptedTask = {
   ...task(
     'accepted-stalled',
@@ -202,12 +219,8 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
           enteredLaneAt: '2026-08-08T07:30:00Z',
           waitingMinutes: 330,
           lastRejection: item.executionLocation.lastRejection,
-          blockReasonCode: item.executionLocation.lastRejection?.code === 'build-profile-gate'
-            ? 'build-profile-gate'
-            : null,
-          blockReason: item.executionLocation.lastRejection?.code === 'build-profile-gate'
-            ? item.executionLocation.lastRejection.reason
-            : null,
+          blockReasonCode: item.executionLocation.lastRejection?.code ?? null,
+          blockReason: item.executionLocation.lastRejection?.reason ?? null,
         })),
       });
     }
@@ -316,6 +329,32 @@ test('shows a durable build-profile gate refusal on the card and the starvation 
     await expect(rejection).toBeVisible();
     await page.screenshot({
       path: join(RESULTS, `notice-bar-after-starvation-narrow-${theme}--mocked.png`),
+      fullPage: false,
+    });
+  }
+});
+
+test('shows Claude as limited while naming automatic recovery and mixed-fleet eligibility', async ({ page }) => {
+  mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 720, height: 800 });
+  await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
+  })));
+  await installRoutes(page, () => [providerLimitedReadyTask]);
+  await page.goto('/?includeFixtures=true');
+  await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
+
+  const banner = page.getByTestId('remote-queue-starvation-banner');
+  await expect(banner).toContainText('Claude claims limited.');
+  await expect(banner).toContainText('will resume automatically after a recovery probe');
+  await expect(banner).toContainText('Codex and other CLI cards remain eligible');
+  await expectFlatFullBleedNoticeBar(banner);
+
+  for (const theme of ['dark', 'light'] as const) {
+    await setTheme(page, theme);
+    await dismissDevErrorDialog(page);
+    await page.screenshot({
+      path: join(RESULTS, `notice-bar-claude-limited-${theme}--mocked.png`),
       fullPage: false,
     });
   }

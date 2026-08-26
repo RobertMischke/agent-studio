@@ -1169,6 +1169,11 @@ public class ProjectRunner
                     candidate.Info.Id, ProjectName, dueWait.CliType);
                 continue;
             }
+            if (candidate.Info.QuotaWait is { } activeWait && activeWait.ResetAt > DateTime.UtcNow)
+            {
+                _lastPickReason = $"provider-limited: {candidate.Info.Id}: {activeWait.Reason}";
+                continue;
+            }
 
             var qplan = PlanQuotaAdmission(candidate.Info);
             if (qplan.Outcome is QuotaAdmissionOutcome.Wait or QuotaAdmissionOutcome.Throttle)
@@ -2154,6 +2159,12 @@ public class ProjectRunner
                 ClearQuotaWait(info);
                 info = _scanner.FindJob(jobId, Entry.Path) ?? info;
                 admissionInfo = info;
+            }
+            else if (info.QuotaWait is { } activeWait)
+            {
+                return RunOutcome.Reject(new RunRejection(
+                    Reason: RunRejectReason.QuotaCapExceeded,
+                    Message: activeWait.Reason));
             }
 
             // Resolve the workspace route from the latest cached quota. The
@@ -5277,6 +5288,12 @@ public class ProjectRunner
             // and write it back here. Without this, Continue always loses
             // context because info.SessionName never advances past the slug.
             var capturedSessionId = cli.GetCapturedSessionId(jobKey);
+            var providerLimitDetected =
+                AgentStudio.TaskServer.Contracts.ProviderLimitParser.TryParse(
+                    cliType,
+                    string.Join(Environment.NewLine, earlyOutputSnapshot.Select(line => line.Text)),
+                    DateTimeOffset.UtcNow,
+                    out var detectedProviderLimit);
 
             // ASS-1739 / T1a: snapshot the read-only execution context (memory /
             // session paths, instruction-file chain, global config, MCP servers,
@@ -5365,7 +5382,7 @@ public class ProjectRunner
                     _consecutiveCaptureFailJobId = null;
                 }
             }
-            else if (cli.EmitsSessionId)
+            else if (cli.EmitsSessionId && !providerLimitDetected)
             {
                 // The CLI normally emits a session UUID on every run; missing
                 // it means the next follow-up will fall back to Recovery. Tell
@@ -5438,7 +5455,7 @@ public class ProjectRunner
             // counter; a fully silent run increments it. Reaching
             // <see cref="PickupFailureThreshold"/> dead-letters the folder
             // on the next pickup tick.
-            if (intentSnapshot == RunIntent.AutoPickup)
+            if (intentSnapshot == RunIntent.AutoPickup && !providerLimitDetected)
             {
                 RecordPickupAttemptResult(
                     slug: jobId,
@@ -5500,6 +5517,14 @@ public class ProjectRunner
                 execution.Status ?? "completed",
                 execution.DurationSeconds ?? 0.0,
                 execution.ExitCode);
+
+            if (activeInfo != null
+                && outcome.IssueKind == RunIssueKind.QuotaExhausted
+                && providerLimitDetected)
+            {
+                HoldForProviderLimit(jobId, activeInfo, detectedProviderLimit);
+                return;
+            }
 
             // Ground-truth quota hook (AGT-2064). A run that died with a
             // usage-limit error is hard proof the cached quota snapshot is wrong,
@@ -8227,6 +8252,55 @@ public class ProjectRunner
         return false;
     }
 
+    private void HoldForProviderLimit(
+        string jobId,
+        TaskInfo activeInfo,
+        AgentStudio.TaskServer.Contracts.ProviderLimitObservation limit)
+    {
+        _logger.LogWarning(
+            "provider_limit_wait project={Project} job={JobId} cli={Cli} resetAt={ResetAt:o}; suppressing task failure and escalation",
+            ProjectName, jobId, limit.CliType, limit.ResetAt);
+        _ = _quotaService.InvalidateForGroundTruthLimit(
+            limit.CliType,
+            $"provider account limit until {limit.ResetAt:O}");
+        _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
+            $"[quota-wait] {limit.Reason}. This card will resume automatically; other CLI providers remain eligible.");
+
+        ReleaseRun(jobId);
+        var move = _states.MoveJob(
+            jobId,
+            TaskStates.Ready,
+            Entry.Path,
+            transitionCause: LaneChangeCauses.RunnerRequeue,
+            transitionDetail: "provider-limit-wait");
+        var waitFolder = move.Status == MoveJobStatus.Success
+            ? move.NewFolderPath ?? activeInfo.FolderPath
+            : activeInfo.FolderPath;
+        var policy = _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName));
+        QuotaWaitMarker.Write(waitFolder, new QuotaWaitRecord
+        {
+            CliType = limit.CliType,
+            StartedAt = limit.ObservedAt.UtcDateTime,
+            ResetAt = limit.ResetAt.UtcDateTime,
+            ThresholdMinutes = policy?.ThresholdMinutes ?? CliQuotaWaitPolicyService.DefaultThresholdMinutes,
+            Reason = limit.Reason,
+        }, _logger);
+        _mutations.SetJobPhase(waitFolder, LifecyclePhases.QuotaWaiting);
+        _timeline?.Append(
+            waitFolder,
+            TimelineEventKinds.QuotaAdmissionDecision,
+            TimelineActors.System,
+            summary: limit.Reason,
+            details: new()
+            {
+                ["outcome"] = "Wait",
+                ["decision"] = "provider-account-limit",
+                ["cli"] = limit.CliType,
+                ["resetAt"] = limit.ResetAt.ToString("O"),
+            });
+        NotifyStatus();
+    }
+
     private void ScheduleGlobalBreakerCooldown(string reason, TaskInfo? activeInfo)
     {
         if (!IsAutoMode(_mode)) return;
@@ -8238,19 +8312,22 @@ public class ProjectRunner
                 * Math.Pow(_circuitBreakerOptions.GlobalCooldownBackoffMultiplier, Math.Max(0, _globalBreakerTripCount - 1)));
         if (minutes <= 0) minutes = RunnerCircuitBreakerOptions.Default.GlobalCooldownBase.TotalMinutes;
 
-        _globalBreakerReason = reason;
+        var breakerObservedAt = DateTime.UtcNow;
+        var visibleReason =
+            $"pickup paused: infra breaker, {_globalBreakerTripCount} failures cliType={activeInfo?.CliType ?? "unknown"} at {breakerObservedAt:O}; {reason}";
+        _globalBreakerReason = visibleReason;
         _globalBreakerCooldownUntil = DateTime.UtcNow.AddMinutes(minutes);
 
         if (activeInfo != null)
         {
             _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
-                $"Auto-mode cooling down until {_globalBreakerCooldownUntil:O}: {reason}. The runner will resume automatically.");
+                $"Auto-mode cooling down until {_globalBreakerCooldownUntil:O}: {visibleReason}. The runner will resume automatically.");
         }
 
         _logger.LogWarning(
             "Runner '{Project}' global circuit breaker cooling down until {Until:o} after trip {TripCount}: {Reason}",
-            ProjectName, _globalBreakerCooldownUntil, _globalBreakerTripCount, reason);
-        SetMode("manual", $"auto-failure circuit-breaker cooldown: {reason}; resumes at {_globalBreakerCooldownUntil:O}");
+            ProjectName, _globalBreakerCooldownUntil, _globalBreakerTripCount, visibleReason);
+        SetMode("manual", $"auto-failure circuit-breaker cooldown: {visibleReason}; resumes at {_globalBreakerCooldownUntil:O}");
     }
 
     private void TryAutoResumeGlobalBreaker()

@@ -25,19 +25,22 @@ public sealed class RemoteTaskRunner
     private readonly Action<string> _log;
     private readonly RunnerStateStore _state;
     private readonly RunnerProcessInventoryTracker _inventory;
+    private readonly ProviderLimitState _providerLimits;
 
     public RemoteTaskRunner(
         RunnerOptions options,
         TaskServerClient client,
         Action<string> log,
         RunnerStateStore? state = null,
-        RunnerProcessInventoryTracker? inventory = null)
+        RunnerProcessInventoryTracker? inventory = null,
+        ProviderLimitState? providerLimits = null)
     {
         _options = options;
         _client = client;
         _log = log;
         _state = state ?? new RunnerStateStore(options.StateDir);
         _inventory = inventory ?? new RunnerProcessInventoryTracker();
+        _providerLimits = providerLimits ?? ProviderLimitState.Shared;
     }
 
     /// <returns>Process exit code: 0 on a clean handoff, non-zero when the run could not complete.</returns>
@@ -808,6 +811,31 @@ public sealed class RemoteTaskRunner
                             processResult,
                             result.LaunchFailed,
                             sameSessionResumeAttempts);
+                    var cliProvider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                      ?? AgentCliProcess.ConfiguredCliType(_options);
+                    var combinedOutput = result.StdOut + Environment.NewLine + result.StdErr;
+                    if (classified.Decision.Outcome == ExecutionOutcomeKind.QuotaExceeded
+                        && ProviderLimitParser.TryParse(cliProvider, combinedOutput, DateTimeOffset.UtcNow, out var providerLimit))
+                    {
+                        _providerLimits.Observe(providerLimit);
+                        classified = classified with
+                        {
+                            Outcome = new RunOutcome(RunOutcomeKind.QuotaWait, providerLimit.Reason),
+                            ProviderLimit = providerLimit,
+                        };
+                        await CapabilityFailureReporter.TryReportAsync(
+                            _client,
+                            _log,
+                            CapabilityProtocol.ProviderAuthentication(cliProvider),
+                            "ProviderSessionLimit",
+                            providerLimit.Reason,
+                            $"provider-limit:{cliProvider}:{providerLimit.ResetAt:O}",
+                            "run",
+                            outbox?.Authority.RunId,
+                            slot.Lease.FencingToken,
+                            stopRun);
+                        shipper.Add("system", $"[runner] provider-limit cli={cliProvider} resetAt={providerLimit.ResetAt:O}; card held for automatic retry");
+                    }
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
                     {
@@ -1575,4 +1603,5 @@ internal sealed class RemoteEnvironmentPreparationException : Exception
 internal sealed record RemoteExecutionResult(
     RunOutcome Outcome,
     IReadOnlyList<string> OutputLines,
-    ExecutionOutcomeDecision Decision);
+    ExecutionOutcomeDecision Decision,
+    ProviderLimitObservation? ProviderLimit = null);

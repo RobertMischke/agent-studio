@@ -660,6 +660,51 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Provider_limit_completion_waits_in_ready_without_escalation_and_can_be_reclaimed()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+        var run = claim.Run!;
+        var lease = claim.Lease!;
+        var decision = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
+            run.RunId,
+            ExecutionAttemptKind.Coding,
+            StdErr: "You've hit your session limit. resets 12:20am",
+            ExitCode: 1,
+            DurableOutputState: DurableOutputState.Missing));
+        Assert.Equal(ExecutionOutcomeKind.QuotaExceeded, decision.Outcome);
+
+        await store.CompleteRunAsync(
+            run.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                "instance-a",
+                lease.LeaseId,
+                lease.Fence,
+                decision.Outcome.ToString(),
+                "claude: limited until 2026-08-24T00:20:00Z",
+                IdempotencyKey: $"completion:{run.RunId}:provider-limit",
+                Sequence: 1,
+                OutcomeDecision: decision),
+            "runner-a",
+            default);
+
+        Assert.Equal("2-ready", (await store.GetTaskAsync(
+            project.ProjectId, task.TaskKey, default))!.State);
+        var replacement = await store.ClaimAsync(
+            new ClaimRequest("runner-a", "instance-a"),
+            "test",
+            default);
+        Assert.Equal("claimed", replacement.Status);
+        Assert.Equal(task.TaskId, replacement.Task!.TaskId);
+        Assert.True(replacement.Lease!.Fence > lease.Fence);
+    }
+
+    [Fact]
     public async Task Typed_event_payloads_fail_before_persistence_when_the_bound_is_exceeded()
     {
         using var temp = new TempDirectory();

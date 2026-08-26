@@ -128,6 +128,36 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Evaluate_ReportsProviderLimitInsteadOfAStalledQueue()
+    {
+        var task = ReadyTask(1) with
+        {
+            Agent = AgentTypes.Claude,
+            QuotaWait = new QuotaWaitStatus(
+                "claude",
+                Now.AddMinutes(-1),
+                Now.AddHours(2),
+                30,
+                "claude: limited until 2026-08-08T14:00:00Z"),
+        };
+
+        var snapshot = RemoteQueueStarvationPolicy.Evaluate(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [task],
+            _ => RemoteSettings(),
+            TaskReferenceIndex.Build([task]),
+            [Runner(0, 0, lastClaimMinutesAgo: 1)]);
+
+        Assert.True(snapshot.Active);
+        Assert.False(snapshot.ClaimProgressStalled);
+        Assert.Equal(1, snapshot.ProviderLimitedTaskCount);
+        var item = Assert.Single(snapshot.Items);
+        Assert.Equal("provider-limited", item.BlockReasonCode);
+        Assert.Contains("limited until", item.BlockReason);
+    }
+
+    [Fact]
     public void Watchdog_LogsWarningOnceForAnAcuteQueueAndRecoveryWhenItClears()
     {
         var logger = new CapturingLogger();

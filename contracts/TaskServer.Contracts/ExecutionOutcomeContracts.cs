@@ -154,7 +154,7 @@ public static class ExecutionOutcomeAdapter
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex Quota = new(
-        @"(?:\b429\b|quota\s+(?:exceeded|exhausted)|rate\s*limit(?:ed| exceeded)?|usage\s+limit|insufficient_quota|too\s+many\s+requests)",
+        @"(?:\b429\b|quota\s+(?:exceeded|exhausted)|rate\s*limit(?:ed| exceeded)?|session\s+limit|usage\s+limit|insufficient_quota|too\s+many\s+requests)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex InvalidConfiguration = new(

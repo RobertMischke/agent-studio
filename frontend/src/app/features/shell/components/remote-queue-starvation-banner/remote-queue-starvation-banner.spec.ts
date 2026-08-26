@@ -130,4 +130,45 @@ describe('RemoteQueueStarvationBannerComponent', () => {
     fixture.destroy();
     http.verify();
   });
+
+  it('names a provider limit and preserves mixed-fleet eligibility', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Demo']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      waitingTaskCount: 1,
+      availableSlots: 0,
+      thresholdMinutes: 30,
+      claimProgressStalled: false,
+      lastSuccessfulClaimAt: '2026-08-23T21:59:00Z',
+      hasRejections: false,
+      buildProfileGateBlockedTaskCount: 0,
+      providerLimitedTaskCount: 1,
+      oldestEnteredLaneAt: '2026-08-23T22:00:00Z',
+      observedAt: '2026-08-23T22:01:00Z',
+      items: [{
+        taskKey: 'AGT-2680',
+        taskId: 'limit-aware-fleet',
+        projectName: 'Demo',
+        title: 'Limit-aware fleet',
+        enteredLaneAt: '2026-08-23T22:00:00Z',
+        blockReasonCode: 'provider-limited',
+        blockReason: 'claude: limited until 2026-08-24T00:20:00Z',
+      }],
+    });
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Claude claims limited');
+    expect(text).toContain('will resume automatically after a recovery probe');
+    expect(text).toContain('Codex and other CLI cards remain eligible');
+    fixture.destroy();
+    http.verify();
+  });
 });

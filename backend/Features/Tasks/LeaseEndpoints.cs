@@ -1035,13 +1035,13 @@ public static class LeaseEndpoints
             {
                 "done" or "noop" => TaskStates.AutoReview,
                 "blocked" or "needsinput" or "unknown" => TaskStates.Escalated,
-                "environmentfailure" => TaskStates.Ready,
+                "environmentfailure" or "quotawait" => TaskStates.Ready,
                 _ => string.Empty,
             };
             if (targetState.Length == 0)
                 return Results.BadRequest(new RemoteRunCompletionResponse(
                     req.TaskKey, reportedOutcome, TaskStates.Progress,
-                    "Outcome must be Done, NoOp, Blocked, NeedsInput, Unknown, or EnvironmentFailure."));
+                    "Outcome must be Done, NoOp, Blocked, NeedsInput, Unknown, EnvironmentFailure, or QuotaWait."));
 
             // AGT-2178: Epic planning is source-read-only - it produces no commit
             // and therefore no fenced ResultSha. The 2177 ResultSha gate only
@@ -1122,6 +1122,7 @@ public static class LeaseEndpoints
                     StringComparison.OrdinalIgnoreCase));
             var envelopeDecision = RemoteCompletionEnvelopePolicy.Decide(
                 requiresEnvelope: !isEpicPlanning
+                                  && outcome is ("done" or "noop")
                                   && !TaskModes.IsReportOnly(task.Mode)
                                   && !worktreeBlocked,
                 outcome,
@@ -1665,6 +1666,55 @@ public static class LeaseEndpoints
             }
 
             remoteClaimFailures.Reset(task);
+
+            if (outcome == "quotawait")
+            {
+                var move = await transitions.MoveAsync(
+                    task.Id,
+                    TaskStates.Ready,
+                    task.WatchPath,
+                    ct,
+                    cause: "provider-limit-wait",
+                    authorityWrite: laneWrite,
+                    suppressProductExecution: true,
+                    transitionCause: LaneChangeCauses.RunnerRequeue,
+                    transitionDetail: "provider-limit-wait");
+                if (move.Status != MoveJobStatus.Success)
+                    return Results.Conflict(new RemoteRunCompletionResponse(
+                        req.TaskKey, reportedOutcome, task.State,
+                        $"Provider-limit wait lane move refused: {move.Status} {move.Message}",
+                        RunAttemptId: attemptId));
+
+                var folder = move.NewFolderPath ?? task.FolderPath;
+                var cliType = string.IsNullOrWhiteSpace(task.CliType) ? "claude" : task.CliType;
+                if (!AgentStudio.TaskServer.Contracts.ProviderLimitParser.TryParse(
+                        cliType,
+                        req.Reason,
+                        DateTimeOffset.UtcNow,
+                        out var providerLimit))
+                {
+                    providerLimit = new AgentStudio.TaskServer.Contracts.ProviderLimitObservation(
+                        cliType,
+                        DateTimeOffset.UtcNow,
+                        DateTimeOffset.UtcNow.AddMinutes(5),
+                        req.Reason ?? $"{cliType}: provider limited; retry scheduled");
+                }
+                QuotaWaitMarker.Write(folder, new QuotaWaitRecord
+                {
+                    CliType = providerLimit.CliType,
+                    StartedAt = providerLimit.ObservedAt.UtcDateTime,
+                    ResetAt = providerLimit.ResetAt.UtcDateTime,
+                    ThresholdMinutes = CliQuotaWaitPolicyService.DefaultThresholdMinutes,
+                    Reason = providerLimit.Reason,
+                });
+                mutations.SetJobPhase(folder, LifecyclePhases.QuotaWaiting);
+                return Results.Ok(new RemoteRunCompletionResponse(
+                    req.TaskKey,
+                    reportedOutcome,
+                    TaskStates.Ready,
+                    providerLimit.Reason,
+                    RunAttemptId: attemptId));
+            }
 
             if (isEpicPlanning)
             {

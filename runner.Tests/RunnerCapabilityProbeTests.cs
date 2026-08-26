@@ -315,6 +315,78 @@ public sealed class RunnerCapabilityProbeTests
         Assert.Contains(GitPushProbe.TokenRequirementsPath, gate);
     }
 
+    [Fact]
+    public async Task Claude_limit_only_pauses_claude_and_expires_into_an_automatic_probe()
+    {
+        using var temp = new TempDirectory();
+        var claude = Path.Combine(temp.Path, "claude");
+        var codex = Path.Combine(temp.Path, "codex");
+        await File.WriteAllTextAsync(claude, "");
+        await File.WriteAllTextAsync(codex, "");
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = temp.Path,
+            BaseBranch = "main",
+            CliBin = codex,
+            ClaudeCliBin = claude,
+            CodexCliBin = codex,
+            CliArgs = "",
+        };
+        var auth = new ProviderAuthProbe(
+            (_, _, _) => Task.FromResult(new ProcessResult(0, "Logged in", "")),
+            File.Exists);
+        await auth.RefreshAsync(claude, CancellationToken.None);
+        await auth.RefreshAsync(codex, CancellationToken.None);
+        var limits = new ProviderLimitState();
+        var observedAt = DateTimeOffset.UtcNow;
+        var resetAt = observedAt.AddHours(2);
+        Assert.True(ProviderLimitParser.TryParse(
+            "claude",
+            $"You've hit your session limit. resetsAt={resetAt.ToUnixTimeSeconds()}",
+            observedAt,
+            out var limit));
+        limits.Observe(limit);
+
+        var limited = RunnerCapabilityProbe.Advertise(
+            options,
+            gitPushReady: true,
+            providerAuth: auth,
+            providerLimits: limits);
+
+        var claudeAuth = Assert.Single(limited, item =>
+            item.Key == CapabilityProtocol.ProviderAuthentication("claude"));
+        Assert.Equal("limited", claudeAuth.Status);
+        Assert.Contains("claude: limited until", claudeAuth.Detail);
+        Assert.Equal("ready", Assert.Single(limited, item =>
+            item.Key == CapabilityProtocol.ProviderAuthentication("codex")).Status);
+        Assert.Null(limits.Current("claude", limit.ResetAt.AddSeconds(1)));
+    }
+
+    [Fact]
+    public void Provider_limit_parser_ignores_non_claude_task_errors_and_reads_epoch_reset()
+    {
+        var now = DateTimeOffset.FromUnixTimeSeconds(1_774_000_000);
+
+        Assert.False(ProviderLimitParser.TryParse(
+            "codex", "rate limit exceeded", now, out _));
+        Assert.True(ProviderLimitParser.TryParse(
+            "claude", "rate_limit_exceeded resetsAt=1774003600", now, out var limit));
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1_774_003_600), limit.ResetAt);
+
+        var evening = new DateTimeOffset(2026, 8, 23, 22, 0, 0, TimeSpan.FromHours(2));
+        Assert.True(ProviderLimitParser.TryParse(
+            "claude", "You've hit your session limit; resets 12:20am", evening, out var clockLimit));
+        Assert.Equal(
+            new DateTimeOffset(2026, 8, 24, 0, 20, 0, TimeSpan.FromHours(2)),
+            clockLimit.ResetAt);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory()

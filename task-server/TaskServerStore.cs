@@ -1400,6 +1400,8 @@ public sealed partial class TaskServerStore
                 "completion",
                 ct);
             var now = UtcNow;
+            var providerLimited = request.OutcomeDecision?.Outcome == ExecutionOutcomeKind.QuotaExceeded;
+            var nextTaskState = providerLimited ? "2-ready" : "4-auto-review";
             if (request.OutcomeDecision is not null)
             {
                 if (!string.Equals(request.OutcomeDecision.RawFacts.AttemptId, runId, StringComparison.Ordinal))
@@ -1436,7 +1438,7 @@ public sealed partial class TaskServerStore
                        source_bundle_artifact_id = NULL,
                        source_bundle_sha256 = $bundleSha
                  WHERE id = $run;
-                UPDATE tasks SET state = '4-auto-review', version = version + 1, updated_at = $now WHERE id = $task;
+                UPDATE tasks SET state = $nextState, version = version + 1, updated_at = $now WHERE id = $task;
                 UPDATE work_permits SET status = 'completed'
                  WHERE run_id = $run AND status = 'accepted';
                 INSERT INTO run_completions(
@@ -1454,20 +1456,24 @@ public sealed partial class TaskServerStore
                 ("$key", request.IdempotencyKey),
                 ("$now", Iso(now)),
                 ("$task", lease.TaskId),
+                ("$nextState", nextTaskState),
                 ("$resultSha", resultHandoff?.Envelope.ResultSha),
                 ("$repositoryId", resultHandoff?.Envelope.RepositoryId),
                 ("$repositoryUrl", resultHandoff?.Envelope.RepositoryUrl),
                 ("$resultRef", resultHandoff?.Envelope.ImmutableRemoteRef),
                 ("$bundleSha", resultHandoff?.Envelope.SourceBundleDigest));
-            await ResolveCanarySuccessAsync(
-                connection,
-                transaction,
-                request.RunnerId,
-                runId,
-                RequiresResultEnvelope(request.Outcome)
-                    ? "coding canary completed with an immutable result handoff"
-                    : "coding canary reached an authoritative typed terminal without a capability failure",
-                ct);
+            if (!providerLimited)
+            {
+                await ResolveCanarySuccessAsync(
+                    connection,
+                    transaction,
+                    request.RunnerId,
+                    runId,
+                    RequiresResultEnvelope(request.Outcome)
+                        ? "coding canary completed with an immutable result handoff"
+                        : "coding canary reached an authoritative typed terminal without a capability failure",
+                    ct);
+            }
             await AppendLifecycleEventAsync(
                 connection,
                 transaction,
@@ -1480,7 +1486,7 @@ public sealed partial class TaskServerStore
                     request.Outcome,
                     request.Summary,
                     authority = "task-server",
-                    nextState = "4-auto-review",
+                    nextState = nextTaskState,
                 },
                 ct);
             await AppendLifecycleEventAsync(

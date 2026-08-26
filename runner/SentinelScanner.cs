@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace AgentRunner;
 
 /// <summary>The terminal outcome an agent signs its run off with.</summary>
-public enum RunOutcomeKind { Done, Blocked, NeedsInput, NoOp, Unknown, EnvironmentFailure }
+public enum RunOutcomeKind { Done, Blocked, NeedsInput, NoOp, Unknown, EnvironmentFailure, QuotaWait }
 
 public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
 {
@@ -19,7 +19,7 @@ public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
     public string TargetState => Kind switch
     {
         RunOutcomeKind.Done or RunOutcomeKind.NoOp => "4-auto-review",
-        RunOutcomeKind.EnvironmentFailure => "2-ready",
+        RunOutcomeKind.EnvironmentFailure or RunOutcomeKind.QuotaWait => "2-ready",
         _ => "5-human-review",
     };
 
@@ -30,6 +30,7 @@ public sealed record RunOutcome(RunOutcomeKind Kind, string? Reason)
         RunOutcomeKind.NeedsInput => "Remote run needs input",
         RunOutcomeKind.NoOp => "Remote run was a no-op",
         RunOutcomeKind.EnvironmentFailure => "Remote claim environment preparation failed",
+        RunOutcomeKind.QuotaWait => "Provider account limit; waiting for automatic recovery",
         _ => "Remote run ended without a terminal sentinel",
     };
 }

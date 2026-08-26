@@ -2134,6 +2134,30 @@
             replay queue.
           </td>
         </tr>
+        <tr id="case-agt-2680">
+          <td>2026-08-23 to 2026-08-24</td>
+          <td><code>AGT-2680</code><br><span class="small">shared Claude session limit caused a fleet-wide escalation storm</span></td>
+          <td>
+            The operator account and every Claude CLI runner shared one session allowance. After the account limit was
+            reached at about 22:00, each claimed Claude card failed and escalated. By morning 32 cards were Escalated and
+            the Ready queue had been exhausted, requiring a mass requeue. An infra breaker later paused pickup without a
+            visible reason and remained paused after the provider reset until an operator changed its mode.
+          </td>
+          <td>
+            The outcome analyser recognised quota exhaustion, but the post-run policy still treated it as a task terminal
+            and reached human escalation before the generic rate-limit cooldown. Admission had cached quota projections
+            but no ground-truth account-limit state shared by all Claude claims. Breaker state exposed a cooldown timestamp
+            but did not identify the failed CLI clearly enough for the board.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> Claude session and rate-limit output now produces a provider-scoped
+            wait with a parsed reset time. The current card returns to Ready with a durable <code>quota-wait</code> marker,
+            no task-failure budget or escalation is consumed, and Claude authentication advertises
+            <code>limited</code> while Codex remains claimable. Reset expiry automatically opens a recovery probe; a repeated
+            limit re-arms the wait. Starvation reports <code>provider-limited</code> instead of stalled, and breaker pauses
+            expose their CLI, trip count, observation time, reason, and automatic cooldown on the board.
+          </td>
+        </tr>
       </tbody>
     </table>
 

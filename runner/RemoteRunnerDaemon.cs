@@ -336,6 +336,7 @@ public sealed class RemoteRunnerDaemon
             _options.ClaimMaxLoadPerCore,
             TimeSpan.FromSeconds(_options.LoadGateSustainedSeconds));
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+        var advertisedProviderLimitVersion = ProviderLimitState.Shared.Version;
         HostTelemetrySample? TakeTelemetry(bool force = false)
         {
             try
@@ -369,7 +370,8 @@ public sealed class RemoteRunnerDaemon
             try
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
-                if (DateTime.UtcNow >= nextCapabilityAdvertisement)
+                if (DateTime.UtcNow >= nextCapabilityAdvertisement
+                    || ProviderLimitState.Shared.Version != advertisedProviderLimitVersion)
                 {
                     var capabilityTelemetry = TakeTelemetry();
                     var generation = ++capabilityGeneration;
@@ -396,6 +398,7 @@ public sealed class RemoteRunnerDaemon
                         _log,
                         shutdown);
                     nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
+                    advertisedProviderLimitVersion = ProviderLimitState.Shared.Version;
                 }
                 // Record the attempt before entering any claim-path HTTP call.
                 // A request which never returns must still count as the last

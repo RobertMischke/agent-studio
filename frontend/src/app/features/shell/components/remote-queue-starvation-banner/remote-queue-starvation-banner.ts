@@ -23,6 +23,7 @@ interface RemoteQueueStarvationSnapshot {
   lastSuccessfulClaimAt: string | null;
   hasRejections: boolean;
   buildProfileGateBlockedTaskCount: number;
+  providerLimitedTaskCount: number;
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
@@ -56,6 +57,10 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
     this.visibleItems().some(item => item.lastRejection != null));
   readonly buildProfileGateBlockedCount = computed(() =>
     this.visibleItems().filter(item => item.blockReasonCode === 'build-profile-gate').length);
+  readonly providerLimitedItems = computed(() =>
+    this.visibleItems().filter(item => item.blockReasonCode === 'provider-limited'));
+  readonly providerLimitedCount = computed(() => this.providerLimitedItems().length);
+  readonly providerLimitReason = computed(() => this.providerLimitedItems()[0]?.blockReason ?? 'Claude is temporarily limited.');
 
   ngOnInit(): void {
     this.refresh();

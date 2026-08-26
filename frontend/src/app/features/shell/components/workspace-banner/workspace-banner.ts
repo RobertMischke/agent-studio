@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { NotificationService } from '../../../../services/notification.service';
 import type { NotificationKind } from '../../../../models/app-dialog.model';
 import { RemoteQueueStarvationBannerComponent } from '../remote-queue-starvation-banner/remote-queue-starvation-banner';
 import { AcceptedIntegrationAlertBannerComponent } from '../accepted-integration-alert-banner/accepted-integration-alert-banner';
+import { NotificationComponent } from '../../../../components/notification/notification.component';
+import type { ProjectRunnerStatus, RunnerStatus } from '../../../../models/task.model';
 
 /**
  * F56: workspace auto-review verdicts now render as toasts in the unified
@@ -47,7 +49,7 @@ const BANNER_TOPICS: ReadonlySet<string> = new Set([
   selector: 'app-workspace-banner',
   standalone: true,
   host: { 'data-testid': 'workspace-banner' },
-  imports: [AcceptedIntegrationAlertBannerComponent, RemoteQueueStarvationBannerComponent],
+  imports: [AcceptedIntegrationAlertBannerComponent, RemoteQueueStarvationBannerComponent, NotificationComponent],
   templateUrl: './workspace-banner.html',
   styleUrl: './workspace-banner.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -57,6 +59,10 @@ export class WorkspaceBannerComponent implements OnInit, OnDestroy {
   private readonly notify = inject(NotificationService);
 
   readonly projects = input<readonly string[]>([]);
+  readonly breakerPauses = signal<ProjectRunnerStatus[]>([]);
+  readonly breakerPauseSummary = computed(() => this.breakerPauses()
+    .map(status => `${status.projectName}: ${status.breakerReason ?? status.modeReason ?? 'infra breaker'}`)
+    .join(' '));
 
   private readonly current = signal<DisplayDecision | null>(null);
   private readonly dismissedId = signal<string | null>(null);
@@ -134,6 +140,14 @@ export class WorkspaceBannerComponent implements OnInit, OnDestroy {
   private pollNow(): void {
     const projects = this.projects();
     if (!projects.length) return;
+    const visibleProjects = new Set(projects.map(project => project.toLowerCase()));
+    this.http.get<RunnerStatus>('/api/runner/status').subscribe({
+      next: status => this.breakerPauses.set(Object.values(status.projects ?? {}).filter(project =>
+        visibleProjects.has(project.projectName.toLowerCase())
+        && (project.mode === 'manual' || project.mode === 'paused')
+        && project.modeSource === 'circuit-breaker')),
+      error: () => this.breakerPauses.set([]),
+    });
     let bestSoFar: DisplayDecision | null = this.current();
     let pending = projects.length;
     for (const project of projects) {

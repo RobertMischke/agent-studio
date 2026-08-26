@@ -4,7 +4,10 @@
     layout="banner"
     ariaLive="polite"
     testid="remote-queue-starvation-banner">
-    @if (buildProfileGateBlockedCount() > 0) {
+    @if (providerLimitedCount() > 0) {
+      <strong data-testid="notice-bar-headline">Claude claims limited.</strong>
+      <span class="notification__detail" data-testid="notice-bar-detail">{{ providerLimitReason() }} <span class="notification__number">{{ providerLimitedCount() }}</span> {{ providerLimitedCount() === 1 ? 'card is' : 'cards are' }} waiting and will resume automatically after a recovery probe. Codex and other CLI cards remain eligible.</span>
+    } @else if (buildProfileGateBlockedCount() > 0) {
       <strong data-testid="notice-bar-headline"><span class="notification__number">{{ buildProfileGateBlockedCount() }}</span> ready {{ buildProfileGateBlockedCount() === 1 ? 'card' : 'cards' }} not claimable: build profile not validated.</strong>
       <span class="notification__detail" data-testid="notice-bar-detail">Revalidate the project build profile. @if (availableSlots() > 0) { <span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'Runner slot is' : 'Runner slots are' }} available. } @else { Runner capacity cannot open this gate. }</span>
     } @else {

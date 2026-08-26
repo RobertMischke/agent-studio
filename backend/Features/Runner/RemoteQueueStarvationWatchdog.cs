@@ -22,6 +22,7 @@ public sealed record RemoteQueueStarvationSnapshot
     public DateTime? LastSuccessfulClaimAt { get; init; }
     public bool HasRejections { get; init; }
     public int BuildProfileGateBlockedTaskCount { get; init; }
+    public int ProviderLimitedTaskCount { get; init; }
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
@@ -83,7 +84,8 @@ public static class RemoteQueueStarvationPolicy
         var items = routedReadyTasks
             .Select(task => (Task: task, Gate: BuildProfileGate.Evaluate(
                 projectSettings(task.ProjectName).BuildProfile)))
-            .Where(candidate => !candidate.Gate.AllowsPickup
+            .Where(candidate => candidate.Task.QuotaWait is { ResetAt: var resetAt } && resetAt > now
+                           || !candidate.Gate.AllowsPickup
                            || candidate.Task.RemoteDispatchRejection is not null
                            || (claimProgressStalled
                                && now - candidate.Task.EnteredLaneAt.ToUniversalTime() >= threshold))
@@ -96,8 +98,12 @@ public static class RemoteQueueStarvationPolicy
                 Title = candidate.Task.Title,
                 EnteredLaneAt = candidate.Task.EnteredLaneAt,
                 LastRejection = candidate.Task.RemoteDispatchRejection,
-                BlockReasonCode = candidate.Gate.AllowsPickup ? null : "build-profile-gate",
-                BlockReason = candidate.Gate.AllowsPickup ? null : candidate.Gate.Reason,
+                BlockReasonCode = candidate.Task.QuotaWait is { ResetAt: var resetAt } && resetAt > now
+                    ? "provider-limited"
+                    : candidate.Gate.AllowsPickup ? null : "build-profile-gate",
+                BlockReason = candidate.Task.QuotaWait is { ResetAt: var resetAt2 } && resetAt2 > now
+                    ? candidate.Task.QuotaWait.Reason
+                    : candidate.Gate.AllowsPickup ? null : candidate.Gate.Reason,
             })
             .ToList();
         var hasRejections = items.Any(item => item.LastRejection is not null);
@@ -106,7 +112,7 @@ public static class RemoteQueueStarvationPolicy
         {
             Active = items.Count > 0
                      && (availableSlots > 0 || items.Any(item =>
-                         string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal))),
+                         item.BlockReasonCode is "build-profile-gate" or "provider-limited")),
             WaitingTaskCount = items.Count,
             AvailableSlots = availableSlots,
             ThresholdMinutes = Math.Max(1, (int)Math.Ceiling(threshold.TotalMinutes)),
@@ -115,6 +121,8 @@ public static class RemoteQueueStarvationPolicy
             HasRejections = hasRejections,
             BuildProfileGateBlockedTaskCount = items.Count(item =>
                 string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)),
+            ProviderLimitedTaskCount = items.Count(item =>
+                string.Equals(item.BlockReasonCode, "provider-limited", StringComparison.Ordinal)),
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
