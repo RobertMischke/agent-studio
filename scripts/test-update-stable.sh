@@ -176,15 +176,18 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
-test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
+if git -C "$stable_checkout" symbolic-ref --quiet --short HEAD; then
+  printf '%s\n' 'updater attached the held checkout before all probes passed' >&2
+  exit 1
+fi
 
 # A held checkout can already point at the target SHA while still detached.
-# The no-op verification path must supervise Task Server and attach main.
-git -C "$stable_checkout" checkout --quiet --detach
+# The no-op verification path must repeat all probes before attaching main.
 rm -f -- "$task_server_start_marker"
 noop_output=$(run_update)
 test -f "$task_server_start_marker"
 printf '%s' "$noop_output" | grep -q 'verifying the supervised Task Server'
+printf '%s' "$noop_output" | grep -q 'Boot completed without page errors'
 test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
 
 printf '%s\n' 'update-stable tests passed'

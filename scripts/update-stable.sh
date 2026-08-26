@@ -69,6 +69,7 @@ task_server_probe_script=${ATP_TASK_SERVER_PROBE_SCRIPT:-$script_dir/task-server
 task_server_config=${ATP_TASK_SERVER_CONFIG:-$stable_checkout/backend/appsettings.Local.json}
 [ -f "$task_server_probe_script" ] || fail "Task Server cutover probe not found: $task_server_probe_script"
 [ -f "$task_server_config" ] || fail "Stable Task Server proxy configuration not found: $task_server_config"
+[ -f "$probe_script" ] || fail "Frontend boot probe not found: $probe_script"
 
 if [ -n "$(git -C "$stable_checkout" status --porcelain)" ]; then
   fail "Stable checkout has local changes; refusing to update."
@@ -91,6 +92,12 @@ if [ "$head_before" = "$target" ]; then
     --config "$task_server_config" \
     --task-server-url "$task_server_url" \
     --backend-url "$backend_url"
+  log "Loading $frontend_url in a headless browser"
+  node "$probe_script" \
+    --frontend-dir "$stable_checkout/frontend" \
+    --url "$frontend_url" \
+    --timeout-ms "$probe_timeout_ms" \
+    --settle-ms "$probe_settle_ms"
   stable_head_branch=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
   if [ -z "$stable_head_branch" ]; then
     git -C "$stable_checkout" checkout --quiet -B "$stable_branch" "$target"
@@ -119,9 +126,11 @@ log "Stopping Stable"
 
 log "Fast-forwarding Stable to $target"
 stable_head_branch=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
+stable_was_detached=0
 if [ -z "$stable_head_branch" ]; then
-  git -C "$stable_checkout" checkout --quiet -B "$stable_branch" "$target"
-  log "Attached the previously pinned Stable checkout to $stable_branch"
+  git -C "$stable_checkout" checkout --quiet --detach "$target"
+  stable_was_detached=1
+  log "Moved the pinned Stable checkout to the candidate without attaching $stable_branch"
 elif [ "$stable_head_branch" = "$stable_branch" ]; then
   git -C "$stable_checkout" merge --quiet --ff-only "$target"
 else
@@ -149,8 +158,6 @@ else
   log "Frontend dependency inputs are unchanged; skipping npm install"
 fi
 
-[ -f "$probe_script" ] || fail "Frontend boot probe not found: $probe_script"
-
 log "Packaging and installing Task Server $target"
 "$task_server_deploy_script" "$stable_checkout" "$target"
 
@@ -175,5 +182,10 @@ node "$task_server_probe_script" \
   --config "$task_server_config" \
   --task-server-url "$task_server_url" \
   --backend-url "$backend_url"
+
+if [ "$stable_was_detached" -eq 1 ]; then
+  git -C "$stable_checkout" checkout --quiet -B "$stable_branch" "$target"
+  log "Attached the verified Stable checkout to $stable_branch"
+fi
 
 log "Stable and Task Server started and healthy at $target"

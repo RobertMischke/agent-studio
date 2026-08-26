@@ -426,7 +426,9 @@ as a release hold until all of these steps have durable evidence:
    devspace defaults. The versioned updater stops Stable, installs and starts
    Task Server, proves direct readiness, starts the API, then proves the proxy
    and browser boot. A detached held checkout is attached to `main` only after
-   the target has passed the fast-forward preflight.
+   direct readiness, proxy health, and the browser boot probe have all passed.
+   A failed probe leaves the checkout detached for diagnosis and a verified
+   retry repeats every probe before attaching it.
 5. Exercise one fenced coding claim through completion, one immutable review
    claim through report and cleanup, result-finalization and report artifact
    submission, and the board projection for the same task. Save request IDs,
