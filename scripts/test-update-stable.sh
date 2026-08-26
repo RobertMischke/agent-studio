@@ -155,6 +155,7 @@ printf '%s' "$output" | grep -q 'Boot completed without page errors'
 printf '%s' "$output" | grep -q 'Stable and Task Server started and healthy'
 grep -q -- '--config-only' "$test_root/task-server-probes.log"
 grep -q -- '--direct-only' "$test_root/task-server-probes.log"
+grep -q -- '--expected-sha' "$test_root/task-server-probes.log"
 test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
 
 # A separate release injects an application boot crash. An open port and a

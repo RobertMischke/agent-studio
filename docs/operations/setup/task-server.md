@@ -136,7 +136,10 @@ to reuse a release directory whose binary does not report the requested SHA.
 It reconciles `LISTEN_URL`, `STORE_PATH`, and `BACKUP_PATH` in an existing
 `server.env` while preserving its authentication settings. The versioned
 package includes the detached supervisor script, so the registered Scheduled
-Task does not execute service code from a mutable Studio checkout.
+Task does not execute service code from a mutable Studio checkout. When the
+task already exists, the helper waits for its process tree to stop before
+repointing `current`; the rollout probe then requires the candidate Git SHA
+from both direct and proxied management status before Stable can be unpinned.
 
 `register-task-server.ps1` registers `AgentOrchestrator-TaskServer` as an
 `AtStartup`-triggered Scheduled Task under an `S4U` principal - services never

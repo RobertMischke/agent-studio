@@ -11,6 +11,7 @@ function options(argv) {
     taskServerUrl: 'http://127.0.0.1:5071',
     backendUrl: 'http://127.0.0.1:5031',
     timeoutMs: 120_000,
+    expectedSha: '',
     configOnly: false,
     directOnly: false,
   };
@@ -26,12 +27,16 @@ function options(argv) {
     else if (flag === '--task-server-url') result.taskServerUrl = normalizedUrl(value);
     else if (flag === '--backend-url') result.backendUrl = normalizedUrl(value);
     else if (flag === '--timeout-ms') result.timeoutMs = Number(value);
+    else if (flag === '--expected-sha') result.expectedSha = value.toLowerCase();
     else throw new Error(`Unknown argument: ${flag}.`);
     index += 1;
   }
   if (!result.config) throw new Error('--config is required.');
   if (!Number.isInteger(result.timeoutMs) || result.timeoutMs <= 0) {
     throw new Error('--timeout-ms must be a positive integer.');
+  }
+  if (result.expectedSha && !/^[0-9a-f]{40}$/.test(result.expectedSha)) {
+    throw new Error('--expected-sha must be a 40-character hexadecimal Git SHA.');
   }
   return result;
 }
@@ -70,6 +75,15 @@ async function probe(url, headers, deadline, label) {
   throw new Error(`${label} did not become healthy: ${lastError?.message ?? 'deadline exceeded'}`);
 }
 
+async function verifyVersion(response, expectedSha, label) {
+  if (!expectedSha) return;
+  const status = await response.json();
+  const serverVersion = typeof status.serverVersion === 'string' ? status.serverVersion : '';
+  if (!serverVersion.toLowerCase().includes(expectedSha)) {
+    throw new Error(`${label} reports '${serverVersion || '<missing>'}', expected Git SHA '${expectedSha}'.`);
+  }
+}
+
 async function run() {
   const value = options(process.argv.slice(2));
   const configuration = await loadConfiguration(value.config);
@@ -85,9 +99,11 @@ async function run() {
   };
   const deadline = Date.now() + value.timeoutMs;
   await probe(`${value.taskServerUrl}/readyz`, headers, deadline, 'Task Server readiness');
-  await probe(`${value.taskServerUrl}/api/v1/management/status`, headers, deadline, 'Task Server management plane');
+  const directStatus = await probe(`${value.taskServerUrl}/api/v1/management/status`, headers, deadline, 'Task Server management plane');
+  await verifyVersion(directStatus, value.expectedSha, 'Task Server management plane');
   if (!value.directOnly) {
-    await probe(`${value.backendUrl}/api/v1/management/status`, {}, deadline, 'OrchestratorApi Task Server proxy');
+    const proxyStatus = await probe(`${value.backendUrl}/api/v1/management/status`, {}, deadline, 'OrchestratorApi Task Server proxy');
+    await verifyVersion(proxyStatus, value.expectedSha, 'OrchestratorApi Task Server proxy');
   }
   console.log(`[task-server-cutover-probe] ${value.directOnly ? 'Task Server' : 'Task Server and proxy'} are healthy.`);
 }

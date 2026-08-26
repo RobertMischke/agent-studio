@@ -90,7 +90,8 @@ if [ "$head_before" = "$target" ]; then
   node "$task_server_probe_script" \
     --config "$task_server_config" \
     --task-server-url "$task_server_url" \
-    --backend-url "$backend_url"
+    --backend-url "$backend_url" \
+    --expected-sha "$target"
   stable_head_branch=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
   if [ -z "$stable_head_branch" ]; then
     git -C "$stable_checkout" checkout --quiet -B "$stable_branch" "$target"
@@ -159,6 +160,7 @@ log "Starting supervised Task Server before Stable API"
 node "$task_server_probe_script" \
   --config "$task_server_config" \
   --task-server-url "$task_server_url" \
+  --expected-sha "$target" \
   --direct-only
 
 log "Starting Stable"
@@ -174,7 +176,8 @@ node "$probe_script" \
 node "$task_server_probe_script" \
   --config "$task_server_config" \
   --task-server-url "$task_server_url" \
-  --backend-url "$backend_url"
+  --backend-url "$backend_url" \
+  --expected-sha "$target"
 
 stable_head_branch=$(git -C "$stable_checkout" symbolic-ref --quiet --short HEAD || true)
 if [ -z "$stable_head_branch" ]; then

@@ -6,7 +6,8 @@ param(
     [string] $InstallBase = 'C:\AgentOrchestrator',
     [string] $EnvFile = 'C:\ProgramData\AgentOrchestrator\server.env',
     [string] $StableConfigurationPath,
-    [string] $ListenUrl = 'http://127.0.0.1:5071'
+    [string] $ListenUrl = 'http://127.0.0.1:5071',
+    [string] $TaskName = 'AgentOrchestrator-TaskServer'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -103,6 +104,19 @@ if ($PSCmdlet.ShouldProcess($releaseDirectory, 'Publish and install the Task Ser
     }
     $configuration | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $StableConfigurationPath -Encoding utf8
 
+    $scheduledTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    if ($null -ne $scheduledTask -and $scheduledTask.State -ne 'Ready') {
+        Stop-ScheduledTask -TaskName $TaskName
+        $deadline = [DateTime]::UtcNow.AddSeconds(30)
+        do {
+            Start-Sleep -Milliseconds 250
+            $scheduledTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+        } while ($scheduledTask.State -ne 'Ready' -and [DateTime]::UtcNow -lt $deadline)
+        if ($scheduledTask.State -ne 'Ready') {
+            throw "Task Server scheduled task did not stop before the release junction update: $TaskName"
+        }
+    }
+
     if (Test-Path -LiteralPath $current) {
         $item = Get-Item -LiteralPath $current -Force
         if (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -117,6 +131,7 @@ if ($PSCmdlet.ShouldProcess($releaseDirectory, 'Publish and install the Task Ser
     & $registerScript `
         -InstallRoot $current `
         -EnvFile $EnvFile `
+        -TaskName $TaskName `
         -StartScriptPath (Join-Path $current 'start-task-server.ps1')
     if ($LASTEXITCODE -ne 0) { throw "Task Server Scheduled Task registration failed." }
 
