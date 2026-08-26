@@ -10,3 +10,8 @@ Suggested first fixtures to capture:
 - `tool-call-bash.jsonl` — a Bash-style tool invocation, for the upcoming `TransformReadLine` switch.
 - `tool-call-read.jsonl` — file-read tool, same reason.
 - `result.jsonl` — the final result frame.
+
+The `quota/` subfolder contains redacted PTY snapshots from the interactive
+`/status` panel. Keep the CLI version in every filename. Add a new fixture and
+parser expectation when a Codex release changes that panel, while retaining
+older versions as compatibility fallbacks.

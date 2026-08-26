@@ -4,7 +4,7 @@ import type { CliType } from '../../../models/task.model';
 import { cliTypeIcon } from '../../../services/format.util';
 import { JobsHubClient } from '../../../services/jobs-hub-client.service';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../quota';
-import { QuotaApiService } from '../../quota';
+import { QuotaApiService, quotaFreshness } from '../../quota';
 import { TokensApiService } from './tokens-api.service';
 import type {
   AdHocUsageAggregate,
@@ -24,6 +24,8 @@ export interface CliUsageQuotaRow {
   label: string;
   plan: string | null;
   fetchedAt: string | null;
+  cliVersion?: string | null;
+  probeFailedAt?: string | null;
   freshness: string;
   stale: boolean;
   source: string | null;
@@ -253,10 +255,7 @@ export class CliUsageStore {
   // ---- Derivation ----
 
   private buildRow(s: QuotaSnapshot, ttlMs: number, now: number): CliUsageQuotaRow {
-    const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
-    const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
-    const freshness = !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
+    const freshness = quotaFreshness(s, ttlMs, now);
     const primary = s.windows.length > 0
       ? [...s.windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1))[0]
       : null;
@@ -267,8 +266,10 @@ export class CliUsageStore {
       label: this.cliLabel(s.cliType),
       plan: s.plan,
       fetchedAt: s.fetchedAt,
-      stale,
-      freshness,
+      cliVersion: s.cliVersion ?? null,
+      probeFailedAt: s.probeFailedAt ?? null,
+      stale: freshness.stale,
+      freshness: freshness.label,
       source: s.source,
       error: s.error,
       windows: s.windows,
@@ -294,16 +295,4 @@ export class CliUsageStore {
     }
   }
 
-  private formatAgo(ms: number): string {
-    if (!Number.isFinite(ms)) return 'never';
-    const sec = Math.floor(ms / 1000);
-    if (sec < 5) return 'just now';
-    if (sec < 60) return `${sec} s ago`;
-    const min = Math.floor(sec / 60);
-    if (min < 60) return `${min} min ago`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr} h ago`;
-    const d = Math.floor(hr / 24);
-    return `${d} d ago`;
-  }
 }

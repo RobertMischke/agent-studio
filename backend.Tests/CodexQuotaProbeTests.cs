@@ -5,6 +5,62 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "cli",
+            "codex",
+            "quota",
+            name));
+
+    public static TheoryData<string, string, int, string[]> VersionedStatusFixtures => new()
+    {
+        {
+            "codex-status-v0.143.0.txt",
+            "Plus",
+            4,
+            new[] { "5-hour", "Weekly", "Spark 5-hour", "Spark Weekly" }
+        },
+        {
+            "codex-status-v0.149.0.txt",
+            "Pro",
+            3,
+            new[] { "Weekly", "Spark 5-hour", "Spark Weekly" }
+        }
+    };
+
+    [Theory]
+    [MemberData(nameof(VersionedStatusFixtures))]
+    public void VersionedStatusFixture_RecognizesPanelPlanAndWindows(
+        string fixtureName,
+        string expectedPlan,
+        int expectedCount,
+        string[] expectedLabels)
+    {
+        var snapshot = ReadFixture(fixtureName);
+
+        Assert.True(CodexQuotaProbe.LooksLikeStatusPanel(snapshot));
+        Assert.Equal(expectedPlan, CodexQuotaProbe.ParsePlan(snapshot));
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+        Assert.Equal(expectedCount, windows.Count);
+        Assert.Equal(expectedLabels, windows.Select(window => window.Label));
+    }
+
+    [Fact]
+    public void ParseStatusWindows_V0_149ContinuationLinesAndMissingMainFiveHourRemainValid()
+    {
+        var windows = CodexQuotaProbe.ParseStatusWindows(ReadFixture("codex-status-v0.149.0.txt"));
+
+        Assert.DoesNotContain(windows, window => window.Label == "5-hour");
+        Assert.Contains(windows, window => window.Label == "Weekly"
+            && window.UsedPct == 52
+            && window.ResetLabel == "17:12 on 1 Sep");
+        Assert.Contains(windows, window => window.Label == "Spark 5-hour"
+            && window.UsedPct == 0
+            && window.ResetLabel == "05:41");
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {
@@ -52,6 +108,20 @@ public class CodexQuotaProbeTests
         Assert.Equal(40, windows[0].UsedPct);
         Assert.Equal("Weekly", windows[1].Label);
         Assert.Equal(25, windows[1].UsedPct);
+    }
+
+    [Fact]
+    public void ParseStatusWindows_StillReadsLegacyFooterFallback()
+    {
+        const string snapshot = "5h 61% · weekly 42%";
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+
+        Assert.Equal(2, windows.Count);
+        Assert.Equal("5-hour", windows[0].Label);
+        Assert.Equal(39, windows[0].UsedPct);
+        Assert.Equal("Weekly", windows[1].Label);
+        Assert.Equal(58, windows[1].UsedPct);
     }
 
     // AGT-2064: the Spark sub-block header must be recognised regardless of the

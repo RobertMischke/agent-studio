@@ -28,6 +28,25 @@ public abstract class QuotaProbeBase : IQuotaProbe
     public abstract Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
 
     /// <summary>
+    /// Return the version string emitted by the same resolved executable the
+    /// PTY probe will launch. Version attribution is best-effort: an unavailable
+    /// binary is already reported by the probe itself.
+    /// </summary>
+    protected string? DetectCliVersion()
+    {
+        try
+        {
+            var (_, version, _) = _router.Get(CliType).TestCliPath();
+            return string.IsNullOrWhiteSpace(version) ? null : version;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not detect {Cli} CLI version before quota probe", CliType);
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Spawn the CLI, optionally send a slash-command sequence, wait for output to settle,
     /// return the ANSI-stripped snapshot. Always sends two Esc presses at the end so
     /// modal pickers close before the process is torn down.

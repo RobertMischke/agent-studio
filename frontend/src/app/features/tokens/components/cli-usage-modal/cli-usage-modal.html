@@ -10,7 +10,13 @@
   (backdropClick)="closeRequest.emit()">
 
   <div class="cum" [attr.data-testid]="'cli-usage-modal-body-' + cliType()">
-    @if (row()?.error; as err) {
+    @if (row()?.probeFailedAt && hasRetainedQuota()) {
+      <div class="cum__stale"
+           data-testid="cli-usage-stale-marker"
+           [appTooltip]="row()?.error ?? 'The latest quota probe failed.'">
+        {{ row()?.freshness }}
+      </div>
+    } @else if (row()?.error; as err) {
       <div class="cum__error" role="alert">{{ err }}</div>
     }
 

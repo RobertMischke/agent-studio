@@ -110,7 +110,11 @@
             <p>
               {{ row.plan ?? 'No plan reported' }}
               @if (row.source) { <span> · {{ row.source }}</span> }
-              <span> · {{ row.freshness }}</span>
+              @if (row.probeFailedAt && (row.windows.length > 0 || row.plan)) {
+                <span class="cud__stale" [cacTooltip]="row.error ?? 'The latest quota probe failed.'"> · {{ row.freshness }}</span>
+              } @else {
+                <span> · {{ row.freshness }}</span>
+              }
             </p>
           </div>
           <button type="button"
@@ -123,7 +127,7 @@
           </button>
         </header>
 
-        @if (row.error) {
+        @if (row.error && (!row.probeFailedAt || (row.windows.length === 0 && !row.plan))) {
           <div class="cud__error">{{ row.error }}</div>
         }
 

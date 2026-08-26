@@ -84,12 +84,24 @@ public sealed class QuotaService
     /// Returns the cached snapshot for every probe immediately, kicking off a background
     /// re-probe for any entry that is missing or older than the TTL.
     /// </summary>
-    public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
+    public QuotaReport GetWithBackgroundRefresh()
     {
         foreach (var k in _probes.Keys)
         {
-            var stale = !_cache.TryGetValue(k, out var s) || (DateTime.UtcNow - s.FetchedAt) > _ttl;
-            if (stale) _ = RefreshAsync(k, ct);
+            var stale = !_cache.TryGetValue(k, out var s)
+                || s.ProbeFailedAt != null
+                || (DateTime.UtcNow - s.FetchedAt) > _ttl;
+            // This refresh intentionally outlives the HTTP request. Binding a
+            // detached probe to RequestAborted caused client disconnects to
+            // surface as TaskCanceledException and made the next cache entry
+            // read "A task was canceled".
+            if (stale)
+            {
+                // ProbeAsync implementations do some synchronous executable
+                // resolution before their first await. Dispatch the whole
+                // refresh so none of that work runs on the request thread.
+                _ = Task.Run(() => RefreshAsync(k, CancellationToken.None));
+            }
         }
         return GetCached();
     }
@@ -115,6 +127,13 @@ public sealed class QuotaService
         {
             _cache.TryGetValue(cliType, out var previous);
             var snap = await ProbeOnceAsync(probe, ct);
+            if (!string.IsNullOrWhiteSpace(snap.Error))
+            {
+                snap = PreserveLastGoodOnFailure(previous, snap, DateTime.UtcNow);
+                _cache[cliType] = snap;
+                PersistCache();
+                return snap;
+            }
             snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
             snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
             _cache[cliType] = snap;
@@ -128,13 +147,15 @@ public sealed class QuotaService
             // fails right after a ground-truth invalidation (AGT-2064) must not
             // silently drop the block and re-open the admission gate.
             _cache.TryGetValue(cliType, out var prior);
-            var snap = new QuotaSnapshot
+            var failed = new QuotaSnapshot
             {
                 CliType = cliType,
                 Error = ex.Message,
+                ProbeFailedAt = DateTime.UtcNow,
                 Suspicious = prior?.Suspicious ?? false,
                 SuspiciousReason = prior?.Suspicious == true ? prior.SuspiciousReason : null
             };
+            var snap = PreserveLastGoodOnFailure(prior, failed, DateTime.UtcNow);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -147,6 +168,48 @@ public sealed class QuotaService
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(45));
         return await probe.ProbeAsync(cts.Token);
+    }
+
+    /// <summary>
+    /// A failed observation must not erase a prior successful one. Retain the
+    /// last-good values and their original <see cref="QuotaSnapshot.FetchedAt"/>,
+    /// while attaching the new failure time, CLI version and diagnostic error.
+    /// Consumers can therefore render useful numbers with an explicit stale
+    /// marker instead of replacing the card with an exception message.
+    /// </summary>
+    internal static QuotaSnapshot PreserveLastGoodOnFailure(
+        QuotaSnapshot? previous,
+        QuotaSnapshot failed,
+        DateTime failedAt)
+    {
+        var failure = failed with
+        {
+            ProbeFailedAt = failed.ProbeFailedAt ?? failedAt,
+            Error = NormalizeProbeError(failed.Error)
+        };
+
+        if (previous == null || (previous.Windows.Count == 0 && string.IsNullOrWhiteSpace(previous.Plan)))
+        {
+            return failure;
+        }
+
+        return previous with
+        {
+            CliVersion = failure.CliVersion ?? previous.CliVersion,
+            Error = failure.Error,
+            ProbeFailedAt = failure.ProbeFailedAt,
+            Suspicious = previous.Suspicious || failure.Suspicious,
+            SuspiciousReason = previous.SuspiciousReason ?? failure.SuspiciousReason
+        };
+    }
+
+    private static string NormalizeProbeError(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error)) return "Quota probe failed.";
+        return error.Equals("A task was canceled.", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("TaskCanceledException", StringComparison.OrdinalIgnoreCase)
+            ? "Quota probe timed out before the CLI panel rendered."
+            : error;
     }
 
     /// <summary>
@@ -186,7 +249,6 @@ public sealed class QuotaService
             FetchedAt = DateTime.UtcNow
         };
     }
-
     /// <summary>
     /// Ground-truth override (AGT-2064): a live launch just died with a
     /// usage-limit error, which is proof the cached snapshot is wrong no matter

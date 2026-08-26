@@ -117,6 +117,25 @@ describe('CliUsageModalComponent', () => {
     expect(first.remainingLabel).toBe('34% left');
   });
 
+  it('keeps last-good windows and renders a versioned stale marker after a failed probe', async () => {
+    const staleRow: CliUsageQuotaRow = {
+      ...codexRow,
+      cliVersion: 'codex-cli 0.149.0',
+      probeFailedAt: new Date().toISOString(),
+      freshness: 'probe failed 21:07, codex 0.149.0',
+      stale: true,
+      error: 'Quota probe timed out before the CLI panel rendered.',
+    };
+
+    const fixture = await build(staleRow, 'codex');
+    fixture.detectChanges();
+    const marker = document.querySelector('[data-testid="cli-usage-stale-marker"]');
+
+    expect(marker?.textContent).toContain('probe failed 21:07, codex 0.149.0');
+    expect(fixture.componentInstance.windows()).toHaveLength(4);
+    expect(document.querySelector('.cum__error')).toBeNull();
+  });
+
   it('labels a reported quota without a percentage as Unknown', async () => {
     const unknownRow: CliUsageQuotaRow = {
       ...row,

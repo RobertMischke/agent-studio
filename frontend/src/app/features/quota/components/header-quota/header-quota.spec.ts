@@ -163,9 +163,15 @@ describe('HeaderQuotaComponent (semantic state)', () => {
     expect(c.cardState('hot', false, false, sw, undefined, noPrimary)).toBe('hot');
   });
 
-  it('error always dominates other tones', async () => {
+  it('error is used when a failed probe has no retained values', async () => {
     const c = await buildComponent();
     expect(c.cardState('warn', true, true, undefined, undefined, noPrimary)).toBe('error');
+  });
+
+  it('stale is used when a failed probe retains last-good values', async () => {
+    const c = await buildComponent();
+    const sw: WindowDisplay = { value: '40%', barPct: 40, tone: 'ok', windowKind: 'five_hour' };
+    expect(c.cardState('ok', true, true, sw, undefined, noPrimary)).toBe('stale');
   });
 
   it('unavailable when no windows reported and no error', async () => {

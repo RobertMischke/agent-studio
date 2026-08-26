@@ -65,6 +65,12 @@
   font-size: 12px;
 }
 
+.cud__stale {
+  color: var(--studio-accent-warn-strong);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 .cud__actions { gap: 8px; }
 
 .cud__button,

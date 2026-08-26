@@ -97,6 +97,7 @@ export class CliUsageModalComponent {
   });
 
   readonly windows = computed<QuotaWindow[]>(() => this.row()?.windows ?? []);
+  readonly hasRetainedQuota = computed(() => this.windows().length > 0 || !!this.row()?.plan);
 
   /** Reshapes each reported window into its card projection (pct, tone,
    *  bar width, reset countdown). Pure derivation of the input row. */

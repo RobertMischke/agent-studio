@@ -1,0 +1,23 @@
+  › /status   /status      show current session configuration and token usage  /statusline  configure which items appear in the status line
+
+/status
+
+╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ OpenAI Codex (v0.149.0)                                                                             │
+│                                                                                                         │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                                           │
+│ information on rate limits and credits                                                                  │
+│                                                                                                         │
+│  Model:                       gpt-5.6-sol (reasoning low, summaries auto)                               │
+│  Directory:                   /redacted/worktree                                                        │
+│  Permissions:                 Workspace (Ask for approval)                                              │
+│  Agents.md:                   ../../../../AGENTS.md                                                     │
+│  Account:                     operator@example.invalid (Pro)                                            │
+│  Collaboration mode:          Default                                                                   │
+│  Session:                     00000000-0000-0000-0000-000000000000                                      │
+│                                                                                                         │
+│  Weekly limit:                [██████████░░░░░░░░░░] 48% left (resets 17:12 on 1 Sep)                   │
+│  GPT-5.3-Codex-Spark limit:                                                                             │
+│  5h limit:                    [████████████████████] 100% left (resets 05:41)                            │
+│  Weekly limit:                [████████████████████] 100% left (resets 00:41 on 3 Sep)                  │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯  › Ask Codex to do anything   gpt-5.6-sol default · /redacted/worktree

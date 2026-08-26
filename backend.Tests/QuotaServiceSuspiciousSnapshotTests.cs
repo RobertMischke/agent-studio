@@ -109,6 +109,93 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
         Assert.Equal(2, probe.Calls);             // did not wait for the TTL
     }
 
+    [Fact]
+    public async Task RefreshAsync_FailedProbePreservesLastGoodValuesAndAddsAttribution()
+    {
+        var goodAt = DateTime.UtcNow.AddMinutes(-12);
+        var failedAt = DateTime.UtcNow;
+        var good = Snap(37) with
+        {
+            FetchedAt = goodAt,
+            CliVersion = "codex-cli 0.148.0",
+            Plan = "Pro",
+            Source = "/status"
+        };
+        var failed = new QuotaSnapshot
+        {
+            CliType = "codex",
+            CliVersion = "codex-cli 0.149.0",
+            Error = "A task was canceled.",
+            ProbeFailedAt = failedAt,
+            Source = "/status"
+        };
+        var svc = NewService(new ScriptedProbe(call => call == 1 ? good : failed));
+
+        await svc.RefreshAsync("codex");
+        var result = await svc.RefreshAsync("codex");
+
+        Assert.NotNull(result);
+        Assert.Equal(goodAt, result.FetchedAt);
+        Assert.Equal("Pro", result.Plan);
+        Assert.Equal(37, Assert.Single(result.Windows).UsedPct);
+        Assert.Equal("codex-cli 0.149.0", result.CliVersion);
+        Assert.Equal(failedAt, result.ProbeFailedAt);
+        Assert.Equal("Quota probe timed out before the CLI panel rendered.", result.Error);
+    }
+
+    [Fact]
+    public async Task GetWithBackgroundRefresh_ReturnsCachedReportWhileProbeRemainsInFlight()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stale = Snap(42) with { FetchedAt = DateTime.UtcNow.AddHours(-1) };
+        var probe = new GatedProbe(stale, gate.Task, Snap(43));
+        var svc = NewService(probe);
+        await svc.RefreshAsync("codex");
+
+        var report = svc.GetWithBackgroundRefresh();
+
+        Assert.Equal(2, probe.Calls);
+        Assert.Equal(42, Assert.Single(report.Snapshots).Windows[0].UsedPct);
+        Assert.Equal(42, svc.GetCachedFor("codex")!.Windows[0].UsedPct);
+
+        gate.SetResult();
+        await AssertEventuallyAsync(() => svc.GetCachedFor("codex")!.Windows[0].UsedPct == 43);
+    }
+
+    [Fact]
+    public async Task GetWithBackgroundRefresh_DoesNotRunSynchronousProbePreambleOnCaller()
+    {
+        using var release = new ManualResetEventSlim();
+        var stale = Snap(42) with { FetchedAt = DateTime.UtcNow.AddHours(-1) };
+        var probe = new BlockingPreambleProbe(stale, release);
+        var svc = NewService(probe);
+        await svc.RefreshAsync("codex");
+
+        var getTask = Task.Run(svc.GetWithBackgroundRefresh);
+        try
+        {
+            var completed = await Task.WhenAny(getTask, Task.Delay(TimeSpan.FromSeconds(1)));
+            Assert.Same(getTask, completed);
+            Assert.Equal(42, Assert.Single((await getTask).Snapshots).Windows[0].UsedPct);
+            Assert.True(probe.SecondCallStarted.Wait(TimeSpan.FromSeconds(1)));
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    private static async Task AssertEventuallyAsync(Func<bool> predicate)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            if (predicate()) return;
+            await Task.Delay(10);
+        }
+
+        Assert.True(predicate(), "Background quota refresh did not complete.");
+    }
+
     private sealed class ScriptedProbe : IQuotaProbe
     {
         private readonly Func<int, QuotaSnapshot> _script;
@@ -139,6 +226,30 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
             if (Interlocked.Increment(ref _calls) == 1) return _first;
             await _gate;
             return _afterGate;
+        }
+    }
+
+    private sealed class BlockingPreambleProbe : IQuotaProbe
+    {
+        private readonly QuotaSnapshot _first;
+        private readonly ManualResetEventSlim _release;
+        private int _calls;
+
+        public BlockingPreambleProbe(QuotaSnapshot first, ManualResetEventSlim release)
+        {
+            _first = first;
+            _release = release;
+        }
+
+        public string CliType => "codex";
+        public ManualResetEventSlim SecondCallStarted { get; } = new();
+
+        public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref _calls) == 1) return Task.FromResult(_first);
+            SecondCallStarted.Set();
+            _release.Wait(ct);
+            return Task.FromResult(Snap(43));
         }
     }
 }

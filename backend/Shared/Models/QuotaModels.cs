@@ -40,6 +40,8 @@ public record QuotaSnapshot
 {
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
+    /// <summary>The exact CLI version that produced this snapshot, for example <c>codex-cli 0.149.0</c>.</summary>
+    public string? CliVersion { get; init; }
     /// <summary>"Pro" / "Pro+" / "Plus" / "Free" — null when unknown.</summary>
     public string? Plan { get; init; }
     public List<QuotaWindow> Windows { get; init; } = [];
@@ -49,6 +51,12 @@ public record QuotaSnapshot
     public string? RawSample { get; init; }
     /// <summary>Set when probing failed; <see cref="Plan"/>/<see cref="Windows"/> may still hold partial data.</summary>
     public string? Error { get; init; }
+    /// <summary>
+    /// UTC instant of the most recent failed refresh. When this is set the
+    /// snapshot may still contain the last successful plan and windows, whose
+    /// age remains represented by <see cref="FetchedAt"/>.
+    /// </summary>
+    public DateTime? ProbeFailedAt { get; init; }
 
     /// <summary>
     /// True when this snapshot is not yet trusted: either a single probe showed
