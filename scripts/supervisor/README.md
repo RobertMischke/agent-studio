@@ -60,6 +60,25 @@ detached and uses `playwright-core` to load the frontend. Any browser
 `pageerror` makes the update fail; an open port alone is not health evidence.
 The watcher does not call `git pull` or `git fetch` directly.
 
+The updater also owns the local Windows Task Server release boundary. Unless
+`ATP_TASK_SERVER_REQUIRED=0` is set explicitly, it publishes and installs the
+versioned `win-x64` package, registers the non-interactive S4U supervisor,
+updates the gitignored Stable `appsettings.Local.json` with
+`TaskServer:BaseUrl`, waits for Task Server readiness, and only then starts
+OrchestratorApi. The browser probe also checks direct `/healthz` and `/readyz`,
+the Stable API `/healthz`, and the proxied `/api/v1/protocol` route. The zero
+override exists for isolated updater tests and legacy deployments only; it is
+not valid for a release containing the standalone claim-path cutover.
+On a non-Windows deployment, `ATP_TASK_SERVER_INSTALL=auto` treats Task Server
+as externally supervised, still requires `/readyz` before API start, and runs
+the same post-start topology probes. Set the install value to `1` only for the
+Windows package and S4U path.
+
+If Stable was pinned at a detached release during incident recovery, the same
+verified update attaches it to the configured deployment branch after proving
+that both the detached HEAD and any existing local branch can fast-forward to
+the fetched target.
+
 Older devspaces may still have an unversioned root-level `update-stable.sh`.
 Replace that copy after updating the dev checkout, or point every caller at the
 versioned script:

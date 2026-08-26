@@ -10,6 +10,8 @@ function readOptions(argv) {
   const options = {
     frontendDir: resolve(scriptDir, '..', 'frontend'),
     url: 'http://127.0.0.1:4011',
+    apiUrl: null,
+    taskServerUrl: null,
     timeoutMs: 180_000,
     settleMs: 2_000,
   };
@@ -26,6 +28,12 @@ function readOptions(argv) {
       case '--url':
         options.url = value;
         break;
+      case '--api-url':
+        options.apiUrl = value;
+        break;
+      case '--task-server-url':
+        options.taskServerUrl = value;
+        break;
       case '--timeout-ms':
         options.timeoutMs = positiveInteger(value, flag);
         break;
@@ -39,6 +47,21 @@ function readOptions(argv) {
   }
 
   return options;
+}
+
+async function loadHealthEndpoint(url, deadline) {
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_000) });
+      if (response.ok) return;
+      lastError = new Error(`${url} returned HTTP ${response.status}.`);
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(Math.min(250, Math.max(1, deadline - Date.now())));
+  }
+  throw new Error(`Timed out waiting for ${url}: ${errorText(lastError)}`);
 }
 
 function positiveInteger(value, flag) {
@@ -93,6 +116,17 @@ async function loadOnceFrontendAcceptsConnections(page, url, deadline) {
 
 async function run() {
   const options = readOptions(process.argv.slice(2));
+  const healthDeadline = Date.now() + options.timeoutMs;
+  if (options.taskServerUrl) {
+    const taskServer = options.taskServerUrl.replace(/\/$/, '');
+    await loadHealthEndpoint(`${taskServer}/healthz`, healthDeadline);
+    await loadHealthEndpoint(`${taskServer}/readyz`, healthDeadline);
+  }
+  if (options.apiUrl) {
+    const api = options.apiUrl.replace(/\/$/, '');
+    await loadHealthEndpoint(`${api}/healthz`, healthDeadline);
+    await loadHealthEndpoint(`${api}/api/v1/protocol`, healthDeadline);
+  }
   const requireFromFrontend = createRequire(join(options.frontendDir, 'package.json'));
   const { chromium } = requireFromFrontend('playwright-core');
   const executablePath = process.env.ATP_PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
@@ -122,7 +156,10 @@ async function run() {
       throw new Error(`PAGEERROR while booting ${options.url}:\n${pageErrors.join('\n---\n')}`);
     }
 
-    console.log(`[stable-frontend-probe] Boot completed without page errors: ${options.url}`);
+    const topology = options.taskServerUrl && options.apiUrl
+      ? `; Task Server ready and API proxy healthy: ${options.taskServerUrl} -> ${options.apiUrl}`
+      : '';
+    console.log(`[stable-frontend-probe] Boot completed without page errors: ${options.url}${topology}`);
   } finally {
     await browser.close();
   }

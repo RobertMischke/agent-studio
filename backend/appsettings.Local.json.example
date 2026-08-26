@@ -35,5 +35,8 @@
 
   "Supervisor": {
     "HardCheckEnabled": true
-  }
+  },
+
+  "//TaskServer": "The planned Windows cutover writes this block into the gitignored appsettings.Local.json. Do not enable proxy mode until the legacy writer is frozen and its inventory has been imported into the standalone authority.",
+  "//TaskServer.example": { "BaseUrl": "http://127.0.0.1:5071" }
 }

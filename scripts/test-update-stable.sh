@@ -33,6 +33,7 @@ git -C "$source_checkout" remote add origin "$remote"
 git -C "$source_checkout" push --quiet -u origin main
 git --git-dir="$remote" symbolic-ref HEAD refs/heads/main
 git clone --quiet "$remote" "$stable_checkout"
+git -C "$stable_checkout" switch --quiet --detach
 
 mkdir -p \
   "$devspace" \
@@ -100,7 +101,10 @@ run_update() {
     ATP_STOP_SCRIPT="$devspace/stop-stable.sh" \
     ATP_START_SCRIPT="$devspace/start-stable.sh" \
     ATP_BOOT_PROBE_SCRIPT="$probe" \
+    ATP_BOOT_PROBE_TIMEOUT_MS="${ATP_TEST_BOOT_PROBE_TIMEOUT_MS:-180000}" \
     ATP_BOOT_PROBE_SETTLE_MS=0 \
+    ATP_TASK_SERVER_REQUIRED="${ATP_TEST_TASK_SERVER_REQUIRED:-0}" \
+    ATP_TASK_SERVER_INSTALL="${ATP_TEST_TASK_SERVER_INSTALL:-auto}" \
     ATP_TEST_STOP_MARKER="$stop_marker" \
     ATP_TEST_START_MARKER="$start_marker" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
@@ -118,6 +122,7 @@ git -C "$source_checkout" push --quiet origin main
 output=$(run_update)
 test -f "$stop_marker"
 test -f "$start_marker"
+test "$(git -C "$stable_checkout" branch --show-current)" = main
 test ! -e "$stable_checkout/frontend/.angular/cache"
 grep -q '^patched$' "$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs"
 printf '%s' "$output" | grep -q 'Invalidated the Angular/Vite optimizer cache'
@@ -140,6 +145,28 @@ printf '%s' "$crash_output" | grep -q 'PAGEERROR'
 printf '%s' "$crash_output" | grep -q 'injected boot crash'
 if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
+  exit 1
+fi
+
+# A decoupled release must never start the API when the required standalone
+# authority is absent. Keep this timeout small because the endpoint is
+# intentionally unreachable in the fixture.
+printf '%s\n' 'release requiring task server' > "$source_checkout/release.txt"
+git -C "$source_checkout" commit --quiet -am 'require standalone task server'
+git -C "$source_checkout" push --quiet origin main
+rm -f "$start_marker"
+
+set +e
+task_server_output=$(ATP_TEST_TASK_SERVER_REQUIRED=1 ATP_TEST_TASK_SERVER_INSTALL=0 \
+  ATP_TEST_BOOT_PROBE_TIMEOUT_MS=1000 run_update)
+task_server_rc=$?
+set -e
+
+test "$task_server_rc" -ne 0
+test ! -e "$start_marker"
+printf '%s' "$task_server_output" | grep -q 'Timed out waiting for required endpoint'
+if printf '%s' "$task_server_output" | grep -q 'Stable started and healthy'; then
+  printf '%s\n' 'updater reported health without the required Task Server' >&2
   exit 1
 fi
 

@@ -50,4 +50,31 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("task-server backup --name timer", timerService);
         Assert.Contains("EnvironmentFile=/etc/agent-orchestrator/server.env", timerService);
     }
+
+    [Fact]
+    public void Windows_cutover_uses_s4u_supervision_versioned_install_and_authority_probes()
+    {
+        var root = ProtocolTests.RepositoryRoot();
+        var windows = Path.Combine(root, "deploy", "windows", "task-server");
+        var registration = File.ReadAllText(Path.Combine(windows, "register-task-server.ps1"));
+        var installer = File.ReadAllText(Path.Combine(windows, "install-task-server.ps1"));
+        var rehearsal = File.ReadAllText(Path.Combine(windows, "rehearse-legacy-migration.ps1"));
+        var updater = File.ReadAllText(Path.Combine(root, "scripts", "update-stable.sh"));
+        var probe = File.ReadAllText(Path.Combine(root, "scripts", "stable-frontend-boot-probe.mjs"));
+
+        Assert.Contains("-LogonType S4U", registration);
+        Assert.Contains("-AtStartup", registration);
+        Assert.Contains("PublishProfile=win-x64", installer);
+        Assert.Contains("New-Item -ItemType Junction", installer);
+        Assert.Contains("TaskServer", installer);
+        Assert.Contains("legacy-copy", rehearsal);
+        Assert.Contains("legacy-authority-import-not-implemented", rehearsal);
+        Assert.Contains("expectedMigrationId", rehearsal);
+        Assert.Contains("integritySha256", rehearsal);
+        Assert.True(
+            updater.IndexOf("Publishing, installing, and starting Task Server", StringComparison.Ordinal)
+            < updater.IndexOf("Starting Stable", StringComparison.Ordinal));
+        Assert.Contains("/readyz", probe);
+        Assert.Contains("/api/v1/protocol", probe);
+    }
 }
