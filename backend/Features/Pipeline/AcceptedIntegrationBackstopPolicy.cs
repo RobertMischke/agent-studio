@@ -64,15 +64,11 @@ internal static class AcceptedIntegrationBackstopPolicy
         if (candidate.HasHistoricalVerification) return false;
         if (!candidate.HasIntegrationRecord) return false;
         if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(candidate.Task)) return false;
-        if (candidate.Task.State == TaskStates.Archive) return false;
-        if (candidate.Task.State == TaskStates.Completed) return true;
-        return candidate.Task.State == TaskStates.HumanReview
-               && (string.Equals(
-                       candidate.Task.Phase,
-                       LifecyclePhases.Integrating,
-                       StringComparison.Ordinal)
-                   || (candidate.Task.Tags ?? []).Any(IntegrationStatuses.IsPendingTag));
+        return IsAcceptedAlertLane(candidate.Task);
     }
+
+    public static bool IsAcceptedAlertLane(TaskInfo task)
+        => task.State is TaskStates.Completed or TaskStates.Archive;
 
     public static AcceptedIntegrationSweepSummary Summarize(
         IEnumerable<MergeIntoIntegrationOutcome> outcomes)

@@ -122,10 +122,10 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
     }
 
     [Theory]
-    [InlineData(TaskStates.Archive, true, false)]
+    [InlineData(TaskStates.Archive, true, true)]
     [InlineData(TaskStates.Completed, false, false)]
     [InlineData(TaskStates.Completed, true, true)]
-    [InlineData(TaskStates.HumanReview, true, true)]
+    [InlineData(TaskStates.HumanReview, true, false)]
     public void AlertCandidate_RequiresCurrentLaneAndIntegrationRecord(
         string state,
         bool hasIntegrationRecord,
@@ -142,6 +142,34 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
         };
 
         Assert.Equal(expected, AcceptedIntegrationBackstopPolicy.IsAlertCandidate(candidate));
+    }
+
+    [Theory]
+    [InlineData(null, IntegrationStatuses.Partial, "gate-failed")]
+    [InlineData(null, IntegrationStatuses.ConflictSkipped, "delivery-gate-failed")]
+    [InlineData(LifecyclePhases.Integrating, IntegrationStatuses.Pending, null)]
+    public void Alert_HumanReviewIntegrationFailures_AreNotAcceptedCards(
+        string? phase,
+        string integrationStatus,
+        string? lastOutcome)
+    {
+        var candidate = Candidate("QS-70", 45, lastOutcome, integrationStatus) with
+        {
+            Task = Candidate("QS-70", 45, lastOutcome, integrationStatus).Task with
+            {
+                State = TaskStates.HumanReview,
+                Phase = phase,
+                Tags = [IntegrationStatuses.PendingTag],
+            },
+        };
+
+        var snapshot = AcceptedIntegrationBackstopPolicy.EvaluateAlert(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [candidate]);
+
+        Assert.False(snapshot.Active);
+        Assert.Empty(snapshot.Items);
     }
 
     [Theory]
@@ -192,8 +220,8 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
                 Key = key,
                 Title = $"Delivery {key}",
                 ProjectName = "Agent Studio",
-                State = TaskStates.HumanReview,
-                Phase = LifecyclePhases.Integrating,
+                State = TaskStates.Completed,
+                Phase = null,
                 Mode = TaskModes.Coding,
                 EnteredLaneAt = Now.AddMinutes(-acceptedMinutesAgo),
             },

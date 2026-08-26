@@ -325,6 +325,34 @@ public class WorkspaceManagementServiceTests : IDisposable
     }
 
     [Fact]
+    public void DeleteProjectStorage_DuplicateDisplayNames_RemovesOnlyMatchingPath()
+    {
+        var realStorage = Path.Combine(_taskRepository, "projects", "PROJ-016");
+        var ghostStorage = Path.Combine(_taskRepository, "legacy", "quality-studio", "jobs");
+        Directory.CreateDirectory(realStorage);
+        Directory.CreateDirectory(ghostStorage);
+        var (svc, config) = Build(seed:
+        [
+            ("Quality Studio", realStorage),
+            ("Quality Studio", ghostStorage),
+        ]);
+
+        var result = svc.DeleteProjectStorage(ghostStorage);
+
+        Assert.Equal(WorkspaceManagementOutcome.Ok, result.Outcome);
+        Assert.False(Directory.Exists(ghostStorage));
+        Assert.True(Directory.Exists(realStorage));
+
+        var written = JsonDocument.Parse(
+            File.ReadAllText(Path.Combine(_contentRoot, "appsettings.Local.json"))).RootElement;
+        var remaining = Assert.Single(written.GetProperty("WatchPaths").EnumerateArray());
+        Assert.Equal("Quality Studio", remaining.GetProperty("Name").GetString());
+        Assert.Equal(realStorage, remaining.GetProperty("Path").GetString());
+        var configured = Assert.Single(config.GetSection("WatchPaths").GetChildren());
+        Assert.Equal(realStorage, configured.GetSection("Path").Value);
+    }
+
+    [Fact]
     public void DeleteProjectStorage_RemovesEmptyRegistryProjectContainer()
     {
         var (svc, _) = Build();

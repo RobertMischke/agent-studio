@@ -104,7 +104,7 @@ public class TaskScannerService : ITaskScanner
         var resolved = new List<WatchPathEntry>(raw.Count);
         foreach (var entry in raw)
         {
-            var resolvedEntry = ResolveWatchPath(entry);
+            var resolvedEntry = ResolveConfiguredWatchPath(entry);
             if (!string.IsNullOrWhiteSpace(resolvedEntry.Path))
                 resolved.Add(resolvedEntry);
         }
@@ -193,7 +193,7 @@ public class TaskScannerService : ITaskScanner
     ///    The central <c>TaskRepository</c> path comes from app configuration.
     /// 3. Otherwise, fall back to <c>&lt;RootPath&gt;/.orchestrator/jobs</c> (legacy layout).
     /// </summary>
-    private WatchPathEntry ResolveWatchPath(WatchPathEntry entry)
+    internal WatchPathEntry ResolveConfiguredWatchPath(WatchPathEntry entry)
     {
         if (!string.IsNullOrWhiteSpace(entry.Path))
         {
