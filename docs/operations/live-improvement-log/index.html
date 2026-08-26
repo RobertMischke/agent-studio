@@ -182,6 +182,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done, publish pending)</td>
   <td>One of two things awaiting an operator v-tag on ai-patterns.dev: the XSS fix (75abd49) and the two thesis articles (Skip the PR, Memory Management). Both are on main, unpublished until tagged.</td>
 </tr>
+<tr>
+  <td class="meta">08-26 09:xx</td>
+  <td><strong>"System appears stalled" &mdash; 6th time, same single root cause, now being fixed permanently.</strong> Runner ran fine overnight (131 claims/12h); the pipeline froze only in HUMAN-REVIEW because the session-bound acceptance/requeue tick died with the cron again. ONE manual tick cleared it instantly: 38 human-review &rarr; 8 in-progress + 23 ready in one pass (AGT-2677 gate-visibility integrated+archived on the way). The band-aid (re-create the cron each session) fails every night.</td>
+  <td class="v candidate">new-candidate &rarr; card cut (highest priority)</td>
+  <td>AGT-2683: platform-side acceptance rail (2662 scenario 2) &mdash; a backend HostedService that auto-accepts integrated cards, requeues conflict-skipped with bounded retry+escalation, respects operator holds, ON by default. The session orchestrator becomes observer, not mover. Ends this class permanently. Also improved: heal_check.sh now auto-kills 2h-wedgers + heals tunnel/lease between ticks; 13-min supervision cron re-armed.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
