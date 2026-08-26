@@ -87,19 +87,27 @@ EOF
 cat > "$devspace/start-stable.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
-: > "$ATP_TEST_START_MARKER"
+printf '%s\n' start >> "$ATP_TEST_START_MARKER"
 EOF
 cat > "$devspace/start-task-server.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
-test ! -e "$ATP_TEST_START_MARKER"
+if [ "$ATP_TEST_EXPECT_STABLE_STOPPED" -eq 1 ]; then
+  test ! -e "$ATP_TEST_START_MARKER"
+else
+  test -e "$ATP_TEST_START_MARKER"
+fi
 : > "$ATP_TEST_TASK_SERVER_START_MARKER"
 EOF
 cat > "$devspace/probe-task-server.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
 test -e "$ATP_TEST_TASK_SERVER_START_MARKER"
-test ! -e "$ATP_TEST_START_MARKER"
+if [ "$ATP_TEST_EXPECT_STABLE_STOPPED" -eq 1 ]; then
+  test ! -e "$ATP_TEST_START_MARKER"
+else
+  test -e "$ATP_TEST_START_MARKER"
+fi
 : > "$ATP_TEST_TASK_SERVER_PROBE_MARKER"
 EOF
 cat > "$fake_bin/npm" <<'EOF'
@@ -124,6 +132,7 @@ run_update() {
     ATP_TEST_START_MARKER="$start_marker" \
     ATP_TEST_TASK_SERVER_START_MARKER="$task_server_start_marker" \
     ATP_TEST_TASK_SERVER_PROBE_MARKER="$task_server_probe_marker" \
+    ATP_TEST_EXPECT_STABLE_STOPPED="${ATP_TEST_EXPECT_STABLE_STOPPED:-1}" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
     ATP_TEST_STALE_CACHE="$stable_checkout/frontend/.angular/cache/deps.js" \
     PATH="$fake_bin:$PATH" \
@@ -147,6 +156,12 @@ printf '%s' "$output" | grep -q 'Invalidated the Angular/Vite optimizer cache'
 printf '%s' "$output" | grep -q 'Boot completed without page errors'
 printf '%s' "$output" | grep -q 'Starting supervised Task Server before Stable API'
 printf '%s' "$output" | grep -q 'Stable started and healthy'
+
+# A no-source-change watchdog tick still supervises and probes Task Server but
+# must not start a second Stable API process.
+no_change_output=$(ATP_TEST_EXPECT_STABLE_STOPPED=0 run_update)
+test "$(wc -l < "$start_marker")" -eq 1
+printf '%s' "$no_change_output" | grep -q 'leaving the running API process in place'
 
 # A separate release injects an application boot crash. An open port and a
 # successful document response must not allow the updater to claim health.

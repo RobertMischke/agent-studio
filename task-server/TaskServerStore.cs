@@ -2096,6 +2096,7 @@ public sealed partial class TaskServerStore
     }
 
     internal async Task ImportLegacyBatchAsync(
+        string migrationId,
         string workspaceName,
         IReadOnlyList<LegacyProjectImport> projects,
         LegacyAuthorityImport authority,
@@ -2107,6 +2108,30 @@ public sealed partial class TaskServerStore
             throw new TaskServerConflictException("maintenance-required", "Legacy import requires maintenance mode.");
         await InWriteTransactionAsync(async (connection, transaction) =>
         {
+            var completedMigration = Convert.ToString(await ScalarAsync(
+                connection,
+                "SELECT value FROM meta WHERE key = 'legacy_migration_id';",
+                ct,
+                transaction), CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(completedMigration))
+                throw new TaskServerConflictException(
+                    "legacy-migration-already-completed",
+                    $"This store already imported legacy migration '{completedMigration}'. Restore the pre-import backup before importing again.");
+            var existingAuthority = Convert.ToInt64(await ScalarAsync(connection, """
+                SELECT (SELECT count(*) FROM workspaces)
+                     + (SELECT count(*) FROM projects)
+                     + (SELECT count(*) FROM tasks)
+                     + (SELECT count(*) FROM runners)
+                     + (SELECT count(*) FROM runs)
+                     + (SELECT count(*) FROM leases)
+                     + (SELECT count(*) FROM review_subjects)
+                     + (SELECT count(*) FROM review_attempts);
+                """, ct, transaction) ?? 0L, CultureInfo.InvariantCulture);
+            if (existingAuthority > 0)
+                throw new TaskServerConflictException(
+                    "legacy-target-not-empty",
+                    "Legacy import requires an empty Task Server authority store. Restore a clean first-start store before retrying.");
+
             var workspaceId = DeterministicId("wsp", workspaceName);
             var now = Iso(UtcNow);
             await ExecuteAsync(connection, """
@@ -2167,13 +2192,42 @@ public sealed partial class TaskServerStore
                 }
             }
 
+            foreach (var runner in authority.Runners)
+            {
+                var capabilities = JsonSerializer.Serialize(
+                    string.IsNullOrWhiteSpace(runner.ExecutorRole)
+                        ? Array.Empty<string>()
+                        : [runner.ExecutorRole]);
+                await ExecuteAsync(connection, """
+                    INSERT INTO runners(
+                        id, name, host_id, instance_id, runner_version, protocol_version,
+                        capabilities_json, status, registered_at, last_seen_at,
+                        effective_max_parallelism)
+                    VALUES ($id, $name, $host, $instance, 'legacy-migration', $protocol,
+                            $capabilities, $status, $registered, $seen, $effective);
+                    """, ct, transaction,
+                    ("$id", runner.RunnerId), ("$name", runner.Name), ("$host", runner.HostId),
+                    ("$instance", runner.InstanceId), ("$protocol", TaskServerProtocol.Current),
+                    ("$capabilities", capabilities), ("$status", runner.Status),
+                    ("$registered", Iso(runner.RegisteredAt)), ("$seen", Iso(runner.LastSeenAt)),
+                    ("$effective", runner.EffectiveMaxParallelism));
+                if (runner.ExecutorRole == ReviewCapabilities.CodingExecutor)
+                    await ExecuteAsync(connection, """
+                        INSERT INTO runtime_capacity_settings(
+                            host_id, max_parallelism, target_load_percent, ramp_strategy, version, updated_at)
+                        VALUES ($host, $max, 80, 'balanced', 1, $updated)
+                        ON CONFLICT(host_id) DO NOTHING;
+                        """, ct, transaction,
+                        ("$host", runner.HostId),
+                        ("$max", Math.Clamp(runner.DesiredMaxParallelism ?? runner.EffectiveMaxParallelism ?? 2, 1, 256)),
+                        ("$updated", Iso(runner.LastSeenAt)));
+            }
+
             foreach (var run in authority.Runs)
             {
                 var taskId = projects.SelectMany(project => project.Tasks)
                     .SingleOrDefault(task => string.Equals(task.TaskKey, run.TaskKey, StringComparison.OrdinalIgnoreCase))?.TaskId
                     ?? throw new InvalidDataException($"RunAttempt '{run.RunId}' refers to unknown task '{run.TaskKey}'.");
-                if (run.Lease is not null)
-                    await ImportLegacyRunnerAsync(connection, transaction, run.Lease, ct);
                 var status = LegacyAttemptStatus(run.Status, run.TerminalAt, run.Lease);
                 await ExecuteAsync(connection, """
                     INSERT INTO runs(id, task_id, status, runner_id, fence, created_at, started_at, finished_at, result_sha, repository_id)
@@ -2201,14 +2255,25 @@ public sealed partial class TaskServerStore
                         ("$status", status == "process-unknown" ? "process-unknown" : "released"));
             }
 
+            foreach (var fence in authority.Fences)
+            {
+                var taskId = projects.SelectMany(project => project.Tasks)
+                    .SingleOrDefault(task => string.Equals(task.TaskKey, fence.TaskKey, StringComparison.OrdinalIgnoreCase))?.TaskId;
+                if (taskId is null)
+                    throw new InvalidDataException($"Fence history refers to unknown task '{fence.TaskKey}'.");
+                await ExecuteAsync(connection, """
+                    INSERT INTO fence_counters(task_id, last_fence)
+                    VALUES ($task, $fence)
+                    ON CONFLICT(task_id) DO UPDATE SET last_fence = MAX(last_fence, excluded.last_fence);
+                    """, ct, transaction, ("$task", taskId), ("$fence", fence.LastFence));
+            }
+
             var reviewNumbers = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var review in authority.Reviews.OrderBy(item => item.CreatedAt))
             {
                 var taskId = projects.SelectMany(project => project.Tasks)
                     .SingleOrDefault(task => string.Equals(task.TaskKey, review.TaskKey, StringComparison.OrdinalIgnoreCase))?.TaskId
                     ?? throw new InvalidDataException($"ReviewAttempt '{review.AttemptId}' refers to unknown task '{review.TaskKey}'.");
-                if (review.Lease is not null)
-                    await ImportLegacyRunnerAsync(connection, transaction, review.Lease, ct);
                 var status = LegacyAttemptStatus(review.Status, review.TerminalAt, review.Lease);
                 await ExecuteAsync(connection, """
                     INSERT INTO review_subjects(
@@ -2247,6 +2312,7 @@ public sealed partial class TaskServerStore
 
             await SetMetaAsync(connection, transaction, "legacy_authority_epoch",
                 authority.AuthorityEpoch.ToString(CultureInfo.InvariantCulture), ct);
+            await SetMetaAsync(connection, transaction, "legacy_migration_id", migrationId, ct);
 
             await AuditAsync(connection, transaction, actorId, "legacy.imported", "server", _serverId,
                 JsonSerializer.Serialize(new { workspaceName, projects = projects.Count, tasks = projects.Sum(p => p.Tasks.Count), runs = authority.Runs.Count, reviews = authority.Reviews.Count, authority.AuthorityEpoch }), ct);
@@ -2265,21 +2331,6 @@ public sealed partial class TaskServerStore
             _ => terminalAt is null ? "process-unknown" : "failed",
         };
     }
-
-    private static async Task ImportLegacyRunnerAsync(
-        SqliteConnection connection,
-        SqliteTransaction transaction,
-        LegacyLeaseImport lease,
-        CancellationToken ct)
-        => await ExecuteAsync(connection, """
-            INSERT INTO runners(id, name, host_id, instance_id, runner_version, protocol_version,
-                                capabilities_json, status, registered_at, last_seen_at)
-            VALUES ($id, $id, $host, $instance, 'legacy-migration', $protocol, '[]',
-                    'process-unknown', $acquired, $acquired)
-            ON CONFLICT(id) DO NOTHING;
-            """, ct, transaction,
-            ("$id", lease.RunnerId), ("$host", lease.HostId), ("$instance", lease.InstanceId),
-            ("$protocol", TaskServerProtocol.Current), ("$acquired", Iso(lease.AcquiredAt)));
 
     private async Task ApplyMigrationsAsync(SqliteConnection connection, CancellationToken ct)
     {
@@ -3531,11 +3582,27 @@ internal sealed record LegacyArtifactImport(
 
 internal sealed record LegacyAuthorityImport(
     long AuthorityEpoch,
+    IReadOnlyList<LegacyRunnerImport> Runners,
     IReadOnlyList<LegacyRunImport> Runs,
-    IReadOnlyList<LegacyReviewImport> Reviews)
+    IReadOnlyList<LegacyReviewImport> Reviews,
+    IReadOnlyList<LegacyTaskFenceImport> Fences)
 {
-    public static LegacyAuthorityImport Empty { get; } = new(0, [], []);
+    public static LegacyAuthorityImport Empty { get; } = new(0, [], [], [], []);
 }
+
+internal sealed record LegacyRunnerImport(
+    string RunnerId,
+    string Name,
+    string HostId,
+    string InstanceId,
+    string? ExecutorRole,
+    string Status,
+    DateTime RegisteredAt,
+    DateTime LastSeenAt,
+    int? DesiredMaxParallelism,
+    int? EffectiveMaxParallelism);
+
+internal sealed record LegacyTaskFenceImport(string TaskKey, long LastFence);
 
 internal sealed record LegacyRunImport(
     string RunId,

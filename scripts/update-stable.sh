@@ -155,8 +155,12 @@ case "$task_server_probe_script" in
     ;;
 esac
 
-log "Starting Stable"
-DETACH=1 "$start_script"
+if [ "$update_needed" -eq 1 ]; then
+  log "Starting Stable"
+  DETACH=1 "$start_script"
+else
+  log "Stable source is unchanged; leaving the running API process in place"
+fi
 
 log "Loading $frontend_url in a headless browser"
 node "$probe_script" \

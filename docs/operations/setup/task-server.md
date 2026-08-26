@@ -1,7 +1,7 @@
 # Task Server deployment and recovery
 
-Status: production bootstrap, topology release, and sole v1 ownership contract,
-AGT-2192/AGT-2196/AGT-2330, 2026-07-25.
+Status: production bootstrap, topology release, sole v1 ownership contract, and
+local Windows cutover gate, AGT-2192/AGT-2196/AGT-2330/AGT-2663, 2026-08-26.
 
 This runbook implements the Task Server boundary from
 [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md).
@@ -361,17 +361,22 @@ become resource identity.
 The inventory reads both the current `task.json` layout and the older
 `job.json` layout. It hashes `.metadata/attempt-authority.json` into the
 migration ID and reports coding Runs, leases, ReviewAttempts, and the legacy
-authority epoch. Import preserves RunAttempt and ReviewAttempt IDs and their
-monotonic fences. Every unresolved coding or review lease enters the new store
-as `process-unknown`; it cannot be reclaimed until the operator proves process
-containment. A malformed authority record or an attempt that refers to a task
-outside the frozen inventory fails the transaction.
+authority epoch. It also inventories runner service identities from
+`identities/*.json`, including host capacity settings, and infers identities
+that hold attempt authority when their identity file is absent. Import
+preserves runner, RunAttempt, and ReviewAttempt IDs plus every monotonic fence,
+including task fence history that is higher than the latest retained attempt.
+Every unresolved coding or review lease enters the new store as
+`process-unknown`; it cannot be reclaimed until the operator proves process
+containment. A malformed authority record, mixed coding and review authority
+on one executor identity, an attempt that refers to a task outside the frozen
+inventory, or a non-empty target authority store fails the transaction.
 
 1. Copy the complete TaskRepository to an isolated rehearsal directory. Call
    `POST /api/v1/management/migrations/legacy/inventory` with the copied root
    and workspace name. Save the project/task/event/artifact counts,
-   Run/lease/ReviewAttempt counts, authority epoch, warnings, evidence-Git
-   roots, and migration ID.
+   runner identity/Run/lease/ReviewAttempt counts, authority epoch, warnings,
+   evidence-Git roots, and migration ID.
 2. Import the rehearsal inventory into a disposable Task Server data directory
    in `Maintenance`. Compare all counts, the returned integrity digest, attempt
    IDs, fence counters, and `process-unknown` rows. Preserve the report before

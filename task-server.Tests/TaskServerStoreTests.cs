@@ -457,17 +457,21 @@ public sealed class TaskServerStoreTests
         Directory.CreateDirectory(activeTaskDirectory);
         Directory.CreateDirectory(reviewTaskDirectory);
         Directory.CreateDirectory(Path.Combine(legacy.Path, ".metadata"));
+        Directory.CreateDirectory(Path.Combine(legacy.Path, "identities"));
         await File.WriteAllTextAsync(Path.Combine(activeTaskDirectory, "task.json"), """
             {"id":"active-task","key":"AGT-11","title":"Active migrated task","state":"3-progress","createdAt":"2026-08-16T18:00:00Z"}
             """);
         await File.WriteAllTextAsync(Path.Combine(reviewTaskDirectory, "task.json"), """
             {"id":"review-task","key":"AGT-12","title":"Review migrated task","state":"4-auto-review","createdAt":"2026-08-16T17:00:00Z"}
             """);
+        await File.WriteAllTextAsync(Path.Combine(legacy.Path, "identities", "runner-1.json"), """
+            {"id":"runner-1","displayName":"Windows coding runner","kind":"service","registeredAt":"2026-08-01T08:00:00Z","lastSeenAt":"2026-08-16T18:02:00Z","runnerDesiredMaxParallelism":4,"runnerEffectiveMaxParallelism":3}
+            """);
         await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"), """
             {
               "schemaVersion": 4,
               "authorityEpoch": 9,
-              "lastFenceByTask": {"AGT-11": 41, "AGT-12": 42},
+              "lastFenceByTask": {"AGT-11": 51, "AGT-12": 42},
               "runAttempts": [
                 {
                   "attemptId":"run-active", "taskKey":"AGT-11", "repositoryId":"repo-1",
@@ -497,14 +501,16 @@ public sealed class TaskServerStoreTests
         var request = new LegacyMigrationRequest(legacy.Path, "Production", true);
         var inventory = await migration.InventoryAsync(request, default);
         Assert.Equal(2, inventory.Tasks);
+        Assert.Equal(2, inventory.RunnerIdentities);
         Assert.Equal(2, inventory.Runs);
-        Assert.Equal(1, inventory.Leases);
+        Assert.Equal(2, inventory.Leases);
         Assert.Equal(1, inventory.ReviewAttempts);
         Assert.Equal(9, inventory.AuthorityEpoch);
 
         await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "dry-run cutover"), "operator", default);
         var result = await migration.ImportAsync(request with { ExpectedMigrationId = inventory.MigrationId }, "operator", default);
         Assert.Equal(2, result.Runs);
+        Assert.Equal(2, result.RunnerIdentities);
         Assert.Equal(1, result.ReviewAttempts);
 
         await using var connection = new SqliteConnection($"Data Source={store.DatabasePath};Pooling=False");
@@ -512,9 +518,15 @@ public sealed class TaskServerStoreTests
         Assert.Equal(2L, await ScalarAsync(connection, "SELECT count(*) FROM runs;"));
         Assert.Equal("process-unknown", await ScalarAsync(connection, "SELECT status FROM leases WHERE lease_id = 'lease-active';"));
         Assert.Equal("process-unknown", await ScalarAsync(connection, "SELECT status FROM review_attempts WHERE id = 'review-active';"));
-        Assert.Equal(41L, await ScalarAsync(connection, "SELECT last_fence FROM fence_counters WHERE task_id = (SELECT id FROM tasks WHERE task_key = 'AGT-11');"));
+        Assert.Equal(51L, await ScalarAsync(connection, "SELECT last_fence FROM fence_counters WHERE task_id = (SELECT id FROM tasks WHERE task_key = 'AGT-11');"));
         Assert.Equal(42L, await ScalarAsync(connection, "SELECT last_fence FROM review_fence_counters WHERE subject_id = 'subject-1';"));
+        Assert.Equal("Windows coding runner", await ScalarAsync(connection, "SELECT name FROM runners WHERE id = 'runner-1';"));
+        Assert.Equal(4L, await ScalarAsync(connection, "SELECT max_parallelism FROM runtime_capacity_settings WHERE host_id = 'host-1';"));
         Assert.Equal("9", await ScalarAsync(connection, "SELECT value FROM meta WHERE key = 'legacy_authority_epoch';"));
+
+        var secondImport = await Assert.ThrowsAsync<TaskServerConflictException>(() => migration.ImportAsync(
+            request with { ExpectedMigrationId = inventory.MigrationId }, "operator", default));
+        Assert.Equal("legacy-migration-already-completed", secondImport.Code);
     }
 
     [Fact]
