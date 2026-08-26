@@ -26,6 +26,8 @@ import {
   hostIsStale,
   hostStatusLabel,
   hostStatusTone,
+  latestCliRepair,
+  localCliRepairNote,
   meterTone,
   ramUsedPct,
   relativeHeartbeat,
@@ -218,6 +220,11 @@ export class RemoteHostCardComponent {
   });
   readonly loadLabel = computed(() => this.loadPct() === null ? null : `${this.loadPct()}%`);
   readonly releaseLabel = computed(() => this.host().releaseId?.trim() || null);
+  readonly cliRepair = computed(() => latestCliRepair([this.host()]));
+  readonly cliRepairNote = computed(() => {
+    const repair = this.cliRepair();
+    return repair ? localCliRepairNote(repair) : null;
+  });
   readonly detailId = computed(() => `remote-host-detail-${this.host().id.replace(/[^a-zA-Z0-9_-]/g, '-')}`);
   readonly healthyCapabilityCount = computed(() => {
     const health = this.host().capabilityHealth ?? [];
@@ -260,6 +267,15 @@ export class RemoteHostCardComponent {
 
   latestAuthTransition(badge: ProviderAuthBadge) {
     return badge.history.at(-1) ?? null;
+  }
+
+  cliRepairTooltip(): string {
+    const repair = this.cliRepair();
+    if (!repair) return '';
+    const versions = repair.state === 'repaired'
+      ? `Version ${repair.cliVersionBefore ?? repair.packageVersionBefore ?? 'unknown'} → ${repair.cliVersionAfter ?? repair.packageVersionAfter ?? 'unknown'}.`
+      : 'The automatic repair did not restore the CLI command.';
+    return `${repair.detail} ${versions}`;
   }
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }

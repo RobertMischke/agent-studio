@@ -23,6 +23,8 @@ import { UsageHoverPanelComponent } from '../../../tokens';
 import {
   deriveBoardRunningTruth,
   freshRemoteTelemetrySlots,
+  latestCliRepair,
+  localCliRepairNote,
   RemoteHostsService,
   ReviewQueueService,
 } from '../../../remote-hosts';
@@ -139,6 +141,19 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   readonly hostLoad = computed(() =>
     summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
+  readonly cliRepair = computed(() => latestCliRepair(this.remoteHosts.hosts()));
+  readonly cliRepairLabel = computed(() => {
+    const repair = this.cliRepair();
+    return repair ? localCliRepairNote(repair) : '';
+  });
+  readonly cliRepairTooltip = computed(() => {
+    const repair = this.cliRepair();
+    if (!repair) return '';
+    const versions = repair.state === 'repaired'
+      ? `Version ${repair.cliVersionBefore ?? repair.packageVersionBefore ?? 'unknown'} to ${repair.cliVersionAfter ?? repair.packageVersionAfter ?? 'unknown'}.`
+      : 'Automatic repair did not restore the command.';
+    return `${repair.cliType}: ${repair.detail} ${versions}`;
+  });
 
   readonly reviewSnapshot = computed(() => this.reviewQueue.snapshot());
 

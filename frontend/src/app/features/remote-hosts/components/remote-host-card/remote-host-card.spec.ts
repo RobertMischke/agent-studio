@@ -188,6 +188,38 @@ describe('RemoteHostCardComponent', () => {
       .toContain('ready → unavailable');
   });
 
+  it('shows the local CLI repair as a quiet hosts note and reserves failure tone for an active failure', () => {
+    const repaired = mount({
+      ...HOST,
+      role: 'local',
+      cliRepairs: [{
+        cliType: 'claude', state: 'repaired', occurredAt: '2026-08-18T09:05:00Z',
+        cliVersionBefore: '2.1.231', cliVersionAfter: '2.1.234',
+        packageVersionBefore: '2.1.234', packageVersionAfter: '2.1.234',
+        detail: 'CLI repaired at 2026-08-18T09:05:00Z.',
+      }],
+    });
+    const success = repaired.nativeElement.querySelector(
+      '[data-testid="remote-host-cli-repair-note"]',
+    ) as HTMLElement;
+    expect(success.textContent).toContain('CLI repaired at');
+    expect(success.textContent).toContain('2.1.234');
+    expect(success.getAttribute('data-state')).toBe('repaired');
+
+    const failed = mount({
+      ...HOST,
+      role: 'local',
+      cliRepairs: [{
+        cliType: 'codex', state: 'failed', occurredAt: '2026-08-18T10:00:00Z',
+        cliVersionBefore: '0.144.0', cliVersionAfter: null,
+        packageVersionBefore: '0.144.1', packageVersionAfter: '0.144.1',
+        detail: 'CLI repair failed.',
+      }],
+    }).nativeElement.querySelector('[data-testid="remote-host-cli-repair-note"]') as HTMLElement;
+    expect(failed.textContent).toContain('CLI repair failed at');
+    expect(failed.getAttribute('data-state')).toBe('failed');
+  });
+
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
     const el: HTMLElement = mount({
       ...HOST,

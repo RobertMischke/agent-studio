@@ -94,6 +94,42 @@ export interface HostCliQuota {
   resetLabel: string | null;
 }
 
+/** Latest durable local repair outcome for one globally installed npm CLI. */
+export interface LocalCliRepairStatus {
+  cliType: string;
+  state: 'repaired' | 'failed';
+  occurredAt: string;
+  cliVersionBefore: string | null;
+  cliVersionAfter: string | null;
+  packageVersionBefore: string | null;
+  packageVersionAfter: string | null;
+  detail: string;
+}
+
+export interface LocalCliRepairStatusResponse {
+  observedAt: string;
+  repairs: readonly LocalCliRepairStatus[];
+}
+
+export function latestCliRepair(
+  hosts: readonly Pick<RemoteHost, 'cliRepairs'>[],
+): LocalCliRepairStatus | null {
+  return hosts
+    .flatMap(host => host.cliRepairs ?? [])
+    .filter(repair => Number.isFinite(Date.parse(repair.occurredAt)))
+    .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))[0] ?? null;
+}
+
+export function localCliRepairNote(repair: LocalCliRepairStatus): string {
+  const occurredAt = new Date(repair.occurredAt);
+  const time = Number.isNaN(occurredAt.getTime())
+    ? repair.occurredAt
+    : occurredAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return repair.state === 'failed'
+    ? `CLI repair failed at ${time}`
+    : `CLI repaired at ${time}`;
+}
+
 /**
  * Host system properties (Robert addendum 2026-07-09): RAM, CPU, disk. The
  * remote runner reports these in its heartbeat; the backend exposes the local
@@ -266,6 +302,8 @@ export interface RemoteHost {
   capabilities: readonly string[];
   /** Per-CLI quota windows from the runner probes. */
   cliQuotas: readonly HostCliQuota[];
+  /** Local control-plane npm shim repair history, absent on remote hosts. */
+  cliRepairs?: readonly LocalCliRepairStatus[];
   /** Live system stats, or null when the host reports none (e.g. retired). */
   stats: HostSystemStats | null;
   telemetry?: HostTelemetrySeries | null;

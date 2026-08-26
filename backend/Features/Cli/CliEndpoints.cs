@@ -17,6 +17,12 @@ public static class CliEndpoints
 
         cliGroup.MapGet("/types", () => Results.Ok(CliTypes.All));
 
+        cliGroup.MapGet("/repair-status", (LocalCliSelfHealService selfHeal) => Results.Ok(new
+        {
+            observedAt = DateTimeOffset.UtcNow,
+            repairs = selfHeal.Snapshot(),
+        }));
+
         // Per-CLI completion contract: how each backend signals turn
         // completion (native frame -> typed CliRunEvent). Static, derived
         // from the live adapter mappings; the Admin/CLI page renders it so

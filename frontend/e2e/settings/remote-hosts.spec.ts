@@ -64,6 +64,10 @@ async function stubBackgroundApis(page: Page) {
     items: [],
   }));
   await page.route('**/api/cli/quota', json({ ttlMs: 600_000, snapshots: [] }));
+  await page.route('**/api/cli/repair-status', json({
+    observedAt: new Date().toISOString(),
+    repairs: [],
+  }));
   const now = new Date().toISOString();
   await page.route('**/api/clients', json([
     { id: 'local-default', displayName: 'operator-workstation', kind: 'human', registeredAt: now, lastSeenAt: now },
@@ -284,6 +288,47 @@ test.describe('Execution Hosts settings section', () => {
     await expect(page.getByTestId('remote-hosts-summary')).toContainText(String(count));
 
     await page.screenshot({ path: join(SHOT_DIR, 'remote-hosts-section--mocked.png'), fullPage: false });
+  });
+
+  test('shows a successful local CLI repair as a quiet status and hosts note in both themes', async ({ page, devBackend: _devBackend }) => {
+    const repairedAt = '2026-08-18T09:15:00Z';
+    await page.unroute('**/api/cli/repair-status');
+    await page.route('**/api/cli/repair-status', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        observedAt: repairedAt,
+        repairs: [{
+          cliType: 'claude',
+          state: 'repaired',
+          occurredAt: repairedAt,
+          cliVersionBefore: '2.1.231 (Claude Code)',
+          cliVersionAfter: '2.1.234 (Claude Code)',
+          packageVersionBefore: '2.1.234',
+          packageVersionAfter: '2.1.234',
+          detail: 'CLI repaired after the installed npm package lost every global shim.',
+        }],
+      }),
+    }));
+    await page.goto('/#/workspace/settings/execution-hosts');
+
+    const status = page.getByTestId('status-bar-cli-repair');
+    await expect(status).toContainText('CLI repaired at');
+    await expect(status).toHaveAttribute('data-signal-tone', 'calm');
+    await expect(page.getByTestId('status-bar-cli-repair-divergence')).toHaveCount(0);
+
+    const local = page.getByTestId('remote-host-card').filter({ hasText: 'Local machine' });
+    await expandHost(local, true);
+    await local.getByTestId('remote-host-detail-toggle-capabilities').click();
+    const note = local.getByTestId('remote-host-cli-repair-note');
+    await expect(note).toContainText('CLI repaired at');
+    await expect(note).toContainText('2.1.234');
+    await expect(note).toHaveAttribute('data-state', 'repaired');
+
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'local-cli-repaired-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: join(SHOT_DIR, 'local-cli-repaired-dark--mocked.png'), fullPage: false });
   });
 
   test('sorts table columns and restores sort plus row disclosure after reload', async ({ page }) => {
