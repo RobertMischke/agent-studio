@@ -43,6 +43,9 @@ describe('CliUsageModalComponent', () => {
     stale: false,
     source: 'pty',
     error: null,
+    cliVersion: '2.1.202 (Claude Code)',
+    probeFailedAt: null,
+    probeFailureLabel: null,
     windows: [
       { label: 'Current session (5h)', usedPct: 11, used: null, limit: null, unit: null, resetAt: null, resetLabel: '3h' },
       { label: 'Weekly (all models)', usedPct: 47, used: null, limit: null, unit: null, resetAt: null, resetLabel: '4d' },
@@ -89,6 +92,9 @@ describe('CliUsageModalComponent', () => {
     stale: false,
     source: '/status',
     error: null,
+    cliVersion: 'codex-cli 0.149.0',
+    probeFailedAt: null,
+    probeFailureLabel: null,
     windows: [
       { label: 'Current session (5h)', usedPct: 66, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '02:33' },
       { label: 'Weekly', usedPct: 12, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '21:33 on 3 May' },
@@ -115,6 +121,26 @@ describe('CliUsageModalComponent', () => {
     const first = fixture.componentInstance.windowViews()[0];
     expect(first.pctLabel).toBe('66% used');
     expect(first.remainingLabel).toBe('34% left');
+  });
+
+  it('shows retained Codex values with an explicit versioned stale marker', async () => {
+    const failedRow: CliUsageQuotaRow = {
+      ...codexRow,
+      stale: true,
+      freshness: 'probe failed 21:07, codex 0.149.0',
+      error: 'Codex /status quota probe timed out or was canceled.',
+      probeFailedAt: '2026-08-23T19:07:00Z',
+      probeFailureLabel: 'probe failed 21:07, codex 0.149.0',
+    };
+
+    const fixture = await build(failedRow, 'codex');
+    const marker = document.body.querySelector('[data-testid="cli-usage-probe-failed"]');
+
+    expect(marker).not.toBeNull();
+    expect(marker!.textContent).toContain('Stale');
+    expect(marker!.textContent).toContain('probe failed 21:07, codex 0.149.0');
+    expect(fixture.componentInstance.windowViews()).toHaveLength(4);
+    fixture.destroy();
   });
 
   it('labels a reported quota without a percentage as Unknown', async () => {

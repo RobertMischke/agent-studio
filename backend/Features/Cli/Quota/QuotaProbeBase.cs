@@ -27,6 +27,21 @@ public abstract class QuotaProbeBase : IQuotaProbe
     public abstract string CliType { get; }
     public abstract Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
 
+    /// <summary>Best-effort CLI version attribution for every probe result.</summary>
+    protected string? DetectCliVersion()
+    {
+        try
+        {
+            var (_, version, _) = _router.Get(CliType).TestCliPath();
+            return string.IsNullOrWhiteSpace(version) ? null : version.Trim();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not detect {Cli} version before quota probe", CliType);
+            return null;
+        }
+    }
+
     /// <summary>
     /// Spawn the CLI, optionally send a slash-command sequence, wait for output to settle,
     /// return the ANSI-stripped snapshot. Always sends two Esc presses at the end so

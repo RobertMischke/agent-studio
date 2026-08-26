@@ -109,6 +109,60 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
         Assert.Equal(2, probe.Calls);             // did not wait for the TTL
     }
 
+    [Fact]
+    public async Task RefreshAsync_FailedProbe_KeepsLastGoodValuesAndMarksFailure()
+    {
+        var good = Snap(42) with
+        {
+            Plan = "Pro",
+            CliVersion = "codex-cli 0.144.1",
+            FetchedAt = new DateTime(2026, 8, 23, 18, 0, 0, DateTimeKind.Utc)
+        };
+        var failed = new QuotaSnapshot
+        {
+            CliType = "codex",
+            CliVersion = "codex-cli 0.149.0",
+            Error = "Codex /status quota probe timed out or was canceled."
+        };
+        var probe = new ScriptedProbe(call => call == 1 ? good : failed);
+        var svc = NewService(probe);
+
+        await svc.RefreshAsync("codex");
+        var result = await svc.RefreshAsync("codex");
+
+        Assert.NotNull(result);
+        Assert.Equal(42, Assert.Single(result.Windows).UsedPct);
+        Assert.Equal("Pro", result.Plan);
+        Assert.Equal(good.FetchedAt, result.FetchedAt);
+        Assert.Equal("codex-cli 0.149.0", result.CliVersion);
+        Assert.NotNull(result.ProbeFailedAt);
+        Assert.Equal(failed.Error, result.Error);
+        Assert.DoesNotContain("A task was canceled", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetWithBackgroundRefresh_ReturnsCachedReportBeforeProbeCompletes()
+    {
+        using var gate = new ManualResetEventSlim();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probe = new GatedStartProbe(started, gate, Snap(17));
+        var svc = NewService(probe);
+
+        var report = svc.GetWithBackgroundRefresh();
+
+        Assert.Single(report.Snapshots);
+        Assert.Empty(report.Snapshots[0].Windows);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Null(svc.GetCachedFor("codex"));
+
+        gate.Set();
+        for (var attempt = 0; attempt < 50 && svc.GetCachedFor("codex") is null; attempt++)
+        {
+            await Task.Delay(20);
+        }
+        Assert.Equal(17, svc.GetCachedFor("codex")?.Windows[0].UsedPct);
+    }
+
     private sealed class ScriptedProbe : IQuotaProbe
     {
         private readonly Func<int, QuotaSnapshot> _script;
@@ -139,6 +193,26 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
             if (Interlocked.Increment(ref _calls) == 1) return _first;
             await _gate;
             return _afterGate;
+        }
+    }
+
+    private sealed class GatedStartProbe : IQuotaProbe
+    {
+        private readonly TaskCompletionSource _started;
+        private readonly ManualResetEventSlim _gate;
+        private readonly QuotaSnapshot _result;
+        public GatedStartProbe(TaskCompletionSource started, ManualResetEventSlim gate, QuotaSnapshot result)
+        {
+            _started = started;
+            _gate = gate;
+            _result = result;
+        }
+        public string CliType => "codex";
+        public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
+        {
+            _started.SetResult();
+            _gate.Wait(ct);
+            return Task.FromResult(_result);
         }
     }
 }

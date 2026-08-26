@@ -10,8 +10,16 @@
   (backdropClick)="closeRequest.emit()">
 
   <div class="cum" [attr.data-testid]="'cli-usage-modal-body-' + cliType()">
-    @if (row()?.error; as err) {
-      <div class="cum__error" role="alert">{{ err }}</div>
+    @if (row()?.probeFailureLabel; as failureLabel) {
+      <div class="cum__stale"
+           role="status"
+           data-testid="cli-usage-probe-failed"
+           [cacTooltip]="row()?.error ?? failureLabel">
+        <span class="cum__stale-badge">Stale</span>
+        <span>{{ failureLabel }}</span>
+      </div>
+    } @else if (row()?.error; as err) {
+      <div class="cum__error" role="alert" [cacTooltip]="err">Probe failed. No last-good values are available.</div>
     }
 
     <section class="cum__panel">

@@ -30,7 +30,11 @@
         }
       </span>
 
-      @if (card.stale) {
+      @if (card.probeFailureLabel; as failureLabel) {
+        <span class="hquota__stale-label"
+              data-testid="hquota-probe-failed"
+              [cacTooltip]="card.error ?? failureLabel">{{ failureLabel }}</span>
+      } @else if (card.stale) {
         <span class="hquota__stale-dot" aria-label="Stale snapshot">●</span>
       }
     </button>

@@ -25,12 +25,16 @@ export interface QuotaWindow {
 
 export interface QuotaSnapshot {
   cliType: CliType;
+  /** Exact text reported by the CLI's `--version` command. */
+  cliVersion?: string | null;
   fetchedAt: string;
   plan: string | null;
   windows: QuotaWindow[];
   source: string | null;
   rawSample: string | null;
   error: string | null;
+  /** Most recent failed re-probe; `fetchedAt` remains the last-good timestamp. */
+  probeFailedAt?: string | null;
   /**
    * True when this snapshot is not yet trusted (AGT-2064): a single probe
    * showed an implausible downward jump no reset explains and a confirmation

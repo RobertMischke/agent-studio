@@ -79,13 +79,17 @@ The frontend's model dropdown reads `/api/cli/{cliType}/models`. No CLI-specific
 **Contract.** A `QuotaProbeBase` subclass returns a `QuotaSnapshot` with:
 
 - `Plan` — human-readable subscription tier ("Pro", "Plus", "Free", …) or `null`.
+- `CliVersion`: exact `--version` output for the binary that produced the snapshot.
 - `Windows[]`: one or more `QuotaWindow`s with `UsedPct` (0-100, may exceed when overage allowed), `ResetAt` UTC, and `ResetLabel` for display. When the CLI exposes a recognized quota surface but no numeric utilization, return an explicit window with `UsedPct = null`; consumers render `Unknown` and must not treat that as a probe error.
 - `Source` — what the probe queried (`/usage`, `/status`, footer text, HTTP endpoint, …).
 - `RawSample` — truncated raw output for debugging.
+- `ProbeFailedAt` / `Error`: failure attribution. A failed re-probe retains
+  the last-good plan and windows, keeps their original `FetchedAt`, and marks
+  them stale instead of replacing them with a cancellation error.
 
 **Implementation pattern.** Most probes spawn the CLI in a scratch directory under `%TEMP%/agent-taskboard-quota/<cliType>` via a PTY, send slash commands, and scrape the rendered panel. See `ProbeWithStepsAsync` in [`QuotaProbeBase`](../../../backend/Features/Cli/Quota/QuotaProbeBase.cs).
 
-**Aggregation.** [`QuotaService`](../../../backend/Features/Cli/Quota/QuotaService.cs) aggregates all registered `IQuotaProbe`s and serves `/api/cli/quota`. New CLIs register an `IQuotaProbe` in [`backend/Host/Program.cs`](../../../backend/Host/Program.cs).
+**Aggregation.** [`QuotaService`](../../../backend/Features/Cli/Quota/QuotaService.cs) aggregates all registered `IQuotaProbe`s and serves `/api/cli/quota`. The GET is cache-only and starts stale probes in the background with their own bounded timeout; it never awaits a live PTY or inherits request cancellation. New CLIs register an `IQuotaProbe` in [`backend/Host/Program.cs`](../../../backend/Host/Program.cs). `CliVersionMonitorHostedService` records the Claude/Codex baseline at startup and emits `CLI version changed` when a periodic check observes drift.
 
 **Quota fallback routing.** Workspace CLI Management persists one primary model
 and an optional fallback CLI/model/thinking level per CLI in
@@ -262,7 +266,7 @@ The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns npm-
 
 **Quirks.**
 - Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter. Sending `1<Enter>` leaves a stray `1` that prefixes the next slash command, so use `<Enter>` alone.
-- Trust, welcome, and `/status` form a fragile multi-step probe. See [`CodexQuotaProbe`](../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs).
+- Update, trust, welcome, and `/status` form a guarded multi-step probe. The 0.149.0 update picker is skipped only when detected, and no trust-confirmation key is sent when the prompt is absent. See [`CodexQuotaProbe`](../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs).
 - The CAR callback bridge must capture raw usage before publishing the matching `TurnCompleted` event.
 
 ### 3.3 Antigravity (`agentapi`, persisted as `gemini`)

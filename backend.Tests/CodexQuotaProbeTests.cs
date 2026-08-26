@@ -5,6 +5,58 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "codex",
+            name));
+
+    [Theory]
+    [InlineData("codex-status-v0.144.1.txt", 4, true)]
+    [InlineData("codex-status-v0.149.0.txt", 3, false)]
+    public void ParseStatusWindows_ParsesVersionedCliFixtures(
+        string fixtureName,
+        int expectedCount,
+        bool expectsStandardFiveHour)
+    {
+        var windows = CodexQuotaProbe.ParseStatusWindows(ReadFixture(fixtureName));
+
+        Assert.Equal(expectedCount, windows.Count);
+        Assert.Equal(expectsStandardFiveHour, windows.Any(window => window.Label == "5-hour"));
+        Assert.Contains(windows, window => window.Label == "Weekly");
+        Assert.Contains(windows, window => window.Label == "Spark 5-hour");
+        Assert.Contains(windows, window => window.Label == "Spark Weekly");
+    }
+
+    [Fact]
+    public void ParseStatusWindows_ReadsVersion149WrappedResetRows()
+    {
+        var windows = CodexQuotaProbe.ParseStatusWindows(ReadFixture("codex-status-v0.149.0.txt"));
+
+        Assert.Collection(
+            windows,
+            weekly =>
+            {
+                Assert.Equal("Weekly", weekly.Label);
+                Assert.Equal(18, weekly.UsedPct);
+                Assert.Equal("17:12 on 1 Sep", weekly.ResetLabel);
+            },
+            sparkFiveHour =>
+            {
+                Assert.Equal("Spark 5-hour", sparkFiveHour.Label);
+                Assert.Equal(0, sparkFiveHour.UsedPct);
+                Assert.Equal("19:09", sparkFiveHour.ResetLabel);
+            },
+            sparkWeekly =>
+            {
+                Assert.Equal("Spark Weekly", sparkWeekly.Label);
+                Assert.Equal(0, sparkWeekly.UsedPct);
+                Assert.Equal("14:09 on 2 Sep", sparkWeekly.ResetLabel);
+            });
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {
