@@ -161,7 +161,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             _configuration.GetValue<int?>("Integration:AcceptedAlertThresholdMinutes") ?? 30,
             1,
             24 * 60);
-        var candidates = _scanner.ScanAllAutomationJobs()
+        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
             .Where(IsPotentialAlertLane)
             .OrderBy(job => job.EnteredLaneAt)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
@@ -205,12 +205,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
     }
 
     private static bool IsPotentialAlertLane(TaskInfo job)
-    {
-        if (job.State == TaskStates.Completed) return true;
-        return job.State == TaskStates.HumanReview
-               && (string.Equals(job.Phase, LifecyclePhases.Integrating, StringComparison.Ordinal)
-                   || (job.Tags ?? []).Any(IntegrationStatuses.IsPendingTag));
-    }
+        => job.State is TaskStates.Completed or TaskStates.Archive;
 
     private (bool Exists, DateTime RecordedAt) ResolveAcceptanceRecord(
         TaskInfo job,

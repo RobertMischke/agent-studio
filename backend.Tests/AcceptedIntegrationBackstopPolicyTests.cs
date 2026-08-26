@@ -122,10 +122,10 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
     }
 
     [Theory]
-    [InlineData(TaskStates.Archive, true, false)]
+    [InlineData(TaskStates.Archive, true, true)]
     [InlineData(TaskStates.Completed, false, false)]
     [InlineData(TaskStates.Completed, true, true)]
-    [InlineData(TaskStates.HumanReview, true, true)]
+    [InlineData(TaskStates.HumanReview, true, false)]
     public void AlertCandidate_RequiresCurrentLaneAndIntegrationRecord(
         string state,
         bool hasIntegrationRecord,
@@ -142,6 +142,35 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
         };
 
         Assert.Equal(expected, AcceptedIntegrationBackstopPolicy.IsAlertCandidate(candidate));
+    }
+
+    [Theory]
+    [InlineData(IntegrationStatuses.ConflictSkipped, MergeIntoIntegrationOutcome.Error)]
+    [InlineData(IntegrationStatuses.Partial, MergeIntoIntegrationOutcome.NoTaskBranch)]
+    [InlineData(IntegrationStatuses.Pending, MergeIntoIntegrationOutcome.Conflict)]
+    public void Alert_HumanReviewIntegrationFailures_AreNotMislabelledAsAccepted(
+        string integrationStatus,
+        MergeIntoIntegrationOutcome lastOutcome)
+    {
+        var baseline = Candidate("QS-70", 45, lastOutcome.ToString(), integrationStatus);
+        var candidate = baseline with
+        {
+            Task = baseline.Task with
+            {
+                State = TaskStates.HumanReview,
+                Phase = LifecyclePhases.Integrating,
+                Tags = [IntegrationStatuses.PendingTag],
+            },
+        };
+
+        var snapshot = AcceptedIntegrationBackstopPolicy.EvaluateAlert(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [candidate]);
+
+        Assert.False(AcceptedIntegrationBackstopPolicy.IsAlertCandidate(candidate));
+        Assert.False(snapshot.Active);
+        Assert.Empty(snapshot.Items);
     }
 
     [Theory]
@@ -192,8 +221,7 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
                 Key = key,
                 Title = $"Delivery {key}",
                 ProjectName = "Agent Studio",
-                State = TaskStates.HumanReview,
-                Phase = LifecyclePhases.Integrating,
+                State = TaskStates.Completed,
                 Mode = TaskModes.Coding,
                 EnteredLaneAt = Now.AddMinutes(-acceptedMinutesAgo),
             },

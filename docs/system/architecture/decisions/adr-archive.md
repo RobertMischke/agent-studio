@@ -907,8 +907,17 @@ registry persist reduces the project count, the previous file is copied to
 `project-registry-shrink-quarantined`. This amendment makes the registry's
 source-of-truth role fail-closed after the 2026-07-28 legacy-reseed incident.
 
+**Amendment (2026-08-26).** Initial WatchPaths discovery now treats a repeated
+display name on a different storage path as a bootstrap collision. The first
+discovered project remains authoritative; the later entry is skipped with a
+`registry-bootstrap-watchpath-name-collision` warning that names both storage
+paths. This closes the PROJ-017 incident, where a second Quality Studio
+WatchPaths entry could become an unconfigured, taskless registry project even
+though PROJ-016 already owned that operator-facing identity.
+
 **Status.** Accepted; F45a + F45b implemented and fail-closed persistence
-amended 2026-07-28. F45c (folder restructure / jobKey migration) and F46
+amended 2026-07-28, with bootstrap name-collision protection added 2026-08-26.
+F45c (folder restructure / jobKey migration) and F46
 (frontend explorer tree on registry) tracked separately.
 
 ---

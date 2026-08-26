@@ -158,6 +158,27 @@ public class RegistryBootstrapTests : IDisposable
     }
 
     [Fact]
+    public void Run_DuplicateWatchPathNamesWithDifferentStorage_SeedsOnlyFirstProject()
+    {
+        var (workspaces, projects, scanner) = Build(
+            ("Quality Studio", _projectA),
+            ("Quality Studio", _projectB));
+        var capture = new CapturingLogger();
+
+        RegistryBootstrap.Run(workspaces, projects, scanner, capture);
+
+        var project = Assert.Single(projects.List());
+        Assert.Equal("PROJ-001", project.Id);
+        Assert.Equal("Quality Studio", project.DisplayName);
+        Assert.Equal(_projectA, project.StorageLocation);
+        Assert.DoesNotContain(projects.List(), candidate => candidate.StorageLocation == _projectB);
+        Assert.Contains(capture.Warnings, message =>
+            message.Contains("registry-bootstrap-watchpath-name-collision", StringComparison.Ordinal)
+            && message.Contains(_projectA, StringComparison.Ordinal)
+            && message.Contains(_projectB, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Run_DoesNotWriteToWatchedFolders()
     {
         var (workspaces, projects, scanner) = Build(("Demo A", _projectA));

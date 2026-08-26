@@ -42,6 +42,7 @@ public static class RegistryBootstrap
         var watchPaths = scanner.GetWatchPaths();
         var discovered = 0;
         var skippedLegacySeeds = 0;
+        var skippedNameCollisions = 0;
         var divergedDisplayNames = 0;
         foreach (var entry in watchPaths)
         {
@@ -83,6 +84,22 @@ public static class RegistryBootstrap
             var displayName = !string.IsNullOrWhiteSpace(entry.Name)
                 ? entry.Name
                 : InferDisplayNameFromPath(entry.Path);
+
+            var sameName = projects.List().FirstOrDefault(project => string.Equals(
+                project.DisplayName,
+                displayName,
+                StringComparison.OrdinalIgnoreCase));
+            if (sameName != null)
+            {
+                skippedNameCollisions++;
+                logger.LogWarning(
+                    "registry-bootstrap-watchpath-name-collision existingProjectId={ExistingProjectId} displayName={DisplayName} existingStorage={ExistingStorage} skippedStorage={SkippedStorage} - existing registry project wins",
+                    sameName.Id,
+                    displayName,
+                    sameName.StorageLocation,
+                    entry.Path);
+                continue;
+            }
 
             projects.EnsureProjectForStorage(
                 storageLocation: entry.Path,
@@ -138,11 +155,12 @@ public static class RegistryBootstrap
         }
 
         logger.LogInformation(
-            "registry-bootstrap-complete workspaces={WorkspaceCount} projectsDiscovered={Discovered} projectsTotal={Total} legacySeedsSkipped={SkippedLegacySeeds} watchPathDisplayNameDivergences={Divergences}",
+            "registry-bootstrap-complete workspaces={WorkspaceCount} projectsDiscovered={Discovered} projectsTotal={Total} legacySeedsSkipped={SkippedLegacySeeds} watchPathNameCollisionsSkipped={SkippedNameCollisions} watchPathDisplayNameDivergences={Divergences}",
             workspaces.List().Count,
             discovered,
             projects.List().Count,
             skippedLegacySeeds,
+            skippedNameCollisions,
             divergedDisplayNames);
     }
 
