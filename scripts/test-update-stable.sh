@@ -176,11 +176,13 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
-test "$(git -C "$stable_checkout" symbolic-ref --short HEAD)" = main
+if git -C "$stable_checkout" symbolic-ref --quiet --short HEAD >/dev/null; then
+  printf '%s\n' 'failed cutover unexpectedly unpinned Stable before verification' >&2
+  exit 1
+fi
 
-# A held checkout can already point at the target SHA while still detached.
-# The no-op verification path must supervise Task Server and attach main.
-git -C "$stable_checkout" checkout --quiet --detach
+# The failed cutover remains held at the target SHA. The no-op verification
+# path must supervise Task Server and attach main only after all probes pass.
 rm -f -- "$task_server_start_marker"
 noop_output=$(run_update)
 test -f "$task_server_start_marker"
