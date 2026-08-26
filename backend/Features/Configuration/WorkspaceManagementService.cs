@@ -279,10 +279,11 @@ public sealed class WorkspaceManagementService
             }
         }
 
-        // Drop any WatchPaths entry resolving to this folder so the project
-        // stops surfacing as a known-project ghost row after the registry
-        // record is gone. Entries are matched by resolved Path; the raw JSON
-        // array is keyed by Name, so we resolve, then remove by Name.
+        // Drop only the WatchPaths entry resolving to this folder so the
+        // project stops surfacing as a known-project ghost row after the
+        // registry record is gone. Display names are not identities: legacy
+        // bootstrap collisions can leave two rows with the same Name but
+        // different paths.
         var match = _scanner.GetWatchPaths().FirstOrDefault(e =>
             string.Equals(NormalizePath(e.Path), normalizedTarget, StringComparison.OrdinalIgnoreCase));
         if (match != null)
@@ -295,8 +296,24 @@ public sealed class WorkspaceManagementService
                     for (int i = array.Count - 1; i >= 0; i--)
                     {
                         if (array[i] is not JsonObject obj) continue;
-                        var nodeName = obj["Name"]?.GetValue<string>() ?? "";
-                        if (string.Equals(nodeName, match.Name, StringComparison.OrdinalIgnoreCase))
+                        WatchPathEntry? configured;
+                        try
+                        {
+                            configured = obj.Deserialize<WatchPathEntry>(new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true,
+                            });
+                        }
+                        catch (JsonException)
+                        {
+                            continue;
+                        }
+
+                        if (configured != null
+                            && string.Equals(
+                                NormalizePath(_scanner.ResolveConfiguredWatchPath(configured).Path),
+                                normalizedTarget,
+                                StringComparison.OrdinalIgnoreCase))
                         {
                             array.RemoveAt(i);
                         }

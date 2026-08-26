@@ -93,6 +93,30 @@ public class RegistryBootstrapTests : IDisposable
     }
 
     [Fact]
+    public void Run_ExistingRegistry_DoesNotCreateSameNameGhostFromLegacyWatchPath()
+    {
+        var legacyStorage = Path.Combine(_root, "legacy", "quality-studio", ".orchestrator", "jobs");
+        Directory.CreateDirectory(legacyStorage);
+        var (_, initialProjects, _) = Build();
+        var real = initialProjects.EnsureProjectForStorage(
+            _projectA,
+            "Quality Studio",
+            DefaultWorkspace.Id);
+
+        var (workspaces, projects, scanner) = Build(("Quality Studio", legacyStorage));
+        RegistryBootstrap.Run(
+            workspaces,
+            projects,
+            scanner,
+            NullLogger<RegistryBootstrapTests>.Instance);
+
+        var remaining = Assert.Single(projects.List());
+        Assert.Equal(real.Id, remaining.Id);
+        Assert.Equal(_projectA, remaining.StorageLocation);
+        Assert.Null(projects.FindByStorageLocation(legacyStorage));
+    }
+
+    [Fact]
     public void Run_InvalidExistingRegistry_AbortsWithoutLegacyReseed()
     {
         Directory.CreateDirectory(RegistryPaths.MetadataDir(_root));
