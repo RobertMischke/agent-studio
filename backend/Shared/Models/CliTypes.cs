@@ -106,6 +106,12 @@ public record CliUsageSection
     /// <summary>Resolved executable path used by the backend for this CLI.</summary>
     public string? Path { get; init; }
     public string? Error { get; init; }
+    /// <summary>
+    /// Latest bounded local npm-shim repair outcome for this CLI, when one has
+    /// occurred. Successful history stays informational; only a current failed
+    /// repair is an alarm.
+    /// </summary>
+    public CliRepairSnapshot? Repair { get; init; }
     /// <summary>Sessions grouped by project (cwd or project name).</summary>
     public List<CliUsageProjectGroup> Projects { get; init; } = [];
 }

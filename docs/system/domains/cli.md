@@ -1,6 +1,6 @@
 # CLI Domain Map
 
-Version: 2026-06-09
+Version: 2026-08-26
 Status: System-of-record map for CLI adapter and quota changes.
 
 Use this when a change touches Claude, Codex, Copilot, Gemini, prompt handoff,
@@ -39,6 +39,18 @@ CLI execution tests.
   and a guarded `DELETE /api/cli/{cliType}/session` (cleanup refused for any path
   outside the CLI's own session store). Both resolve/parse in
   `SessionRegistry.cs`; the `/usage` list report stays body-free.
+- `backend/Features/Cli/Execution/LocalCliSelfHealMonitor.cs` extends the local
+  Windows capability probe. Once per minute it checks Claude and Codex. When a
+  CLI is absent but its global npm package remains present and the canonical
+  `.cmd` shim is gone, it runs one `npm install --global` repair at most once
+  per CLI per hour. A true uninstall or missing explicit path is never mutated.
+  Attempts and before/after versions are journaled in
+  `<TaskRepository>/logs/cli-repairs.jsonl`; bounded package, shim, staging,
+  old-artifact, and npm-log metadata captures updater/install activity. Recent
+  npm logs contribute only a sanitized command/version/exit summary; full log
+  contents are not copied. The latest event is projected through
+  `GET /api/cli/usage`; the status bar polls the lightweight
+  `GET /api/cli/repair-status` projection.
 - `backend/Services/Runner/OrchestratorSession.cs` and
   `OrchestratorRunner.cs`: runner-to-CLI orchestration boundary.
 - `backend/Features/Cli/Routing/OneShot/ClaudeOneShot.cs` and `CodexOneShot.cs`:
@@ -62,6 +74,13 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- Local npm-shim repair is narrower than CLI installation. It may reinstall
+  only Claude or Codex when `node_modules` proves the package is already
+  installed and the PATH probe plus canonical shim prove the launcher is
+  missing. Keep the one-hour durable attempt boundary. A successful repair is
+  a quiet `CLI repaired at <time>` status-bar note; only a failed repair uses
+  warning treatment. Preserve the repair journal's before/after version and
+  bounded activity metadata when changing this path.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

@@ -18,9 +18,10 @@ public sealed class SessionRegistry
     private readonly ILogger<SessionRegistry> _logger;
     private readonly ITaskScanner _scanner;
     private readonly SessionToTaskIndex? _sessionIndex;
+    private readonly LocalCliSelfHealMonitor? _selfHeal;
 
     public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner)
-        : this(logger, scanner, sessionIndex: null) { }
+        : this(logger, scanner, sessionIndex: null, selfHeal: null) { }
 
     /// <summary>
     /// Production constructor: <paramref name="sessionIndex"/> is the
@@ -31,10 +32,18 @@ public sealed class SessionRegistry
     /// case, which matches today's behaviour).
     /// </summary>
     public SessionRegistry(ILogger<SessionRegistry> logger, ITaskScanner scanner, SessionToTaskIndex? sessionIndex)
+        : this(logger, scanner, sessionIndex, selfHeal: null) { }
+
+    public SessionRegistry(
+        ILogger<SessionRegistry> logger,
+        ITaskScanner scanner,
+        SessionToTaskIndex? sessionIndex,
+        LocalCliSelfHealMonitor? selfHeal)
     {
         _logger = logger;
         _scanner = scanner;
         _sessionIndex = sessionIndex;
+        _selfHeal = selfHeal;
     }
 
     public CliUsageReport BuildReport(CliRouter router)
@@ -126,7 +135,8 @@ public sealed class SessionRegistry
             CliType = cli.CliType,
             Available = available,
             Version = version,
-            Path = path
+            Path = path,
+            Repair = _selfHeal?.Snapshot(cli.CliType),
         };
 
         try

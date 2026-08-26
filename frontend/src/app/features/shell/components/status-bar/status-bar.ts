@@ -31,11 +31,38 @@ import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.compone
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { summarizeStatusBarHostLoad, summarizeStatusBarSlotsByRole } from './status-bar-host-load';
 import { withRouteSegment } from '../../../../services/url-hash.util';
+import type { CliRepairSnapshot, CliRepairStatusReport } from '../../../cli';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 const HOST_LOAD_REFRESH_MS = 30_000;
+
+export interface StatusBarCliRepairNote {
+  label: string;
+  tooltip: string;
+  failed: boolean;
+}
+
+export function summarizeCliRepairStatus(
+  report: CliRepairStatusReport | null,
+  locale = 'en',
+): StatusBarCliRepairNote | null {
+  const latest = (report?.repairs ?? [])
+    .filter((repair): repair is CliRepairSnapshot => !!repair)
+    .sort((a, b) => Date.parse(b.completedAt) - Date.parse(a.completedAt))[0];
+  if (!latest) return null;
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(latest.completedAt));
+  const failed = latest.status === 'failed';
+  return {
+    label: failed ? `CLI repair failed at ${time}` : `CLI repaired at ${time}`,
+    tooltip: `${latest.cliType}: ${latest.detail || latest.note}`,
+    failed,
+  };
+}
 
 export function formatRunningLabel(
   local: number,
@@ -104,6 +131,8 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly defaultCli = signal<CliType>(this.readDefaultCli());
   readonly defaultModel = signal<string>(this.readDefaultModel(this.readDefaultCli()));
   readonly defaultThinkingLevel = signal<string | null>(this.readDefaultThinkingLevel(this.readDefaultCli()));
+  readonly cliRepairStatus = signal<CliRepairStatusReport | null>(null);
+  readonly cliRepairNote = computed(() => summarizeCliRepairStatus(this.cliRepairStatus()));
 
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
@@ -207,8 +236,13 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.remoteHosts.refresh();
     this.reviewQueue.refresh();
+    this.refreshCliRepairStatus();
     this.hostLoadRefreshHandle = setVisibleInterval(
-      () => { this.remoteHosts.refresh(); this.reviewQueue.refresh(); },
+      () => {
+        this.remoteHosts.refresh();
+        this.reviewQueue.refresh();
+        this.refreshCliRepairStatus();
+      },
       HOST_LOAD_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {
@@ -216,6 +250,13 @@ export class StatusBarComponent implements OnInit, OnDestroy {
       this.defaultCli.set(cli);
       this.defaultModel.set(this.readDefaultModel(cli));
       this.defaultThinkingLevel.set(this.readDefaultThinkingLevel(cli));
+    });
+  }
+
+  private refreshCliRepairStatus(): void {
+    this.jobService.getCliRepairStatus().subscribe({
+      next: report => this.cliRepairStatus.set(report),
+      error: () => void 0,
     });
   }
 

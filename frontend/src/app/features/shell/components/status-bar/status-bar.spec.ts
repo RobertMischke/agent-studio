@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { formatRunningLabel, StatusBarComponent, summarizeCliRepairStatus } from './status-bar';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -26,6 +26,36 @@ describe('formatRunningLabel', () => {
 
   it('shows the honest coding slot ceiling once it is known', () => {
     expect(formatRunningLabel(0, 0, 3, 8)).toBe('coding 0/8');
+  });
+});
+
+describe('summarizeCliRepairStatus', () => {
+  it('keeps a successful repair as a quiet timestamped note', () => {
+    const note = summarizeCliRepairStatus({
+      at: '2026-08-18T10:06:00Z',
+      repairs: [{
+          cliType: 'claude', status: 'repaired', attemptedAt: '2026-08-18T10:04:00Z',
+          completedAt: '2026-08-18T10:05:00Z', versionBefore: '2.1.231', versionAfter: '2.1.234',
+          note: 'CLI repaired at 2026-08-18T10:05:00Z', detail: 'npm global reinstall restored claude.cmd.',
+      }],
+    }, 'en-GB');
+
+    expect(note).toMatchObject({ failed: false });
+    expect(note?.label).toMatch(/^CLI repaired at \d{2}:\d{2}$/);
+  });
+
+  it('alarms only when the latest repair failed', () => {
+    const note = summarizeCliRepairStatus({
+      at: '2026-08-18T10:06:00Z',
+      repairs: [{
+          cliType: 'codex', status: 'failed', attemptedAt: '2026-08-18T10:04:00Z',
+          completedAt: '2026-08-18T10:05:00Z', versionBefore: '0.90.0', versionAfter: null,
+          note: 'CLI repair failed at 2026-08-18T10:05:00Z', detail: 'npm exited 1.',
+      }],
+    }, 'en-GB');
+
+    expect(note).toMatchObject({ failed: true });
+    expect(note?.label).toMatch(/^CLI repair failed at \d{2}:\d{2}$/);
   });
 });
 

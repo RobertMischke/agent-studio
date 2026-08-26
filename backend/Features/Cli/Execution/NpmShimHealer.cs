@@ -36,8 +36,217 @@ public sealed record HealOutcome(
     IReadOnlyList<string> Actions,
     string? Error);
 
+public sealed record NpmGlobalInstallResult(int ExitCode, string Detail);
+
+public sealed record NpmInstallActivity(
+    string Kind,
+    string Path,
+    DateTimeOffset LastWriteAt,
+    long SizeBytes,
+    string? Summary = null);
+
 public static class NpmShimHealer
 {
+    /// <summary>
+    /// Recreate the complete npm shim set for a package that is still present
+    /// under global node_modules. This is deliberately not used for a genuine
+    /// uninstall; <see cref="NpmShimRepairPolicy"/> owns that distinction.
+    /// </summary>
+    public static async Task<NpmGlobalInstallResult> InstallGlobalPackageAsync(
+        string packageName,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = GenericCliExecutionService.ResolveExecutable("npm"),
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                ArgumentList = { "install", "--global", packageName },
+            });
+            if (process is null)
+                return new NpmGlobalInstallResult(-1, "npm process did not start");
+
+            var stdout = process.StandardOutput.ReadToEndAsync(ct);
+            var stderr = process.StandardError.ReadToEndAsync(ct);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromMinutes(5));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception ex) { SilentCatch.Note(ex, "NpmShimHealer: npm repair timeout kill"); }
+                return new NpmGlobalInstallResult(-1, "npm install timed out after 5 minutes");
+            }
+
+            var output = $"{await stdout.ConfigureAwait(false)}\n{await stderr.ConfigureAwait(false)}";
+            return new NpmGlobalInstallResult(process.ExitCode, SafeExcerpt(output));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "npm global repair failed to start for {Package}", packageName);
+            return new NpmGlobalInstallResult(-1, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Capture bounded metadata around an npm repair. npm debug logs contribute
+    /// only sanitized command/version/exit lines. Package, shim, staging, and
+    /// old-artifact mtimes make an updater/install race reconstructable without
+    /// journaling full logs, credentials, or registry output.
+    /// </summary>
+    public static IReadOnlyList<NpmInstallActivity> CaptureInstallActivity(
+        string packagePath,
+        string npmBin,
+        DateTimeOffset observedAt,
+        IReadOnlyList<string?>? cacheRootsOverride = null)
+    {
+        var candidates = new List<(string Kind, string Path)>();
+        AddFile(candidates, "package", Path.Combine(packagePath, "package.json"));
+        foreach (var cliName in new[] { CliTypes.Claude, CliTypes.Codex })
+        {
+            AddFile(candidates, "shim", Path.Combine(npmBin, cliName));
+            AddFile(candidates, "shim", Path.Combine(npmBin, cliName + ".cmd"));
+            AddFile(candidates, "shim", Path.Combine(npmBin, cliName + ".ps1"));
+        }
+        try
+        {
+            foreach (var path in Directory.EnumerateFileSystemEntries(npmBin, ".*-*", SearchOption.TopDirectoryOnly))
+                candidates.Add(("npm-staging", path));
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "NpmShimHealer: npm-bin staging activity scan");
+        }
+
+        var packageScope = Directory.GetParent(packagePath)?.FullName;
+        if (!string.IsNullOrWhiteSpace(packageScope))
+        {
+            try
+            {
+                foreach (var path in Directory.EnumerateFileSystemEntries(
+                             packageScope, ".*-*", SearchOption.TopDirectoryOnly))
+                {
+                    candidates.Add(("package-staging", path));
+                }
+                foreach (var path in Directory.EnumerateFiles(
+                             packageScope, "*.old.*", SearchOption.AllDirectories))
+                {
+                    candidates.Add(("old-install-artifact", path));
+                }
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "NpmShimHealer: package staging activity scan");
+            }
+        }
+
+        IReadOnlyList<string?> cacheRoots = cacheRootsOverride ??
+        [
+            Environment.GetEnvironmentVariable("NPM_CONFIG_CACHE"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".npm"),
+            Environment.GetEnvironmentVariable("LOCALAPPDATA") is { Length: > 0 } local
+                ? Path.Combine(local, "npm-cache")
+                : null,
+        ];
+        foreach (var root in cacheRoots.Where(root => !string.IsNullOrWhiteSpace(root)).Distinct())
+        {
+            var logs = Path.Combine(root!, "_logs");
+            try
+            {
+                candidates.AddRange(Directory.EnumerateFiles(logs, "*.log", SearchOption.TopDirectoryOnly)
+                    .Select(path => ("npm-log", path)));
+            }
+            catch (Exception ex)
+            {
+                SilentCatch.Note(ex, "NpmShimHealer: npm-log activity scan");
+            }
+        }
+
+        return candidates
+            .DistinctBy(candidate => (candidate.Kind, candidate.Path))
+            .Select(candidate => ToActivity(candidate.Kind, candidate.Path))
+            .Where(activity => activity is not null)
+            .Select(activity => activity!)
+            .Where(activity => activity.LastWriteAt >= observedAt.AddHours(-24))
+            .OrderByDescending(activity => activity.LastWriteAt)
+            .Take(20)
+            .ToArray();
+    }
+
+    private static void AddFile(ICollection<(string Kind, string Path)> items, string kind, string path)
+    {
+        if (File.Exists(path)) items.Add((kind, path));
+    }
+
+    private static NpmInstallActivity? ToActivity(string kind, string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                var directory = new DirectoryInfo(path);
+                return new NpmInstallActivity(kind, path, directory.LastWriteTimeUtc, 0);
+            }
+            var info = new FileInfo(path);
+            return new NpmInstallActivity(
+                kind,
+                path,
+                info.LastWriteTimeUtc,
+                info.Length,
+                kind == "npm-log" ? ReadNpmLogSummary(path) : null);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadNpmLogSummary(string path)
+    {
+        try
+        {
+            var selected = File.ReadLines(path)
+                .Where(line => line.Contains(" info using npm@", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains(" info using node@", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains(" verbose title ", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains(" verbose exit ", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains(" verbose code ", StringComparison.OrdinalIgnoreCase))
+                .Take(20);
+            var summary = SafeExcerpt(string.Join('\n', selected));
+            return summary == "npm produced no output" ? null : summary;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string SafeExcerpt(string text)
+    {
+        var single = string.Join(' ', text.Split(
+            ['\r', '\n'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        single = System.Text.RegularExpressions.Regex.Replace(
+            single,
+            @"https?://\S+",
+            "[url]",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        single = System.Text.RegularExpressions.Regex.Replace(
+            single,
+            @"\b(?:npm_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{6,}|[A-Za-z0-9_-]{40,})\b",
+            "[redacted]");
+        if (single.Length > 1000) single = single[^1000..];
+        return string.IsNullOrWhiteSpace(single) ? "npm produced no output" : single;
+    }
+
     /// <summary>
     /// Repair the <c>claude</c> npm-shim install on Windows and smoke-test
     /// the resulting <c>claude.cmd</c>. No-op on non-Windows hosts (the

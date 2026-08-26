@@ -96,7 +96,24 @@ export interface CliUsageSection {
   version: string | null;
   path: string | null;
   error: string | null;
+  repair?: CliRepairSnapshot | null;
   projects: CliUsageProjectGroup[];
+}
+
+export interface CliRepairSnapshot {
+  cliType: CliType;
+  status: 'repaired' | 'failed';
+  attemptedAt: string;
+  completedAt: string;
+  versionBefore: string | null;
+  versionAfter: string | null;
+  note: string;
+  detail: string | null;
+}
+
+export interface CliRepairStatusReport {
+  at: string;
+  repairs: CliRepairSnapshot[];
 }
 
 export interface CliUsageReport {

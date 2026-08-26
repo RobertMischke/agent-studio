@@ -17,6 +17,15 @@ public static class CliEndpoints
 
         cliGroup.MapGet("/types", () => Results.Ok(CliTypes.All));
 
+        // Lightweight status-bar projection. The full /usage endpoint scans
+        // native session stores and must not become a 30-second chrome poll.
+        cliGroup.MapGet("/repair-status", (LocalCliSelfHealMonitor monitor) =>
+            Results.Ok(new
+            {
+                at = DateTimeOffset.UtcNow,
+                repairs = monitor.Snapshots(),
+            }));
+
         // Per-CLI completion contract: how each backend signals turn
         // completion (native frame -> typed CliRunEvent). Static, derived
         // from the live adapter mappings; the Admin/CLI page renders it so
