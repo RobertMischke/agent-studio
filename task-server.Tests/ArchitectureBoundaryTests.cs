@@ -84,6 +84,7 @@ public sealed class ArchitectureBoundaryTests
             "install-task-server-release.ps1"));
         Assert.Contains("LISTEN_URL = $ListenUrl", installer);
         Assert.Contains("STORE_PATH = $DataDirectory", installer);
+        Assert.Contains("sourceHead.Equals($ReleaseSha", installer);
         Assert.Contains("Copy-Item -LiteralPath $supervisorScript", installer);
         Assert.Contains("-StartScriptPath (Join-Path $current 'start-task-server.ps1')", installer);
         Assert.Contains("TaskServer", installer);

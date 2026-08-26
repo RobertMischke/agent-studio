@@ -21,6 +21,14 @@ $staging = Join-Path $InstallBase ('.staging-{0}' -f $ReleaseSha.ToLowerInvarian
 $backupDirectory = Join-Path $DataDirectory 'backups'
 $normalizedInstallBase = [IO.Path]::GetFullPath($InstallBase).TrimEnd('\')
 $normalizedDataDirectory = [IO.Path]::GetFullPath($DataDirectory).TrimEnd('\')
+$sourceHead = & git -C $source rev-parse HEAD
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not resolve the source checkout revision: $source"
+}
+$sourceHead = "$sourceHead".Trim()
+if (-not $sourceHead.Equals($ReleaseSha, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Source checkout HEAD '$sourceHead' does not match requested release SHA '$ReleaseSha'."
+}
 
 if ($normalizedDataDirectory.Equals(
         $normalizedInstallBase,
