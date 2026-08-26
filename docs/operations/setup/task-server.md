@@ -131,8 +131,12 @@ host-owned Stable configuration, and registers the Scheduled Task:
 
 Keep `DataDirectory` outside every versioned installation. `-WhatIf` previews
 the host mutations. The helper refuses to replace a non-junction `current`
-directory and refuses to reuse a release directory whose binary does not
-report the requested SHA.
+directory, rejects a data directory below the installation root, and refuses
+to reuse a release directory whose binary does not report the requested SHA.
+It reconciles `LISTEN_URL`, `STORE_PATH`, and `BACKUP_PATH` in an existing
+`server.env` while preserving its authentication settings. The versioned
+package includes the detached supervisor script, so the registered Scheduled
+Task does not execute service code from a mutable Studio checkout.
 
 `register-task-server.ps1` registers `AgentOrchestrator-TaskServer` as an
 `AtStartup`-triggered Scheduled Task under an `S4U` principal - services never
@@ -394,13 +398,14 @@ lifecycle.
 Treat a move from the OrchestratorApi-owned v1 routes to the standalone service
 as a release hold until all of these steps have durable evidence:
 
-1. Copy the complete legacy `TaskRepository`, including `identities/` and
-   `.metadata/attempt-authority.json`, to a rehearsal root while Stable is
+1. Copy the complete legacy `TaskRepository`, including `identities/`,
+   `.metadata/attempt-authority.json`, and every
+   `.metadata/attempt-authority.archive-*.json`, to a rehearsal root while Stable is
    still on the held release. Inventory and import that copy into an empty
    rehearsal Task Server store. The inventory and import counts must agree for
    runner identities, tasks, coding attempts, review attempts, and leases, and the returned
    authority epoch and integrity SHA-256 must be recorded. Any missing or
-   unreadable attempt-authority store aborts the cutover. Imported live leases
+   unreadable live or archived attempt-authority store aborts the cutover. Imported live leases
    become `process-unknown`; they are never made claimable merely because the
    owner process was stopped.
 
