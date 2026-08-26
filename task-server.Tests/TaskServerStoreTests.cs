@@ -483,6 +483,26 @@ public sealed class TaskServerStoreTests
                       ]
                     }
                     """);
+                await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.archive-2026-07-16.json"), """
+                    {
+                      "schemaVersion": 1,
+                      "archivedAt": "2026-07-16T12:00:00Z",
+                      "runAttempts": [
+                        {
+                          "attemptId": "run_legacy_archived",
+                          "taskKey": "AGT-1",
+                          "repositoryId": "repo_legacy",
+                          "state": 2,
+                          "lastFence": 4,
+                          "authorityEpoch": 6,
+                          "createdAt": "2026-07-16T10:01:00Z",
+                          "terminalAt": "2026-07-16T10:03:00Z",
+                          "resultSha": "2222222222222222222222222222222222222222"
+                        }
+                      ],
+                      "reviewAttempts": []
+                    }
+                    """);
 
                 var store = Store(data.Path);
                 await store.InitializeAsync();
@@ -497,7 +517,7 @@ public sealed class TaskServerStoreTests
                 Assert.Equal(1, inventory.Tasks);
                 Assert.Equal(1, inventory.Events);
                 Assert.Equal(1, inventory.Artifacts);
-                Assert.Equal(1, inventory.CodingAttempts);
+                Assert.Equal(2, inventory.CodingAttempts);
                 Assert.Equal(1, inventory.RunnerIdentities);
                 Assert.Equal(1, inventory.ReviewAttempts);
                 Assert.Equal(2, inventory.Leases);
@@ -507,7 +527,7 @@ public sealed class TaskServerStoreTests
                 await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "single-writer cutover"), "operator", default);
                 var result = await migration.ImportAsync(request, "operator", default);
                 Assert.True(result.Imported);
-                Assert.Equal(1, result.CodingAttempts);
+                Assert.Equal(2, result.CodingAttempts);
                 Assert.Equal(1, result.RunnerIdentities);
                 Assert.Equal(1, result.ReviewAttempts);
                 Assert.Equal(2, result.Leases);
@@ -532,6 +552,7 @@ public sealed class TaskServerStoreTests
                 await using var connection = new SqliteConnection($"Data Source={store.DatabasePath};Pooling=False");
                 await connection.OpenAsync();
                 Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM runs WHERE id = 'run_legacy_1' AND status = 'completed';"));
+                Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM runs WHERE id = 'run_legacy_archived' AND status = 'completed';"));
                 Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM leases WHERE lease_id = 'lease_coding_1' AND fence = 8;"));
                 Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM review_attempts WHERE id = 'review_legacy_1' AND status = 'process-unknown' AND fence = 3;"));
                 Assert.Equal(1L, Scalar(connection, "SELECT count(*) FROM runners WHERE id = 'idle-runner' AND name = 'Idle Runner';"));
