@@ -2134,6 +2134,28 @@
             replay queue.
           </td>
         </tr>
+        <tr id="case-agt-2680">
+          <td>2026-08-23/24</td>
+          <td><code>AGT-2680</code><br><span class="small">Claude session limit caused fleet-wide escalation storm</span></td>
+          <td>
+            The shared Claude account reached its session limit near 22:00. Every Claude card then failed, 32 cards reached
+            <span class="lane">5e-escalated</span>, and the pickup breaker left two projects paused after the provider reset.
+            From 00:20 through 09:00 no claimable cards remained, so recovery required a mass requeue and manual mode change.
+          </td>
+          <td>
+            Provider session-limit output was classified as a task failure. Each card therefore consumed failure and breaker
+            budgets instead of opening one account-level capability wait. The durable pause exposed no provider reset reason,
+            and the breaker mode had no provider-probe path that could restore automatic pickup.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> Claude session, usage, and rate-limit rejections now create one shared
+            provider capability circuit and keep the current card in <code>quota-waiting</code>. Claude admission pauses until
+            the parsed reset or bounded probe time while Codex remains eligible. No task escalation or failure budget is
+            consumed. Runner status and the board distinguish <code>limited</code>, <code>paused</code>, and
+            <code>stalled</code>; one reset-time quota probe keeps Claude closed until recovery is confirmed, then clears
+            every matching wait and resumes the card automatically.
+          </td>
+        </tr>
       </tbody>
     </table>
 

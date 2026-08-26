@@ -133,7 +133,76 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         Assert.NotNull(recorded.FinishedAt);
     }
 
-    private void WriteJob(string state, string slug, int order = 1)
+    [Fact]
+    public async Task ProviderLimit_HoldsWithoutEscalation_ThenProbeResumesSameCard()
+    {
+        WriteJob(TaskStates.Ready, "job-provider-limit");
+        var cli = new ProviderLimitCliService();
+        var registry = new ProviderLimitRegistry();
+        var runner = BuildRunner(cli, providerLimits: registry, quotaProbes: [new HealthyQuotaProbe()]);
+        runner.SetMode("auto-continuous");
+
+        await runner.TickAsync(CancellationToken.None);
+        var progressFolder = Path.Combine(_watchPath, TaskStates.Progress, "job-provider-limit");
+        await WaitUntilAsync(() =>
+            File.Exists(Path.Combine(progressFolder, QuotaWaitMarker.FileName))
+            && runner.GetStatus().OccupiedSlots == 0);
+
+        Assert.True(Directory.Exists(progressFolder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "job-provider-limit")));
+        Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl")));
+        Assert.False(runner.ProviderClaimsAllowedForTest("claude", DateTime.UtcNow));
+        Assert.True(runner.ProviderClaimsAllowedForTest("codex", DateTime.UtcNow));
+
+        // The simulated response reports a near-future reset. Once due, this
+        // tick starts the single coalesced recovery probe without admitting
+        // Claude on the strength of the timestamp alone.
+        var resetAt = Assert.Single(registry.Active(DateTime.UtcNow)).LimitedUntil;
+        var untilReset = resetAt - DateTime.UtcNow + TimeSpan.FromMilliseconds(100);
+        if (untilReset > TimeSpan.Zero) await Task.Delay(untilReset);
+        var recoveryDeadline = DateTime.UtcNow.AddSeconds(10);
+        while (!runner.ProviderClaimsAllowedForTest("claude", DateTime.UtcNow)
+               && DateTime.UtcNow < recoveryDeadline)
+        {
+            await runner.TickAsync(CancellationToken.None);
+            await Task.Delay(20);
+        }
+        Assert.True(runner.ProviderClaimsAllowedForTest("claude", DateTime.UtcNow));
+
+        // Normal scheduler ticks resume the same Progress card after the
+        // durable marker projection observes that recovery.
+        var resumeDeadline = DateTime.UtcNow.AddSeconds(10);
+        while (cli.StartCount < 2 && DateTime.UtcNow < resumeDeadline)
+        {
+            await runner.TickAsync(CancellationToken.None);
+            await Task.Delay(20);
+        }
+        Assert.Equal(2, cli.StartCount);
+    }
+
+    [Fact]
+    public async Task ProviderLimit_ClaudeCircuitStillAdmitsCodexCard()
+    {
+        WriteJob(TaskStates.Ready, "job-codex", cliType: CliTypes.Codex);
+        var cli = new ImmediateFinishCliService();
+        var registry = new ProviderLimitRegistry();
+        registry.Record(new ProviderLimitStatus(
+            CliTypes.Claude,
+            DateTime.UtcNow,
+            DateTime.UtcNow.AddHours(1),
+            "claude: limited until reset",
+            ResetTimeReported: true));
+        var runner = BuildRunner(cli, providerLimits: registry);
+        runner.SetMode("auto-continuous");
+        cli.AllowStartReturn.SetResult();
+
+        await runner.TickAsync(CancellationToken.None);
+        await cli.FinishRaised.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(runner.ProviderClaimsAllowedForTest(CliTypes.Codex, DateTime.UtcNow));
+    }
+
+    private void WriteJob(string state, string slug, int order = 1, string cliType = CliTypes.Claude)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
@@ -141,7 +210,7 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         File.WriteAllText(
             Path.Combine(dir, "task.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order}," +
-            "\"agent\":\"claude\",\"cliType\":\"claude\",\"ownerClientId\":\"local-default\"}");
+            $"\"agent\":\"claude\",\"cliType\":\"{cliType}\",\"ownerClientId\":\"local-default\"}}");
     }
 
     private void InitializeGitRepository()
@@ -175,7 +244,11 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         Assert.True(string.IsNullOrWhiteSpace(stderr), stderr);
     }
 
-    private ProjectRunner BuildRunner(ICliExecutionService cli, string? executionEngine = null)
+    private ProjectRunner BuildRunner(
+        ICliExecutionService cli,
+        string? executionEngine = null,
+        ProviderLimitRegistry? providerLimits = null,
+        IReadOnlyList<IQuotaProbe>? quotaProbes = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -225,7 +298,11 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         var orchestratorRunner = new OrchestratorRunner(claude, NullLogger<OrchestratorRunner>.Instance);
         var orchestratorSessions = new OrchestratorSessionStore(NullLogger<OrchestratorSessionStore>.Instance);
         var quotaCacheStore = new QuotaCacheStore(config, NullLogger<QuotaCacheStore>.Instance);
-        var quotaService = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), config, quotaCacheStore);
+        var quotaService = new QuotaService(
+            NullLogger<QuotaService>.Instance,
+            quotaProbes ?? Array.Empty<IQuotaProbe>(),
+            config,
+            quotaCacheStore);
         var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, config);
         var pickupFailures = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
         var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
@@ -249,7 +326,16 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
             settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess,
             bus: null,
             pickupLock: pickupLock,
-            pickupLockOwner: pickupLockOwner);
+            pickupLockOwner: pickupLockOwner,
+            providerLimits: providerLimits);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> predicate)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!predicate() && DateTime.UtcNow < deadline)
+            await Task.Delay(20);
+        Assert.True(predicate(), "condition was not reached before the test deadline");
     }
 
     private sealed class FailingCliService : ICliExecutionService
@@ -386,5 +472,101 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         public event Action<string, CliExecution>? OnStarted;
         public event Action<string, CliExecution>? OnFinished;
         public event Action<string, CliRunEvent>? OnRunEvent;
+    }
+
+    private sealed class ProviderLimitCliService : ICliExecutionService
+    {
+        private readonly Dictionary<string, List<CliOutputLine>> _output = new(StringComparer.Ordinal);
+
+        public string CliType => CliTypes.Claude;
+        public int StartCount { get; private set; }
+        public string GetCliPath() => "fake-claude";
+        public bool IsAvailable() => true;
+        public (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+            => (true, "test", path ?? GetCliPath());
+
+        public Task<(CliExecution? Execution, string? Error)> StartAsync(
+            string jobId,
+            string jobKey,
+            string prompt,
+            string workingDirectory,
+            string? sessionName = null,
+            bool resumeSession = false,
+            string? model = null,
+            string? thinkingLevel = null,
+            string? jobFolderPath = null,
+            string? permissionMode = null,
+            string? contextMode = null,
+            string? executionEngine = null,
+            CancellationToken ct = default)
+        {
+            StartCount++;
+            var started = new CliExecution
+            {
+                JobId = jobId,
+                TaskKey = jobKey,
+                ProcessId = Environment.ProcessId,
+                StartedAt = DateTime.UtcNow,
+                Status = RunStatuses.Running,
+            };
+            OnStarted?.Invoke(jobKey, started);
+            var text = StartCount == 1
+                ? $"You've hit your session limit (resetsAt={DateTimeOffset.UtcNow.AddSeconds(2).ToUnixTimeSeconds()})"
+                : "[[TASK_DONE]]";
+            var line = new CliOutputLine { Timestamp = DateTime.UtcNow, Stream = "stderr", Text = text };
+            _output[jobKey] = [line];
+            OnOutput?.Invoke(jobKey, line);
+            OnFinished?.Invoke(jobKey, started with
+            {
+                Status = StartCount == 1 ? RunStatuses.Failed : RunStatuses.Completed,
+                ExitCode = StartCount == 1 ? 1 : 0,
+                DurationSeconds = 0.01,
+                RunOutcome = StartCount == 1 ? TerminalRunOutcomeKinds.Failed : TerminalRunOutcomeKinds.Success,
+            });
+            return Task.FromResult<(CliExecution?, string?)>((started, null));
+        }
+
+        public bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop) => false;
+        public bool SendInput(string jobKey, string input) => false;
+        public List<CliOutputLine> GetOutput(string jobKey)
+            => _output.TryGetValue(jobKey, out var output) ? output : [];
+        public void DiscardPersistedOutput(string jobKey) { }
+        public void ReleaseOutputResources(string jobKey) { }
+        public CliExecution? GetExecution(string jobKey) => null;
+        public SessionUsage? GetLastUsage(string jobKey) => null;
+        public bool IsRunningForProject(string rootPath) => false;
+        public DateTime? GetLastStreamedAt(string jobKey) => null;
+        public WatchdogState GetWatchdogState(string jobKey) => WatchdogState.Healthy;
+        public void SetWatchdogState(string jobKey, WatchdogState state) { }
+        public void ReattachOnStartup() { }
+        public Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+            => Task.FromResult(new CliModelCatalog { Models = [], Source = "fake", FetchedAt = DateTime.UtcNow });
+        public bool IsCompatibleSessionName(string? sessionName) => true;
+
+        public event Action<string, CliOutputLine>? OnOutput;
+        public event Action<string, CliExecution>? OnStarted;
+        public event Action<string, CliExecution>? OnFinished;
+        public event Action<string, CliRunEvent>? OnRunEvent;
+    }
+
+    private sealed class HealthyQuotaProbe : IQuotaProbe
+    {
+        public string CliType => CliTypes.Claude;
+
+        public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct) => Task.FromResult(new QuotaSnapshot
+        {
+            CliType = CliTypes.Claude,
+            FetchedAt = DateTime.UtcNow,
+            Windows =
+            [
+                new QuotaWindow
+                {
+                    Label = "five-hour",
+                    UsedPct = 0,
+                    ResetAt = DateTime.UtcNow.AddHours(5),
+                },
+            ],
+            Source = "simulated-recovery",
+        });
     }
 }

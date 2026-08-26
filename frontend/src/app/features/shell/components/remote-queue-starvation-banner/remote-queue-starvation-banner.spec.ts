@@ -6,6 +6,90 @@ import { describe, expect, it } from 'vitest';
 import { RemoteQueueStarvationBannerComponent } from './remote-queue-starvation-banner';
 
 describe('RemoteQueueStarvationBannerComponent', () => {
+  it('names a provider limit instead of reporting queue starvation', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Demo']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      signal: 'limited',
+      waitingTaskCount: 1,
+      availableSlots: 4,
+      thresholdMinutes: 30,
+      claimProgressStalled: true,
+      lastSuccessfulClaimAt: null,
+      hasRejections: false,
+      oldestEnteredLaneAt: null,
+      observedAt: '2026-08-24T00:00:00Z',
+      items: [],
+      providerLimits: [{
+        cliType: 'claude',
+        observedAt: '2026-08-23T22:00:00Z',
+        limitedUntil: '2026-08-24T00:20:00Z',
+        reason: 'claude: limited until reset',
+        resetTimeReported: true,
+      }],
+      pickupPauses: [],
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-starvation-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('Claude claims limited until');
+    expect(banner.textContent).toContain('resume automatically');
+    expect(banner.textContent).toContain('Codex and other CLI claims remain eligible');
+    expect(banner.textContent).not.toContain('waiting despite free Runner capacity');
+    fixture.destroy();
+    http.verify();
+  });
+
+  it('shows the reason for an infrastructure-breaker pickup pause', async () => {
+    await TestBed.configureTestingModule({
+      imports: [RemoteQueueStarvationBannerComponent],
+      providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(RemoteQueueStarvationBannerComponent);
+    fixture.componentRef.setInput('projects', ['Demo']);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/runner/queue-starvation').flush({
+      active: true,
+      signal: 'paused',
+      waitingTaskCount: 0,
+      availableSlots: 0,
+      thresholdMinutes: 30,
+      claimProgressStalled: false,
+      lastSuccessfulClaimAt: null,
+      hasRejections: false,
+      oldestEnteredLaneAt: null,
+      observedAt: '2026-08-24T00:00:00Z',
+      items: [],
+      providerLimits: [],
+      pickupPauses: [{
+        projectName: 'Demo',
+        reason: 'pickup paused: infra breaker, 3 failures cliType=claude at 2026-08-23T22:10:00Z',
+        pausedAt: '2026-08-23T22:10:00Z',
+        autoResumeAt: null,
+      }],
+    });
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="remote-queue-starvation-banner"]',
+    ) as HTMLElement;
+    expect(banner.textContent).toContain('Pickup paused: infra breaker');
+    expect(banner.textContent).toContain('3 failures cliType=claude');
+    expect(banner.textContent).toContain('requires an operator resume');
+    fixture.destroy();
+    http.verify();
+  });
+
   it('describes stalled claim progress without inventing a rejection', async () => {
     await TestBed.configureTestingModule({
       imports: [RemoteQueueStarvationBannerComponent],
