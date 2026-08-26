@@ -170,7 +170,8 @@ public sealed record QuotaWaitStatus(
     DateTime StartedAt,
     DateTime ResetAt,
     int ThresholdMinutes,
-    string Reason);
+    string Reason,
+    string Scope = "quota");
 
 public record ProjectRunnerStatus
 {
@@ -224,6 +225,11 @@ public record ProjectRunnerStatus
     /// Human-readable reason for the active global breaker cooldown.
     /// </summary>
     public string? BreakerReason { get; init; }
+    /// <summary>
+    /// Account-level provider capabilities currently paused. These are scoped
+    /// by CLI, so a Claude limit does not make Codex cards ineligible.
+    /// </summary>
+    public IReadOnlyList<ProviderLimitStatus> ProviderLimits { get; init; } = [];
     /// <summary>
     /// Number of global breaker trips since this runner instance started. Used
     /// to explain exponential cooldown backoff.

@@ -26,6 +26,24 @@ interface RemoteQueueStarvationSnapshot {
   oldestEnteredLaneAt: string | null;
   observedAt: string;
   items: RemoteQueueStarvationItem[];
+  signal?: 'limited' | 'paused' | 'stalled' | null;
+  providerLimits?: ProviderLimitStatus[];
+  pickupPauses?: RunnerPickupPause[];
+}
+
+interface ProviderLimitStatus {
+  cliType: string;
+  observedAt: string;
+  limitedUntil: string;
+  reason: string;
+  resetTimeReported: boolean;
+}
+
+interface RunnerPickupPause {
+  projectName: string;
+  reason: string;
+  pausedAt: string | null;
+  autoResumeAt: string | null;
 }
 
 @Component({
@@ -56,6 +74,27 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
     this.visibleItems().some(item => item.lastRejection != null));
   readonly buildProfileGateBlockedCount = computed(() =>
     this.visibleItems().filter(item => item.blockReasonCode === 'build-profile-gate').length);
+  readonly providerLimits = computed(() => this.snapshot()?.providerLimits ?? []);
+  readonly pickupPauses = computed(() => {
+    const pauses = this.snapshot()?.pickupPauses ?? [];
+    const projects = this.projects();
+    if (projects.length === 0) return pauses;
+    const visible = new Set(projects.map(project => project.toLowerCase()));
+    return pauses.filter(pause => visible.has(pause.projectName.toLowerCase()));
+  });
+  readonly showBanner = computed(() =>
+    this.providerLimits().length > 0
+    || this.pickupPauses().length > 0
+    || this.visibleItems().length > 0);
+
+  formatLimitTime(value: string): string {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+  }
+
+  cliLabel(cliType: string): string {
+    return cliType.length === 0 ? 'Provider' : cliType[0].toUpperCase() + cliType.slice(1);
+  }
 
   ngOnInit(): void {
     this.refresh();

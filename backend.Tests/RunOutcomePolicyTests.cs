@@ -962,7 +962,7 @@ public class RunOutcomePolicyTests
     /// the orchestrator-inconclusive catch-all (AGT-1918/1919/1920 signature).
     /// </summary>
     [Fact]
-    public void QuotaExhausted_StopsAndRoutesToHumanReview()
+    public void QuotaExhausted_WaitsForProviderWithoutHumanReview()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.AutoPickup,
@@ -972,7 +972,7 @@ public class RunOutcomePolicyTests
             reissueAttempt: 0,
             codexEvidence: null);
 
-        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(OutcomeActionKind.WaitForProvider, action.Kind);
         Assert.Equal(RunIssueKind.QuotaExhausted, action.IssueKind);
         Assert.Equal(OrchestratorMessageKind.QuotaExhausted, action.MessageKind);
         Assert.False(action.IsHeuristicFallback);

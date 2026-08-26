@@ -510,6 +510,15 @@ state.
   notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
   A recognized provider-auth run failure reports unavailability immediately so
   revocation between periodic probes is visible.
+- Account-level provider session, usage, and rate limits are CLI capability
+  state, not task outcomes. The local runner records `claude: limited until
+  <time>` in runner status, persists the current card in provider-scoped
+  `quota-waiting`, and excludes only Claude from claim admission. The queue
+  health projection reports `limited` separately from `stalled`. At the reset
+  time the runner refreshes quota state, clears the wait marker, and resumes the
+  card automatically. Codex and other CLI claims remain eligible throughout.
+  Provider limits do not create task failure records, human-review moves, or
+  pickup-breaker failure counts. Operator mode changes remain manual.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps

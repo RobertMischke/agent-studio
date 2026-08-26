@@ -372,6 +372,59 @@ public sealed class ProjectRunnerModeTests : IDisposable
         Assert.Null(runner.GetStatus().BreakerState);
     }
 
+    [Fact]
+    public void ProviderLimit_PausesClaudeOnly_AndEligibilityReturnsAtReset()
+    {
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+        var observed = DateTime.UtcNow;
+        var reset = observed.AddHours(2);
+        runner.RecordProviderLimitForTest(new ProviderLimitStatus(
+            "claude", observed, reset, "claude: limited until reset", true));
+
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.False(runner.ProviderClaimsAllowedForTest("claude", observed.AddMinutes(1)));
+        Assert.True(runner.ProviderClaimsAllowedForTest("codex", observed.AddMinutes(1)));
+        Assert.True(runner.ProviderClaimsAllowedForTest("claude", reset));
+    }
+
+    [Fact]
+    public void InfraBreakerPause_ExposesCircuitBreakerSourceAndReason()
+    {
+        var runner = BuildRunner();
+
+        runner.SetMode(
+            "manual",
+            "pickup paused: infra breaker, 3 failures cliType=claude at 2026-08-23T22:10:00Z");
+
+        Assert.Equal("circuit-breaker", runner.GetStatus().ModeSource);
+        Assert.Contains("3 failures cliType=claude", runner.GetStatus().ModeReason);
+    }
+
+    [Fact]
+    public void ProviderLimit_DurableWaitRehydratesRunnerStatusAfterRestart()
+    {
+        WriteJob(TaskStates.Progress, "job-a");
+        var observed = DateTime.UtcNow;
+        var reset = observed.AddHours(2);
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "job-a");
+        QuotaWaitMarker.Write(folder, new QuotaWaitRecord
+        {
+            CliType = "claude",
+            StartedAt = observed,
+            ResetAt = reset,
+            ThresholdMinutes = 30,
+            Reason = $"claude: limited until {reset:O}",
+            Scope = "provider",
+        });
+
+        var status = BuildRunner().GetStatus();
+
+        var limit = Assert.Single(status.ProviderLimits);
+        Assert.Equal("claude", limit.CliType);
+        Assert.Equal(reset, limit.LimitedUntil);
+    }
+
     /// <summary>
     /// Mixed transient failures across DIFFERENT jobs (none repeating to the
     /// threshold) must not park a task and must not halt: the window resets and

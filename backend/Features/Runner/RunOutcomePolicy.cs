@@ -14,7 +14,9 @@ public enum OutcomeActionKind
     /// <summary>Re-issue the same intent with a stronger framing because the agent did not honor the user request.</summary>
     ReissueWithStrongerFraming,
     /// <summary>Halt the job and post a meta message explaining why a re-issue did not run.</summary>
-    NotifyUserAndStop
+    NotifyUserAndStop,
+    /// <summary>Hold the task for an account-level provider reset without escalation.</summary>
+    WaitForProvider,
 }
 
 /// <summary>
@@ -233,16 +235,14 @@ public static class RunOutcomePolicy
 
         if (outcome.IssueKind == RunIssueKind.QuotaExhausted)
         {
-            // The account's usage/session/rate-limit budget is exhausted. This
-            // is transient (it clears when the quota window resets), so re-
-            // issuing right now walks into the same rejection. Route to human
-            // review with an honest quota-exhausted reason (the runner also
-            // exempts it from the per-task no-progress quarantine streak) rather
-            // than the misleading orchestrator-inconclusive.
+            // Account limits are provider capability state, not task failure.
+            // The runner persists quotaWait and schedules a reset-time probe;
+            // this action exists as the policy-level guard against any caller
+            // accidentally routing the same signal to human review.
             return new OutcomeAction(
-                Kind: OutcomeActionKind.NotifyUserAndStop,
+                Kind: OutcomeActionKind.WaitForProvider,
                 MetaMessage: outcome.Summary
-                    ?? "The account's usage/session/rate-limit budget is exhausted. This is transient; re-queue the task after the quota window resets. Routing to human review.",
+                    ?? "The account's usage/session/rate-limit budget is exhausted. Waiting for the provider reset; the task will resume automatically.",
                 IsHeuristicFallback: false)
             {
                 IssueKind = RunIssueKind.QuotaExhausted,
