@@ -498,7 +498,12 @@ state.
   registration instead of failing startup on a missing capability route. The
   authenticated `GET /api/v1/management/remote-hosts` route exposes the latest
   retained coding and review snapshots in both the monolith compatibility
-  profile and the standalone Task Server profile.
+  profile and the standalone Task Server profile. Each snapshot retains the
+  process role's bootstrap parallelism, so Execution Hosts can show Review and
+  Coding ceilings independently while grouping them by the shared host id.
+  Runner registration advertises the deployment release directory selected by
+  `/opt/agent-host/current` (or `RUNNER_RELEASE_ID`) rather than the generic
+  assembly package version.
 - Provider-auth advertisement changes are appended to the same bounded recovery
   history exposed by the management snapshot. Execution Hosts turns that data
   into per-CLI `OK`, `Unavailable`, and `Unknown` badges, transition

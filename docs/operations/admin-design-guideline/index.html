@@ -418,6 +418,13 @@
           <p>A lane or comparable compact header MUST use one UI font family and one vertical centerline. The name is primary at 13 px and 600 weight. Count and operational summary are secondary at 11 px, with tabular figures. The name receives flexible width before trailing decoration. At narrow component widths, summary prose MUST switch to compact notation such as <code>0/10</code>, with the complete meaning available in an accessible tooltip. Optional decoration collapses next; name ellipsis is the last resort.</p>
         </div>
       </article>
+      <article class="rule">
+        <div class="rule-id">ADM-17</div>
+        <div>
+          <h4>Unknown table values stay inline and quiet</h4>
+          <p>A missing metric, release, or activity value MUST render as one muted en dash in the cell. A placeholder MUST NOT reserve the geometry of a meter, progress track, badge, bar, or boxed control. Render data visualizations only when a measured value exists, and preserve the full reason in accessible text when it helps diagnosis.</p>
+        </div>
+      </article>
     </div>
 
     <h3>Decision provenance</h3>
@@ -435,6 +442,7 @@
           <tr><td>ADM-10</td><td>Product typography has no runtime dependency on a third-party font host.</td><td>Operator mandate for this dossier.</td></tr>
           <tr><td>ADM-11</td><td>Push panels use a distinct shell layer, one fixed header row, and collision-free transcript controls.</td><td>AGT-2613 and operator evidence from 11.08.</td></tr>
           <tr><td>ADM-12</td><td>Compact headers use one type hierarchy and centerline, protect the name before decoration, and abbreviate secondary status before truncating identity.</td><td>AGT-2642 name-first tree rows and AGT-2644 operator evidence from 11.08.</td></tr>
+          <tr><td>ADM-17</td><td>Unknown table values use one quiet inline placeholder and never impersonate a measured bar or boxed state.</td><td>AGT-2653 Execution Hosts operator evidence and AGT-2681 delivery audit.</td></tr>
         </tbody>
       </table>
     </div>

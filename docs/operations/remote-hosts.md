@@ -216,6 +216,10 @@ Execution Hosts shows the capability state, reason, first and last failure,
 cooldown, canary claim, affected coding and review attempts, and recovery
 history. A stale advertisement is explicitly stale. AGT-2142 telemetry appears
 as live meters only while both its sample and the host heartbeat are fresh.
+Coding and Review processes that advertise the same host id appear below one
+physical-machine row. Their role-local slot ceilings stay separate, while CPU,
+memory, activity, and release identity appear once for the machine. Missing
+values use a quiet dash rather than an empty meter.
 
 Automatic whole-host drain is reserved for shared foundations: disk full,
 invalid lease authority, host network isolation, repository filesystem
@@ -245,8 +249,8 @@ curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/drain \
 Use **Retire**, read the confirmation, then choose **Drain and retire**. If work
 is running, the server drains first and changes the identity to `retired` only
 after the daemon reports zero active slots. With zero active slots it retires
-immediately. Retired clients move into the
-collapsed **Retired clients** section and retain historical attribution.
+immediately. Retired roles are hidden by default. Use **Show retired** in the
+table summary to reveal them; historical attribution remains intact.
 
 ```bash
 curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/retire \
@@ -255,7 +259,7 @@ curl -sS -X POST https://tasks.example.com/api/clients/agent-runner-01/retire \
 
 ## Revive
 
-Expand **Retired clients** and choose **Revive**. Start or re-register the daemon
+Choose **Show retired**, then **Revive** on the role row. Start or re-register the daemon
 afterward so `LastSeenAt`, daemon state, and the push probe become fresh again.
 
 ```bash

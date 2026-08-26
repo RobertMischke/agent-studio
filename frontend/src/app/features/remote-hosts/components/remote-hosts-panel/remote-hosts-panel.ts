@@ -21,6 +21,10 @@ import {
   type RemoteHostSortKey,
 } from './remote-host-table-state';
 import { formatDrainRate, formatReviewDuration } from './auto-review-queue-format';
+import {
+  groupPhysicalHosts,
+  type PhysicalHostGroup,
+} from '../../models/physical-host-group';
 
 /**
  * Execution Hosts settings page (AGT-1921).
@@ -53,6 +57,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly error = this.service.error;
   readonly identityDiagnostics = this.service.identityDiagnostics;
   readonly wizardOpen = signal(false);
+  readonly showRetired = signal(false);
   readonly setupHost = signal<RemoteHost | null>(null);
   readonly pendingConfirmation = signal<{ kind: 'retire' | 'delete'; host: RemoteHost } | null>(null);
   readonly confirmationTitle = computed(() => {
@@ -75,18 +80,20 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly now = signal<number>(Date.now());
   private tickHandle: ReturnType<typeof setInterval> | null = null;
 
-  /** Header tallies - each reconciles to the visible rows (R3 sum invariant). */
-  readonly activeHosts = computed(() => this.hosts().filter(host => host.status !== 'retired'));
-  readonly retiredHosts = computed(() => this.hosts().filter(host => host.status === 'retired'));
-  readonly total = computed(() => this.hosts().length);
-  readonly onlineCount = computed(() => this.activeHosts().filter((h) => h.status === 'online').length);
-  readonly remoteCount = computed(() => this.activeHosts().filter((h) => h.role === 'remote').length);
+  /** Header tallies reconcile to visible physical machines and role sub-rows. */
+  readonly hostGroups = computed(() => groupPhysicalHosts(this.hosts(), this.showRetired()));
+  readonly retiredCount = computed(() => this.hosts().filter(host => host.status === 'retired').length);
+  readonly total = computed(() => this.hostGroups().length);
+  readonly roleCount = computed(() => this.hostGroups()
+    .reduce((total, group) => total + group.roles.length, 0));
+  readonly onlineCount = computed(() => this.hostGroups()
+    .filter(group => group.machine.status === 'online').length);
   readonly boardRunningTruth = computed(() =>
     deriveBoardRunningTruth(this.tasks.grouped().progress));
   readonly sortKey = this.tableState.sortKey;
   readonly sortDirection = this.tableState.direction;
-  readonly sortedHosts = computed(() =>
-    this.tableState.sort(this.hosts(), host => this.boardSlots(host)));
+  readonly sortedHostGroups = computed(() =>
+    this.tableState.sort(this.hostGroups(), host => this.boardSlots(host)));
 
   /** Auto-review post-processing queue snapshot (AGT-2645). */
   readonly reviewQueueSnapshot = computed(() => this.reviewQueue.snapshot());
@@ -144,6 +151,16 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
 
   setExpanded(hostId: string, expanded: boolean): void {
     this.tableState.setExpanded(hostId, expanded);
+  }
+
+  toggleRetired(): void { this.showRetired.update(value => !value); }
+
+  roleSlots(group: PhysicalHostGroup): Readonly<Record<string, number>> {
+    return Object.fromEntries(group.roles.map(role => [role.id, this.boardSlots(role)]));
+  }
+
+  groupSlots(group: PhysicalHostGroup): number {
+    return group.roles.reduce((total, role) => total + this.boardSlots(role), 0);
   }
 
   openWizard(): void { this.wizardOpen.set(true); }

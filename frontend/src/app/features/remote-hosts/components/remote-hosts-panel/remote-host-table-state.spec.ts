@@ -4,27 +4,29 @@ import {
   REMOTE_HOST_TABLE_SESSION_KEY,
   RemoteHostTableState,
 } from './remote-host-table-state';
+import { groupPhysicalHosts } from '../../models/physical-host-group';
 
 const HOSTS: RemoteHost[] = [
   host('runner-b', 'offline', 91, '2026-08-11T08:00:00Z', 'release-2'),
   host('runner-a', 'online', 21, '2026-08-11T10:00:00Z', 'release-1'),
 ];
+const GROUPS = groupPhysicalHosts(HOSTS, true);
 
 afterEach(() => window.sessionStorage.clear());
 
 describe('RemoteHostTableState', () => {
   it('sorts every data column with a stable direction toggle', () => {
     const state = new RemoteHostTableState();
-    expect(state.sort(HOSTS, item => item.id === 'runner-a' ? 1 : 3).map(item => item.id))
+    expect(state.sort(GROUPS, item => item.id === 'runner-a' ? 1 : 3).map(item => item.id))
       .toEqual(['runner-a', 'runner-b']);
 
     state.selectSort('load');
     expect(state.direction()).toBe('desc');
-    expect(state.sort(HOSTS, () => 0).map(item => item.id)).toEqual(['runner-b', 'runner-a']);
+    expect(state.sort(GROUPS, () => 0).map(item => item.id)).toEqual(['runner-b', 'runner-a']);
 
     state.selectSort('load');
     expect(state.direction()).toBe('asc');
-    expect(state.sort(HOSTS, () => 0).map(item => item.id)).toEqual(['runner-a', 'runner-b']);
+    expect(state.sort(GROUPS, () => 0).map(item => item.id)).toEqual(['runner-a', 'runner-b']);
   });
 
   it('restores sort and expanded rows from session storage', () => {
@@ -71,5 +73,6 @@ function host(
       diskFreeGb: 5,
     },
     releaseId,
+    capacityHostId: id,
   };
 }

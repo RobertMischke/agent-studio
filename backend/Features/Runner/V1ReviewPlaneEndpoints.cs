@@ -1374,6 +1374,7 @@ public sealed class V1ReviewExecutorRegistry
                     request.RunnerVersion,
                     request.ProtocolVersion,
                     capabilities.ToHashSet(StringComparer.Ordinal),
+                    request.BootstrapMaxParallelism,
                     now,
                     now),
                 (_, existing) =>
@@ -1391,6 +1392,7 @@ public sealed class V1ReviewExecutorRegistry
                         RunnerVersion = request.RunnerVersion,
                         ProtocolVersion = request.ProtocolVersion,
                         Capabilities = capabilities.ToHashSet(StringComparer.Ordinal),
+                        RoleMaxParallelism = request.BootstrapMaxParallelism,
                         LastSeenAt = now,
                     };
                 });
@@ -1837,7 +1839,8 @@ public sealed class V1ReviewExecutorRegistry
                             null,
                             null),
                         capabilities,
-                        state?.Telemetry);
+                        state?.Telemetry,
+                        RoleMaxParallelism: registration.RoleMaxParallelism);
                 })
                 .ToArray();
         }
@@ -2011,6 +2014,7 @@ public sealed class V1ReviewExecutorRegistry
         string RunnerVersion,
         int ProtocolVersion,
         IReadOnlySet<string> Capabilities,
+        int RoleMaxParallelism,
         DateTime RegisteredAt,
         DateTime LastSeenAt);
 

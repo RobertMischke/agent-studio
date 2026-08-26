@@ -198,7 +198,7 @@ public sealed class TaskServerClient : IDisposable
                 displayName,
                 options.Hostname,
                 RunnerInstanceId,
-                typeof(TaskServerClient).Assembly.GetName().Version?.ToString(3) ?? "unknown",
+                RunnerReleaseIdentity.Current,
                 RunnerOptions.ProtocolVersion,
                 capabilities,
                 HostOrchestratorMinimum: _supportsHostOrchestrator
