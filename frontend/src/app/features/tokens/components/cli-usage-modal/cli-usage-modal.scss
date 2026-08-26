@@ -290,6 +290,17 @@
   font-size: 12px;
 }
 
+.cum__stale {
+  width: fit-content;
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  border: 1px solid color-mix(in srgb, var(--severity-warn) 38%, var(--studio-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--severity-warn) 12%, transparent);
+  color: var(--studio-accent-warn-strong);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 .cum__footer {
   display: flex;
   gap: var(--studio-spacing-2);

@@ -251,6 +251,9 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     chips: Chip[];
     state: string;
     tone: string;
+    stale: boolean;
+    staleMarker: string | null;
+    error: string | null;
   }
 
   // Real Codex shape: 4 windows, unit '%', used/limit both null, only usedPct.
@@ -261,7 +264,7 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     { label: 'Spark Weekly', usedPct: 4, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '16:25 on 14 Jun' },
   ];
 
-  async function renderWithCodex() {
+  async function renderWithCodex(probeFailed = false) {
     await TestBed.configureTestingModule({
       imports: [HeaderQuotaComponent],
       providers: [
@@ -281,8 +284,10 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
           cliType: 'codex',
           plan: 'Pro',
           fetchedAt: new Date().toISOString(),
+          cliVersion: 'codex-cli 0.149.0',
+          probeFailedAt: probeFailed ? '2026-08-23T19:07:00Z' : null,
           source: '/status',
-          error: null,
+          error: probeFailed ? 'Codex quota probe timed out.' : null,
           windows: codexWindows,
         },
       ],
@@ -309,5 +314,15 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     expect(session.tone).toBe('ok');
     // A fresh, error-free snapshot is never "unavailable".
     expect(codex.state).not.toBe('unavailable');
+  });
+
+  it('keeps last-good values and shows an attributable stale marker after a probe failure', async () => {
+    const codex = await renderWithCodex(true);
+
+    expect(codex.chips.map((chip) => chip.value)).toEqual(['66%', '12%', '0%', '4%']);
+    expect(codex.stale).toBe(true);
+    expect(codex.state).toBe('stale');
+    expect(codex.staleMarker).toMatch(/^probe failed \d{2}:\d{2}, codex 0\.149\.0$/);
+    expect(codex.error).toBe('Codex quota probe timed out.');
   });
 });

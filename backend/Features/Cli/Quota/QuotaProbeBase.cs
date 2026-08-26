@@ -16,6 +16,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
     protected readonly ILogger _logger;
     protected readonly CliRouter _router;
     protected readonly CliEnvironment _env;
+    protected string? LastCliVersion { get; private set; }
 
     protected QuotaProbeBase(ILogger logger, CliRouter router, CliEnvironment env)
     {
@@ -39,7 +40,8 @@ public abstract class QuotaProbeBase : IQuotaProbe
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, version, resolvedPath) = cli.TestCliPath();
+        LastCliVersion = version;
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 
@@ -80,7 +82,8 @@ public abstract class QuotaProbeBase : IQuotaProbe
         CancellationToken ct)
     {
         var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
+        var (available, version, resolvedPath) = cli.TestCliPath();
+        LastCliVersion = version;
         if (!available)
             throw new InvalidOperationException($"{CliType} CLI not available");
 

@@ -82,10 +82,12 @@ The frontend's model dropdown reads `/api/cli/{cliType}/models`. No CLI-specific
 - `Windows[]`: one or more `QuotaWindow`s with `UsedPct` (0-100, may exceed when overage allowed), `ResetAt` UTC, and `ResetLabel` for display. When the CLI exposes a recognized quota surface but no numeric utilization, return an explicit window with `UsedPct = null`; consumers render `Unknown` and must not treat that as a probe error.
 - `Source` — what the probe queried (`/usage`, `/status`, footer text, HTTP endpoint, …).
 - `RawSample` — truncated raw output for debugging.
+- `CliVersion`: exact `--version` output from the executable that rendered the probed surface.
+- `ProbeFailedAt` and `Error`: the latest failed refresh, when present. If a last-good plan or window set exists, the service retains it with its original `FetchedAt` and marks it stale instead of replacing it with an empty error snapshot.
 
 **Implementation pattern.** Most probes spawn the CLI in a scratch directory under `%TEMP%/agent-taskboard-quota/<cliType>` via a PTY, send slash commands, and scrape the rendered panel. See `ProbeWithStepsAsync` in [`QuotaProbeBase`](../../../backend/Features/Cli/Quota/QuotaProbeBase.cs).
 
-**Aggregation.** [`QuotaService`](../../../backend/Features/Cli/Quota/QuotaService.cs) aggregates all registered `IQuotaProbe`s and serves `/api/cli/quota`. New CLIs register an `IQuotaProbe` in [`backend/Host/Program.cs`](../../../backend/Host/Program.cs).
+**Aggregation.** [`QuotaService`](../../../backend/Features/Cli/Quota/QuotaService.cs) aggregates all registered `IQuotaProbe`s and serves `/api/cli/quota`. The GET is cache-only: stale or failed entries schedule a background probe with a bounded timeout, and no PTY startup work or request cancellation token is allowed onto the response path. New CLIs register an `IQuotaProbe` in [`backend/Host/Program.cs`](../../../backend/Host/Program.cs).
 
 **Quota fallback routing.** Workspace CLI Management persists one primary model
 and an optional fallback CLI/model/thinking level per CLI in
@@ -103,7 +105,7 @@ Before this routing was added, quota handling only rejected pickup with
 cap. Model catalog fallback referred only to discovery failure and did not
 change the launch model. There was no quota-triggered model or CLI router.
 
-**Refresh cadence.** Background refresh is automatic; the user can force a refresh per-CLI via the side-sheet button.
+**Refresh cadence.** Background refresh is automatic; the user can force a refresh per-CLI via the side-sheet button. Claude and Codex versions are checked at startup and every 15 minutes. A change emits the `CLI version changed` log with previous and current values so parser drift is attributable.
 
 ### 2.5 Logging & Activity Log
 

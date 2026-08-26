@@ -17,4 +17,5 @@ Imports via `from './features/quota'`. See [`index.ts`](./index.ts).
 
 - `usedPct` above 100 means the user has overshot the included allotment.
 - The "↻" buttons force a synchronous re-probe; calls take several seconds because they spawn a fresh PTY.
+- The ordinary GET is cache-only. Failed refreshes retain last-good values and show `probe failed HH:mm, <cli> <version>` as stale; the probe error is available from that marker's tooltip.
 - Strip vs donut is a deliberate split: the strip is for density when the user wants the full picture; the donut header is for at-a-glance "do I have headroom" in the status bar.

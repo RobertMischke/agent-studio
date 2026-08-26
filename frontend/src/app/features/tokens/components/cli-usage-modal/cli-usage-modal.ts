@@ -96,6 +96,19 @@ export class CliUsageModalComponent {
     return parts.join(' · ');
   });
 
+  readonly probeFailureMarker = computed(() => {
+    const row = this.row();
+    if (!row?.probeFailedAt) return null;
+    const failedAt = new Date(row.probeFailedAt);
+    const time = Number.isNaN(failedAt.getTime())
+      ? 'unknown time'
+      : failedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const version = (row.cliVersion ?? 'version unknown')
+      .replace(/^codex-cli\s*/i, '')
+      .replace(/^claude(?:\s+code)?\s*/i, '');
+    return `probe failed ${time}, ${row.cliType} ${version}`;
+  });
+
   readonly windows = computed<QuotaWindow[]>(() => this.row()?.windows ?? []);
 
   /** Reshapes each reported window into its card projection (pct, tone,

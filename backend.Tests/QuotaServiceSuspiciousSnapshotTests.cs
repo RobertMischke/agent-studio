@@ -109,6 +109,52 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
         Assert.Equal(2, probe.Calls);             // did not wait for the TTL
     }
 
+    [Fact]
+    public async Task RefreshAsync_FailedProbe_RetainsLastGoodValuesAndRecordsAttributableFailure()
+    {
+        var goodAt = DateTime.UtcNow.AddMinutes(-12);
+        var good = Snap(64) with
+        {
+            FetchedAt = goodAt,
+            Plan = "Pro",
+            CliVersion = "codex-cli 0.144.1"
+        };
+        var failed = new QuotaSnapshot
+        {
+            CliType = "codex",
+            CliVersion = "codex-cli 0.149.0",
+            Error = "A task was canceled."
+        };
+        var probe = new ScriptedProbe(call => call == 1 ? good : failed);
+        var svc = NewService(probe);
+
+        await svc.RefreshAsync("codex");
+        var final = await svc.RefreshAsync("codex");
+
+        Assert.Equal(goodAt, final!.FetchedAt);
+        Assert.Equal("Pro", final.Plan);
+        Assert.Equal(64, Assert.Single(final.Windows).UsedPct);
+        Assert.Equal("codex-cli 0.149.0", final.CliVersion);
+        Assert.NotNull(final.ProbeFailedAt);
+        Assert.Equal("Codex quota probe timed out.", final.Error);
+        Assert.DoesNotContain("task was canceled", final.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GetWithBackgroundRefresh_DoesNotRunSynchronousProbeStartupOnCallerThread()
+    {
+        using var release = new ManualResetEventSlim(false);
+        using var started = new ManualResetEventSlim(false);
+        var probe = new BlockingSynchronousPrefixProbe(started, release);
+        var svc = NewService(probe);
+
+        var report = svc.GetWithBackgroundRefresh();
+
+        Assert.Single(report.Snapshots);
+        Assert.True(started.Wait(TimeSpan.FromSeconds(2)), "background refresh did not start");
+        release.Set();
+    }
+
     private sealed class ScriptedProbe : IQuotaProbe
     {
         private readonly Func<int, QuotaSnapshot> _script;
@@ -139,6 +185,27 @@ public sealed class QuotaServiceSuspiciousSnapshotTests : IDisposable
             if (Interlocked.Increment(ref _calls) == 1) return _first;
             await _gate;
             return _afterGate;
+        }
+    }
+
+    private sealed class BlockingSynchronousPrefixProbe : IQuotaProbe
+    {
+        private readonly ManualResetEventSlim _started;
+        private readonly ManualResetEventSlim _release;
+
+        public BlockingSynchronousPrefixProbe(ManualResetEventSlim started, ManualResetEventSlim release)
+        {
+            _started = started;
+            _release = release;
+        }
+
+        public string CliType => "codex";
+
+        public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
+        {
+            _started.Set();
+            _release.Wait(ct);
+            return Task.FromResult(Snap(10));
         }
     }
 }

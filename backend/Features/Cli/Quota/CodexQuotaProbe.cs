@@ -20,14 +20,19 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed class CodexQuotaProbe : QuotaProbeBase
 {
-    // "5h limit: [bar] NN% left (resets HH:MM[ on D Mon])"
-    private static readonly Regex FiveHourRegex = new(
-        @"5h\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+    private static readonly Regex StatusPanelRegex = new(
+        @"(?:5h|5\s*-?\s*hour|Weekly|Spark)\s*limit|Account\s*:|codex/settings/usage|Context\s*window\s*:",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Legacy panels used "5h limit" on one logical line. Newer panels may
+    // spell it "5-hour limit" and render the reset on a continuation line.
+    private static readonly Regex FiveHourRegex = new(
+        @"(?:5h|5\s*-?\s*hour)\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
     private static readonly Regex WeeklyRegex = new(
         @"Weekly\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
     // Header of the Spark sub-block: "<model>-Spark limit:". It is
     // DELIBERATELY version-agnostic. The previous form pinned the model to
@@ -67,7 +72,8 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         {
             var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
             var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
-            var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
+            var commandPattern = new Regex(@"/status\s+show\s+current\s+session", RegexOptions.IgnoreCase);
+            var statusPattern  = StatusPanelRegex;
 
             var snap = await ProbeWithStepsAsync(
             [
@@ -78,17 +84,15 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
                 new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
                 // Clear the buffer so the await-welcome match only sees post-trust content.
                 new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
-                // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
-                // Enter while it's still parsing the slash command.
-                new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
+                // Wait for the slash-command menu entry before Enter. In 0.149.0,
+                // an early Enter can submit /status as a normal agent prompt.
+                new ProbeStep("submit-status", WaitForPattern: commandPattern, WaitTimeoutMs: 3000, PreSendDelayMs: 250, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
                 new ProbeStep("await-status",  WaitForPattern: statusPattern,  WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
             ],
             initialIdleMs: 8000,
             ct);
 
-            string? plan = PlanRegex.Match(snap) is { Success: true } pm
-                ? pm.Groups["plan"].Value.Trim()
-                : null;
+            var plan = ParsePlan(snap);
 
             var windows = ParseStatusWindows(snap);
 
@@ -106,6 +110,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = LastCliVersion,
                 Plan      = plan,
                 Source    = "/status",
                 RawSample = TruncateForDebug(snap),
@@ -118,7 +123,15 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Codex quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = LastCliVersion,
+                Source = "/status",
+                Error = ex is OperationCanceledException
+                    ? "Codex quota probe timed out or was canceled."
+                    : ex.Message
+            };
         }
     }
 
@@ -155,6 +168,14 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
         return windows;
     }
+
+    public static bool LooksLikeStatusPanel(string snap)
+        => !string.IsNullOrWhiteSpace(snap) && StatusPanelRegex.IsMatch(snap);
+
+    public static string? ParsePlan(string snap)
+        => PlanRegex.Match(snap) is { Success: true } match
+            ? match.Groups["plan"].Value.Trim()
+            : null;
 
     private static void AddLimitWindow(List<QuotaWindow> windows, string snap, Regex regex, string label)
     {

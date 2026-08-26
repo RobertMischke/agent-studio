@@ -268,7 +268,7 @@ locks default resolution in both cases plus vendor isolation.
 ## Quirks (and what to do about them)
 
 1. **Trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter.** Sending `1<Enter>` works but leaves a stray `1` in the input box that prefixes the next slash command. Use `<Enter>` alone when scripting Codex over a PTY (the quota probe does this).
-2. **`/status` PTY probe is fragile.** Trust + welcome + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. See comments in [`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` and lock with a fixture-based test.
+2. **`/status` PTY probe is fragile.** Trust + welcome + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. Wait for the `/status show current session...` command-menu entry before submitting, because Codex 0.149.0 can otherwise send `/status` as an ordinary prompt. The 0.144.1 and 0.149.0 panels also put reset text on continuation lines and can omit the standard 5-hour row. See comments in [`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` with the CLI version in its filename and lock both panel detection and parsing with a fixture-based test.
 3. **Codex reports % left, we report % used.** The probe inverts the value so the UI's `UsedPct` semantics stay consistent across CLIs. Don't double-invert.
 4. **`--json` is required.** Without it, stdout is a colored panel that can't be parsed. The runner always passes it.
 
@@ -369,7 +369,7 @@ locked by:
 
 ## Quota probe
 
-[`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs) returns two windows: a 5-hour bucket and a weekly bucket. Implementation runs `codex` over a PTY, accepts the trust prompt, navigates to `/status`, scrapes the panel.
+[`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs) returns whichever standard and Spark windows `/status` exposes. A standard 5-hour row is not guaranteed to be present. Implementation runs `codex` over a PTY, accepts the trust prompt, navigates to `/status`, and scrapes the panel.
 
 The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
 

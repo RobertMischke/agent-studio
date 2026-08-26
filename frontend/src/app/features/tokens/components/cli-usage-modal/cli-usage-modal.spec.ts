@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CliUsageModalComponent } from './cli-usage-modal';
@@ -205,5 +205,29 @@ describe('CliUsageModalComponent', () => {
     expect(
       c.limitText({ label: 'x', usedPct: null, used: null, limit: null, unit: null, resetAt: null, resetLabel: null }),
     ).toBe('n/a');
+  });
+
+  it('shows the failed-probe time and CLI version while keeping the error in a tooltip', async () => {
+    vi.useFakeTimers();
+    const failedRow: CliUsageQuotaRow = {
+      ...codexRow,
+      stale: true,
+      cliVersion: 'codex-cli 0.149.0',
+      probeFailedAt: '2026-08-23T19:07:00Z',
+      error: 'Codex quota probe timed out while waiting for the /status panel.',
+    };
+    const fixture = await build(failedRow, 'codex');
+    try {
+      const marker = document.querySelector<HTMLElement>('[data-testid="cli-usage-probe-stale"]');
+      expect(marker?.textContent?.trim()).toMatch(/^probe failed \d{2}:\d{2}, codex 0\.149\.0$/);
+
+      marker?.dispatchEvent(new MouseEvent('mouseenter'));
+      vi.advanceTimersByTime(301);
+      expect(document.querySelector<HTMLElement>('[data-testid="cli-usage-probe-error-tooltip"]')?.textContent)
+        .toBe('Codex quota probe timed out while waiting for the /status panel.');
+    } finally {
+      fixture.destroy();
+      vi.useRealTimers();
+    }
   });
 });

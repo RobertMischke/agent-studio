@@ -16,6 +16,7 @@ import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../services/quota-api.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';
 
@@ -76,6 +77,7 @@ interface QuotaCardModel {
   windows: QuotaWindow[];
   error: string | null;
   source: string | null;
+  staleMarker: string | null;
 }
 
 /**
@@ -93,6 +95,7 @@ interface QuotaCardModel {
 @Component({
   selector: 'app-header-quota',
   standalone: true,
+  imports: [AppTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './header-quota.html',
   styleUrl: './header-quota.scss'
@@ -171,7 +174,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
+    const stale = !s.fetchedAt || ageMs > ttlMs || !!s.probeFailedAt;
     const freshness = !s.fetchedAt
       ? 'never refreshed'
       : 'updated ' + this.formatAgo(ageMs);
@@ -186,7 +189,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, chips),
+      ariaLabel: this.cardAriaLabel(label, chips, this.probeFailureLabel(s)),
       chips,
       tone,
       state,
@@ -195,7 +198,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness,
       windows: s.windows,
       error: s.error,
-      source: s.source
+      source: s.source,
+      staleMarker: this.probeFailureLabel(s),
     };
   }
 
@@ -214,7 +218,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness: 'never refreshed',
       windows: [],
       error: null,
-      source: null
+      source: null,
+      staleMarker: null,
     };
   }
 
@@ -353,14 +358,15 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     return l.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'window';
   }
 
-  private cardAriaLabel(label: string, chips: QuotaChip[]): string {
+  private cardAriaLabel(label: string, chips: QuotaChip[], staleMarker: string | null): string {
     const real = chips.filter(c => c.windowKey !== 'none');
     if (real.length === 0) return `${label} quota: no data yet`;
     const parts = real.map(c => {
       const name = c.label ?? c.tag;
       return `${name ? name + ' ' : ''}${c.value}${c.value === 'Unknown' ? '' : ' used'}`;
     });
-    return `${label} quota: ${parts.join(', ')}`;
+    const suffix = staleMarker ? `, ${staleMarker}` : '';
+    return `${label} quota: ${parts.join(', ')}${suffix}`;
   }
 
   /**
@@ -402,7 +408,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     ww: QuotaWindowDisplay | undefined,
     primary: QuotaPrimaryDisplay,
   ): QuotaCardState {
-    if (hasError) return 'error';
+    if (hasError && !sw && !ww && !primary.hasValue) return 'error';
     if (!sw && !ww && !primary.hasValue) return 'unavailable';
     if (tone === 'hot') return 'hot';
     if (tone === 'warn') return 'warn';
@@ -417,6 +423,18 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       case 'gemini': return 'Gemini';
       default: return cli;
     }
+  }
+
+  private probeFailureLabel(snapshot: QuotaSnapshot): string | null {
+    if (!snapshot.probeFailedAt) return null;
+    const failedAt = new Date(snapshot.probeFailedAt);
+    const time = Number.isNaN(failedAt.getTime())
+      ? 'unknown time'
+      : failedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    const version = (snapshot.cliVersion ?? 'version unknown')
+      .replace(/^codex-cli\s*/i, '')
+      .replace(/^claude(?:\s+code)?\s*/i, '');
+    return `probe failed ${time}, ${snapshot.cliType} ${version}`;
   }
 
   private formatAgo(ms: number): string {

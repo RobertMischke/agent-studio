@@ -5,6 +5,46 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "codex",
+            name));
+
+    [Theory]
+    [InlineData("codex-status-v0.144.1.txt")]
+    [InlineData("codex-status-v0.149.0.txt")]
+    public void CapturedStatusPanel_ByCliVersion_RemainsParseable(string fixtureName)
+    {
+        var snapshot = ReadFixture(fixtureName);
+
+        Assert.True(CodexQuotaProbe.LooksLikeStatusPanel(snapshot));
+        Assert.Equal("Pro", CodexQuotaProbe.ParsePlan(snapshot));
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+        Assert.Equal(3, windows.Count);
+        Assert.DoesNotContain(windows, window => window.Label == "5-hour");
+        Assert.Contains(windows, window => window.Label == "Weekly" && window.UsedPct == 46);
+        Assert.Contains(windows, window => window.Label == "Spark 5-hour" && window.UsedPct == 0);
+        Assert.Contains(windows, window => window.Label == "Spark Weekly" && window.UsedPct == 0);
+    }
+
+    [Fact]
+    public void ParseStatusWindows_AcceptsSpelledOutFiveHourLabel()
+    {
+        const string snapshot =
+            "5-hour limit: [██████████░░░░░░░░░░] 50% left\n" +
+            "              (resets 09:30 on 27 Aug)\n";
+
+        var window = Assert.Single(CodexQuotaProbe.ParseStatusWindows(snapshot));
+
+        Assert.Equal("5-hour", window.Label);
+        Assert.Equal(50, window.UsedPct);
+        Assert.Equal("09:30 on 27 Aug", window.ResetLabel);
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {
