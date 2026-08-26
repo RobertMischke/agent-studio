@@ -119,8 +119,22 @@ public static class CliEndpoints
             }
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
-        cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions, TaskRunnerService runners) =>
+        cliGroup.MapGet("/local-capabilities", async (
+            LocalCliSelfRepairService repair,
+            CancellationToken ct) =>
+            Results.Ok(await repair.ProbeAsync(ct)));
+
+        cliGroup.MapGet("/usage", async (
+            CliRouter router,
+            SessionRegistry sessions,
+            TaskRunnerService runners,
+            LocalCliSelfRepairService repair,
+            CancellationToken ct) =>
         {
+            // This is the established local availability probe. Repair before
+            // building it so the capability banner reflects the post-repair
+            // state rather than briefly flipping to unavailable.
+            await repair.ProbeAsync(ct);
             // Snapshot the runner's per-project active job so the
             // LinkedJob chip can render `active` (green) when the linked
             // session belongs to the project's currently-running task.

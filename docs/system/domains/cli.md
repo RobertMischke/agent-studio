@@ -39,6 +39,9 @@ CLI execution tests.
   and a guarded `DELETE /api/cli/{cliType}/session` (cleanup refused for any path
   outside the CLI's own session store). Both resolve/parse in
   `SessionRegistry.cs`; the `/usage` list report stays body-free.
+- `backend/Features/Cli/Repair/`: Windows control-plane capability probing,
+  package-present/missing-shim classification, hourly bounded npm repair,
+  `cli-repairs.jsonl` forensic receipts, and the status-bar snapshot.
 - `backend/Services/Runner/OrchestratorSession.cs` and
   `OrchestratorRunner.cs`: runner-to-CLI orchestration boundary.
 - `backend/Features/Cli/Routing/OneShot/ClaudeOneShot.cs` and `CodexOneShot.cs`:

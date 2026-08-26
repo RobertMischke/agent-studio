@@ -424,6 +424,13 @@ builder.Services.AddSingleton<CliRouter>(sp => new CliRouter(
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Gemini)));
 builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
+builder.Services.AddSingleton<ILocalNpmRepairBoundary>(sp => new LocalNpmRepairBoundary(
+    sp.GetRequiredService<ILogger<LocalNpmRepairBoundary>>(),
+    repairEnabled: !publicDemoExecutionProfile));
+builder.Services.AddSingleton<LocalCliRepairJournal>();
+builder.Services.AddSingleton<LocalCliSelfRepairService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<LocalCliSelfRepairHostedService>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<SummaryGenerationService>();
 builder.Services.AddSingleton<PromptCallTelemetryService>();

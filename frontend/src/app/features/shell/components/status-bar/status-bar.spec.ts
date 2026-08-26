@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { formatCliRepairLabel, formatRunningLabel, StatusBarComponent } from './status-bar';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -26,6 +26,27 @@ describe('formatRunningLabel', () => {
 
   it('shows the honest coding slot ceiling once it is known', () => {
     expect(formatRunningLabel(0, 0, 3, 8)).toBe('coding 0/8');
+  });
+});
+
+describe('formatCliRepairLabel', () => {
+  it('surfaces a successful repair without an alarm word', () => {
+    const label = formatCliRepairLabel({
+      at: '2026-08-18T14:05:00Z', cliType: 'claude', outcome: 'succeeded',
+      cliVersionBefore: null, packageVersionBefore: '2.1.231',
+      cliVersionAfter: '2.1.234', packageVersionAfter: '2.1.234', error: null,
+    });
+    expect(label).toMatch(/^CLI repaired at /);
+    expect(label).not.toContain('failed');
+  });
+
+  it('uses the alarm copy only for a failed repair', () => {
+    const label = formatCliRepairLabel({
+      at: '2026-08-18T14:05:00Z', cliType: 'codex', outcome: 'failed',
+      cliVersionBefore: null, packageVersionBefore: '1.2.3',
+      cliVersionAfter: null, packageVersionAfter: '1.2.3', error: 'npm exited 1',
+    });
+    expect(label).toMatch(/^CLI repair failed at /);
   });
 });
 

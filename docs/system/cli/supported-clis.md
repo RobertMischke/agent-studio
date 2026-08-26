@@ -221,6 +221,32 @@ CAR 0.7.0 raises typed events before the matching raw-output callback. Studio mu
 
 The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns npm-shim healing for CAR-backed Claude launches. CAR 0.7.0 keeps its healer internal, so the existing Studio `NpmShimHealer` remains temporarily for the explicit legacy rollback and non-agent `ClaudeOneShot` only; T4 removes it with those paths. Studio uses the public `ICliProcessSpawner` seam only to attach host bookkeeping and the Claude rules-file overlay. The remaining public API gaps are tracked in PROJ-011 as `public-clean-context-lease`, `public-hardened-spawner-composition`, `public-cli-launch-overlay`, and `public-pre-spawn-health`. Do not solve CAR's internal Windows process helpers by copying them back into this repository.
 
+### 2.11 Local Windows npm-shim capability repair
+
+The control-plane host probes Claude and Codex independently of CAR launch
+health. When `--version` cannot start, `LocalCliSelfRepairService` distinguishes
+four states from filesystem facts: available, truly uninstalled, package
+present with no callable shim, and a present-but-broken install. Only the
+package-present/missing-shim state authorizes mutation. The repair is exactly
+`npm install --global <package>`, with one attempt per CLI per hour. Attempt
+timestamps are recovered from `<TaskRepository>/logs/cli-repairs.jsonl`, so a
+backend restart does not reset the budget.
+
+Every attempted repair journals package and CLI versions before and after, npm
+exit/output tails, the global prefix, and bounded filesystem activity metadata
+for package files, shim orphans, update-named files, and recent npm debug-log
+command metadata that names the affected package. Full npm logs are not copied.
+The status bar renders the latest
+successful receipt as `CLI repaired at <time>` with a calm tone; only a failed
+repair uses the alarm tone and `CLI repair failed at <time>`. A true uninstall
+stays unavailable and is never silently reinstalled.
+
+This host-level capability repair does not start a coding-agent process and
+does not replace CAR's per-launch hardening. `GET /api/cli/usage` runs the
+coordinator before returning the established local capability view;
+`GET /api/cli/local-capabilities` serves the lightweight status-bar receipt;
+and a five-minute hosted probe protects unattended local execution.
+
 ---
 
 ## 3. Currently supported CLIs

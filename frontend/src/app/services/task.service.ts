@@ -39,7 +39,7 @@ import type {
 } from '../models/task.model';
 import { TaskState } from '../models/task.model';
 import type { ClaudeSessionResponse } from '../features/claude';
-import type { CliModelCatalog, CliCompletionContract, CliUsageReport, CliSessionDetail, CliSessionDeleteResult, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult } from '../features/cli';
+import type { CliModelCatalog, CliCompletionContract, CliUsageReport, CliSessionDetail, CliSessionDeleteResult, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult, LocalCliCapabilityReport } from '../features/cli';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } from '../features/git';
 import type {
   OrchestratorLogResponse,
@@ -1667,6 +1667,10 @@ export class TaskService {
 
   getCliUsageReport() {
     return this.http.get<CliUsageReport>(`${this.baseUrl}/cli/usage`);
+  }
+
+  getLocalCliCapabilities() {
+    return this.http.get<LocalCliCapabilityReport>(`${this.baseUrl}/cli/local-capabilities`);
   }
 
   /**

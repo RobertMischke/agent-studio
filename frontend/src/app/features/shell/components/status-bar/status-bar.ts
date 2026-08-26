@@ -31,6 +31,7 @@ import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.compone
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { summarizeStatusBarHostLoad, summarizeStatusBarSlotsByRole } from './status-bar-host-load';
 import { withRouteSegment } from '../../../../services/url-hash.util';
+import type { LocalCliRepairReceipt } from '../../../cli';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -53,6 +54,13 @@ export function formatRunningLabel(
     return codingSlotCeiling !== null ? `coding 0/${codingSlotCeiling}` : 'coding idle';
   }
   return 'no runners';
+}
+
+export function formatCliRepairLabel(receipt: LocalCliRepairReceipt): string {
+  const time = new Date(receipt.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return receipt.outcome === 'succeeded'
+    ? `CLI repaired at ${time}`
+    : `CLI repair failed at ${time}`;
 }
 
 @Component({
@@ -104,6 +112,20 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly defaultCli = signal<CliType>(this.readDefaultCli());
   readonly defaultModel = signal<string>(this.readDefaultModel(this.readDefaultCli()));
   readonly defaultThinkingLevel = signal<string | null>(this.readDefaultThinkingLevel(this.readDefaultCli()));
+  readonly latestCliRepair = signal<LocalCliRepairReceipt | null>(null);
+  readonly cliRepairLabel = computed(() => {
+    const receipt = this.latestCliRepair();
+    return receipt ? formatCliRepairLabel(receipt) : '';
+  });
+  readonly cliRepairTooltip = computed(() => {
+    const receipt = this.latestCliRepair();
+    if (!receipt) return '';
+    const before = receipt.cliVersionBefore ?? receipt.packageVersionBefore ?? 'not found';
+    const after = receipt.cliVersionAfter ?? receipt.packageVersionAfter ?? 'unavailable';
+    const result = receipt.outcome === 'succeeded' ? 'Repaired' : 'Repair failed';
+    return `${result} ${receipt.cliType} on the local host. Version before: ${before}. Version after: ${after}.`
+      + (receipt.error ? ` ${receipt.error}` : '');
+  });
 
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
@@ -207,8 +229,13 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.remoteHosts.refresh();
     this.reviewQueue.refresh();
+    this.refreshLocalCliCapabilities();
     this.hostLoadRefreshHandle = setVisibleInterval(
-      () => { this.remoteHosts.refresh(); this.reviewQueue.refresh(); },
+      () => {
+        this.remoteHosts.refresh();
+        this.reviewQueue.refresh();
+        this.refreshLocalCliCapabilities();
+      },
       HOST_LOAD_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {
@@ -216,6 +243,16 @@ export class StatusBarComponent implements OnInit, OnDestroy {
       this.defaultCli.set(cli);
       this.defaultModel.set(this.readDefaultModel(cli));
       this.defaultThinkingLevel.set(this.readDefaultThinkingLevel(cli));
+    });
+  }
+
+  private refreshLocalCliCapabilities(): void {
+    this.jobService.getLocalCliCapabilities().subscribe({
+      next: report => this.latestCliRepair.set(report.latestRepair),
+      error: () => {
+        // The repair coordinator also runs in the backend. A transient status
+        // read failure must not manufacture a CLI alarm in the status bar.
+      },
     });
   }
 

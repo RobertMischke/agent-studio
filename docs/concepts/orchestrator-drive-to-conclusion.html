@@ -2134,6 +2134,29 @@
             replay queue.
           </td>
         </tr>
+        <tr id="case-agt-2673">
+          <td>2026-08-13 and<br>2026-08-18</td>
+          <td><code>AGT-2673</code><br><span class="small">local Windows CLI npm shims vanished</span></td>
+          <td>
+            The global Claude npm package remained under <code>node_modules/@anthropic-ai</code>, but the
+            callable <code>claude</code>/<code>claude.cmd</code> shims disappeared from the Windows control-plane
+            host. Local Claude runs could not start and the local capability view became unavailable. The
+            operator restored service twice with <code>npm install --global @anthropic-ai/claude-code</code>;
+            the observed package progression was 2.1.231 to 2.1.234.
+          </td>
+          <td>
+            The exact trigger was not captured during either occurrence. The package-survives/shim-vanishes
+            shape is consistent with a CLI auto-update or interrupted npm postinstall, but that remains a
+            hypothesis until the new journal correlates package, shim-orphan, update-file, and npm-log mtimes.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the local capability coordinator now separates a true
+            uninstall from package-present/missing-shim for Claude and Codex, runs one global npm reinstall per
+            CLI per hour, and journals versions and activity before/after. A successful repair returns the
+            capability to available and shows <em>CLI repaired at &lt;time&gt;</em>; a failed repair leaves it
+            unavailable and raises the status alarm. A true uninstall remains observation-only.
+          </td>
+        </tr>
       </tbody>
     </table>
 

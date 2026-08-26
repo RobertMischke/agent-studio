@@ -104,6 +104,30 @@ export interface CliUsageReport {
   sections: CliUsageSection[];
 }
 
+export interface LocalCliRepairReceipt {
+  at: string;
+  cliType: CliType;
+  outcome: 'succeeded' | 'failed';
+  cliVersionBefore: string | null;
+  packageVersionBefore: string | null;
+  cliVersionAfter: string | null;
+  packageVersionAfter: string | null;
+  error: string | null;
+}
+
+export interface LocalCliCapabilityReport {
+  at: string;
+  capabilities: {
+    cliType: CliType;
+    state: 'available' | 'missing-shim-with-package-present' | 'uninstalled' | 'broken-install';
+    available: boolean;
+    cliVersion: string | null;
+    packageVersion: string | null;
+    executablePath: string;
+  }[];
+  latestRepair: LocalCliRepairReceipt | null;
+}
+
 /**
  * On-demand deep read of a single session (mirror of the backend
  * `CliSessionDetail` record). Fetched lazily when a session row is expanded in
