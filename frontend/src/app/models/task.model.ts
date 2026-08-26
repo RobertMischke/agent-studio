@@ -317,6 +317,7 @@ export interface TaskInfo {
     resetAt: string;
     thresholdMinutes: number;
     reason: string;
+    scope?: 'quota' | 'provider' | string;
   } | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
@@ -1640,6 +1641,8 @@ export interface ProjectRunnerStatus {
   breakerCooldownUntil?: string | null;
   /** Human-readable reason for the active global breaker cooldown. */
   breakerReason?: string | null;
+  /** Account-level CLI capabilities temporarily held until their reset/probe time. */
+  providerLimits?: ProviderLimitStatus[];
   /** Number of global breaker trips since backend startup. */
   breakerTripCount?: number;
   /**
@@ -1663,6 +1666,14 @@ export interface ProjectRunnerStatus {
   pendingModeActiveTaskCount?: number;
   /** Title of the sole remaining snapshot task, when exactly one remains. */
   pendingModeActiveTaskTitle?: string | null;
+}
+
+export interface ProviderLimitStatus {
+  cliType: string;
+  observedAt: string;
+  limitedUntil: string;
+  reason: string;
+  resetTimeReported: boolean;
 }
 
 /**

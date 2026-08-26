@@ -1,10 +1,16 @@
-@if (visibleItems().length > 0) {
+@if (showBanner()) {
   <app-notification
     kind="warning"
     layout="banner"
     ariaLive="polite"
     testid="remote-queue-starvation-banner">
-    @if (buildProfileGateBlockedCount() > 0) {
+    @if (providerLimits()[0]; as limit) {
+      <strong data-testid="notice-bar-headline">{{ cliLabel(limit.cliType) }} claims limited until <span class="notification__number">{{ formatLimitTime(limit.limitedUntil) }}</span>.</strong>
+      <span class="notification__detail" data-testid="notice-bar-detail">The account-level provider limit is waiting for its reset and will resume automatically after a fresh quota probe. Codex and other CLI claims remain eligible.</span>
+    } @else if (pickupPauses()[0]; as pause) {
+      <strong data-testid="notice-bar-headline">Pickup paused: infra breaker.</strong>
+      <span class="notification__detail" data-testid="notice-bar-detail">{{ pause.projectName }}: {{ pause.reason }} @if (pause.autoResumeAt) { Auto-resume is scheduled for <span class="notification__number">{{ formatLimitTime(pause.autoResumeAt) }}</span>. } @else { This breaker requires an operator resume after the infrastructure recovers. }</span>
+    } @else if (buildProfileGateBlockedCount() > 0) {
       <strong data-testid="notice-bar-headline"><span class="notification__number">{{ buildProfileGateBlockedCount() }}</span> ready {{ buildProfileGateBlockedCount() === 1 ? 'card' : 'cards' }} not claimable: build profile not validated.</strong>
       <span class="notification__detail" data-testid="notice-bar-detail">Revalidate the project build profile. @if (availableSlots() > 0) { <span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'Runner slot is' : 'Runner slots are' }} available. } @else { Runner capacity cannot open this gate. }</span>
     } @else {

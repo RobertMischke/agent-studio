@@ -25,7 +25,17 @@ public sealed record RemoteQueueStarvationSnapshot
     public DateTime? OldestEnteredLaneAt { get; init; }
     public DateTime ObservedAt { get; init; }
     public IReadOnlyList<RemoteQueueStarvationItem> Items { get; init; } = [];
+    /// <summary>Acute signal: <c>limited</c>, <c>paused</c>, <c>stalled</c>, or null.</summary>
+    public string? Signal { get; init; }
+    public IReadOnlyList<ProviderLimitStatus> ProviderLimits { get; init; } = [];
+    public IReadOnlyList<RunnerPickupPause> PickupPauses { get; init; } = [];
 }
+
+public sealed record RunnerPickupPause(
+    string ProjectName,
+    string Reason,
+    DateTime? PausedAt,
+    DateTime? AutoResumeAt);
 
 /// <summary>Pure policy for the ready-queue starvation watchdog.</summary>
 public static class RemoteQueueStarvationPolicy
@@ -118,6 +128,60 @@ public static class RemoteQueueStarvationPolicy
             OldestEnteredLaneAt = items.FirstOrDefault()?.EnteredLaneAt,
             ObservedAt = now,
             Items = items,
+            Signal = items.Count > 0 ? "stalled" : null,
+        };
+    }
+}
+
+/// <summary>
+/// Pure server projection that overlays provider and pickup admission state on
+/// the queue watchdog. Provider limits and breaker pauses are acute even when
+/// there is no Ready-card starvation row to display.
+/// </summary>
+public static class RemoteQueueStarvationVisibility
+{
+    public static RemoteQueueStarvationSnapshot Project(
+        RemoteQueueStarvationSnapshot snapshot,
+        IReadOnlyList<RemoteQueueStarvationItem> visibleItems,
+        IReadOnlyList<ProjectRunnerStatus> visibleStatuses)
+    {
+        var providerLimits = visibleStatuses
+            .SelectMany(project => project.ProviderLimits)
+            .GroupBy(limit => limit.CliType, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(limit => limit.LimitedUntil).First())
+            .OrderBy(limit => limit.CliType, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var pickupPauses = visibleStatuses
+            .Where(project => string.Equals(project.ModeSource, "circuit-breaker", StringComparison.OrdinalIgnoreCase))
+            .Where(project => project.Mode is "manual" or "paused")
+            .Select(project => new RunnerPickupPause(
+                project.ProjectName,
+                project.BreakerReason ?? project.ModeReason ?? "infra circuit breaker",
+                project.ModeChangedAt,
+                project.BreakerCooldownUntil))
+            .ToList();
+        var signal = providerLimits.Count > 0
+            ? "limited"
+            : pickupPauses.Count > 0
+                ? "paused"
+                : visibleItems.Count > 0 ? "stalled" : null;
+
+        return snapshot with
+        {
+            Active = providerLimits.Count > 0
+                     || pickupPauses.Count > 0
+                     || (visibleItems.Count > 0
+                         && (snapshot.AvailableSlots > 0 || visibleItems.Any(item =>
+                             string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)))),
+            WaitingTaskCount = visibleItems.Count,
+            HasRejections = visibleItems.Any(item => item.LastRejection is not null),
+            BuildProfileGateBlockedTaskCount = visibleItems.Count(item =>
+                string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)),
+            OldestEnteredLaneAt = visibleItems.FirstOrDefault()?.EnteredLaneAt,
+            Items = visibleItems,
+            Signal = signal,
+            ProviderLimits = providerLimits,
+            PickupPauses = pickupPauses,
         };
     }
 }
@@ -256,27 +320,22 @@ public static class RemoteQueueStarvationEndpoints
         app.MapGet("/api/runner/queue-starvation", (
             HttpContext context,
             RemoteQueueStarvationWatchdog watchdog,
-            ProjectRegistry projects) =>
+            ProjectRegistry projects,
+            TaskRunnerService runner) =>
         {
             var snapshot = watchdog.Refresh();
-            if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human)
-                return Results.Ok(snapshot);
+            var status = runner.GetStatus();
+            var human = context.Items[AccessSecurityMiddleware.HumanPrincipalItem] as HumanPrincipal;
+            bool CanSee(string project) => human is null
+                || ProjectAccessAuthorization.Allows(human.User, project, projects);
 
             var visibleItems = snapshot.Items
-                .Where(item => ProjectAccessAuthorization.Allows(human.User, item.ProjectName, projects))
+                .Where(item => CanSee(item.ProjectName))
                 .ToList();
-            return Results.Ok(snapshot with
-            {
-                Active = visibleItems.Count > 0
-                         && (snapshot.AvailableSlots > 0 || visibleItems.Any(item =>
-                             string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal))),
-                WaitingTaskCount = visibleItems.Count,
-                HasRejections = visibleItems.Any(item => item.LastRejection is not null),
-                BuildProfileGateBlockedTaskCount = visibleItems.Count(item =>
-                    string.Equals(item.BlockReasonCode, "build-profile-gate", StringComparison.Ordinal)),
-                OldestEnteredLaneAt = visibleItems.FirstOrDefault()?.EnteredLaneAt,
-                Items = visibleItems,
-            });
+            var visibleStatuses = status.Projects.Values
+                .Where(project => CanSee(project.ProjectName))
+                .ToList();
+            return Results.Ok(RemoteQueueStarvationVisibility.Project(snapshot, visibleItems, visibleStatuses));
         });
     }
 }

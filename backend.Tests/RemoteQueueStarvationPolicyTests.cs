@@ -128,6 +128,57 @@ public sealed class RemoteQueueStarvationPolicyTests
     }
 
     [Fact]
+    public void Visibility_ProviderLimitOverridesStalledAndKeepsOtherCliCapacityDistinct()
+    {
+        var limit = new ProviderLimitStatus(
+            "claude",
+            Now,
+            Now.AddHours(2),
+            $"claude: limited until {Now.AddHours(2):O}",
+            true);
+        var projected = RemoteQueueStarvationVisibility.Project(
+            new RemoteQueueStarvationSnapshot { AvailableSlots = 4, Signal = "stalled" },
+            [new RemoteQueueStarvationItem { TaskKey = "AGT-1", EnteredLaneAt = Now.AddHours(-1) }],
+            [new ProjectRunnerStatus { ProjectName = "demo", ProviderLimits = [limit] }]);
+
+        Assert.True(projected.Active);
+        Assert.Equal("limited", projected.Signal);
+        Assert.Equal(limit, Assert.Single(projected.ProviderLimits));
+        Assert.Empty(projected.PickupPauses);
+    }
+
+    [Fact]
+    public void Visibility_InfraBreakerPauseCarriesReasonWhileManualPauseStaysManual()
+    {
+        const string reason = "pickup paused: infra breaker, 3 failures cliType=claude at 2026-08-23T22:10:00Z";
+        var projected = RemoteQueueStarvationVisibility.Project(
+            new RemoteQueueStarvationSnapshot(),
+            [],
+            [
+                new ProjectRunnerStatus
+                {
+                    ProjectName = "breaker-project",
+                    Mode = "paused",
+                    ModeSource = "circuit-breaker",
+                    ModeReason = reason,
+                },
+                new ProjectRunnerStatus
+                {
+                    ProjectName = "operator-project",
+                    Mode = "paused",
+                    ModeSource = "user",
+                    ModeReason = "api-toggle",
+                },
+            ]);
+
+        Assert.True(projected.Active);
+        Assert.Equal("paused", projected.Signal);
+        var pause = Assert.Single(projected.PickupPauses);
+        Assert.Equal("breaker-project", pause.ProjectName);
+        Assert.Equal(reason, pause.Reason);
+    }
+
+    [Fact]
     public void Watchdog_LogsWarningOnceForAnAcuteQueueAndRecoveryWhenItClears()
     {
         var logger = new CapturingLogger();

@@ -28,6 +28,7 @@ public class TaskRunnerService : BackgroundService
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly CliQuotaWaitPolicyService? _quotaWaitPolicy;
+    private readonly ProviderLimitRegistry _providerLimits;
     private readonly CliQuotaFallbackService? _quotaFallback;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
@@ -152,7 +153,8 @@ public class TaskRunnerService : BackgroundService
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
         VisualQaService? visualQa = null,
-        StartupExecutionAdmission? executionAdmission = null)
+        StartupExecutionAdmission? executionAdmission = null,
+        ProviderLimitRegistry? providerLimits = null)
     {
         _config = config;
         _logger = logger;
@@ -200,6 +202,7 @@ public class TaskRunnerService : BackgroundService
         _runnerIdentity = runnerIdentity;
         _clients = clients;
         _quotaWaitPolicy = quotaWaitPolicy;
+        _providerLimits = providerLimits ?? new ProviderLimitRegistry();
         _executionAdmission = executionAdmission;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
@@ -374,7 +377,8 @@ public class TaskRunnerService : BackgroundService
                 conceptWorkbenchPublisher: _conceptWorkbenchPublisher,
                 promptEnrichment: _promptEnrichment,
                 dossierMaintenance: _dossierMaintenance,
-                visualQa: _visualQa);
+                visualQa: _visualQa,
+                providerLimits: _providerLimits);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -1292,7 +1296,8 @@ public class TaskRunnerService : BackgroundService
             conceptWorkbenchPublisher: _conceptWorkbenchPublisher,
             promptEnrichment: _promptEnrichment,
             dossierMaintenance: _dossierMaintenance,
-            visualQa: _visualQa);
+            visualQa: _visualQa,
+            providerLimits: _providerLimits);
         runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
         runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
         runner.ConfigureStuckLoopBudget(LoadStuckLoopBudget(_config));

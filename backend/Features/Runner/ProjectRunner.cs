@@ -140,6 +140,7 @@ public class ProjectRunner
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly CliQuotaWaitPolicyService? _quotaWaitPolicy;
     private readonly CliQuotaFallbackService? _quotaFallback;
+    private readonly ProviderLimitRegistry _providerLimits;
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly GitService _git;
     private readonly PickupFailureLog _pickupFailures;
@@ -453,7 +454,8 @@ public class ProjectRunner
         AgentStudio.Pipeline.IConceptWorkbenchPublisher? conceptWorkbenchPublisher = null,
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
-        VisualQaService? visualQa = null)
+        VisualQaService? visualQa = null,
+        ProviderLimitRegistry? providerLimits = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -476,6 +478,7 @@ public class ProjectRunner
         _quotaCaps = quotaCaps;
         _quotaFallback = quotaFallback;
         _quotaWaitPolicy = quotaWaitPolicy;
+        _providerLimits = providerLimits ?? new ProviderLimitRegistry();
         _loadThrottle = loadThrottle;
         _git = git;
         _pickupFailures = pickupFailures;
@@ -727,7 +730,8 @@ public class ProjectRunner
     private static string ClassifyModeSource(string reason)
     {
         if (string.IsNullOrWhiteSpace(reason)) return "system";
-        if (reason.Contains("circuit-breaker", StringComparison.OrdinalIgnoreCase))
+        if (reason.Contains("circuit-breaker", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("infra breaker", StringComparison.OrdinalIgnoreCase))
             return "circuit-breaker";
         if (reason.StartsWith("supervisor", StringComparison.OrdinalIgnoreCase))
             return "supervisor";
@@ -815,12 +819,178 @@ public class ProjectRunner
     }
 
     private void ClearQuotaWait(TaskInfo info)
-        => QuotaWaitMarker.Clear(info.FolderPath, _logger);
+    {
+        QuotaWaitMarker.Clear(info.FolderPath, _logger);
+        // quota-wait.json participates in the indexed TaskInfo projection.
+        // Make deletion visible synchronously so a recovered provider wait
+        // cannot be re-read from a stale task snapshot on the next tick.
+        _scanner.InvalidateCache();
+    }
+
+    private ProviderLimitStatus? ActiveProviderLimit(string? cliType, DateTime utcNow)
+    {
+        var active = _providerLimits.GetActive(cliType, utcNow);
+        if (active is not null || string.IsNullOrWhiteSpace(cliType)) return active;
+
+        // The task marker is durable while the provider registry is in memory.
+        // Rehydrate the process-wide circuit after a backend restart before any
+        // project can launch another card against the same shared account.
+        var marker = _scanner.ScanAllAutomationJobs()
+            .Select(task => QuotaWaitMarker.TryRead(task.FolderPath, _logger))
+            .Where(wait => wait is not null
+                           && string.Equals(wait.Scope, "provider", StringComparison.OrdinalIgnoreCase)
+                           && string.Equals(wait.CliType, cliType, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(wait => wait!.ResetAt)
+            .FirstOrDefault();
+        if (marker is null) return null;
+        return _providerLimits.Record(new ProviderLimitStatus(
+            marker.CliType,
+            marker.StartedAt,
+            marker.ResetAt,
+            marker.Reason,
+            ResetTimeReported: true));
+    }
+
+    private void HoldForProviderLimit(
+        TaskInfo info,
+        string cliType,
+        ProviderLimitStatus limit,
+        CliExecution execution,
+        DateTime finishedAt)
+    {
+        _providerLimits.Record(limit);
+        var policy = _quotaWaitPolicy?.Resolve(_projectSettings.Get(ProjectName));
+        QuotaWaitMarker.Write(info.FolderPath, new QuotaWaitRecord
+        {
+            CliType = cliType,
+            StartedAt = limit.ObservedAt,
+            ResetAt = limit.LimitedUntil,
+            ThresholdMinutes = policy?.ThresholdMinutes ?? CliQuotaWaitPolicyService.DefaultThresholdMinutes,
+            Reason = limit.Reason,
+            Scope = "provider",
+        }, _logger);
+        if (info.State == TaskStates.Progress)
+            _mutations.SetJobPhase(info.FolderPath, LifecyclePhases.QuotaWaiting);
+
+        // Close the run as an intentional wait, not as a failed task attempt.
+        // The original task stays in Progress with its worktree/session intact.
+        _sessions.CloseSessionEvent(info.Id, new RunSessionCloseout
+        {
+            StartedAt = execution.StartedAt,
+            FinishedAt = finishedAt,
+            Status = "waiting",
+            Result = "quota-wait",
+            ExitCode = execution.ExitCode,
+            DurationSeconds = execution.DurationSeconds,
+        }, Entry.Path);
+        _consecutiveFailNoProgress.TryRemove(info.Id, out _);
+        _rapidCrashBackoffUntil.TryRemove(info.Id, out _);
+        _zombieResumeFailures.TryRemove(Path.GetFileName(info.FolderPath), out _);
+
+        _logger.LogWarning(
+            "provider_limit_wait project={Project} job={JobId} cliType={CliType} observedAt={ObservedAt:o} limitedUntil={LimitedUntil:o} resetReported={ResetReported}; task held without escalation",
+            ProjectName,
+            info.Id,
+            cliType,
+            limit.ObservedAt,
+            limit.LimitedUntil,
+            limit.ResetTimeReported);
+        _chatLog.Append(
+            info,
+            OrchestratorMessageKind.Decision,
+            $"[quota-wait] {limit.Reason}. The task is waiting and will resume automatically; other CLI providers remain eligible.");
+        _timeline?.Append(
+            info.FolderPath,
+            TimelineEventKinds.QuotaAdmissionDecision,
+            TimelineActors.System,
+            summary: limit.Reason,
+            details: new()
+            {
+                ["outcome"] = "ProviderLimited",
+                ["decision"] = "account-provider-wait",
+                ["cli"] = cliType,
+                ["resetAt"] = limit.LimitedUntil.ToString("o"),
+                ["resetTimeReported"] = limit.ResetTimeReported ? "true" : "false",
+            });
+        NotifyStatus();
+    }
 
     private async Task RefreshQuotaAfterResetAsync(TaskInfo info, string cliType)
     {
         try { await _quotaService.RefreshAsync(cliType); }
         finally { ClearQuotaWait(info); }
+    }
+
+    private async Task ProbeProviderRecoveryAsync(ProviderLimitStatus limit)
+    {
+        var recovered = false;
+        string? failureReason = null;
+        try
+        {
+            var snapshot = await _quotaService.RefreshAsync(limit.CliType);
+            var cap = _quotaCaps.Evaluate(snapshot);
+            recovered = snapshot is not null
+                        && string.IsNullOrWhiteSpace(snapshot.Error)
+                        && !cap.Blocked;
+            failureReason = recovered
+                ? null
+                : snapshot?.Error
+                  ?? cap.DescribeReason();
+        }
+        catch (Exception ex)
+        {
+            failureReason = ex.Message;
+            _logger.LogWarning(
+                ex,
+                "provider_limit_probe_failed project={Project} cliType={CliType}",
+                ProjectName,
+                limit.CliType);
+        }
+        finally
+        {
+            var completedAt = DateTime.UtcNow;
+            _providerLimits.CompleteRecoveryProbe(
+                limit.CliType,
+                completedAt,
+                recovered,
+                failureReason);
+
+            var current = _providerLimits.GetActive(limit.CliType, completedAt);
+            foreach (var task in _scanner.ScanAllAutomationJobs())
+            {
+                var wait = QuotaWaitMarker.TryRead(task.FolderPath, _logger);
+                if (wait is null
+                    || !string.Equals(wait.Scope, "provider", StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(wait.CliType, limit.CliType, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (current is null)
+                {
+                    ClearQuotaWait(task);
+                    continue;
+                }
+
+                QuotaWaitMarker.Write(task.FolderPath, new QuotaWaitRecord
+                {
+                    CliType = current.CliType,
+                    StartedAt = current.ObservedAt,
+                    ResetAt = current.LimitedUntil,
+                    ThresholdMinutes = Math.Max(
+                        1,
+                        (int)Math.Ceiling((current.LimitedUntil - completedAt).TotalMinutes)),
+                    Reason = current.Reason,
+                    Scope = "provider",
+                }, _logger);
+            }
+
+            _logger.LogInformation(
+                "provider_limit_probe_completed cliType={CliType} recovered={Recovered} retryAt={RetryAt} reason={Reason}",
+                limit.CliType,
+                recovered,
+                current?.LimitedUntil,
+                failureReason);
+            NotifyStatus();
+        }
     }
 
     /// <summary>
@@ -937,6 +1107,24 @@ public class ProjectRunner
 
     public ProjectRunnerStatus GetStatus()
     {
+        var statusAt = DateTime.UtcNow;
+        var providerLimits = _providerLimits.Active(statusAt);
+        if (providerLimits.Count == 0)
+        {
+            foreach (var wait in _scanner.ScanAllAutomationJobs()
+                         .Select(task => QuotaWaitMarker.TryRead(task.FolderPath, _logger))
+                         .Where(wait => wait is not null
+                                        && string.Equals(wait.Scope, "provider", StringComparison.OrdinalIgnoreCase)))
+            {
+                _providerLimits.Record(new ProviderLimitStatus(
+                    wait!.CliType,
+                    wait.StartedAt,
+                    wait.ResetAt,
+                    wait.Reason,
+                    ResetTimeReported: !wait.Reason.Contains("retry probe", StringComparison.OrdinalIgnoreCase)));
+            }
+            providerLimits = _providerLimits.Active(statusAt);
+        }
         var queued = GetQueuedJobIds();
         var activeJobKey = GetActiveJobKey();
         CliExecution? activeExec = null;
@@ -953,6 +1141,7 @@ public class ProjectRunner
             ActiveExecution = activeExec,
             QuotaFallbackModel = activeRun?.FallbackFromCliType == null ? null : activeExec?.Model,
             QuotaFallbackReason = activeRun?.QuotaFallbackReason,
+            ProviderLimits = providerLimits,
             QueuedJobIds = queued,
             Role = RunnerRoles.Format(_role),
             PendingMode = _pendingMode,
@@ -1160,6 +1349,16 @@ public class ProjectRunner
             // next reset (the scheduler re-ticks and wakes on its own). The
             // switch/throttle/wait decision is emitted (de-duplicated per job) so
             // the load-steering is never silent.
+            var providerLimit = ActiveProviderLimit(candidate.Info.CliType, DateTime.UtcNow);
+            if (providerLimit is not null)
+            {
+                _lastPickReason =
+                    $"provider-limited: {candidate.Info.Id}: {providerLimit.CliType} until {providerLimit.LimitedUntil:O}";
+                if (_providerLimits.TryBeginRecoveryProbe(providerLimit.CliType, DateTime.UtcNow))
+                    _ = ProbeProviderRecoveryAsync(providerLimit);
+                continue;
+            }
+
             if (candidate.Info.QuotaWait is { } dueWait && dueWait.ResetAt <= DateTime.UtcNow)
             {
                 _ = RefreshQuotaAfterResetAsync(candidate.Info, dueWait.CliType);
@@ -5156,6 +5355,39 @@ public class ProjectRunner
             var runFinishedAt = execution.DurationSeconds is double recordedDuration
                 ? execution.StartedAt.AddSeconds(Math.Max(0, recordedDuration))
                 : DateTime.UtcNow;
+            var cli = _router.Get(cliType);
+            var earlyOutputSnapshot = cli.GetOutput(jobKey);
+            var failedRun = string.Equals(execution.Status, "failed", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(execution.Status, "cancelled", StringComparison.OrdinalIgnoreCase);
+            var detectedProviderLimit = failedRun
+                ? ProviderLimitDetector.Detect(
+                    cliType,
+                    earlyOutputSnapshot.Select(line => line.Text),
+                    runFinishedAt)
+                : null;
+            var providerWaitInfo = _scanner.FindJob(jobId, Entry.Path);
+            if (detectedProviderLimit is not null && providerWaitInfo is not null)
+            {
+                // Provider limits are classified before task finalization,
+                // worktree integration, pickup-failure accounting, or the
+                // normal failed run closeout can consume per-card budgets.
+                // Preserve the provider output as diagnosis, then hold the
+                // card and release only its execution slot in the finally path.
+                if (WriteCliLog(providerWaitInfo, cli))
+                    cli.DiscardPersistedOutput(jobKey);
+                _mutations.SetJobLastProgressAt(providerWaitInfo.FolderPath, DateTime.UtcNow);
+                HoldForProviderLimit(
+                    providerWaitInfo,
+                    cliType,
+                    detectedProviderLimit,
+                    execution,
+                    runFinishedAt);
+                // Do not launch the legacy immediate invalidation probe here.
+                // The provider circuit is already the conservative admission
+                // authority, and only its reset-time fresh probe may reopen it.
+                return;
+            }
+
             _sessions.CloseSessionEvent(jobId, new RunSessionCloseout
             {
                 StartedAt = execution.StartedAt,
@@ -5166,8 +5398,6 @@ public class ProjectRunner
                 DurationSeconds = execution.DurationSeconds
             }, Entry.Path);
 
-            var cli = _router.Get(cliType);
-            var earlyOutputSnapshot = cli.GetOutput(jobKey);
             var runInfo = _scanner.FindJob(jobId, Entry.Path);
             var runGitRoot = run.IsWorktreeRun ? run.WorktreePath! : Entry.RootPath;
             var workerHeadAfter = _git.ReadHeadShaAt(runGitRoot);
@@ -5365,7 +5595,7 @@ public class ProjectRunner
                     _consecutiveCaptureFailJobId = null;
                 }
             }
-            else if (cli.EmitsSessionId)
+            else if (cli.EmitsSessionId && detectedProviderLimit is null)
             {
                 // The CLI normally emits a session UUID on every run; missing
                 // it means the next follow-up will fall back to Recovery. Tell
@@ -5500,6 +5730,20 @@ public class ProjectRunner
                 execution.Status ?? "completed",
                 execution.DurationSeconds ?? 0.0,
                 execution.ExitCode);
+
+            if (outcome.IssueKind == RunIssueKind.QuotaExhausted
+                && activeInfo is not null
+                && !string.IsNullOrWhiteSpace(cliType))
+            {
+                var limit = detectedProviderLimit ?? new ProviderLimitStatus(
+                        cliType,
+                        runFinishedAt,
+                        runFinishedAt.Add(ProviderLimitDetector.UnknownResetRetry),
+                        $"{cliType}: provider limit detected; retry probe at {runFinishedAt.Add(ProviderLimitDetector.UnknownResetRetry):O}",
+                        ResetTimeReported: false);
+                HoldForProviderLimit(activeInfo, cliType, limit, execution, runFinishedAt);
+                return;
+            }
 
             // Ground-truth quota hook (AGT-2064). A run that died with a
             // usage-limit error is hard proof the cached quota snapshot is wrong,
@@ -5808,13 +6052,10 @@ public class ProjectRunner
                     && activeInfo != null
                     && ShouldRouteIssueToEscalated(action.IssueKind)
                     && !preserveSuccessfulRunContext
-                    // Non-retryable verdicts skip abort-review entirely: rerunning
-                    // a context-overflow walks straight back into the same input
-                    // window, a model-invalid into the same 400, and a quota-
-                    // exhausted into the same rejection; the quarantine breaker
-                    // exists precisely to STOP re-running this task. All go
-                    // directly to Escalated.
-                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.QuotaExhausted or RunIssueKind.AuthRefreshFailed or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
+                    // Non-retryable task verdicts skip abort-review entirely.
+                    // Account-level provider limits never reach this task
+                    // escalation path; they return earlier into quota-waiting.
+                    && action.IssueKind is not (RunIssueKind.ContextOverflow or RunIssueKind.ModelInvalid or RunIssueKind.AuthRefreshFailed or RunIssueKind.Quarantined or RunIssueKind.AgentGitViolation)
                     && _postAbortReview != null
                     && AgentStudio.Pipeline.PipelineStepConfigResolver.ShouldRun(
                         AgentStudio.Pipeline.PipelineTypeSettings.ForTask(
@@ -6531,12 +6772,11 @@ public class ProjectRunner
                      or RunIssueKind.EnvironmentBlocker
                      or RunIssueKind.EmptyFastExit
                      or RunIssueKind.ContextOverflow
-                     // Non-retryable model rejection and transient quota
-                     // exhaustion both reach Escalated with an honest,
-                     // distinct reason instead of the orchestrator-inconclusive
-                     // catch-all (AGT-1941: codex model-invalid / claude quota).
+                     // A non-retryable model rejection reaches Escalated with
+                     // an honest reason instead of the inconclusive catch-all.
+                     // Provider quota exhaustion is capability state and is
+                     // intentionally absent from this task escalation list.
                      or RunIssueKind.ModelInvalid
-                     or RunIssueKind.QuotaExhausted
                      // A failed OAuth-session refresh (AGT-2066 breaker) is
                      // non-retryable and must reach Escalated with a re-auth
                      // instruction instead of stranding in 3-progress.
@@ -8221,7 +8461,10 @@ public class ProjectRunner
                 || text.Contains("rate_limit", StringComparison.OrdinalIgnoreCase)
                 || text.Contains("rate-limit", StringComparison.OrdinalIgnoreCase)
                 || text.Contains("429", StringComparison.OrdinalIgnoreCase)
-                || text.Contains("too many requests", StringComparison.OrdinalIgnoreCase))
+                || text.Contains("too many requests", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("session limit", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("usage limit", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("quota exceeded", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;
@@ -8283,6 +8526,12 @@ public class ProjectRunner
         if (_globalBreakerCooldownUntil != null)
             _globalBreakerCooldownUntil = DateTime.UtcNow.AddSeconds(-1);
     }
+
+    internal void RecordProviderLimitForTest(ProviderLimitStatus status)
+        => _providerLimits.Record(status);
+
+    internal bool ProviderClaimsAllowedForTest(string cliType, DateTime utcNow)
+        => ActiveProviderLimit(cliType, utcNow) is null;
 
     /// <summary>Test seam: prime the per-slug zombie-resume-failure counter
     /// so a regression test can drive the picker's zombie dead-letter path
@@ -8950,7 +9199,7 @@ public class ProjectRunner
         if (IsAutoMode(_mode))
         {
             SetMode("manual",
-                $"cross-slug infra circuit-breaker on {cliType}: {string.Join(", ", trip.Slugs)}");
+                $"pickup paused: infra breaker, {trip.Slugs.Count} failures cliType={cliType} at {trip.TrippedAt:O}; tasks={string.Join(", ", trip.Slugs)}");
             return true;
         }
         return false;
