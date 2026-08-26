@@ -68,7 +68,9 @@ public sealed class ArchitectureBoundaryTests
         Assert.Contains("New-Item -ItemType Junction", installer);
         Assert.Contains("TaskServer", installer);
         Assert.Contains("legacy-copy", rehearsal);
-        Assert.Contains("legacy-authority-import-not-implemented", rehearsal);
+        Assert.Contains("legacyAuthority", rehearsal);
+        Assert.Contains("runnerIdentities", rehearsal);
+        Assert.Contains("reviewAttempts", rehearsal);
         Assert.Contains("expectedMigrationId", rehearsal);
         Assert.Contains("integritySha256", rehearsal);
         Assert.True(

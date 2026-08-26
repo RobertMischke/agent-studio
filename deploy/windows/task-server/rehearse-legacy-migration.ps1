@@ -36,22 +36,6 @@ $fenceCount = if ($null -eq $legacyAuthority -or $null -eq $legacyAuthority.last
 } else {
     @($legacyAuthority.lastFenceByTask.PSObject.Properties).Count
 }
-if ($identityFiles.Count -gt 0 -or $runAttemptCount -gt 0 -or $reviewAttemptCount -gt 0 -or $fenceCount -gt 0) {
-    $evidenceDirectory = Split-Path -Parent $EvidenceFile
-    if ($evidenceDirectory) { New-Item -ItemType Directory -Force -Path $evidenceDirectory | Out-Null }
-    [pscustomobject]@{
-        executedAtUtc = [DateTime]::UtcNow.ToString('o')
-        status = 'blocked'
-        reason = 'legacy-authority-import-not-implemented'
-        identities = $identityFiles.Count
-        runAttempts = $runAttemptCount
-        reviewAttempts = $reviewAttemptCount
-        fencedTasks = $fenceCount
-        authorityPath = $authorityPath
-    } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $EvidenceFile -Encoding utf8
-    throw "LegacyMigrationService does not yet import identity, lease, fence, and attempt authority. Refusing a rehearsal that would prove only task content and fork authority. Evidence: $EvidenceFile"
-}
-
 function Invoke-TaskServer {
     param(
         [Parameter(Mandatory)] [string] $Method,
@@ -121,10 +105,19 @@ try {
     $status = Invoke-TaskServer GET '/api/v1/management/status' $null
     $invariants = Invoke-TaskServer GET '/api/v1/management/invariants' $null
 
-    foreach ($field in @('projects', 'tasks', 'events', 'artifacts')) {
+    foreach ($field in @('projects', 'tasks', 'events', 'artifacts', 'runnerIdentities', 'runs', 'leases', 'reviewAttempts')) {
         if ($inventory.$field -ne $result.$field) {
             throw "Migration count mismatch for $field: inventory=$($inventory.$field), import=$($result.$field)."
         }
+    }
+    if ($inventory.runs -ne $runAttemptCount) {
+        throw "Run authority count mismatch: source=$runAttemptCount, inventory=$($inventory.runs)."
+    }
+    if ($inventory.reviewAttempts -ne $reviewAttemptCount) {
+        throw "Review authority count mismatch: source=$reviewAttemptCount, inventory=$($inventory.reviewAttempts)."
+    }
+    if ($inventory.runnerIdentities -gt $identityFiles.Count) {
+        throw "Imported runner identity count exceeds source identity files: source=$($identityFiles.Count), inventory=$($inventory.runnerIdentities)."
     }
     if (-not $result.imported -or [string]::IsNullOrWhiteSpace($result.integritySha256)) {
         throw 'LegacyMigrationService did not return an imported result with an integrity digest.'
@@ -150,6 +143,13 @@ try {
         invariants = $invariants
         preImportBackups = @($backupFiles.FullName)
         sourceWasNeverPassedToTaskServer = $true
+        legacyAuthority = [pscustomobject]@{
+            identityFiles = $identityFiles.Count
+            runAttempts = $runAttemptCount
+            reviewAttempts = $reviewAttemptCount
+            fencedTasks = $fenceCount
+            authorityPath = $authorityPath
+        }
         rehearsalStore = $data
         stdout = $stdout
         stderr = $stderr

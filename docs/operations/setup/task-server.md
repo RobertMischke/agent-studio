@@ -179,13 +179,13 @@ do not allow both processes to accept task writes.
    Server store. Preserve the emitted JSON with the task evidence. A passing
    rehearsal has equal project, task, event, and artifact counts, a non-empty
    integrity digest, a pre-import backup, and no invariant failure.
-   The rehearsal also inspects `identities/*.json` and
-   `.metadata/attempt-authority.json`. It fails closed with
-   `legacy-authority-import-not-implemented` if the legacy root contains any
-   identity, run attempt, review attempt, lease fence, or attempt fence that
-   the current migration contract cannot import. Do not waive this result:
-   extending `LegacyMigrationService` and its count/integrity evidence is a
-   prerequisite to cutting over such a store without forking authority.
+   The rehearsal also inventories `identities/*.json` and
+   `.metadata/attempt-authority.json`, then proves that runner identities,
+   coding attempts, review attempts, leases, and fence counters were imported.
+   Active legacy leases are restored as `process-unknown`, never as claimable
+   work. Any source/import count mismatch fails the rehearsal. Do not waive
+   this result: the imported authority inventory is what prevents a second
+   executor from receiving authority after cutover.
 
    ```powershell
    .\deploy\windows\task-server\rehearse-legacy-migration.ps1 `
