@@ -10,6 +10,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota.model';
@@ -27,11 +28,8 @@ interface QuotaWindowDisplay {
 }
 
 /**
- * One rendered usage pill inside a card: a short window tag (5H / WK /
- * MO …), the used%, and a small bar. Claude and Codex report both a
- * 5-hour rolling window and a weekly window, so their cards now carry
- * two chips side by side instead of collapsing to a single primary; a
- * CLI that only exposes one window (Copilot's monthly) renders one chip.
+ * One usage pill: a short window tag, the used percentage, and a small bar.
+ * Multi-window CLIs render one chip per reported window.
  */
 interface QuotaChip {
   windowKey: string;
@@ -75,6 +73,8 @@ interface QuotaCardModel {
   freshness: string;
   windows: QuotaWindow[];
   error: string | null;
+  staleMarker: string | null;
+  errorTooltip: string | null;
   source: string | null;
 }
 
@@ -85,14 +85,13 @@ interface QuotaCardModel {
  * cards are buttons: clicking one opens that CLI's own usage-detail modal
  * (one modal per CLI, no shared hover tooltip and no grouped view).
  *
- * The strip reads the quota report from the backend's filesystem-cached
- * store on app start (no spinner; data appears immediately). Stale
- * snapshots show a small dot + border tint so the user knows the number
- * is from the previous run.
+ * The strip reads the backend's filesystem-cached report immediately.
+ * Stale snapshots retain the last-good values with explicit attribution.
  */
 @Component({
   selector: 'app-header-quota',
   standalone: true,
+  imports: [AppTooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './header-quota.html',
   styleUrl: './header-quota.scss'
@@ -171,7 +170,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
+    const stale = !!s.error || !s.fetchedAt || ageMs > ttlMs;
     const freshness = !s.fetchedAt
       ? 'never refreshed'
       : 'updated ' + this.formatAgo(ageMs);
@@ -182,11 +181,12 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const chips = this.buildChips(shortWindow, weekWindow, primary, s.windows);
     const tone = this.cardTone(shortWindow, weekWindow, !!s.error, primary);
     const state = this.cardState(tone, stale, !!s.error, shortWindow, weekWindow, primary);
+    const staleMarker = s.error ? this.probeFailureLabel(s) : null;
     return {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, chips),
+      ariaLabel: this.cardAriaLabel(label, chips) + (staleMarker ? `. ${staleMarker}` : ''),
       chips,
       tone,
       state,
@@ -195,6 +195,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness,
       windows: s.windows,
       error: s.error,
+      staleMarker,
+      errorTooltip: s.error ? `${staleMarker}. ${s.error}` : null,
       source: s.source
     };
   }
@@ -214,6 +216,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness: 'never refreshed',
       windows: [],
       error: null,
+      staleMarker: null,
+      errorTooltip: null,
       source: null
     };
   }
@@ -417,6 +421,16 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       case 'gemini': return 'Gemini';
       default: return cli;
     }
+  }
+
+  private probeFailureLabel(snapshot: QuotaSnapshot): string {
+    const failedAt = snapshot.probeFailedAt ? new Date(snapshot.probeFailedAt) : null;
+    const time = failedAt && Number.isFinite(failedAt.getTime())
+      ? failedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      : 'unknown time';
+    const versionMatch = snapshot.cliVersion?.match(/\d+(?:\.\d+)+(?:[-+][A-Za-z0-9.-]+)?/);
+    const version = versionMatch?.[0] ?? snapshot.cliVersion ?? 'unknown version';
+    return `probe failed ${time}, ${snapshot.cliType} ${version}`;
   }
 
   private formatAgo(ms: number): string {

@@ -98,6 +98,18 @@ export class CliUsageModalComponent {
 
   readonly windows = computed<QuotaWindow[]>(() => this.row()?.windows ?? []);
 
+  readonly probeFailure = computed(() => {
+    const row = this.row();
+    if (!row?.error) return null;
+    const failedAt = row.probeFailedAt ? new Date(row.probeFailedAt) : null;
+    const time = failedAt && Number.isFinite(failedAt.getTime())
+      ? failedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      : 'unknown time';
+    const versionMatch = row.cliVersion?.match(/\d+(?:\.\d+)+(?:[-+][A-Za-z0-9.-]+)?/);
+    const version = versionMatch?.[0] ?? row.cliVersion ?? 'unknown version';
+    return `probe failed ${time}, ${row.cliType} ${version}`;
+  });
+
   /** Reshapes each reported window into its card projection (pct, tone,
    *  bar width, reset countdown). Pure derivation of the input row. */
   readonly windowViews = computed<WindowView[]>(() =>

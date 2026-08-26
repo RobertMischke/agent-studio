@@ -20,13 +20,20 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed class CodexQuotaProbe : QuotaProbeBase
 {
-    // "5h limit: [bar] NN% left (resets HH:MM[ on D Mon])"
+    // Parse the percentage independently from the reset suffix. Codex 0.149.0
+    // moved "(resets ...)" onto an indented continuation line and a tall panel
+    // can leave that line outside the final viewport. Older releases rendered
+    // both pieces inline. A usable percentage must survive either layout.
     private static readonly Regex FiveHourRegex = new(
-        @"5h\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        @"5\s*(?:h|hour)\s*limit\s*:?\s*(?:\[[^\]]*\]\s*)?(?<left>\d+)\s*%\s*left",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex WeeklyRegex = new(
-        @"Weekly\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        @"Weekly\s*limit\s*:?\s*(?:\[[^\]]*\]\s*)?(?<left>\d+)\s*%\s*left",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ResetRegex = new(
+        @"(?:\(\s*)?resets\s*(?<reset>[^)\r\n│┃]+)\)?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Header of the Spark sub-block: "<model>-Spark limit:". It is
@@ -63,24 +70,37 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
     public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
     {
+        string? cliVersion = null;
         try
         {
+            var target = ResolveCliTarget();
+            cliVersion = target.CliVersion;
+            var updatePattern  = new Regex(@"Update\s*available|Skip\s*until\s*next\s*version", RegexOptions.IgnoreCase);
             var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
-            var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
-            var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
+            var readyPattern   = new Regex(@"\?\s*for\s*shortcuts|Ask\s*Codex|Use\s*/skills|context\s*left", RegexOptions.IgnoreCase);
+            var statusMenuPattern = new Regex(@"/status\s+show\s+current\s+session", RegexOptions.IgnoreCase);
+            var statusPattern  = new Regex(@"chatgpt\.com/codex/settings/usage|Context\s*window|5\s*h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
 
             var snap = await ProbeWithStepsAsync(
+            target,
             [
+                // Codex 0.149 can place an update chooser over the welcome screen
+                // before the workspace-trust prompt. Pick "Skip" only when that
+                // chooser is visible so the key cannot leak into the chat input.
+                new ProbeStep("dismiss-update", WaitForPattern: updatePattern, WaitTimeoutMs: 3000, SendKeys: "2<Enter>", SettleTimeoutMs: 5000, PreSendDelayMs: 300, SendKeysOnlyIfMatched: true),
                 // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
                 // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
                 // stray "1" in the chat input box, which then prefixes the next slash
                 // command and turns "/status" into a chat message instead of a command.
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
-                // Clear the buffer so the await-welcome match only sees post-trust content.
-                new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
-                // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
-                // Enter while it's still parsing the slash command.
-                new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
+                new ProbeStep("await-trust", WaitForPattern: trustPattern, WaitTimeoutMs: 4000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300, SendKeysOnlyIfMatched: true),
+                // Codex 0.149 can draw the welcome card while models and MCP servers are
+                // still loading. Select /status through the command menu so those early
+                // keystrokes cannot become a normal model prompt.
+                new ProbeStep("open-command-menu", WaitForPattern: readyPattern, WaitTimeoutMs: 15000, SendKeys: "/", SettleIdleMs: 500, SettleTimeoutMs: 4000, PreSendDelayMs: 500),
+                // /status can sit below the initially visible menu rows. Filter first,
+                // then require the matching menu item before submitting it.
+                new ProbeStep("filter-status", PreSendDelayMs: 200, SendKeys: "status", SettleIdleMs: 500, SettleTimeoutMs: 4000),
+                new ProbeStep("submit-status", WaitForPattern: statusMenuPattern, WaitTimeoutMs: 6000, RequirePattern: true, PreSendDelayMs: 300, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
                 new ProbeStep("await-status",  WaitForPattern: statusPattern,  WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
             ],
             initialIdleMs: 8000,
@@ -91,6 +111,14 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
                 : null;
 
             var windows = ParseStatusWindows(snap);
+
+            if (plan == null && windows.Count == 0)
+            {
+                _logger.LogWarning(
+                    "Codex /status output could not be parsed for {CliVersion}. Snapshot tail: {Sample}",
+                    cliVersion ?? "<unknown>",
+                    TruncateForDebug(snap));
+            }
 
             // Log the parsed windows next to the raw sample so a future false
             // snapshot (AGT-2064) is diagnosable from logs alone, without having
@@ -106,6 +134,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = cliVersion,
                 Plan      = plan,
                 Source    = "/status",
                 RawSample = TruncateForDebug(snap),
@@ -118,7 +147,14 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Codex quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = cliVersion,
+                Source = "/status",
+                Error = DescribeProbeFailure(ex, "/status"),
+                ProbeFailedAt = DateTime.UtcNow
+            };
         }
     }
 
@@ -164,13 +200,21 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             return;
         }
 
-        var resetRaw = match.Groups["reset"].Value.Trim();
+        // Search only until the next quota row. This associates a continuation-
+        // line reset with its own percentage without accidentally borrowing the
+        // next window's reset when the current one was clipped.
+        var suffixStart = match.Index + match.Length;
+        var suffix = snap[suffixStart..];
+        var nextLimit = Regex.Match(suffix, @"(?:5\s*(?:h|hour)|Weekly)\s*limit\s*:", RegexOptions.IgnoreCase);
+        if (nextLimit.Success) suffix = suffix[..nextLimit.Index];
+        var resetMatch = ResetRegex.Match(suffix);
+        var resetRaw = resetMatch.Success ? resetMatch.Groups["reset"].Value.Trim() : null;
         windows.Add(new QuotaWindow
         {
             Label      = label,
             UsedPct    = 100 - left,
             Unit       = "%",
-            ResetAt    = ParseResetUtc(resetRaw),
+            ResetAt    = resetRaw == null ? null : ParseResetUtc(resetRaw),
             ResetLabel = resetRaw
         });
     }

@@ -27,22 +27,39 @@ public abstract class QuotaProbeBase : IQuotaProbe
     public abstract string CliType { get; }
     public abstract Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
 
+    protected sealed record CliProbeTarget(string ResolvedPath, string? CliVersion);
+
+    /// <summary>
+    /// Resolve the executable once per probe and retain the version before any
+    /// PTY wait can time out. This lets failed snapshots identify the CLI build
+    /// whose interactive output drifted.
+    /// </summary>
+    protected CliProbeTarget ResolveCliTarget()
+    {
+        var cli = _router.Get(CliType);
+        var (available, version, resolvedPath) = cli.TestCliPath();
+        if (!available)
+            throw new InvalidOperationException($"{CliType} CLI not available");
+        return new CliProbeTarget(resolvedPath, version);
+    }
+
+    protected string DescribeProbeFailure(Exception ex, string command)
+        => ex is OperationCanceledException
+            ? $"{CliType} quota probe timed out while waiting for {command}."
+            : $"{CliType} quota probe failed while reading {command}: {ex.Message}";
+
     /// <summary>
     /// Spawn the CLI, optionally send a slash-command sequence, wait for output to settle,
     /// return the ANSI-stripped snapshot. Always sends two Esc presses at the end so
     /// modal pickers close before the process is torn down.
     /// </summary>
     protected async Task<string> ProbeWithSnapshotAsync(
+        CliProbeTarget target,
         string? sendKeys,
         int initialIdleMs,
         int settleAfterSendMs,
         CancellationToken ct)
     {
-        var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
-        if (!available)
-            throw new InvalidOperationException($"{CliType} CLI not available");
-
         var scratch = Path.Combine(Path.GetTempPath(), "agent-taskboard-quota", CliType);
         Directory.CreateDirectory(scratch);
         try
@@ -55,7 +72,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
             _logger.LogDebug(ex, "Pre-probe environment setup failed (best-effort)");
         }
 
-        await using var pty = await PtySession.SpawnAsync(app: resolvedPath, cwd: scratch, ct: ct);
+        await using var pty = await PtySession.SpawnAsync(app: target.ResolvedPath, cwd: scratch, ct: ct);
         await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: initialIdleMs, ct);
 
         if (!string.IsNullOrEmpty(sendKeys))
@@ -75,15 +92,11 @@ public abstract class QuotaProbeBase : IQuotaProbe
     /// Returns the final ANSI-stripped snapshot.
     /// </summary>
     protected async Task<string> ProbeWithStepsAsync(
+        CliProbeTarget target,
         IEnumerable<ProbeStep> steps,
         int initialIdleMs,
         CancellationToken ct)
     {
-        var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
-        if (!available)
-            throw new InvalidOperationException($"{CliType} CLI not available");
-
         var scratch = Path.Combine(Path.GetTempPath(), "agent-taskboard-quota", CliType);
         Directory.CreateDirectory(scratch);
         try
@@ -96,7 +109,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
             _logger.LogDebug(ex, "Pre-probe environment setup failed (best-effort)");
         }
 
-        await using var pty = await PtySession.SpawnAsync(app: resolvedPath, cwd: scratch, ct: ct);
+        await using var pty = await PtySession.SpawnAsync(app: target.ResolvedPath, cwd: scratch, ct: ct);
         await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: initialIdleMs, ct);
 
         foreach (var step in steps)

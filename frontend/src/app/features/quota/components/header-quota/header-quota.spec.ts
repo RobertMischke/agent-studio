@@ -251,6 +251,9 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     chips: Chip[];
     state: string;
     tone: string;
+    stale: boolean;
+    staleMarker: string | null;
+    errorTooltip: string | null;
   }
 
   // Real Codex shape: 4 windows, unit '%', used/limit both null, only usedPct.
@@ -309,5 +312,43 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     expect(session.tone).toBe('ok');
     // A fresh, error-free snapshot is never "unavailable".
     expect(codex.state).not.toBe('unavailable');
+  });
+
+  it('keeps last-good values visible and marks a failed 0.149.0 probe stale', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeaderQuotaComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeaderQuotaComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/cli/quota').flush({
+      ttlSeconds: 600,
+      snapshots: [{
+        cliType: 'codex',
+        cliVersion: 'codex-cli 0.149.0',
+        fetchedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+        probeFailedAt: new Date().toISOString(),
+        plan: 'Pro',
+        source: '/status',
+        error: 'codex quota probe timed out while waiting for /status.',
+        windows: codexWindows,
+      }],
+    });
+    fixture.detectChanges();
+
+    const codex = (fixture.componentInstance as unknown as { cards: () => CardModel[] })
+      .cards().find(c => c.cliType === 'codex')!;
+    expect(codex.chips.map(ch => ch.value)).toEqual(['66%', '12%', '0%', '4%']);
+    expect(codex.state).toBe('error');
+    expect(codex.stale).toBe(true);
+    expect(codex.staleMarker).toMatch(/^probe failed .+, codex 0\.149\.0$/);
+    expect(codex.errorTooltip).toContain('timed out while waiting for /status');
+    expect(fixture.nativeElement.querySelector('[data-testid="hquota-stale-marker"]')?.textContent.trim()).toBe('stale');
   });
 });

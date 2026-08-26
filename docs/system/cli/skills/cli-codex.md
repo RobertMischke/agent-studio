@@ -268,7 +268,7 @@ locks default resolution in both cases plus vendor isolation.
 ## Quirks (and what to do about them)
 
 1. **Trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter.** Sending `1<Enter>` works but leaves a stray `1` in the input box that prefixes the next slash command. Use `<Enter>` alone when scripting Codex over a PTY (the quota probe does this).
-2. **`/status` PTY probe is fragile.** Trust + welcome + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. See comments in [`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` and lock with a fixture-based test.
+2. **`/status` PTY probe is fragile.** Trust + welcome + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. See comments in [`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` and lock with a fixture-based test.
 3. **Codex reports % left, we report % used.** The probe inverts the value so the UI's `UsedPct` semantics stay consistent across CLIs. Don't double-invert.
 4. **`--json` is required.** Without it, stdout is a colored panel that can't be parsed. The runner always passes it.
 
@@ -369,9 +369,32 @@ locked by:
 
 ## Quota probe
 
-[`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs) returns two windows: a 5-hour bucket and a weekly bucket. Implementation runs `codex` over a PTY, accepts the trust prompt, navigates to `/status`, scrapes the panel.
+[`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs)
+returns the standard 5-hour and weekly windows that are present, plus separately
+labelled Spark windows when Codex renders that sub-panel. The implementation
+runs `codex` over a PTY, clears startup gates, navigates to `/status`, and
+scrapes the panel.
 
-The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
+The probe reports `% used` (1 - `% left`). Source string is `/status`.
+
+**Versioned panel compatibility (AGT-2679).** Codex 0.149.0 can render the
+reset timestamp on an indented continuation line, omit the standard 5-hour row,
+and show an update chooser before the trust or welcome screens. The probe
+skips that chooser when present, waits for the ready composer, opens the
+slash-command menu, filters to `/status`, and only then submits it. Percentage
+parsing is independent from the optional reset suffix, so a clipped continuation
+line does not erase an otherwise valid quota value. Keep the older inline-reset
+form as a fallback.
+Real scrubbed PTY captures live under
+`backend.Tests/Fixtures/quota/codex/codex-status-v<exact-version>.txt`; add a
+new fixture and parser assertion for every observed CLI layout change.
+
+Every quota snapshot carries the exact `--version` string. A failed refresh
+preserves the prior successful windows and their `fetchedAt`, then overlays
+`probeFailedAt`, `cliVersion`, and a diagnostic error. `GET /api/cli/quota`
+always returns this cache immediately and schedules a detached, bounded
+background refresh. The status bar and detail modal render a stale marker; the
+full failure remains available in the marker tooltip.
 
 **Spark-block split is version-agnostic (AGT-2064).** `/status` renders a
 `<model>-Spark limit:` sub-block with its own near-empty 5h/Weekly lines. The

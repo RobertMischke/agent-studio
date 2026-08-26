@@ -8,6 +8,7 @@
             [class.hquota__card--stale]="card.stale"
             [attr.data-tone]="card.tone"
             [attr.data-state]="card.state"
+            [appTooltip]="card.errorTooltip"
             (click)="select(card.cliType)">
       <span class="hquota__lead" aria-hidden="true">
         <span class="hquota__icon">{{ card.icon }}</span>
@@ -30,7 +31,9 @@
         }
       </span>
 
-      @if (card.stale) {
+      @if (card.error) {
+        <span class="hquota__stale-badge" data-testid="hquota-stale-marker">stale</span>
+      } @else if (card.stale) {
         <span class="hquota__stale-dot" aria-label="Stale snapshot">●</span>
       }
     </button>

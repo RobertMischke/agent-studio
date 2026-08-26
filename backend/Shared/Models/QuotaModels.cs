@@ -39,7 +39,15 @@ public record QuotaWindow
 public record QuotaSnapshot
 {
     public string CliType { get; init; } = "";
+    /// <summary>The exact CLI version string reported by its <c>--version</c> probe.</summary>
+    public string? CliVersion { get; init; }
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
+    /// <summary>
+    /// Timestamp of the most recent failed refresh. When set alongside quota
+    /// windows, <see cref="FetchedAt"/> remains the timestamp of the last good
+    /// values and consumers must mark those values stale.
+    /// </summary>
+    public DateTime? ProbeFailedAt { get; init; }
     /// <summary>"Pro" / "Pro+" / "Plus" / "Free" — null when unknown.</summary>
     public string? Plan { get; init; }
     public List<QuotaWindow> Windows { get; init; } = [];
