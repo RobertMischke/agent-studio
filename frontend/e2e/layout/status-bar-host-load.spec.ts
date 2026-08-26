@@ -20,6 +20,7 @@ async function stubHostLoad(
   remoteRuns: number,
   telemetrySlots: number,
   load1: number,
+  cliRepair: Record<string, unknown> | null = null,
 ): Promise<void> {
   const now = new Date().toISOString();
   const baseTask = (id: string, projectName: string) => ({
@@ -96,7 +97,7 @@ async function stubHostLoad(
     archive: [],
   }));
   await page.route('**/api/tasks', json([]));
-  await page.route('**/api/runner/status', json({ projects: runnerProjects }));
+  await page.route('**/api/runner/status', json({ projects: runnerProjects, cliRepair }));
   await page.route('**/api/clients', json([{
     id: 'agent-runner-01',
     displayName: 'agent-runner-01',
@@ -172,6 +173,50 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.screenshot({
       path: join(RESULTS_DIR, 'status-bar-runners-both-positive-light--mocked.png'),
       fullPage: false,
+    });
+  });
+
+  test('successful CLI repair is a calm note', async ({ page }) => {
+    const completedAt = '2026-08-18T12:34:00Z';
+    await stubHostLoad(page, 0, 0, 0, 0.2, {
+      cliType: 'claude',
+      state: 'repaired',
+      attemptedAt: '2026-08-18T12:33:00Z',
+      completedAt,
+      versionBefore: '2.1.231',
+      versionAfter: '2.1.234',
+      message: `claude CLI repaired at ${completedAt}`,
+    });
+    await page.goto('/');
+
+    const repair = page.getByTestId('status-bar-cli-repair');
+    await expect(repair).toContainText('CLI repaired at');
+    await expect(repair).toHaveAttribute('data-signal-tone', 'calm');
+    await setTheme(page, 'light');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-cli-repaired-light--mocked.png'),
+    });
+  });
+
+  test('failed CLI repair is the only acute repair alarm', async ({ page }) => {
+    const completedAt = '2026-08-18T12:34:00Z';
+    await stubHostLoad(page, 0, 0, 0, 0.2, {
+      cliType: 'codex',
+      state: 'failed',
+      attemptedAt: '2026-08-18T12:33:00Z',
+      completedAt,
+      versionBefore: '0.42.0',
+      versionAfter: null,
+      message: `codex CLI repair failed at ${completedAt}: npm install -g exited 1`,
+    });
+    await page.goto('/');
+
+    const repair = page.getByTestId('status-bar-cli-repair');
+    await expect(repair).toContainText('CLI repair failed at');
+    await expect(repair).toHaveAttribute('data-signal-tone', 'mismatch');
+    await setTheme(page, 'dark');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-cli-repair-failed-dark--mocked.png'),
     });
   });
 

@@ -23,6 +23,27 @@ sandbox = "workspace-write"
 
 Restart the Codex CLI (no backend restart needed - the next pickup re-spawns Codex with the new config). The full background and the runner's preventive complement live in [onboard-an-agent-cli.md](./onboard-an-agent-cli.md) under "Codex on Windows: the sandbox quirk".
 
+## "Claude or Codex disappeared from PATH, but its npm package is present"
+
+On a Windows local execution host, inspect
+`<TaskRepository>/logs/cli-repairs.jsonl`. The backend probes Claude and Codex
+once per minute. When `claude.cmd` or `codex.cmd` is absent while the matching
+global package remains under `node_modules`, it runs the canonical
+`npm install -g` repair automatically. It will not install a truly absent
+package and will not attempt the same CLI repair more than once per hour,
+including across backend restarts.
+
+The status bar reports `CLI repaired at <time>` after success. A failed repair
+is the only acute alarm. The journal records package and executable versions
+before and after the attempt, nearby npm log timestamps, related process start
+times, shim/package timestamps, bounded npm output, and the final error.
+
+For a controlled rehearsal, move only the target `.cmd` shim to a temporary
+backup name while leaving the package directory intact. Preserve the pre-check,
+status-bar capture, new journal row, restored `--version` output, and the backup
+location as evidence. Never delete the package directory or all npm shims for
+the rehearsal. Restore the backup if the automatic repair fails.
+
 ## "Auto-mode flipped to Manual after a short time"
 
 Symptom: the project's runner-mode pill flips from `auto-continuous` to `manual` after a small number of failures, no further `2-ready` jobs are picked up.

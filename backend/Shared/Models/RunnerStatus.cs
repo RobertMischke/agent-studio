@@ -160,6 +160,11 @@ public static class TaskRunActivityClassifier
 public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
+    /// <summary>
+    /// Latest attempted local npm-shim repair. Null means this backend has not
+    /// observed the package-present, shim-absent failure shape.
+    /// </summary>
+    public AgentStudio.Cli.LocalCliRepairStatus? CliRepair { get; init; }
 }
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);

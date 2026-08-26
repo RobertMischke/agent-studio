@@ -55,6 +55,12 @@ export function formatRunningLabel(
   return 'no runners';
 }
 
+export function formatCliRepairTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'unknown time';
+  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 @Component({
   selector: 'app-status-bar',
   standalone: true,
@@ -187,6 +193,22 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     return Object.values(status.projects).filter(
       p => p.mode === 'auto-continuous' || p.mode === 'auto-single'
     ).length;
+  });
+
+  readonly cliRepair = computed(() => this.jobService.runnerStatus().cliRepair ?? null);
+  readonly cliRepairLabel = computed(() => {
+    const repair = this.cliRepair();
+    if (!repair) return '';
+    const outcome = repair.state === 'repaired' ? 'CLI repaired' : 'CLI repair failed';
+    return `${outcome} at ${formatCliRepairTime(repair.completedAt)}`;
+  });
+  readonly cliRepairTooltip = computed(() => {
+    const repair = this.cliRepair();
+    if (!repair) return '';
+    const versions = repair.versionBefore || repair.versionAfter
+      ? ` Version ${repair.versionBefore ?? 'unknown'} → ${repair.versionAfter ?? 'unavailable'}.`
+      : '';
+    return `${repair.message}.${versions}`;
   });
 
   readonly projectCount = computed(() => this.projectNames().length || Object.keys(this.jobService.runnerStatus().projects).length);

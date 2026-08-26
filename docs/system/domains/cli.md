@@ -1,6 +1,6 @@
 # CLI Domain Map
 
-Version: 2026-06-09
+Version: 2026-08-26
 Status: System-of-record map for CLI adapter and quota changes.
 
 Use this when a change touches Claude, Codex, Copilot, Gemini, prompt handoff,
@@ -39,6 +39,12 @@ CLI execution tests.
   and a guarded `DELETE /api/cli/{cliType}/session` (cleanup refused for any path
   outside the CLI's own session store). Both resolve/parse in
   `SessionRegistry.cs`; the `/usage` list report stays body-free.
+- `backend/Features/Cli/Repair/LocalCliSelfHealService.cs`: Windows local-host
+  capability loop for the package-present, launch-shim-missing npm failure.
+  Claude and Codex repairs use their canonical global package, are bounded to
+  one attempt per CLI per hour across backend restarts, and append before/after
+  package, process, npm-log, and version evidence to
+  `<TaskRepository>/logs/cli-repairs.jsonl`.
 - `backend/Services/Runner/OrchestratorSession.cs` and
   `OrchestratorRunner.cs`: runner-to-CLI orchestration boundary.
 - `backend/Features/Cli/Routing/OneShot/ClaudeOneShot.cs` and `CodexOneShot.cs`:
@@ -62,6 +68,11 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- A missing local Claude or Codex shim is repairable only when the matching
+  global npm package directory is still present. A truly uninstalled CLI never
+  triggers installation. A successful repair is a quiet status-bar note; only
+  a failed repair is an acute signal. Preserve the one-hour attempt bound and
+  the forensic journal when changing local capability admission.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

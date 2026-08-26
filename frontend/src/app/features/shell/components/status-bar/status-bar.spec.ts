@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { formatCliRepairTime, formatRunningLabel, StatusBarComponent } from './status-bar';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -26,6 +26,16 @@ describe('formatRunningLabel', () => {
 
   it('shows the honest coding slot ceiling once it is known', () => {
     expect(formatRunningLabel(0, 0, 3, 8)).toBe('coding 0/8');
+  });
+});
+
+describe('formatCliRepairTime', () => {
+  it('renders a compact local time for the repair status note', () => {
+    expect(formatCliRepairTime('2026-08-18T12:34:00Z')).not.toBe('unknown time');
+  });
+
+  it('does not leak an invalid date into the status bar', () => {
+    expect(formatCliRepairTime('not-a-date')).toBe('unknown time');
   });
 });
 

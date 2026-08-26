@@ -423,6 +423,11 @@ builder.Services.AddSingleton<CliRouter>(sp => new CliRouter(
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude),
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Codex),
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Gemini)));
+if (!publicDemoExecutionProfile)
+{
+    builder.Services.AddSingleton<LocalCliSelfHealService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<LocalCliSelfHealService>());
+}
 builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
