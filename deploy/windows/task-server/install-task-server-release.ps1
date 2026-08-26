@@ -52,6 +52,10 @@ if ($PSCmdlet.ShouldProcess($releaseDirectory, 'Publish and install the Task Ser
     if ($LASTEXITCODE -ne 0) { throw "Task Server publish failed with exit code $LASTEXITCODE." }
     $executable = Join-Path $staging 'task-server.exe'
     if (-not (Test-Path -LiteralPath $executable)) { throw "Published Task Server executable is missing: $executable" }
+    $publishedVersion = & $executable '--version'
+    if ($LASTEXITCODE -ne 0 -or $publishedVersion -notmatch [regex]::Escape($ReleaseSha)) {
+        throw "Published Task Server identity does not contain the requested SHA $ReleaseSha: $publishedVersion"
+    }
     Copy-Item -LiteralPath $supervisorScript -Destination (Join-Path $staging 'start-task-server.ps1')
 
     if (-not (Test-Path -LiteralPath $releaseDirectory)) {
