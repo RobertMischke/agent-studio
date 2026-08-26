@@ -279,6 +279,9 @@ public static class TimelineEventKinds
     /// the round was automatic.
     /// </summary>
     public const string IntegrationRecoveryQueued = "integration_recovery_queued";
+    /// <summary>The deterministic backend acceptance rail accepted an integrated
+    /// card or escalated an exhausted recovery budget.</summary>
+    public const string AcceptanceRailAction = "acceptance_rail_action";
     /// <summary>
     /// AGT-2220: the card's recorded <c>integrationBranch</c> disagreed with
     /// project truth when a review was claimed, so the review plane rewrote it.

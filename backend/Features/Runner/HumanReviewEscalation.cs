@@ -143,6 +143,11 @@ public static class HumanReviewEscalationCategories
     /// repeatedly failed to produce the mandatory iteration evidence.</summary>
     public const string UiIterationCap = "ui-iteration-cap";
 
+    /// <summary>The deterministic acceptance rail spent its bounded conflict
+    /// requeue budget. The card stays parked for a person instead of beginning
+    /// another automatic rework loop.</summary>
+    public const string IntegrationRecoveryExhausted = "integration-recovery-exhausted";
+
     /// <summary>A review subject can never be materialized - either because the
     /// pre-plane source completion has no immutable Result-Envelope, or because
     /// all bounded infrastructure retries for that subject were exhausted.</summary>

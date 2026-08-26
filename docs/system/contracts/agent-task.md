@@ -71,7 +71,7 @@ The visible task states are (ADR-0025: three-stage review pipeline):
 
 State transitions are application-controlled. A task can sit in `3-progress` without a live CLI process after a stop, crash, or backend restart. Treat the live CLI execution state as the real signal for whether work is currently running.
 
-Only successful CLI runs move automatically from `3-progress` to `4-auto-review`. The durable state key stays `4-auto-review` for compatibility, but the visible board lane is Post Processing. The orchestrator's review-decision pass then reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (also forward to `5-human-review`). The user always confirms the move from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` so the user can inspect the log, restart, or continue the task.
+Only successful CLI runs move automatically from `3-progress` to `4-auto-review`. The durable state key stays `4-auto-review` for compatibility, but the visible board lane is Post Processing. The orchestrator's review-decision pass then reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (forward to `5e-escalated`). A model-free backend acceptance rail finalizes an ordinary coding card from `5-human-review` only after the current-attempt Git guard proves it integrated. Concept cards, explicit holds, operator-decision cards, and every non-integrated delivery remain for a person. Failed or stopped runs stay in `3-progress` so the user can inspect the log, restart, or continue the task.
 
 ## Task Files
 

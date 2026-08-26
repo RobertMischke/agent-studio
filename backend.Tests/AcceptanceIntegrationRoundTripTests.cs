@@ -1004,6 +1004,165 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    public async Task AcceptanceRail_IntegratedCard_IsAcceptedWithoutSessionOrchestrator()
+    {
+        var deliverySha = PublishDelivery("rail-integrated.txt", "integrated work\n");
+        IntegrateDelivery(deliverySha);
+        var deps = Build(deliverySha);
+
+        var snapshot = await AcceptanceRail(deps).RunOnceAsync();
+
+        var completed = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(completed);
+        Assert.Equal(TaskStates.Completed, completed!.State);
+        Assert.Equal(1, snapshot.Accepted);
+        Assert.Equal(1, snapshot.LaneDepth.HumanReview);
+        Assert.NotNull(snapshot.LastRunCompletedAtUtc);
+        Assert.Contains(
+            deps.Timeline.ReadAll(completed.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.AcceptanceRailAction
+                     && entry.Details?.GetValueOrDefault("action") == "accepted");
+    }
+
+    [Fact]
+    public async Task AcceptanceRail_OperatorHold_IsUntouched()
+    {
+        var deliverySha = PublishDelivery("rail-held.txt", "held work\n");
+        IntegrateDelivery(deliverySha);
+        var deps = Build(deliverySha);
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        TaskJsonFile.UpdateField(
+            reviewed.FolderPath,
+            "tags",
+            new[] { AcceptanceRailHostedService.HoldTag },
+            NullLogger.Instance);
+        deps.Scanner.InvalidateCache();
+
+        var snapshot = await AcceptanceRail(deps).RunOnceAsync();
+
+        Assert.Equal(TaskStates.HumanReview, deps.Scanner.FindJob(Slug, _watchPath)!.State);
+        Assert.Equal(1, snapshot.Held);
+        Assert.Equal(0, snapshot.Accepted);
+    }
+
+    [Fact]
+    public async Task AcceptanceRail_Conflict_RequeuesWithVisibleSteer()
+    {
+        var deliverySha = PublishDelivery("rail-conflict.txt", "conflicted work\n");
+        var deps = Build(deliverySha);
+        RecordRecoverableConflict(deps);
+
+        var snapshot = await AcceptanceRail(deps).RunOnceAsync();
+
+        var queued = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(queued);
+        Assert.Equal(TaskStates.Ready, queued!.State);
+        Assert.Equal(1, snapshot.Requeued);
+        Assert.Equal(ContinueModes.Steer, queued.PendingIntent?.Mode);
+        Assert.Contains("## STEER", queued.PendingIntent?.Prompt, StringComparison.Ordinal);
+        Assert.Contains("Do not redo the feature work", queued.PendingIntent?.Prompt, StringComparison.Ordinal);
+        Assert.Contains(
+            deps.Timeline.ReadAll(queued.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.IntegrationRecoveryQueued
+                     && entry.Details?.GetValueOrDefault("source") == "acceptance-rail"
+                     && entry.Details?.GetValueOrDefault("retry") == "1");
+    }
+
+    [Fact]
+    public async Task AcceptanceRail_ConflictInEscalated_RequeuesGenuineBounce()
+    {
+        var deliverySha = PublishDelivery("rail-escalated-conflict.txt", "conflicted work\n");
+        var deps = Build(deliverySha);
+        RecordRecoverableConflict(deps);
+        var moved = deps.States.MoveJob(
+            Slug,
+            TaskStates.Escalated,
+            _watchPath,
+            cause: TimelineActors.System,
+            reason: HumanReviewEscalation.FormatReason(
+                HumanReviewEscalationCategories.Environmental,
+                "Integration requires a corrected delivery."));
+        Assert.Equal(MoveJobStatus.Success, moved.Status);
+
+        var snapshot = await AcceptanceRail(deps).RunOnceAsync();
+
+        Assert.Equal(TaskStates.Ready, deps.Scanner.FindJob(Slug, _watchPath)!.State);
+        Assert.Equal(1, snapshot.Requeued);
+        Assert.Equal(1, snapshot.LaneDepth.Escalated);
+    }
+
+    [Fact]
+    public async Task AcceptanceRail_ConflictRetryBudget_EscalatesInsteadOfLooping()
+    {
+        var deliverySha = PublishDelivery("rail-budget.txt", "conflicted work\n");
+        var deps = Build(deliverySha);
+        RecordRecoverableConflict(deps);
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        for (var retry = 1; retry <= AcceptanceRailOptions.DefaultMaxRequeues; retry++)
+        {
+            deps.Timeline.Append(
+                reviewed.FolderPath,
+                TimelineEventKinds.IntegrationRecoveryQueued,
+                TimelineActors.System,
+                $"Historical conflict recovery {retry}.",
+                details: new Dictionary<string, string>
+                {
+                    ["reason"] = AcceptedIntegrationFailureCodes.MergeConflict,
+                    ["retry"] = retry.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                });
+        }
+
+        var snapshot = await AcceptanceRail(deps).RunOnceAsync();
+
+        var escalated = deps.Scanner.FindJob(Slug, _watchPath);
+        Assert.NotNull(escalated);
+        Assert.Equal(TaskStates.Escalated, escalated!.State);
+        Assert.Equal(1, snapshot.Escalated);
+        Assert.Contains(
+            HumanReviewEscalationCategories.IntegrationRecoveryExhausted,
+            File.ReadAllText(Path.Combine(escalated.FolderPath, "status.md")),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            deps.Timeline.ReadAll(escalated.FolderPath),
+            entry => entry.Kind == TimelineEventKinds.AcceptanceRailAction
+                     && entry.Details?.GetValueOrDefault("action") == "escalated");
+    }
+
+    [Fact]
+    public async Task AcceptanceRail_ConceptCard_IsUntouched()
+    {
+        var deliverySha = PublishDelivery("rail-concept.txt", "concept evidence\n");
+        IntegrateDelivery(deliverySha);
+        var deps = Build(deliverySha);
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        TaskJsonFile.UpdateField(
+            reviewed.FolderPath,
+            "mode",
+            TaskModes.Concept,
+            NullLogger.Instance);
+        deps.Scanner.InvalidateCache();
+
+        var snapshot = await AcceptanceRail(deps).RunOnceAsync();
+
+        Assert.Equal(TaskStates.HumanReview, deps.Scanner.FindJob(Slug, _watchPath)!.State);
+        Assert.Equal(1, snapshot.ConceptHeld);
+        Assert.Equal(0, snapshot.Accepted);
+    }
+
+    [Fact]
+    public async Task AcceptanceRail_NonIntegratedCard_IsNeverAccepted()
+    {
+        var deliverySha = PublishDelivery("rail-pending.txt", "pending work\n");
+        var deps = Build(deliverySha);
+
+        var snapshot = await AcceptanceRail(deps).RunOnceAsync();
+
+        Assert.Equal(TaskStates.HumanReview, deps.Scanner.FindJob(Slug, _watchPath)!.State);
+        Assert.Equal(0, snapshot.Accepted);
+        Assert.Equal(1, snapshot.Unchanged);
+    }
+
+    [Fact]
     public async Task IntegrationTagMutation_NeverExposesTruncatedTaskJsonToConcurrentReader()
     {
         var folder = Path.Combine(_tempDir, "atomic-task-json");
@@ -1426,6 +1585,69 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         RunGit(_repo, "branch", "-D", DeliveryRef);
         RunGit(_repo, "update-ref", "-d", $"refs/remotes/origin/{DeliveryRef}");
         return sha;
+    }
+
+    private void IntegrateDelivery(string deliverySha)
+    {
+        RunGit(_repo, "checkout", "-q", "-b", "develop", "origin/develop");
+        RunGit(_repo, "merge", "-q", "--no-ff", "--no-edit", deliverySha);
+        RunGit(_repo, "checkout", "-q", "main");
+    }
+
+    private void RecordRecoverableConflict(Deps deps)
+    {
+        var reviewed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        var now = DateTime.UtcNow;
+        deps.Pipeline.RecordStep(reviewed.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            StartedAt = now,
+            CompletedAt = now,
+            Verdict = "conflict",
+            VerdictSummary = "The delivery conflicts with the current integration branch.",
+            Reason = "Automatic merge stopped on a content conflict.",
+            FailureCode = AcceptedIntegrationFailureCodes.MergeConflict,
+        });
+    }
+
+    private AcceptanceRailHostedService AcceptanceRail(Deps deps)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["TaskRepository"] = _tempDir,
+                ["AcceptanceRail:Enabled"] = "true",
+                ["AcceptanceRail:IntervalMinutes"] = "3",
+                ["AcceptanceRail:MaxRequeues"] =
+                    AcceptanceRailOptions.DefaultMaxRequeues.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture),
+            })
+            .Build();
+        var recovery = new TaskIntegrationRecoveryService(
+            deps.Scanner,
+            deps.Integration,
+            deps.Pipeline,
+            deps.Mutations,
+            deps.States,
+            deps.Timeline,
+            NullLogger<TaskIntegrationRecoveryService>.Instance);
+        var escalation = new HumanReviewEscalation(
+            deps.States,
+            deps.Transitions,
+            _tempDir,
+            NullLogger<HumanReviewEscalation>.Instance,
+            deps.Scanner);
+        return new AcceptanceRailHostedService(
+            deps.Scanner,
+            deps.Integration,
+            deps.Transitions,
+            recovery,
+            escalation,
+            deps.Timeline,
+            config,
+            NullLogger<AcceptanceRailHostedService>.Instance);
     }
 
     private string PublishLocalDelivery(string relativePath, string content)

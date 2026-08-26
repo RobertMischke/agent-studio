@@ -30,6 +30,9 @@
   completion judging in the separate API-only Orchestrator Engine. Flow
   definitions and in-flight runs remain durable Task Server data, so restarting
   the Engine does not orphan work.
+- Advances integrated deliveries through a deterministic platform rail even
+  when no Studio or orchestrator session is alive, while explicit operator
+  holds remain in Human Review.
 
 ## Get started
 

@@ -4,13 +4,15 @@
   "title": "Rebase, merge, and bounce steering",
   "summary": "Decision-ready attribution analysis of the current stage-specific Git hybrid: fresh recovery rounds rebase and record a new fenced subject, canonical integration preserves reviewed delivery SHAs with merge-first recovery, and promotion publishes only the gated candidate SHA. Defines deterministic backend bounce steering as the default rail, strong guardian analysis for repeated or complex conflicts, Batch Gate interplay, bounded rounds, and migration slices.",
   "entrypoint": "index.html",
-  "status": "decision-pending",
-  "phase": "decision-ready",
-  "updatedAt": "2026-08-16T00:00:00Z",
+  "status": "accepted",
+  "phase": "accepted",
+  "updatedAt": "2026-08-26T00:00:00Z",
   "sourceTaskKeys": [
     "AGT-2662"
   ],
-  "implementationTasks": [],
+  "implementationTasks": [
+    "AGT-2683"
+  ],
   "relatedTaskKeys": [
     "AGT-2544",
     "AGT-2557",

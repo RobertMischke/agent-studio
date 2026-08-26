@@ -2134,6 +2134,28 @@
             replay queue.
           </td>
         </tr>
+        <tr id="case-agt-2683">
+          <td>2026-08-26</td>
+          <td><code>AGT-2683</code><br><span class="small">Human Review stalled whenever the session cron died</span></td>
+          <td>
+            Operators perceived the system as stalled about six times because integrated cards and
+            rebase-recoverable conflicts accumulated in Human Review after the session-bound orchestrator stopped.
+            One manual tick changed 38 Human Review cards into 8 in Progress plus 23 Ready cards immediately.
+          </td>
+          <td>
+            The terminal decisions were already typed and deterministic, but their only broad mover was an
+            ephemeral orchestrator session. No backend service accepted Git-proven integration or requeued the
+            typed conflict after that session ended, and no durable retry budget bounded repeated conflict rework.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the default-on acceptance rail runs every three minutes without
+            a model or Studio session. It reaches <span class="lane">6-completed</span> only through the current-attempt
+            Git acceptance guard, returns eligible conflicts to <span class="lane">2-ready</span> through the shared
+            Steer service, and reaches <span class="lane">5e-escalated</span> with
+            <code>integration-recovery-exhausted</code> after the configured task-local budget. Holds and concept
+            cards stay parked. Structured activity plus lane-depth and last-run status make every sweep visible.
+          </td>
+        </tr>
       </tbody>
     </table>
 

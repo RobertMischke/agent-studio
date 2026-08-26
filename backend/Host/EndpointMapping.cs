@@ -46,6 +46,7 @@ public static class EndpointMapping
         app.MapAdaptiveReviewParallelismEndpoints();
         app.MapCodingYieldEndpoints();
         app.MapAcceptedIntegrationBackstopEndpoints();
+        app.MapAcceptanceRailEndpoints();
         app.MapOrchestratorSessionEndpoints();
         app.MapOrchestratorContextEndpoints();
         app.MapLeaseEndpoints();

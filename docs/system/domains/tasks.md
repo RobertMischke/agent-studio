@@ -210,17 +210,18 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   branch's current HEAD. Lane state, provenance merge records, pipeline success,
   and curated merge subjects do not force `integrated`; an out-of-band merge is
   detected on the next read.
-- Human acceptance is transactional. A coding card remains in
-  `5-human-review` with phase `integrating` until the delivery reaches `Merged`,
-  `MergedAfterRebase`, or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure,
-  and error return it
-  to ordinary Human Review with an Integration failed badge and timeline
-  evidence. Before the already-integrated decision, acceptance fetches the
-  configured origin integration ref and evaluates refreshed local plus remote
-  ancestry. A remote-only out-of-band integration therefore skips the merge
-  queue and gate, while local/remote divergence becomes a failed integration
-  record instead of being overwritten. The `integrationpending` tag is an
-  internal recovery marker, not a second UI status.
+- Acceptance never performs integration. The default-on
+  `AcceptanceRailHostedService` scans Human Review and Escalated every three
+  minutes without a model or Studio session. It moves a coding card to
+  `6-completed` only through `TaskTransitionService`, whose current-attempt and
+  Git-derived guard rechecks `integration.status=integrated` at the mutation
+  boundary. Recoverable `conflict-skipped` cards receive the shared rebase Steer
+  and return to Ready; a task-local restart-safe counter defaults to five rounds
+  before `integration-recovery-exhausted` escalation. Concept cards,
+  `human-decision-needed`, the `orchestrator-hold` tag, configured hold-list
+  entries, and genuine operator-decision parks stay put. The status endpoint
+  `/api/pipeline/acceptance-rail-status` exposes lane depth and last-run/action
+  metrics.
 - A current integration failure is projected as typed card state from the
   durable merge step. `integration.failure` carries a stable code, concise
   label, operator-facing reason, and whether focused rebase recovery applies.
@@ -532,8 +533,11 @@ cannot erase an operator decision.
   creation instead of silently selecting another lane.
 - `4-auto-review` remains the disk/API key even when the UI labels it Post
   Processing.
-- `5-human-review` is where the user gets the final say. The orchestrator does
-  not move a task directly from auto-review to completed.
+- `5-human-review` is the quality boundary. The deterministic platform rail
+  finalizes ordinary Git-proven coding deliveries; concept sight review,
+  explicit holds, and operator-decision cards remain for the user. Neither the
+  orchestrator nor Post Processing moves a task directly from Auto Review to
+  Completed.
 - A canonical Remote Review report does not perform a lane move. Infrastructure
   outcomes retry the same immutable ReviewSubject. A non-infrastructure report
   remains in `4-auto-review` through successful workspace cleanup, which
@@ -541,9 +545,10 @@ cannot erase an operator decision.
   Engine settlement then moves the task to `2-ready`, `5-human-review`, or
   `5e-escalated`. The bounded reissue count spans decision runs and coding
   attempts for the task; it does not reset with Studio or Engine restart.
-- Integration remains an explicit operator decision after Human Review. The
-  Remote control plane may durably accept and schedule that command, but Post
-  Processing does not infer acceptance or move directly to `6-completed`.
+- Integration remains pipeline-owned and must finish before Human Review.
+  Platform acceptance may finalize only a current Git-proven delivery. Post
+  Processing does not infer acceptance or move directly to `6-completed`, and
+  operator holds remain unchanged.
 - Moving a task from `6-completed` to `7-archive` in task detail requires a
   second confirmation while `integration.status` is anything other than
   `integrated`. This is an operator warning, not a server-side hard block.

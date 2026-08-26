@@ -150,14 +150,14 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Decision dossier · AGT-2662 · concept only</p>
+  <p class="kicker">Accepted architecture · AGT-2662 · Scenario 2 implemented by AGT-2683</p>
   <h1>Rebase, merge, and bounce steering</h1>
   <p class="lede">The pipeline should preserve attributed delivery commits when it integrates, but it should refresh a bounced delivery by rebasing before the next fenced review. The apparent inconsistency is a stage boundary, not one Git policy applied twice.</p>
   <div class="meta">
-    <span><b>Status</b> decision pending</span>
-    <span><b>Phase</b> decision ready</span>
-    <span><b>Evidence cut</b> 14 August 2026</span>
-    <span><b>Implementation</b> none in this card</span>
+    <span><b>Status</b> accepted</span>
+    <span><b>Phase</b> implemented</span>
+    <span><b>Evidence cut</b> 26 August 2026</span>
+    <span><b>Implementation</b> AGT-2683</span>
   </div>
 </header>
 
@@ -166,9 +166,9 @@
   <p><b>Keep the hybrid and make its boundary explicit.</b> A fresh agent recovery round rebases its delivery onto current <code>origin/&lt;integration-branch&gt;</code>, records a new fenced result and reruns review. Canonical integration tries SHA-preserving merge first. Promotion advances <code>main</code> only to the exact tested candidate SHA. Move routine conflict bounces from session labor into one deterministic backend round; invoke a strong guardian only after repetition, contradictory evidence, or a genuinely semantic conflict.</p>
 </div>
 
-<div class="box warn">
-  <h4>The decision requested</h4>
-  <p>Approve the stage-specific Git policy, one automatic deterministic bounce per operator review epoch, a strong-model escalation tier for complex repeats, and the migration slices in §11. The Batch Gate remains a separate pending decision and changes the publication unit only if its own exact-SHA evidence contract is approved.</p>
+<div class="box accent">
+  <h4>Scenario 2 accepted and delivered</h4>
+  <p>AGT-2683 moved deterministic acceptance and conflict requeue into a default-on backend HostedService. It rechecks current Git integration before completion, respects operator and concept holds, persists a restart-safe conflict budget, and escalates after the configured limit. The session orchestrator is now an observer for eligible cards. The Batch Gate and strong guardian remain separate pending decisions.</p>
 </div>
 
 <nav class="box" aria-label="Contents">
@@ -355,15 +355,15 @@
   <p>Mechanical rebase replay makes a compact batch candidate but spends attribution complexity on every member. Prebuilt no-FF member merges preserve original SHAs and make acceptance simpler, at the cost of a more branched candidate. The Batch Gate pilot should measure both construction shapes in shadow mode before making rebase replay permanent. Whichever shape wins, the tested candidate and per-member evidence must be identical to what is published.</p>
 </div>
 
-<h2 id="bounce-today"><span class="no">§8</span>Bounce steering today</h2>
-<p>The broad operating practice is session-side. On a reviewed card with <code>integration.status = conflict-skipped</code>, the orchestrator:</p>
+<h2 id="bounce-today"><span class="no">§8</span>Bounce steering before the platform rail</h2>
+<p>Before AGT-2683, the broad operating practice was session-side. On a reviewed card with <code>integration.status = conflict-skipped</code>, the orchestrator:</p>
 <ol>
   <li>appends a <code>STEER</code> section to <code>prompt.md</code>: the delivery could not be merged; rebase onto current <code>origin/&lt;branch&gt;</code>; resolve conservatively; rerun the gate; deliver again; do not redo feature work;</li>
   <li>changes <code>thinkingLevel</code> to <code>high</code> for the mechanical round rather than spending <code>xhigh</code> by default;</li>
   <li>moves the card to <code>2-ready</code> through the move API; and</li>
   <li>applies the same requeue pattern to eligible escalated, non-hold cards.</li>
 </ol>
-<p>The next claim creates a new attempt and fence. Its delivery and review re-record current SHAs, so the rebase is not silently substituted underneath old evidence. The operational weakness is ownership: the loop advances only while the orchestrator session is alive and inspecting every tick. On the night of 13 August 2026, the session stopped and 17 eligible cards accumulated without those manual mutations.</p>
+<p>The next claim creates a new attempt and fence. Its delivery and review re-record current SHAs, so the rebase is not silently substituted underneath old evidence. The operational weakness was ownership: the loop advanced only while the orchestrator session was alive and inspecting every tick. The failure repeated about six times. One observed manual tick reduced 38 Human Review cards to 8 in progress plus 23 Ready cards immediately, proving that the mover belonged in deterministic platform code.</p>
 
 <pre><code>## STEER
 
@@ -378,7 +378,7 @@ rerun the gate, and deliver again. Do not redo the feature work.</code></pre>
   <li>AGT-2544’s envelope policy already demonstrates deterministic backend requeue: one automatic retry for an incomplete immutable Result Envelope, then typed <code>unverified-delivery</code> escalation.</li>
   <li>AGT-2654’s visual guardian already demonstrates evidence-driven steering: a bounded classifier names defects, pure policy permits one retry with a precise steer, and repetition reaches Human Review with durable evidence.</li>
 </ul>
-<p>Scenario 2 is therefore an extension and unification of deployed patterns, not a new scheduler.</p>
+<p>Scenario 2 extends and unifies those deployed patterns; AGT-2683 now supplies that rail without introducing another scheduler.</p>
 
 <figure>
   <svg viewBox="0 0 1040 650" role="img" aria-labelledby="bounce-title bounce-desc">
@@ -457,20 +457,20 @@ rerun the gate, and deliver again. Do not redo the feature work.</code></pre>
 
 <h2 id="scenarios"><span class="no">§9</span>Four automation scenarios</h2>
 <h3>Scenario 1: session orchestrator</h3>
-<p><span class="pill part">Current broad practice</span> The model sees the board, recognizes the pattern, writes the steer, changes thinking, and calls the move API on each tick.</p>
+<p><span class="pill part">Supervisor only</span> The model may inspect the board, explain unusual evidence, and alert on held or repeated cases. It is no longer the mover for a typed eligible terminal.</p>
 <ul>
   <li><b>Strength:</b> adaptable immediately and able to notice odd context around a card.</li>
   <li><b>Cost:</b> repeated board scans and model attention for a deterministic action; every card consumes orchestration labor.</li>
   <li><b>Fragility:</b> no durable owner after the session ends. The 13 August pileup is the direct failure mode.</li>
-  <li><b>Use:</b> fallback while Scenario 2 is not complete, and deliberate operator intervention outside the allowlist.</li>
+  <li><b>Use:</b> deliberate operator intervention outside the allowlist and supervision of platform health.</li>
 </ul>
 
 <h3>Scenario 2: platform rule</h3>
-<p><span class="pill done">Recommended default</span> A backend policy consumes the typed integration failure and current task facts. When the state is fresh, recoverable, within budget, and not on hold, existing application services append an idempotent template, supersede the failed generation, select the safe mechanical route, and queue Ready.</p>
+<p><span class="pill done">Implemented default</span> <code>AcceptanceRailHostedService</code> consumes the typed integration status and current task facts every three minutes by default. Git-proven integrated coding cards complete through the existing acceptance guard. When a conflict state is fresh, recoverable, within its durable budget, and not on hold, shared application services append an idempotent template, supersede the failed generation, and queue Ready.</p>
 <ul>
   <li><b>No model is needed:</b> branch, result ref, failure code, epoch, attempt, conflict paths, and retry count are already structured.</li>
   <li><b>Reuse rather than duplicate:</b> build on the AGT-2544 envelope retry policy, <code>TaskIntegrationRecoveryEndpoints</code>, <code>IntegrationAgentRoundService</code>, <code>OperatorReviewRequeueService</code>, commit supersession, timeline events, and the state machine.</li>
-  <li><b>Availability:</b> a durable hosted worker or transition hook owns completion. Backend restart replays the idempotent obligation.</li>
+  <li><b>Availability:</b> the durable hosted worker owns completion. Backend restart resumes the task-local recovery fingerprint and counter.</li>
   <li><b>Boundary:</b> the rule does not resolve content, edit Git, waive a gate, or requeue a hold card.</li>
 </ul>
 
@@ -509,8 +509,8 @@ rerun the gate, and deliver again. Do not redo the feature work.</code></pre>
   <thead><tr><th>Slice</th><th>Scope</th><th>Acceptance</th></tr></thead>
   <tbody>
     <tr><td><b>S0 · Contract and shadow</b></td><td>Define <code>IntegrationBounceObligation</code> with task, attempt, operator epoch, failure code, evidence fingerprint, branch, result ref/SHA, conflict files, round count, hold state, route decision, and idempotency key. Observe current manual actions without mutation.</td><td>Every eligible manual bounce projects one identical proposed obligation; duplicate ticks and restarts produce one record. Measure eligible count, latency, manual interventions, repeats, and false eligibility.</td></tr>
-    <tr><td><b>S1 · Deterministic rail</b></td><td>Extend the existing integration recovery policy to own the first eligible reviewed <code>conflict-skipped</code> round. Reuse continuation intent, supersession, review epoch, timeline, and Ready promotion services.</td><td>Matrix tests cover stale attempt, changed ref, hold, non-recoverable code, already integrated, duplicate event, backend restart, budget exhausted, and partial side-effect recovery. No model call and no direct filesystem mutation outside owning services.</td></tr>
-    <tr><td><b>S2 · Route and visibility</b></td><td>Add floor-aware thinking selection, action receipts, queue age, automatic-round badge, kill switch per project, and an alert when obligations age beyond the service objective.</td><td>Route never drops below a hard floor or rewrites an explicit operator pin without a recorded approved policy. The 17-card session-loss shape drains after a backend restart without an open Studio session.</td></tr>
+    <tr><td><b>S1 · Deterministic rail</b><br><span class="pill done">Implemented AGT-2683</span></td><td>Extend the existing integration recovery policy to own eligible reviewed <code>conflict-skipped</code> rounds and Git-proven acceptance. Reuse continuation intent, supersession, timeline, Ready promotion, and the normal acceptance guard.</td><td>Matrix and Git-backed tests cover integrated acceptance, hold, concept, non-integrated refusal, recoverable conflict, Escalated bounce, and budget exhaustion. The task-local fingerprint resumes partial side effects after restart. No model call and no Git mutation.</td></tr>
+    <tr><td><b>S2 · Route and visibility</b><br><span class="pill part">Visibility delivered</span></td><td>AGT-2683 adds action receipts, lane depth, last run/action, a global enable switch, interval, retry cap, and hold list. Floor-aware route selection, per-project disable, queue-age badge, and objective alert remain follow-up scope.</td><td>The implemented rail never changes model or thinking pins. The former session-loss pileup drains after backend restart without an open Studio session.</td></tr>
     <tr><td><b>S3 · Guardian escalation</b></td><td>Feed repeated or complex bounces into the W15 evidence pack and strong analysis receipt. Allow one targeted A1 steer through the same backend action boundary.</td><td>One call per fingerprint; pure policy rejects stale evidence and exhausted budgets; every mutation has an idempotent receipt; semantic conflict can end only in a normal verified delivery or human decision.</td></tr>
     <tr><td><b>S4 · Batch alignment</b></td><td>If AGT-2648 is approved, make construction ejection emit the same obligation and make stale batch bases coordinator-owned. Shadow-test rebase replay against prebuilt merge assembly.</td><td>No member is bounced for a batch-wide stale base; ejected members retain original and replacement mapping; exact green candidate and per-member evidence match canonical publication.</td></tr>
   </tbody>
@@ -518,10 +518,10 @@ rerun the gate, and deliver again. Do not redo the feature work.</code></pre>
 
 <h3>Operational defaults</h3>
 <ul>
-  <li><b>Round cap:</b> one deterministic automatic recovery per operator review epoch, matching the existing integration and visual guardian loop breakers.</li>
-  <li><b>Escalation:</b> repeat goes to guardian when evidence is complete and the conflict is potentially resolvable; otherwise it goes directly to Human Review.</li>
+  <li><b>Round cap:</b> a restart-safe task-local conflict budget, configurable with a safe default of five requeues.</li>
+  <li><b>Escalation:</b> budget exhaustion reaches <code>5e-escalated</code> with <code>integration-recovery-exhausted</code>. A guardian remains optional follow-up scope for complex evidence.</li>
   <li><b>Service objective:</b> claim or visibly defer an eligible obligation within five minutes. An unavailable worker becomes a platform Problem rather than a quiet card pile.</li>
-  <li><b>Kill switch:</b> global and per-project disable; disabling automation leaves typed obligations visible and returns ownership to the session/operator path.</li>
+  <li><b>Kill switch:</b> the implemented switch is global; per-project disable remains follow-up scope. Disabling automation leaves typed obligations visible and returns ownership to the session/operator path.</li>
   <li><b>Measures:</b> bounce volume, time to new claim, repair rate, repeat rate, guardian-call rate and tokens, human reversal, wrong-scope changes, attribution failures, and cards stranded by unavailable ownership.</li>
 </ul>
 
@@ -530,7 +530,7 @@ rerun the gate, and deliver again. Do not redo the feature work.</code></pre>
   <thead><tr><th>Question</th><th>Recommendation</th><th>If declined</th></tr></thead>
   <tbody>
     <tr><td>Keep the hybrid?</td><td>Yes: agent rebase for fresh delivery; server merge-first for accepted identity; exact fast-forward for promotion.</td><td>Changing server integration to squash or unmapped rebase requires a new acceptance evidence contract first.</td></tr>
-    <tr><td>Who owns the first bounce?</td><td>Backend deterministic rule with one round per review epoch.</td><td>Retain session labor and accept that session availability is queue availability.</td></tr>
+    <tr><td>Who owns the first bounce?</td><td>Backend deterministic rail with a configurable restart-safe task budget.</td><td>Retain session labor and accept that session availability is queue availability.</td></tr>
     <tr><td>When does the guardian run?</td><td>On repeat, complex/semantic conflicts, contradictory evidence, or cross-member interaction.</td><td>Route those cases directly to Human Review; do not repeat the generic template.</td></tr>
     <tr><td>How should Batch Gate assemble members?</td><td>Shadow compare mapped rebase replay with prebuilt no-FF member merges before the pilot chooses.</td><td>If rebase replay remains fixed, treat its per-member replacement map as a launch-blocking evidence contract.</td></tr>
     <tr><td>How far may automation act?</td><td>Append precise steer, apply floor-safe route, supersede delivery, and requeue through existing services. No semantic merge or protected-branch mutation.</td><td>Keep mutation human-owned but still ship durable detection and obligation visibility.</td></tr>
@@ -538,21 +538,21 @@ rerun the gate, and deliver again. Do not redo the feature work.</code></pre>
 </table>
 
 <div class="box accent">
-  <h4>Decision statement ready for sign-off</h4>
-  <p>“Preserve reviewed delivery SHAs at canonical integration by trying merge first; permit rebase only in a fresh fenced recovery round or with an exact persisted replacement map. Publish main only at the gated candidate SHA. Move the first recoverable conflict-skipped bounce into a deterministic, restart-safe backend rule with one round per operator review epoch. Use a strong guardian only for repeated, complex, or contradictory evidence, and stop at Human Review when the bounded budget is exhausted.”</p>
+  <h4>Accepted decision</h4>
+  <p>“Preserve reviewed delivery SHAs at canonical integration by trying merge first; permit rebase only in a fresh fenced recovery round or with an exact persisted replacement map. Publish main only at the gated candidate SHA. Move recoverable conflict-skipped bounces and Git-proven acceptance into a deterministic, restart-safe backend rail with a bounded task-local budget. Keep holds and concept decisions human-owned, and escalate when the configured budget is exhausted.”</p>
 </div>
 
 <h3>Source and contract references</h3>
 <ul>
-  <li><a href="../../system/architecture/decisions/adr-archive.md">ADR-0067 amendments</a>, especially the 11 August merge-before-rebase and integration-before-acceptance decisions.</li>
+  <li><a href="../../system/architecture/decisions/adr-archive.md">ADR-0067 and ADR-0068</a>, covering integration-before-acceptance and the platform acceptance rail.</li>
   <li><a href="../../concepts/task-integration-and-merge-workflow.md">Task Integration and the Worktree/Merge Workflow</a>, current branch, gate, and acceptance behavior.</li>
   <li><a href="../batch-gate-concept/index.html">Batch Gate</a>, closed candidate, per-member evidence, conflict ejection, and promotion authority.</li>
   <li><a href="../orchestrator-waechter/index.html">Global Orchestrator Watcher</a>, evidence ladder, A1 rebase-steer authority, model economy, and AGT-2654 visual guardian implementation state.</li>
   <li><a href="../develop-main-promotion.md">Develop to main promotion</a>, pinned candidate-SHA gate and exact publication.</li>
   <li><a href="../../system/domains/tasks.md">Tasks domain</a> and <a href="../../system/contracts/filesystem.md">filesystem contract</a>, active attribution and SHA/attempt supersession.</li>
   <li><a href="../../system/domains/model-routing-policy.md">Model Routing Policy</a>, hard floors and the rule not to promote stale-base or environmental reissues.</li>
-  <li>Code anchors: <code>GitService.MergeRefIntoIntegration</code>, <code>MergeIntoDevelopRunner</code>, <code>TaskTransitionService.ValidateIntegratedAcceptance</code>, <code>TaskIntegrationStatusService</code>, <code>TaskIntegrationRecoveryEndpoints</code>, <code>IntegrationAgentRoundService</code>, and <code>RemoteDeliveryFailurePolicy</code>.</li>
-  <li>Operator observation, 13 August 2026 night: the steering session stopped and 17 eligible cards accumulated.</li>
+  <li>Code anchors: <code>AcceptanceRailHostedService</code>, <code>TaskIntegrationRecoveryService</code>, <code>TaskTransitionService.ValidateIntegratedAcceptance</code>, <code>TaskIntegrationStatusService</code>, <code>TaskIntegrationRecoveryEndpoints</code>, <code>IntegrationAgentRoundService</code>, <code>GitService.MergeRefIntoIntegration</code>, and <code>MergeIntoDevelopRunner</code>.</li>
+  <li>Operator observations: the steering-session failure repeated about six times; one manual tick changed 38 Human Review cards into 8 in progress plus 23 Ready cards immediately.</li>
 </ul>
 
 <p class="small">Layout and theme tokens follow the calm documentation style of <a href="../haertung-verteilte-ausfuehrung/index.html">Distributed Execution</a>. Both diagrams are inline SVG and require no external runtime.</p>

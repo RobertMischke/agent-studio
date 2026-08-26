@@ -161,7 +161,7 @@ steer the pipeline in this policy version.
   develop merge commit, and fast-forwards `main` to the same commit. Existing
   divergence blocks before the delivery merge. A main-only repository retains
   the single-target release path.
-  Human acceptance is a quality and sight-review decision only. For a coding
+  Acceptance is a quality-boundary decision only. For a coding
   delivery, `TaskTransitionService` validates that `review-subject.json` still
   names the current Attempt and that Git already projects the delivery as
   `integrated`. It then performs only the lane move. Acceptance never fetches,
@@ -173,6 +173,15 @@ steer the pipeline in this policy version.
   pipeline history. `operatorOverride: true` is the explicit,
   target-Completed-only exception; no-branch task metadata is exempt without an
   override.
+  The default-on `AcceptanceRailHostedService` invokes this exact validation on
+  a bounded three-minute sweep, independent of any session orchestrator. It
+  skips concept and operator-held cards. A recoverable `conflict-skipped`
+  delivery uses `TaskIntegrationRecoveryService` to persist one idempotent
+  Steer, supersede the failed generation, and return the card to Ready. The
+  durable task-local counter defaults to five requeues before the
+  `integration-recovery-exhausted` funnel terminal. Structured sweep/action
+  logs and `/api/pipeline/acceptance-rail-status` expose lane depth and last-run
+  time.
   `DeliveryRefResolver` chooses the immutable result ref first, then an
   attributed commit branch, then `runner/<runner>/<task-key>`, with
   `task/<slug>` only as the legacy local fallback. Remote delivery is fetched
@@ -656,8 +665,10 @@ evidence. Studio and its BFF are read and command surfaces, not loop owners.
 
 Integration is a pipeline-owned delivery decision. The canonical Remote order
 is **delivery -> settled Review/build gate -> integration -> Human Review ->
-acceptance**. No automatic Post Processing verdict may mark a task Completed;
-Human Review remains the quality decision after the code is already integrated.
+acceptance**. No automatic Post Processing verdict may mark a task Completed.
+Human Review remains the quality boundary after the code is already integrated;
+the platform rail finalizes ordinary integrated coding cards there, while
+concept and operator-held cards remain explicit decisions.
 
 The named deviations are narrow. Local worktree coding integrates during local
 finalization before its Auto Review gate, but still before Human Review.

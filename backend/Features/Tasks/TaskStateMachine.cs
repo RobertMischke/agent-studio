@@ -336,13 +336,15 @@ public class TaskStateMachine
     /// <param name="cause">Ledger actor of the lane change when the task is not yet in <c>2-ready</c> (see <see cref="MoveJob"/>).</param>
     /// <param name="transitionCause">Ledger cause id of that lane change, one of <see cref="LaneChangeCauses"/>.</param>
     /// <param name="transitionDetail">Short qualifier for <paramref name="transitionCause"/>.</param>
+    /// <param name="expectedSourceState">Optional optimistic fence for the source lane.</param>
     /// <returns>The 1-based position of the target in the new <c>2-ready</c> ordering, or 0 on failure.</returns>
     public int PromoteToReadyTop(
         string jobId,
         string? watchPath = null,
         string? cause = null,
         string? transitionCause = null,
-        string? transitionDetail = null)
+        string? transitionDetail = null,
+        string? expectedSourceState = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return 0;
@@ -350,6 +352,7 @@ public class TaskStateMachine
         if (info.State != TaskStates.Ready)
         {
             var moved = MoveJob(jobId, TaskStates.Ready, watchPath, cause,
+                expectedSourceState: expectedSourceState,
                 transitionCause: transitionCause, transitionDetail: transitionDetail);
             if (moved.Status != MoveJobStatus.Success) return 0;
         }

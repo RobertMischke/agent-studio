@@ -343,6 +343,7 @@ builder.Services.AddSingleton<ProjectGitGraphService>();
 // AGT-2202: honest git-derived integration verdict for accepted cards (is the
 // work actually in develop?). Batched + cached per repo like BoardMergeStatusService.
 builder.Services.AddSingleton<TaskIntegrationStatusService>();
+builder.Services.AddSingleton<TaskIntegrationRecoveryService>();
 builder.Services.AddSingleton<SupersededCommitSweep>();
 builder.Services.AddSingleton<RemoteTokenReceiptService>();
 builder.Services.AddSingleton<RemoteCompletionAttributionSweep>();
@@ -683,10 +684,13 @@ if (!publicDemoExecutionProfile)
 // recover both an interrupted accept transaction and a successful merge whose
 // queued origin push was dropped by restart.
 builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>();
+builder.Services.AddSingleton<AgentStudio.Pipeline.AcceptanceRailHostedService>();
 if (!publicDemoExecutionProfile)
 {
     builder.Services.AddHostedService(sp =>
         sp.GetRequiredService<AgentStudio.Pipeline.AcceptedIntegrationBackstopHostedService>());
+    builder.Services.AddHostedService(sp =>
+        sp.GetRequiredService<AgentStudio.Pipeline.AcceptanceRailHostedService>());
     builder.Services.AddHostedService<AgentStudio.Pipeline.IntegrationPushBackstopHostedService>();
 }
 // Periodic reap of orphaned CLI process trees (codex/node) that a finished or
