@@ -17,6 +17,7 @@ public sealed record QuotaWaitRecord
     [JsonPropertyName("resetAt")] public DateTime ResetAt { get; init; }
     [JsonPropertyName("thresholdMinutes")] public int ThresholdMinutes { get; init; }
     [JsonPropertyName("reason")] public string Reason { get; init; } = "";
+    [JsonPropertyName("source")] public string? Source { get; init; }
 }
 
 public static class QuotaWaitMarker
@@ -81,5 +82,6 @@ public static class QuotaWaitMarker
             marker.StartedAt,
             marker.ResetAt,
             marker.ThresholdMinutes,
-            marker.Reason);
+            marker.Reason,
+            marker.Source);
 }

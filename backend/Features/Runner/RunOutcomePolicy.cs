@@ -13,6 +13,8 @@ public enum OutcomeActionKind
     NotifyUserAndAccept,
     /// <summary>Re-issue the same intent with a stronger framing because the agent did not honor the user request.</summary>
     ReissueWithStrongerFraming,
+    /// <summary>Hold the card for an account-level provider reset; no task failure is recorded.</summary>
+    WaitForQuotaReset,
     /// <summary>Halt the job and post a meta message explaining why a re-issue did not run.</summary>
     NotifyUserAndStop
 }
@@ -233,16 +235,14 @@ public static class RunOutcomePolicy
 
         if (outcome.IssueKind == RunIssueKind.QuotaExhausted)
         {
-            // The account's usage/session/rate-limit budget is exhausted. This
-            // is transient (it clears when the quota window resets), so re-
-            // issuing right now walks into the same rejection. Route to human
-            // review with an honest quota-exhausted reason (the runner also
-            // exempts it from the per-task no-progress quarantine streak) rather
-            // than the misleading orchestrator-inconclusive.
+            // Account exhaustion is fleet infrastructure, not a task verdict.
+            // The coordinator persists quotaWait, pauses only this CLI, and
+            // schedules one reset-time probe. It must never route the card to
+            // human review or consume a task retry/failure budget.
             return new OutcomeAction(
-                Kind: OutcomeActionKind.NotifyUserAndStop,
+                Kind: OutcomeActionKind.WaitForQuotaReset,
                 MetaMessage: outcome.Summary
-                    ?? "The account's usage/session/rate-limit budget is exhausted. This is transient; re-queue the task after the quota window resets. Routing to human review.",
+                    ?? "The account's usage/session/rate-limit budget is exhausted. Waiting for the provider reset; this card will resume automatically.",
                 IsHeuristicFallback: false)
             {
                 IssueKind = RunIssueKind.QuotaExhausted,

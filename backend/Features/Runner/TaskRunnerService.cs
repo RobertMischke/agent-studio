@@ -29,6 +29,7 @@ public class TaskRunnerService : BackgroundService
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly CliQuotaWaitPolicyService? _quotaWaitPolicy;
     private readonly CliQuotaFallbackService? _quotaFallback;
+    private readonly ProviderLimitStateStore? _providerLimits;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
     private readonly OrchestratorRunner _orchestratorRunner;
@@ -152,7 +153,8 @@ public class TaskRunnerService : BackgroundService
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
         VisualQaService? visualQa = null,
-        StartupExecutionAdmission? executionAdmission = null)
+        StartupExecutionAdmission? executionAdmission = null,
+        ProviderLimitStateStore? providerLimits = null)
     {
         _config = config;
         _logger = logger;
@@ -201,6 +203,7 @@ public class TaskRunnerService : BackgroundService
         _clients = clients;
         _quotaWaitPolicy = quotaWaitPolicy;
         _executionAdmission = executionAdmission;
+        _providerLimits = providerLimits;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -374,7 +377,8 @@ public class TaskRunnerService : BackgroundService
                 conceptWorkbenchPublisher: _conceptWorkbenchPublisher,
                 promptEnrichment: _promptEnrichment,
                 dossierMaintenance: _dossierMaintenance,
-                visualQa: _visualQa);
+                visualQa: _visualQa,
+                providerLimits: _providerLimits);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
             runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
@@ -546,7 +550,11 @@ public class TaskRunnerService : BackgroundService
         {
             projects[name] = runner.GetStatus();
         }
-        return new RunnerStatus { Projects = projects };
+        return new RunnerStatus
+        {
+            Projects = projects,
+            Capabilities = _providerLimits?.Snapshot() ?? [],
+        };
     }
 
     public bool SetMode(string projectName, string mode, string? reason = null)
@@ -1292,7 +1300,8 @@ public class TaskRunnerService : BackgroundService
             conceptWorkbenchPublisher: _conceptWorkbenchPublisher,
             promptEnrichment: _promptEnrichment,
             dossierMaintenance: _dossierMaintenance,
-            visualQa: _visualQa);
+            visualQa: _visualQa,
+            providerLimits: _providerLimits);
         runner.ConfigureWatchdog(LoadWatchdogConfig(_config), PhaseBudgetTable.FromConfig(_config));
         runner.ConfigureCircuitBreaker(RunnerCircuitBreakerOptions.FromConfig(_config));
         runner.ConfigureStuckLoopBudget(LoadStuckLoopBudget(_config));

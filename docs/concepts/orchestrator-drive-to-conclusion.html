@@ -238,7 +238,7 @@
     </ol>
 
     <h3>The four-terminal model</h3>
-    <p>Every post-run path ends in exactly one of four owned terminals. Two transient states feed them:</p>
+    <p>Every post-run path ends in exactly one of four owned terminals. Three transient states feed them:</p>
     <table>
       <thead>
         <tr><th>State</th><th>Kind</th><th>Destination</th><th>Meaning</th></tr>
@@ -263,6 +263,12 @@
           <td>An auto-mode run asked a steer / NeedsInput question and released its live CLI seat. A durable start time drives the visible "Waiting for answer" timer and a bounded wake: after the configured timeout, the task either receives an unambiguous context-derived answer or reaches a blocked human escalation.</td>
         </tr>
         <tr>
+          <td><strong>QuotaWaiting</strong></td>
+          <td><span class="pill transient">transient</span></td>
+          <td class="lane">3-progress</td>
+          <td>An account-level provider session, usage, or rate limit stopped the CLI. The attempt closes as a neutral interruption, the card keeps a durable <code>quotaWait</code>, and only claims for that CLI pause. The reported reset time schedules one fleet-level probe; a healthy probe clears the pause automatically. This state consumes no card failure, retry, or escalation budget.</td>
+        </tr>
+        <tr>
           <td><strong>Succeeded</strong></td>
           <td><span class="pill ok">terminal</span></td>
           <td class="lane">4-auto-review</td>
@@ -284,7 +290,7 @@
     </table>
 
     <p class="small"><strong>Invariant:</strong> a run can only leave <em>Running</em> into one of
-      {Succeeded, NeedsReview, GaveUpToHuman, CooldownRetry, SteerPending}. CooldownRetry and SteerPending must each terminate
+      {Succeeded, NeedsReview, GaveUpToHuman, CooldownRetry, SteerPending, QuotaWaiting}. CooldownRetry, SteerPending, and QuotaWaiting must each terminate
       in one of the three terminals or schedule a concrete continuation. No path leaves a task parked in <span class="lane">3-progress</span> without either a live process or a
       scheduled wake. The 9-day-stranding state is structurally unreachable.</p>
   </section>
@@ -2110,6 +2116,8 @@
             board activity plus active host-slot telemetry. A first 404/409 renewal performs one exact re-registration and
             retry; a mismatched or superseded fence still stops. Restart regressions cover review report and coding
             completion delivery under the original authority.
+          </td>
+        </tr>
         <tr id="case-agt-2657">
           <td>2026-08-12</td>
           <td><code>AGT-2657</code><br><span class="small">accepted review reports timed out behind immediate integration</span></td>
@@ -2132,6 +2140,31 @@
             restart recovery. Endpoint and coordinator regressions pin both contracts. Attempt re-adoption remains
             complementary: it preserves live pre-restart authority but cannot prevent a post-settlement integration
             replay queue.
+          </td>
+        </tr>
+        <tr id="case-agt-2680">
+          <td>2026-08-23/24</td>
+          <td><code>AGT-2680</code><br><span class="small">shared Claude session limit drained the claimable fleet into escalation</span></td>
+          <td>
+            The operator account reached its Claude session limit at about 22:00. The local runner shared that credential,
+            classified every rejected Claude launch as a card failure, and moved 32 cards to
+            <span class="lane">5e-escalated</span>. By 00:20 every claimable card had been consumed, so claims stayed at zero
+            until an operator manually restored runner modes the next morning. The mass recovery requeued 33 cards.
+          </td>
+          <td>
+            Account-level limit text had no fleet-scoped runtime state or reset parser. It flowed through per-card failure and
+            cross-slug breaker accounting. Breaker-created manual modes carried incomplete halt detail to the status/banner
+            surface and had no provider-reset recovery path. One shared credential was therefore both a fleet-wide failure
+            domain and an escalation amplifier.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> rejected provider limit responses now enter the non-terminal
+            <strong>QuotaWaiting</strong> state: the current process attempt closes neutrally, the card stays in Progress, and
+            no card failure or escalation record is written. A durable CLI-scoped capability gate preserves Codex and other
+            claims, advertises <code>claude: limited until &lt;t&gt;</code>, and grants exactly one automatic reset-time probe.
+            A repeated rejection advances the wait; a healthy terminal clears it and resumes all waiting claims. Infra breaker
+            pauses expose count, CLI, timestamp, and reason; user-originated pauses remain manual. AGT-2679 probe drift remains
+            a separate scope.
           </td>
         </tr>
       </tbody>
@@ -2189,9 +2222,11 @@
       <li>Positive sentinel present &rarr; <strong>Succeeded</strong> (sentinel always wins).</li>
       <li><code>[[TASK_BLOCKED]]</code> / <code>[[TASK_NEEDS_INPUT]]</code> &rarr; <strong>NeedsReview</strong>.</li>
       <li><code>RunStopReason</code> in {UserStop, FollowupPause} &rarr; not terminal (existing pause/continue path, untouched).</li>
-      <li><code>RunStopReason</code> in {Watchdog, Cancelled, QuotaCapExceeded} <em>or</em> (<code>exitCode &lt; 0</code>/non-zero
+      <li><code>RunStopReason</code> in {Watchdog, Cancelled} <em>or</em> (<code>exitCode &lt; 0</code>/non-zero
           AND no agent terminal text AND no commits) &rarr; <strong>infra crash</strong> &rarr; CooldownRetry if budget remains,
           else GaveUpToHuman. This is the ASS-1757 path.</li>
+      <li>A provider session, usage, or rate limit &rarr; <strong>QuotaWaiting</strong>. It closes the process attempt neutrally,
+          consumes no task retry budget, and schedules one CLI-scoped reset probe while other CLIs remain eligible.</li>
       <li>Failed exit WITH substantial agent text but no positive sentinel and no commits &rarr; <strong>NeedsReview</strong>
           ("failed without terminal sentinel"). No re-issue, no "unknown".</li>
       <li>Failed exit WITH commits &rarr; <strong>Succeeded</strong> via CommittedPartial (unchanged).</li>
@@ -2262,8 +2297,6 @@
     <ul>
       <li><strong>Cooldown shape.</strong> Reuse <code>RapidCrashBreaker.Backoff</code> as-is (15s / 60s / 240s) for zero delta,
           or a gentler infra-specific curve (e.g. 30s / 120s) that is cleaner semantically?</li>
-      <li><strong>QuotaCapExceeded.</strong> Should it count as an infra crash (retry) or escalate immediately? A quota cap will
-          just re-hit on an immediate retry, so it may deserve its own category rather than burning 3 attempts.</li>
       <li><strong>Inconclusive track.</strong> Does <code>OrchestratorInconclusive</code> deserve its own card track / reason
           string distinct from a plain logical NeedsReview, or is one honest reason text enough? (Affects the UI step.)</li>
       <li><strong>Budget across resume-fallback.</strong> Should a retry that had to rebuild-from-job-folder (session genuinely

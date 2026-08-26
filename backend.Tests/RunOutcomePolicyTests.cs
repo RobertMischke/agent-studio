@@ -956,13 +956,12 @@ public class RunOutcomePolicyTests
     }
 
     /// <summary>
-    /// A quota-exhausted failure (session/usage/rate limit) is transient but
-    /// re-issuing right now hits the same rejection, so the policy stops and
-    /// routes to human review with an honest quota-exhausted reason instead of
-    /// the orchestrator-inconclusive catch-all (AGT-1918/1919/1920 signature).
+    /// A quota-exhausted response is transient fleet infrastructure. The policy
+    /// holds the card for the provider reset without reissue, task failure, or
+    /// human escalation.
     /// </summary>
     [Fact]
-    public void QuotaExhausted_StopsAndRoutesToHumanReview()
+    public void QuotaExhausted_WaitsWithoutTaskFailureOrHumanEscalation()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.AutoPickup,
@@ -972,7 +971,7 @@ public class RunOutcomePolicyTests
             reissueAttempt: 0,
             codexEvidence: null);
 
-        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(OutcomeActionKind.WaitForQuotaReset, action.Kind);
         Assert.Equal(RunIssueKind.QuotaExhausted, action.IssueKind);
         Assert.Equal(OrchestratorMessageKind.QuotaExhausted, action.MessageKind);
         Assert.False(action.IsHeuristicFallback);

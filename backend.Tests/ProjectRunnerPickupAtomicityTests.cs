@@ -133,6 +133,49 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         Assert.NotNull(recorded.FinishedAt);
     }
 
+    [Fact]
+    public async Task ClaudeSessionLimit_HoldsQuotaWaitWithoutFailureOrEscalation()
+    {
+        WriteJob(TaskStates.Ready, "job-limit");
+        var cli = new LimitFinishCliService();
+        var runner = BuildRunner(cli);
+        runner.SetMode("auto-continuous");
+
+        await runner.TickAsync(CancellationToken.None);
+
+        var progressFolder = Path.Combine(_watchPath, TaskStates.Progress, "job-limit");
+        var markerPath = Path.Combine(progressFolder, QuotaWaitMarker.FileName);
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!File.Exists(markerPath) && DateTime.UtcNow < deadline)
+            await Task.Delay(20);
+
+        Assert.True(File.Exists(markerPath), "the account limit must create a durable quota wait");
+        var marker = QuotaWaitMarker.TryRead(progressFolder);
+        Assert.NotNull(marker);
+        Assert.Equal("provider-limit", marker!.Source);
+        Assert.Equal(CliTypes.Claude, marker.CliType);
+        Assert.True(marker.ResetAt > marker.StartedAt);
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.Null(runner.GetStatus().BreakerState);
+        Assert.True(Directory.Exists(progressFolder));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "job-limit")));
+        Assert.False(File.Exists(Path.Combine(progressFolder, "status.md")),
+            "an account-level limit must not create a per-card failure result");
+        Assert.Equal(0, runner.GetConsecutiveAutoFailureCountForTest());
+
+        var taskJson = File.ReadAllText(Path.Combine(progressFolder, "task.json"));
+        Assert.Contains(LifecyclePhases.QuotaWaiting, taskJson);
+        var sessionEvents = Path.Combine(progressFolder, "logs", "session-events.jsonl");
+        var recorded = JsonSerializer.Deserialize<SessionEvent>(
+            File.ReadLines(sessionEvents).Single(),
+            TaskJsonFile.ReadOpts);
+        Assert.NotNull(recorded);
+        Assert.NotNull(recorded!.FinishedAt);
+        Assert.Equal(RunStatuses.Stopped, recorded.Status);
+        Assert.Equal(TerminalRunOutcomeKinds.Interrupted, recorded.Result);
+        Assert.Null(recorded.ExitCode);
+    }
+
     private void WriteJob(string state, string slug, int order = 1)
     {
         var dir = Path.Combine(_watchPath, state, slug);
@@ -375,6 +418,82 @@ public sealed class ProjectRunnerPickupAtomicityTests : IDisposable
         public SessionUsage? GetLastUsage(string jobKey) => null;
         public bool IsRunningForProject(string rootPath) => false;
         public DateTime? GetLastStreamedAt(string jobKey) => null;
+        public WatchdogState GetWatchdogState(string jobKey) => WatchdogState.Healthy;
+        public void SetWatchdogState(string jobKey, WatchdogState state) { }
+        public void ReattachOnStartup() { }
+        public Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+            => Task.FromResult(new CliModelCatalog { Models = [], Source = "fake", FetchedAt = DateTime.UtcNow });
+        public bool IsCompatibleSessionName(string? sessionName) => true;
+
+        public event Action<string, CliOutputLine>? OnOutput;
+        public event Action<string, CliExecution>? OnStarted;
+        public event Action<string, CliExecution>? OnFinished;
+        public event Action<string, CliRunEvent>? OnRunEvent;
+    }
+
+    private sealed class LimitFinishCliService : ICliExecutionService
+    {
+        private readonly List<CliOutputLine> _output =
+        [
+            new CliOutputLine
+            {
+                Timestamp = DateTime.UtcNow,
+                Stream = "stderr",
+                Text = "You've hit your session limit · resets 11:50pm",
+            },
+        ];
+
+        public string CliType => CliTypes.Claude;
+        public string GetCliPath() => "fake-claude";
+        public bool IsAvailable() => true;
+        public (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+            => (true, "test", path ?? GetCliPath());
+
+        public Task<(CliExecution? Execution, string? Error)> StartAsync(
+            string jobId,
+            string jobKey,
+            string prompt,
+            string workingDirectory,
+            string? sessionName = null,
+            bool resumeSession = false,
+            string? model = null,
+            string? thinkingLevel = null,
+            string? jobFolderPath = null,
+            string? permissionMode = null,
+            string? contextMode = null,
+            string? executionEngine = null,
+            CancellationToken ct = default)
+        {
+            var started = new CliExecution
+            {
+                JobId = jobId,
+                TaskKey = jobKey,
+                ProcessId = Environment.ProcessId,
+                StartedAt = DateTime.UtcNow,
+                Status = RunStatuses.Running,
+                Model = model,
+                ThinkingLevel = thinkingLevel,
+            };
+            OnStarted?.Invoke(jobKey, started);
+            OnFinished?.Invoke(jobKey, started with
+            {
+                Status = RunStatuses.Failed,
+                ExitCode = 1,
+                DurationSeconds = 0.1,
+                RunOutcome = TerminalRunOutcomeKinds.Failed,
+            });
+            return Task.FromResult<(CliExecution?, string?)>((started, null));
+        }
+
+        public bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop) => false;
+        public bool SendInput(string jobKey, string input) => false;
+        public List<CliOutputLine> GetOutput(string jobKey) => _output;
+        public void DiscardPersistedOutput(string jobKey) { }
+        public void ReleaseOutputResources(string jobKey) { }
+        public CliExecution? GetExecution(string jobKey) => null;
+        public SessionUsage? GetLastUsage(string jobKey) => null;
+        public bool IsRunningForProject(string rootPath) => false;
+        public DateTime? GetLastStreamedAt(string jobKey) => DateTime.UtcNow;
         public WatchdogState GetWatchdogState(string jobKey) => WatchdogState.Healthy;
         public void SetWatchdogState(string jobKey, WatchdogState state) { }
         public void ReattachOnStartup() { }

@@ -317,6 +317,7 @@ export interface TaskInfo {
     resetAt: string;
     thresholdMinutes: number;
     reason: string;
+    source?: 'provider-limit' | 'quota-admission' | 'library' | string | null;
   } | null;
   /**
    * Card kind. `epic` cards are containers for sub-tasks; `task` (the default
@@ -1642,6 +1643,8 @@ export interface ProjectRunnerStatus {
   breakerReason?: string | null;
   /** Number of global breaker trips since backend startup. */
   breakerTripCount?: number;
+  breakerFailureCount?: number | null;
+  breakerCliType?: string | null;
   /**
    * Backend role assigned via `Runner:Role` config (ADR-0044). `orchestrator`
    * runs the auto-pickup loop (stable seat); `test-subject` structurally
@@ -1681,6 +1684,18 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
+  capabilities?: ProviderLimitCapability[];
+}
+
+export interface ProviderLimitCapability {
+  cliType: string;
+  status: 'limited' | 'probing' | string;
+  detectedAt: string;
+  limitedUntil: string;
+  reason: string;
+  probeInFlight: boolean;
+  consecutiveLimits: number;
+  probeJobId?: string | null;
 }
 
 /**

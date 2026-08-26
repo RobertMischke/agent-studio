@@ -353,23 +353,41 @@ public sealed class ProjectRunnerModeTests : IDisposable
     }
 
     [Fact]
-    public async Task AutoFailure_RateLimitCluster_CoolsDownWithoutQuarantiningTask()
+    public void ProviderLimit_MixedFleetSkipsClaudeAndKeepsCodexEligible()
     {
+        WriteJob(TaskStates.Progress, "waiting-claude", cliType: CliTypes.Claude, order: 0);
+        WriteJob(TaskStates.Ready, "next-claude", cliType: CliTypes.Claude, order: 1);
+        WriteJob(TaskStates.Ready, "next-codex", cliType: CliTypes.Codex, order: 2);
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
+        var waitingFolder = Path.Combine(_watchPath, TaskStates.Progress, "waiting-claude");
+        runner.RecordProviderLimitForTest(
+            new TaskInfo
+            {
+                Id = "waiting-claude",
+                Title = "waiting-claude",
+                State = TaskStates.Progress,
+                CliType = CliTypes.Claude,
+                FolderPath = waitingFolder,
+                WatchPath = _watchPath,
+                ProjectName = ProjectName,
+            },
+            CliTypes.Claude,
+            [new CliOutputLine
+            {
+                Timestamp = DateTime.UtcNow,
+                Stream = "stderr",
+                Text = "You've hit your session limit · reset in 2 hours",
+            }],
+            DateTime.UtcNow);
 
-        runner.RecordRateLimitAutoPickupFailureForTest("job-a");
+        var next = runner.GetNextPickupCandidateForTest();
 
-        Assert.Equal(0, runner.GetParkedFailedTaskCountForTest());
-        Assert.Equal("manual", runner.GetStatus().Mode);
-        Assert.Equal("cooldown", runner.GetStatus().BreakerState);
-        Assert.Contains("rate-limit", runner.GetStatus().BreakerReason);
-
-        runner.ForceGlobalBreakerCooldownElapsedForTest();
-        await runner.TickAsync(CancellationToken.None);
-
+        Assert.NotNull(next);
+        Assert.Equal("next-codex", next!.Id);
+        Assert.Equal(CliTypes.Codex, next.CliType);
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
-        Assert.Null(runner.GetStatus().BreakerState);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, TaskStates.Escalated, "waiting-claude")));
     }
 
     /// <summary>
@@ -493,12 +511,12 @@ public sealed class ProjectRunnerModeTests : IDisposable
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
     }
 
-    private void WriteJob(string state, string slug)
+    private void WriteJob(string state, string slug, string cliType = "copilot", int order = 1)
     {
         var dir = Path.Combine(_watchPath, state, slug);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "task.json"),
-            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\",\"cliType\":\"copilot\"}}");
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":{order},\"agent\":\"copilot\",\"cliType\":\"{cliType}\"}}");
     }
 
     /// <summary>Poll for a slug folder to appear under <paramref name="state"/>;

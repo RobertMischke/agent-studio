@@ -557,13 +557,14 @@ public class AgentOutcomeAnalyzerTests
     [InlineData("You've hit your session limit · resets 8:10pm (Europe/Berlin)")]
     [InlineData("● Rate limit · five-hour · rejected · reset in 3,6 h  [window=five_hour status=rejected resetsAt=1783447800 overage=rejected usingOverage=false]")]
     [InlineData("Error: rate_limit_exceeded")]
+    [InlineData("HTTP 429: Too Many Requests")]
     [InlineData("You've reached your usage limit for this model.")]
     public void QuotaExhausted_OnFailedRun_TypesAsQuotaExhausted(string reply)
     {
         // A usage/session/rate-limit exhaustion must type as quota-exhausted
-        // (transient) instead of the orchestrator-inconclusive catch-all so the
-        // escalation reason is honest and re-queue-after-reset is the clear next
-        // step (AGT-1918/1919/1920).
+        // (transient) instead of the orchestrator-inconclusive catch-all. The
+        // runner uses this type to hold the card without a task failure and
+        // schedule an account-level reset probe (AGT-1918/1919/1920/2680).
         var lines = Lines(reply);
         var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "failed", durationSeconds: 5.1, exitCode: 1);
         Assert.Equal(RunIssueKind.QuotaExhausted, outcome.IssueKind);

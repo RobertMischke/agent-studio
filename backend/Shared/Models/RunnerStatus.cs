@@ -160,6 +160,8 @@ public static class TaskRunActivityClassifier
 public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
+    /// <summary>Fleet-level CLI capability limitations shared by every project.</summary>
+    public IReadOnlyList<ProviderLimitStatus> Capabilities { get; init; } = [];
 }
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);
@@ -170,7 +172,8 @@ public sealed record QuotaWaitStatus(
     DateTime StartedAt,
     DateTime ResetAt,
     int ThresholdMinutes,
-    string Reason);
+    string Reason,
+    string? Source = null);
 
 public record ProjectRunnerStatus
 {
@@ -229,6 +232,10 @@ public record ProjectRunnerStatus
     /// to explain exponential cooldown backoff.
     /// </summary>
     public int BreakerTripCount { get; init; }
+    /// <summary>Failure count carried by the active infrastructure breaker pause.</summary>
+    public int? BreakerFailureCount { get; init; }
+    /// <summary>CLI capability that caused the active infrastructure breaker pause.</summary>
+    public string? BreakerCliType { get; init; }
     /// <summary>
     /// Backend role assigned via <c>Runner:Role</c> config; one of
     /// <c>orchestrator</c> (the default — picks tasks automatically when mode is

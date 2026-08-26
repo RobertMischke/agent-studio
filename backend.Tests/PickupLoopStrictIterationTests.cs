@@ -593,7 +593,13 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         // Tick 2: stuck-b spawn-fails, the breaker's 2nd distinct slug trips it.
         InvokePickerLoop(runner);
-        Assert.Equal("manual", runner.GetStatus().Mode);
+        var breakerStatus = runner.GetStatus();
+        Assert.Equal("manual", breakerStatus.Mode);
+        Assert.Equal("circuit-breaker", breakerStatus.ModeSource);
+        Assert.Equal(2, breakerStatus.BreakerFailureCount);
+        Assert.Equal("copilot", breakerStatus.BreakerCliType);
+        Assert.Contains("pickup paused: infra breaker", breakerStatus.ModeReason);
+        Assert.Contains("2 failures cliType=copilot at", breakerStatus.ModeReason);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Ready, "stuck-b")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, TaskStates.Progress, "stuck-c")),
             "third folder must NOT have been touched after the cross-slug breaker tripped");

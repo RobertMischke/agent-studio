@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import type { RemoteDispatchRejection } from '../../../../models/task.model';
+import type { ProjectRunnerStatus, RemoteDispatchRejection, RunnerStatus } from '../../../../models/task.model';
 import { NotificationComponent } from '../../../../components/notification/notification.component';
 
 interface RemoteQueueStarvationItem {
@@ -8,6 +8,7 @@ interface RemoteQueueStarvationItem {
   taskId: string;
   projectName: string;
   title: string;
+  cliType?: string | null;
   enteredLaneAt: string;
   lastRejection?: RemoteDispatchRejection | null;
   blockReasonCode?: string | null;
@@ -42,6 +43,7 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
 
   readonly projects = input<readonly string[]>([]);
   readonly snapshot = signal<RemoteQueueStarvationSnapshot | null>(null);
+  readonly runnerStatus = signal<RunnerStatus | null>(null);
   readonly visibleItems = computed(() => {
     const snapshot = this.snapshot();
     if (!snapshot?.active) return [];
@@ -52,10 +54,25 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
   });
   readonly availableSlots = computed(() => this.snapshot()?.availableSlots ?? 0);
   readonly thresholdMinutes = computed(() => this.snapshot()?.thresholdMinutes ?? 0);
+  readonly limitedCapabilities = computed(() => this.runnerStatus()?.capabilities ?? []);
+  readonly limitedCliTypes = computed(() => new Set(
+    this.limitedCapabilities().map(capability => capability.cliType.toLowerCase())));
+  readonly stalledItems = computed(() => this.visibleItems().filter(item =>
+    !item.cliType || !this.limitedCliTypes().has(item.cliType.toLowerCase())));
   readonly hasRejections = computed(() =>
-    this.visibleItems().some(item => item.lastRejection != null));
+    this.stalledItems().some(item => item.lastRejection != null));
   readonly buildProfileGateBlockedCount = computed(() =>
-    this.visibleItems().filter(item => item.blockReasonCode === 'build-profile-gate').length);
+    this.stalledItems().filter(item => item.blockReasonCode === 'build-profile-gate').length);
+  readonly breakerPauses = computed(() => {
+    const projects = this.projects();
+    const visible = projects.length === 0
+      ? null
+      : new Set(projects.map(project => project.toLowerCase()));
+    return Object.values(this.runnerStatus()?.projects ?? {}).filter(status =>
+      (status.mode === 'manual' || status.mode === 'paused')
+      && status.modeSource === 'circuit-breaker'
+      && (visible == null || visible.has(status.projectName.toLowerCase())));
+  });
 
   ngOnInit(): void {
     this.refresh();
@@ -71,5 +88,24 @@ export class RemoteQueueStarvationBannerComponent implements OnInit, OnDestroy {
       next: snapshot => this.snapshot.set(snapshot),
       error: () => this.snapshot.set(null),
     });
+    this.http.get<RunnerStatus>('/api/runner/status').subscribe({
+      next: status => this.runnerStatus.set(status),
+      error: () => this.runnerStatus.set(null),
+    });
+  }
+
+  cliLabel(cliType: string): string {
+    return cliType.length === 0 ? cliType : cliType[0].toUpperCase() + cliType.slice(1);
+  }
+
+  formatTime(value: string): string {
+    return new Date(value).toLocaleString();
+  }
+
+  breakerHeadline(status: ProjectRunnerStatus): string {
+    const count = status.breakerFailureCount ?? status.breakerTripCount ?? 0;
+    const cli = status.breakerCliType ? ` cliType=${status.breakerCliType}` : '';
+    const at = status.modeChangedAt ? ` at ${this.formatTime(status.modeChangedAt)}` : '';
+    return `Pickup paused: infra breaker, ${count} failures${cli}${at}.`;
   }
 }

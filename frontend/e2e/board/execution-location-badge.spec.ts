@@ -157,7 +157,11 @@ async function expectNoticeCopySharesWideLine(page: Page, banner: Locator): Prom
   await page.setViewportSize({ width: 720, height: 800 });
 }
 
-async function installRoutes(page: Page, currentTasks: () => typeof initialTasks): Promise<void> {
+async function installRoutes(
+  page: Page,
+  currentTasks: () => typeof initialTasks,
+  runnerStatus: () => unknown = () => ({ projects: {}, capabilities: [] }),
+): Promise<void> {
   await page.route('**/api/**', route => {
     const url = route.request().url();
     const taskDetail = new URL(url).pathname.match(/^\/api\/tasks\/([^/]+)$/);
@@ -184,7 +188,7 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
     if (/\/api\/(?:tasks|jobs)(\?|$)/.test(url)) return json(route, currentTasks());
     if (url.includes('/api/watch-paths')) return json(route, [{ name: PROJECT, path: WATCH_PATH, rootPath: WATCH_PATH }]);
     if (url.includes('/api/clients')) return json(route, [{ id: 'local-default', displayName: 'Local', kind: 'agent-instance' }]);
-    if (url.includes('/api/runner/status')) return json(route, { projects: {} });
+    if (url.includes('/api/runner/status')) return json(route, runnerStatus());
     if (url.includes('/api/runner/queue-starvation')) {
       const waiting = currentTasks().filter(item => item.state === '2-ready');
       return json(route, {
@@ -199,6 +203,7 @@ async function installRoutes(page: Page, currentTasks: () => typeof initialTasks
           taskKey: item.taskKey,
           projectName: item.projectName,
           title: item.title,
+          cliType: item.cliType,
           enteredLaneAt: '2026-08-08T07:30:00Z',
           waitingMinutes: 330,
           lastRejection: item.executionLocation.lastRejection,
@@ -316,6 +321,71 @@ test('shows a durable build-profile gate refusal on the card and the starvation 
     await expect(rejection).toBeVisible();
     await page.screenshot({
       path: join(RESULTS, `notice-bar-after-starvation-narrow-${theme}--mocked.png`),
+      fullPage: false,
+    });
+  }
+});
+
+test('distinguishes a Claude provider limit from stalled work and names an infra breaker', async ({ page }) => {
+  mkdirSync(RESULTS, { recursive: true });
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await page.addInitScript(() => localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+    v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
+  })));
+  const claudeReady = {
+    ...task('claude-limited', 'Claude card waiting for account reset', location('none', null, 'none'), '2-ready'),
+    agent: 'claude',
+    cliType: 'claude',
+  };
+  const codexReady = {
+    ...task('codex-stalled', 'Codex card is genuinely stalled', location('none', null, 'none'), '2-ready'),
+    agent: 'codex',
+    cliType: 'codex',
+  };
+  await installRoutes(page, () => [claudeReady, codexReady], () => ({
+    projects: {
+      [PROJECT]: {
+        projectName: PROJECT,
+        mode: 'manual',
+        activeJobId: null,
+        activeExecution: null,
+        queuedJobIds: [],
+        modeSource: 'circuit-breaker',
+        modeChangedAt: '2026-08-23T22:07:00Z',
+        modeReason: 'pickup paused: infra breaker (circuit-breaker), 3 failures cliType=claude',
+        breakerFailureCount: 3,
+        breakerCliType: 'claude',
+      },
+    },
+    capabilities: [{
+      cliType: 'claude',
+      status: 'limited',
+      detectedAt: '2026-08-23T22:00:00Z',
+      limitedUntil: '2026-08-24T00:20:00Z',
+      reason: "You've hit your session limit",
+      probeInFlight: false,
+      consecutiveLimits: 1,
+    }],
+  }));
+  await page.goto('/?includeFixtures=true');
+  await page.addStyleTag({ content: '.dialog__overlay { display: none !important; }' });
+
+  const limit = page.getByTestId('provider-limit-banner');
+  const breaker = page.getByTestId('infra-breaker-banner');
+  const stalled = page.getByTestId('remote-queue-starvation-banner');
+  await expect(limit).toContainText('Claude: limited until');
+  await expect(limit).toContainText('Other CLIs remain eligible');
+  await expect(breaker).toContainText('Pickup paused: infra breaker, 3 failures cliType=claude at');
+  await expect(stalled).toContainText('1 task is stalled despite free Runner capacity');
+  await expectFlatFullBleedNoticeBar(limit);
+  await expectFlatFullBleedNoticeBar(breaker);
+
+  for (const theme of ['light', 'dark'] as const) {
+    await setTheme(page, theme);
+    await dismissDevErrorDialog(page);
+    await expect(limit).toBeVisible();
+    await page.screenshot({
+      path: join(RESULTS, `provider-limit-breaker-${theme}--mocked.png`),
       fullPage: false,
     });
   }

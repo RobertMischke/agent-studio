@@ -138,11 +138,10 @@ public enum RunIssueKind
     /// <c>Rate limit · … · rejected</c> marker, "usage limit reached"). This is
     /// a TRANSIENT provider condition, not an agent decision and not an
     /// unclassifiable reply: it clears when the quota window resets. Typed
-    /// distinctly so the escalation reason is an honest <c>quota-exhausted</c>
-    /// (with the reset time when the CLI reported it) instead of the misleading
-    /// <c>orchestrator-inconclusive</c>, and so the runner exempts it from the
-    /// per-task no-progress quarantine streak. This is the AGT-1918/1919/1920
-    /// signature (claude-sonnet-5 five-hour session limit on 2026-07-07).
+    /// distinctly so the runner can hold the card without a task failure,
+    /// advertise the affected CLI capability, and schedule one reset-time probe
+    /// instead of escalating or consuming retry budget. This is the
+    /// AGT-1918/1919/1920/2680 signature.
     /// </summary>
     QuotaExhausted,
     /// <summary>
@@ -414,10 +413,9 @@ public static class AgentOutcomeAnalyzer
         //    carries a usage/session/rate-limit-exhausted signal ("You've hit
         //    your session limit", a `Rate limit · … · rejected` marker) is a
         //    TRANSIENT provider condition that clears when the quota window
-        //    resets - not an unclassifiable agent reply. Typed so the escalation
-        //    reason is an honest "quota-exhausted" (carrying the reported reset
-        //    time) instead of orchestrator-inconclusive, and so the runner's
-        //    rate-limit cooldown / quarantine exemption treat it as transient.
+        //    resets - not an unclassifiable agent reply. Typed so the runner
+        //    enters CLI-scoped quota waiting (carrying the reported reset time)
+        //    instead of escalating or consuming per-card failure budgets.
         //    Gated on `failed`, and checked BEFORE the CLI-launch / heuristic
         //    paths so it is not swallowed by them. NOTE: claude emits a benign
         //    `● Rate limit · … · allowed` telemetry marker on healthy runs too,
@@ -949,6 +947,9 @@ public static class AgentOutcomeAnalyzer
         "quota exceeded",
         "rate limit exceeded",
         "rate_limit_exceeded",
+        "too many requests",
+        "status=429",
+        "\"status\":429",
         "· rejected ·",
         "status=rejected",
         "insufficient_quota",
@@ -970,8 +971,8 @@ public static class AgentOutcomeAnalyzer
                     ?? ExtractFirstMatchingLine(rawText, "usage limit")
                     ?? ExtractFirstMatchingLine(rawText, "rate limit");
         return reset != null
-            ? $"The agent CLI rejected the run: the account's usage/session budget is exhausted. \"{reset}\" This is transient - re-queue after the quota window resets."
-            : "The agent CLI rejected the run because the account's usage/session/rate-limit budget is exhausted. This is transient - re-queue after the quota window resets.";
+            ? $"The agent CLI rejected the run: the account's usage/session budget is exhausted. \"{reset}\" Waiting for the reported reset and automatic recovery probe."
+            : "The agent CLI rejected the run because the account's usage/session/rate-limit budget is exhausted. Waiting for the bounded automatic recovery probe.";
     }
 
     /// <summary>

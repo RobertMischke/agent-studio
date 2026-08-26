@@ -6,6 +6,7 @@ public sealed record RemoteQueueStarvationItem
     public string TaskId { get; init; } = "";
     public string ProjectName { get; init; } = "";
     public string Title { get; init; } = "";
+    public string? CliType { get; init; }
     public DateTime EnteredLaneAt { get; init; }
     public RemoteDispatchRejection? LastRejection { get; init; }
     public string? BlockReasonCode { get; init; }
@@ -94,6 +95,7 @@ public static class RemoteQueueStarvationPolicy
                 TaskId = candidate.Task.Id,
                 ProjectName = candidate.Task.ProjectName,
                 Title = candidate.Task.Title,
+                CliType = candidate.Task.CliType,
                 EnteredLaneAt = candidate.Task.EnteredLaneAt,
                 LastRejection = candidate.Task.RemoteDispatchRejection,
                 BlockReasonCode = candidate.Gate.AllowsPickup ? null : "build-profile-gate",

@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-08-12
+Version: 2026-08-26
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -510,6 +510,27 @@ state.
   notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
   A recognized provider-auth run failure reports unavailability immediately so
   revocation between periodic probes is visible.
+- Local CLI provider limits have their own durable fleet-level capability state
+  in `backend/Features/Runner/ProviderLimitStateStore.cs`. A failed Claude CLI
+  response containing a rejected session, usage, or rate limit is account
+  infrastructure, not a card failure: the card remains in `3-progress` with a
+  `quotaWait` marker, the process attempt closes as a neutral interruption, and
+  neither task failure budgets nor escalation records advance. The reset hint
+  selects the retry time, with a bounded five-minute fallback when the CLI does
+  not report one. At reset, exactly one waiting card probes the capability;
+  another limit moves the retry time, while any non-limit terminal response
+  clears the capability and releases all waiting cards automatically. The gate
+  is keyed by CLI, so a Claude limit does not block Codex or other CLI claims.
+  `GET /api/runner/status` advertises these states in `capabilities` for the
+  board's `Claude: limited until ...` banner and for limited-versus-stalled
+  starvation classification.
+- Infrastructure circuit-breaker pauses carry their failure count, CLI type,
+  timestamp, source, and full reason through runner status. The board renders
+  that reason as `Pickup paused: infra breaker, N failures cliType=... at ...`.
+  Provider limits are intercepted before this breaker and recover through the
+  provider probe gate; existing unspawnable-CLI breaker pauses retain their
+  bounded availability probe and automatic restoration of the operator's
+  desired auto mode. A mode with source `user` is never auto-resumed.
 
 - Coding-slot occupancy follows live CLI processes, not lane membership. A
   `3-progress` card in `loop-waiting`, `steer-pending`, `quota-waiting`, or post-processing keeps

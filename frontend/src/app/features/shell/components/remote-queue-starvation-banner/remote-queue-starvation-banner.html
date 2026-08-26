@@ -1,4 +1,26 @@
-@if (visibleItems().length > 0) {
+@for (capability of limitedCapabilities(); track capability.cliType) {
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="provider-limit-banner">
+    <strong data-testid="provider-limit-headline">{{ cliLabel(capability.cliType) }}: limited until {{ formatTime(capability.limitedUntil) }}.</strong>
+    <span class="notification__detail" data-testid="provider-limit-detail">{{ cliLabel(capability.cliType) }} claims are waiting and will probe automatically at reset. Other CLIs remain eligible. @if (capability.probeInFlight) { Recovery probe in progress. }</span>
+  </app-notification>
+}
+
+@for (pause of breakerPauses(); track pause.projectName) {
+  <app-notification
+    kind="warning"
+    layout="banner"
+    ariaLive="polite"
+    testid="infra-breaker-banner">
+    <strong data-testid="infra-breaker-headline">{{ breakerHeadline(pause) }}</strong>
+    <span class="notification__detail" data-testid="infra-breaker-detail">{{ pause.projectName }}. {{ pause.modeReason ?? pause.breakerReason ?? 'Inspect runner status for the halt reason.' }}</span>
+  </app-notification>
+}
+
+@if (stalledItems().length > 0) {
   <app-notification
     kind="warning"
     layout="banner"
@@ -8,7 +30,7 @@
       <strong data-testid="notice-bar-headline"><span class="notification__number">{{ buildProfileGateBlockedCount() }}</span> ready {{ buildProfileGateBlockedCount() === 1 ? 'card' : 'cards' }} not claimable: build profile not validated.</strong>
       <span class="notification__detail" data-testid="notice-bar-detail">Revalidate the project build profile. @if (availableSlots() > 0) { <span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'Runner slot is' : 'Runner slots are' }} available. } @else { Runner capacity cannot open this gate. }</span>
     } @else {
-      <strong data-testid="notice-bar-headline"><span class="notification__number">{{ visibleItems().length }}</span> {{ visibleItems().length === 1 ? 'task is' : 'tasks are' }} waiting despite free Runner capacity.</strong>
+      <strong data-testid="notice-bar-headline"><span class="notification__number">{{ stalledItems().length }}</span> {{ stalledItems().length === 1 ? 'task is' : 'tasks are' }} stalled despite free Runner capacity.</strong>
       <span class="notification__detail" data-testid="notice-bar-detail"><span class="notification__number">{{ availableSlots() }}</span> {{ availableSlots() === 1 ? 'slot is' : 'slots are' }} available. @if (hasRejections()) { Open a task to inspect its latest rejection. } @else { No successful claim has been recorded for at least <span class="notification__number">{{ thresholdMinutes() }}</span> minutes. }</span>
     }
   </app-notification>
