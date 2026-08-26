@@ -15,6 +15,8 @@ fake_bin="$test_root/bin"
 update="$test_root/update-stable.sh"
 update_count="$test_root/update-count"
 busy_file="$test_root/stable-busy"
+task_server_marker="$test_root/task-server-ready"
+task_server_ensure="$test_root/ensure-task-server.ps1"
 
 git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
@@ -52,6 +54,9 @@ for arg in "$@"; do
   case "$arg" in http://*) url=$arg ;; esac
 done
 case "$url" in
+  http://task-server.invalid/readyz)
+    test -f "$ATP_TEST_TASK_SERVER_MARKER"
+    ;;
   */healthz/drain)
     printf '%s\n' idle
     ;;
@@ -74,7 +79,13 @@ case "$url" in
     ;;
 esac
 EOF
-chmod +x "$fake_bin/curl"
+cat > "$fake_bin/powershell.exe" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+: > "$ATP_TEST_TASK_SERVER_MARKER"
+EOF
+: > "$task_server_ensure"
+chmod +x "$fake_bin/curl" "$fake_bin/powershell.exe"
 
 run_tick() {
   env \
@@ -83,6 +94,11 @@ run_tick() {
     ATP_STABLE_CHECKOUT="$stable" \
     ATP_STABLE_API=http://stable.invalid \
     ATP_RESTART_TRIGGER=main-advance \
+    ATP_TASK_SERVER_REQUIRED="${ATP_TEST_TASK_SERVER_REQUIRED:-0}" \
+    ATP_TASK_SERVER_URL=http://task-server.invalid \
+    ATP_TASK_SERVER_ENSURE_COMMAND=powershell.exe \
+    ATP_TASK_SERVER_ENSURE_SCRIPT="$task_server_ensure" \
+    ATP_TEST_TASK_SERVER_MARKER="$task_server_marker" \
     ATP_UPDATE_SCRIPT="$update" \
     ATP_TEST_UPDATE_COUNT="$update_count" \
     ATP_CLIENT_ID=deploy-cron-test \
@@ -97,6 +113,12 @@ run_tick() {
 output=$(run_tick)
 test "$(cat "$update_count")" = 0
 printf '%s' "$output" | grep -q 'stable already matches origin/main'
+
+# Every watchdog tick supervises Task Server independently of a main advance.
+rm -f "$task_server_marker"
+output=$(ATP_TEST_TASK_SERVER_REQUIRED=1 run_tick)
+test -f "$task_server_marker"
+printf '%s' "$output" | grep -q 'Task Server supervised recovery succeeded'
 
 # A promoted main is deployed once and recorded with its exact target SHA.
 printf '%s\n' promoted > "$source_checkout/release.txt"

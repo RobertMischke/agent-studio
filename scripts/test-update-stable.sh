@@ -20,8 +20,9 @@ git init --bare --quiet "$remote"
 git init --quiet "$source_checkout"
 git -C "$source_checkout" config user.name 'Stable Update Test'
 git -C "$source_checkout" config user.email 'stable-update@example.invalid'
-mkdir -p "$source_checkout/frontend/scripts"
-printf '%s\n' '/frontend/node_modules/' '/frontend/.angular/' > "$source_checkout/.gitignore"
+mkdir -p "$source_checkout/frontend/scripts" "$source_checkout/scripts" "$source_checkout/backend"
+printf '%s\n' '/frontend/node_modules/' '/frontend/.angular/' '/backend/appsettings.Local.json' > "$source_checkout/.gitignore"
+cp "$script_dir/configure-task-server-proxy.mjs" "$source_checkout/scripts/configure-task-server-proxy.mjs"
 printf '%s\n' '{"name":"fixture","private":true}' > "$source_checkout/frontend/package.json"
 printf '%s\n' '{"lockfileVersion":3}' > "$source_checkout/frontend/package-lock.json"
 printf '%s\n' '// initial compatibility patch' > "$source_checkout/frontend/scripts/patch-coding-agent-chat-technical-blocks.mjs"
@@ -37,9 +38,11 @@ git clone --quiet "$remote" "$stable_checkout"
 mkdir -p \
   "$devspace" \
   "$fake_bin" \
+  "$stable_checkout/backend" \
   "$stable_checkout/frontend/node_modules/playwright-core" \
   "$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022" \
   "$stable_checkout/frontend/.angular/cache"
+printf '%s\n' '{"Runner":{"Role":"orchestrator"}}' > "$stable_checkout/backend/appsettings.Local.json"
 printf '%s\n' stale-prebundle > "$stable_checkout/frontend/.angular/cache/deps.js"
 printf '%s\n' unpatched > "$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs"
 
@@ -84,6 +87,7 @@ EOF
 cat > "$devspace/start-stable.sh" <<'EOF'
 #!/usr/bin/env sh
 set -eu
+[ -z "${ATP_TEST_REQUIRE_TASK_SERVER:-}" ] || test -f "$ATP_TEST_TASK_SERVER_MARKER"
 : > "$ATP_TEST_START_MARKER"
 EOF
 cat > "$fake_bin/npm" <<'EOF'
@@ -101,6 +105,7 @@ run_update() {
     ATP_START_SCRIPT="$devspace/start-stable.sh" \
     ATP_BOOT_PROBE_SCRIPT="$probe" \
     ATP_BOOT_PROBE_SETTLE_MS=0 \
+    ATP_TASK_SERVER_REQUIRED=0 \
     ATP_TEST_STOP_MARKER="$stop_marker" \
     ATP_TEST_START_MARKER="$start_marker" \
     ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
@@ -142,5 +147,51 @@ if printf '%s' "$crash_output" | grep -q 'Stable started and healthy'; then
   printf '%s\n' 'updater reported health after an injected page error' >&2
   exit 1
 fi
+
+# The cutover path installs and starts Task Server before the Stable API,
+# writes the proxy configuration, and proves both direct and proxied health.
+task_server_marker=$test_root/task-server-ran
+task_server_installer=$test_root/install-task-server.ps1
+: > "$task_server_installer"
+cat > "$fake_bin/powershell.exe" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+: > "$ATP_TEST_TASK_SERVER_MARKER"
+EOF
+cat > "$fake_bin/curl" <<'EOF'
+#!/usr/bin/env sh
+set -eu
+exit 0
+EOF
+chmod +x "$fake_bin/powershell.exe" "$fake_bin/curl"
+
+printf '%s\n' 'release with task server cutover' > "$source_checkout/release.txt"
+git -C "$source_checkout" commit --quiet -am 'task server cutover'
+git -C "$source_checkout" push --quiet origin main
+git -C "$stable_checkout" switch --detach --quiet
+
+cutover_output=$(env \
+  ATP_DEVSPACE_DIR="$devspace" \
+  ATP_STABLE_CHECKOUT="$stable_checkout" \
+  ATP_STOP_SCRIPT="$devspace/stop-stable.sh" \
+  ATP_START_SCRIPT="$devspace/start-stable.sh" \
+  ATP_BOOT_PROBE_SCRIPT="$probe" \
+  ATP_BOOT_PROBE_SETTLE_MS=0 \
+  ATP_TASK_SERVER_REQUIRED=1 \
+  ATP_TASK_SERVER_INSTALLER="$task_server_installer" \
+  ATP_TASK_SERVER_INSTALL_COMMAND=powershell.exe \
+  ATP_TEST_REQUIRE_TASK_SERVER=1 \
+  ATP_TEST_TASK_SERVER_MARKER="$task_server_marker" \
+  ATP_TEST_STOP_MARKER="$stop_marker" \
+  ATP_TEST_START_MARKER="$start_marker" \
+  ATP_TEST_PACKAGE_FILE="$stable_checkout/frontend/node_modules/coding-agent-chat/fesm2022/coding-agent-chat-markdown.mjs" \
+  PATH="$fake_bin:$PATH" \
+  "$updater" 2>&1)
+
+test -f "$task_server_marker"
+test "$(git -C "$stable_checkout" branch --show-current)" = main
+grep -q '"BaseUrl": "http://127.0.0.1:5071"' "$stable_checkout/backend/appsettings.Local.json"
+printf '%s' "$cutover_output" | grep -q 'Task Server authority ready'
+printf '%s' "$cutover_output" | grep -q 'Stable Task Server proxy ready'
 
 printf '%s\n' 'update-stable tests passed'

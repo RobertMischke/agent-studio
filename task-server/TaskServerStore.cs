@@ -2098,6 +2098,7 @@ public sealed partial class TaskServerStore
     internal async Task ImportLegacyBatchAsync(
         string workspaceName,
         IReadOnlyList<LegacyProjectImport> projects,
+        LegacyAttemptAuthorityImport authority,
         string actorId,
         CancellationToken ct)
     {
@@ -2166,10 +2167,216 @@ public sealed partial class TaskServerStore
                 }
             }
 
+            await ImportLegacyAttemptAuthorityAsync(
+                connection, transaction, authority, actorId, ct);
+
             await AuditAsync(connection, transaction, actorId, "legacy.imported", "server", _serverId,
-                JsonSerializer.Serialize(new { workspaceName, projects = projects.Count, tasks = projects.Sum(p => p.Tasks.Count) }), ct);
+                JsonSerializer.Serialize(new
+                {
+                    workspaceName,
+                    projects = projects.Count,
+                    tasks = projects.Sum(p => p.Tasks.Count),
+                    runnerIdentities = authority.RunnerIdentities.Count,
+                    runAttempts = authority.RunAttempts.Count,
+                    activeLeases = authority.ActiveLeaseCount,
+                    reviewAttempts = authority.ReviewAttempts.Count,
+                }), ct);
         }, ct);
     }
+
+    private async Task ImportLegacyAttemptAuthorityAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        LegacyAttemptAuthorityImport authority,
+        string actorId,
+        CancellationToken ct)
+    {
+        if (authority.RunAttempts.Count == 0 && authority.ReviewAttempts.Count == 0)
+            return;
+
+        var taskIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        await using (var command = Command(connection, "SELECT task_key, id FROM tasks;", transaction))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+            while (await reader.ReadAsync(ct)) taskIds[reader.GetString(0)] = reader.GetString(1);
+
+        var referencedKeys = authority.RunAttempts.Select(item => item.TaskKey)
+            .Concat(authority.ReviewAttempts.Select(item => item.TaskKey))
+            .Concat(authority.LastFenceByTask.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var missingKeys = referencedKeys.Where(key => !taskIds.ContainsKey(key)).ToArray();
+        if (missingKeys.Length > 0)
+            throw new TaskServerConflictException(
+                "legacy-authority-task-missing",
+                "Legacy attempt authority references tasks absent from the frozen inventory: "
+                + string.Join(", ", missingKeys));
+
+        var now = Iso(UtcNow);
+        foreach (var identity in authority.RunnerIdentities)
+        {
+            var capabilities = authority.ReviewAttempts.Any(item =>
+                    string.Equals(item.Lease?.ExecutorId, identity.RunnerId, StringComparison.OrdinalIgnoreCase))
+                ? "[\"review-executor\"]"
+                : "[\"coding-executor\"]";
+            await ExecuteAsync(connection, """
+                INSERT INTO runners(
+                    id, name, host_id, instance_id, runner_version, protocol_version,
+                    capabilities_json, status, registered_at, last_seen_at)
+                VALUES ($id, $name, $host, $instance, 'legacy-migration', 1,
+                        $capabilities, 'offline', $now, $now)
+                ON CONFLICT(id) DO NOTHING;
+                """, ct, transaction,
+                ("$id", identity.RunnerId), ("$name", identity.Name),
+                ("$host", identity.HostId), ("$instance", identity.InstanceId),
+                ("$capabilities", capabilities), ("$now", now));
+        }
+
+        foreach (var (taskKey, lastFence) in authority.LastFenceByTask)
+        {
+            await ExecuteAsync(connection, """
+                INSERT INTO fence_counters(task_id, last_fence)
+                VALUES ($task, $fence)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    last_fence = max(fence_counters.last_fence, excluded.last_fence);
+                """, ct, transaction,
+                ("$task", taskIds[taskKey]), ("$fence", lastFence));
+        }
+
+        foreach (var run in authority.RunAttempts.OrderBy(item => item.CreatedAt))
+        {
+            var taskId = taskIds[run.TaskKey];
+            var status = LegacyRunStatus(run.State);
+            await ExecuteAsync(connection, """
+                INSERT INTO runs(
+                    id, task_id, status, runner_id, fence, created_at, started_at,
+                    finished_at, result_sha, repository_id)
+                VALUES ($id, $task, $status, $runner, $fence, $created, $started,
+                        $finished, $resultSha, $repository)
+                ON CONFLICT(id) DO NOTHING;
+                """, ct, transaction,
+                ("$id", run.AttemptId), ("$task", taskId), ("$status", status),
+                ("$runner", run.Lease?.ExecutorId), ("$fence", run.LastFence),
+                ("$created", Iso(run.CreatedAt)),
+                ("$started", run.Lease is null ? null : Iso(run.Lease.AcquiredAt)),
+                ("$finished", run.TerminalAt is null ? null : Iso(run.TerminalAt.Value)),
+                ("$resultSha", run.ResultSha), ("$repository", run.RepositoryId));
+
+            if (run.Lease is { } lease)
+            {
+                await ExecuteAsync(connection, """
+                    INSERT INTO leases(
+                        task_id, lease_id, run_id, runner_id, instance_id, fence,
+                        acquired_at, expires_at, status)
+                    VALUES ($task, $lease, $run, $runner, $instance, $fence,
+                            $acquired, $expires, $status)
+                    ON CONFLICT(lease_id) DO NOTHING;
+                    """, ct, transaction,
+                    ("$task", taskId), ("$lease", lease.LeaseId),
+                    ("$run", run.AttemptId), ("$runner", lease.ExecutorId),
+                    ("$instance", lease.InstanceId), ("$fence", run.LastFence),
+                    ("$acquired", Iso(lease.AcquiredAt)), ("$expires", Iso(lease.ExpiresAt)),
+                    ("$status", status == "process-unknown" ? "process-unknown" : "released"));
+            }
+        }
+
+        var knownRuns = authority.RunAttempts.Select(item => item.AttemptId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missingSourceRuns = authority.ReviewAttempts
+            .Where(item => !knownRuns.Contains(item.SourceRunAttemptId))
+            .Select(item => item.SourceRunAttemptId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (missingSourceRuns.Length > 0)
+            throw new TaskServerConflictException(
+                "legacy-review-source-missing",
+                "Legacy review authority references coding attempts absent from the frozen authority store: "
+                + string.Join(", ", missingSourceRuns));
+
+        var attemptNumbers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var review in authority.ReviewAttempts.OrderBy(item => item.CreatedAt))
+        {
+            var taskId = taskIds[review.TaskKey];
+            await ExecuteAsync(connection, """
+                INSERT INTO review_subjects(
+                    id, task_id, source_run_id, repository_id, repository_url,
+                    expected_result_sha, result_ref, review_policy_hash, plan_json,
+                    idempotency_key, created_at)
+                VALUES ($id, $task, $run, $repository, $url, $sha, $ref,
+                        $policy, '{"commands":[],"requiredAspects":[]}', $key, $created)
+                ON CONFLICT(id) DO NOTHING;
+                """, ct, transaction,
+                ("$id", review.SubjectId), ("$task", taskId),
+                ("$run", review.SourceRunAttemptId), ("$repository", review.RepositoryId),
+                ("$url", review.RepositoryUrl), ("$sha", review.ExpectedResultSha),
+                ("$ref", review.ResultRef), ("$policy", review.ReviewPolicyHash),
+                ("$key", $"legacy-review-subject:{review.SubjectId}"),
+                ("$created", Iso(review.SubjectCreatedAt)));
+
+            var attemptNumber = attemptNumbers.GetValueOrDefault(review.SubjectId) + 1;
+            attemptNumbers[review.SubjectId] = attemptNumber;
+            var status = LegacyReviewStatus(review.State);
+            await ExecuteAsync(connection, """
+                INSERT INTO review_attempts(
+                    id, subject_id, task_id, attempt_number, status, executor_id,
+                    instance_id, host_id, lease_id, fence, acquired_at, expires_at,
+                    outcome, failure_classification, reported_at, created_at)
+                VALUES ($id, $subject, $task, $number, $status, $executor,
+                        $instance, $host, $lease, $fence, $acquired, $expires,
+                        $outcome, $failure, $reported, $created)
+                ON CONFLICT(id) DO NOTHING;
+                """, ct, transaction,
+                ("$id", review.AttemptId), ("$subject", review.SubjectId),
+                ("$task", taskId), ("$number", attemptNumber), ("$status", status),
+                ("$executor", review.Lease?.ExecutorId), ("$instance", review.Lease?.InstanceId),
+                ("$host", review.Lease?.HostId), ("$lease", review.Lease?.LeaseId),
+                ("$fence", review.LastFence),
+                ("$acquired", review.Lease is null ? null : Iso(review.Lease.AcquiredAt)),
+                ("$expires", review.Lease is null ? null : Iso(review.Lease.ExpiresAt)),
+                ("$outcome", review.Outcome), ("$failure", review.FailureClassification),
+                ("$reported", review.TerminalAt is null ? null : Iso(review.TerminalAt.Value)),
+                ("$created", Iso(review.CreatedAt)));
+            await ExecuteAsync(connection, """
+                INSERT INTO review_fence_counters(subject_id, last_fence)
+                VALUES ($subject, $fence)
+                ON CONFLICT(subject_id) DO UPDATE SET
+                    last_fence = max(review_fence_counters.last_fence, excluded.last_fence);
+                """, ct, transaction,
+                ("$subject", review.SubjectId), ("$fence", review.LastFence));
+        }
+
+        await AuditAsync(connection, transaction, actorId,
+            "legacy.attempt-authority-imported", "server", "legacy-authority",
+            JsonSerializer.Serialize(new
+            {
+                runners = authority.RunnerIdentities.Count,
+                runs = authority.RunAttempts.Count,
+                activeLeases = authority.ActiveLeaseCount,
+                reviews = authority.ReviewAttempts.Count,
+                disposition = "active authority imported as process-unknown",
+            }), ct);
+    }
+
+    private static string LegacyRunStatus(string state)
+        => state.Trim().ToLowerInvariant() switch
+        {
+            "leased" => "process-unknown",
+            "completed" => "completed",
+            "failed" => "failed",
+            "cancelled" => "cancelled",
+            "superseded" => "superseded",
+            _ => "released",
+        };
+
+    private static string LegacyReviewStatus(string state)
+        => state.Trim().ToLowerInvariant() switch
+        {
+            "leased" => "process-unknown",
+            "completed" => "completed",
+            "failed" => "failed",
+            "cancelled" => "cancelled",
+            "superseded" => "superseded",
+            _ => "queued",
+        };
 
     private async Task ApplyMigrationsAsync(SqliteConnection connection, CancellationToken ct)
     {
@@ -3418,3 +3625,65 @@ internal sealed record LegacyArtifactImport(
     string Sha256,
     string IdempotencyKey,
     DateTime CreatedAt);
+
+internal sealed record LegacyAttemptAuthorityImport(
+    IReadOnlyList<LegacyRunnerIdentityImport> RunnerIdentities,
+    IReadOnlyList<LegacyRunAttemptImport> RunAttempts,
+    IReadOnlyList<LegacyReviewAttemptImport> ReviewAttempts,
+    IReadOnlyDictionary<string, long> LastFenceByTask)
+{
+    public static LegacyAttemptAuthorityImport Empty { get; } = new(
+        [], [], [], new Dictionary<string, long>());
+
+    public int ActiveLeaseCount => RunAttempts.Count(item =>
+        item.Lease is not null && string.Equals(item.State, "Leased", StringComparison.OrdinalIgnoreCase))
+        + ReviewAttempts.Count(item =>
+            item.Lease is not null && string.Equals(item.State, "Leased", StringComparison.OrdinalIgnoreCase));
+}
+
+internal sealed record LegacyRunnerIdentityImport(
+    string RunnerId,
+    string Name,
+    string HostId,
+    string InstanceId);
+
+internal sealed record LegacyAttemptLeaseImport(
+    string LeaseId,
+    string ExecutorId,
+    string HostId,
+    string InstanceId,
+    DateTime AcquiredAt,
+    DateTime ExpiresAt,
+    string? ExecutorDisplayName,
+    string? ClientId);
+
+internal sealed record LegacyRunAttemptImport(
+    string AttemptId,
+    string TaskKey,
+    string RepositoryId,
+    string State,
+    long LastFence,
+    DateTime CreatedAt,
+    DateTime? TerminalAt,
+    string? ResultSha,
+    string? TerminalOutcome,
+    LegacyAttemptLeaseImport? Lease);
+
+internal sealed record LegacyReviewAttemptImport(
+    string AttemptId,
+    string TaskKey,
+    string RepositoryId,
+    string SourceRunAttemptId,
+    string SubjectId,
+    string ExpectedResultSha,
+    string ReviewPolicyHash,
+    string? RepositoryUrl,
+    string? ResultRef,
+    DateTime SubjectCreatedAt,
+    string State,
+    long LastFence,
+    DateTime CreatedAt,
+    DateTime? TerminalAt,
+    string? Outcome,
+    string? FailureClassification,
+    LegacyAttemptLeaseImport? Lease);

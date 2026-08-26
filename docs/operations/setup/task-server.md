@@ -1,7 +1,7 @@
 # Task Server deployment and recovery
 
 Status: production bootstrap, topology release, and sole v1 ownership contract,
-AGT-2192/AGT-2196/AGT-2330, 2026-07-25.
+AGT-2192/AGT-2196/AGT-2330/AGT-2663, 2026-08-26.
 
 This runbook implements the Task Server boundary from
 [Distributed Agent Studio target architecture](../../concepts/distributed-agent-studio-target-architecture.md).
@@ -135,6 +135,24 @@ Start-ScheduledTask -TaskName AgentOrchestrator-TaskServer
 Get-ScheduledTask -TaskName AgentOrchestrator-TaskServer | Get-ScheduledTaskInfo
 Stop-ScheduledTask -TaskName AgentOrchestrator-TaskServer
 ```
+
+For the local Stable seat, package, install, create the versioned junction,
+and register the S4U task in one planned step. The default durable data root is
+`task-server-data` beside the Stable checkout, under the devspace and outside
+every release directory:
+
+```powershell
+.\deploy\windows\task-server\install-task-server.ps1 `
+    -SourceRoot C:\Projects\agent-taskboard-stable `
+    -DataDirectory C:\Projects\task-server-data
+```
+
+The installer creates `server.env` only when it does not exist. It never
+replaces a host-owned bootstrap file or token. Re-running it publishes a new
+versioned release, stops only `AgentOrchestrator-TaskServer`, repoints the
+`current` junction, and starts the S4U Scheduled Task. The external Stable
+watchdog calls `ensure-task-server.ps1`; failed `/readyz` checks restart this
+Scheduled Task before any API rollout is considered.
 
 `Stop-ScheduledTask` terminates the process tree without a graceful drain
 signal, so before an upgrade or a planned stop, put the server in `Draining`
@@ -365,6 +383,63 @@ become resource identity.
    frozen legacy root. Roll back before allowing either side to accept another
    write. After cutover, never reactivate the legacy writer against the same
    logical tasks.
+
+Current OrchestratorApi stores use `task.json` and retain fenced attempt
+authority in `.metadata/attempt-authority.json`. Inventory and import cover both
+that current layout and the older `job.json` layout. The migration response
+must report non-zero `runnerIdentities`, `runAttempts`, `activeLeases`, and
+`reviewAttempts` whenever those records exist in the frozen source. A missing
+task or coding source referenced by attempt authority aborts the transaction.
+Active coding and review leases are imported as `process-unknown`; an operator
+must provide positive containment before requeue. This fail-closed disposition
+preserves fences without claiming that a stopped legacy process is safe.
+
+Rehearse the exact migration against a copy before freezing the live writer:
+
+```powershell
+.\deploy\windows\task-server\test-legacy-migration-dry-run.ps1 `
+    -LegacyRoot C:\Projects\agent-taskboard-workspace `
+    -TaskServerExecutable C:\AgentOrchestrator\current\task-server.exe `
+    -ReportPath C:\Projects\agent-taskboard-workspace\tasks\AGT-2663\results\task-server-migration-dry-run.json
+```
+
+The rehearsal owns one disposable Task Server PID and a temporary data store;
+it is not the production service. It copies the legacy root, inventories and
+imports the copy, compares all eight count fields, verifies the integrity
+digest, writes the JSON report, then stops that exact PID. A successful dry run
+does not authorize the live import. Freeze all legacy writers before repeating
+inventory and import against production.
+
+## Local Stable planned cutover
+
+The 2026-08-16 incident rollback pinned Stable at
+`release/20260816-091737Z`. Do not deploy a release containing claim-path
+decoupling until every step below is captured in the task `results/` directory.
+
+1. Run the migration rehearsal above against a fresh copy and preserve its JSON
+   report. Confirm the task and authority counts against the legacy files.
+2. Stop runner claim polling and every OrchestratorApi writer. Inventory the
+   frozen source, put the supervised Task Server in `Maintenance`, import with
+   the saved migration ID, and preserve the pre-import backup ID and integrity
+   SHA-256.
+3. Set `TaskServer:BaseUrl` to `http://127.0.0.1:5071` in Stable's
+   `backend/appsettings.Local.json`. `scripts/update-stable.sh` performs this
+   update atomically during the rollout and refuses to start the API until the
+   independently supervised Task Server reports ready.
+4. Roll out current `main` with `ATP_TASK_SERVER_REQUIRED=1`. The updater starts
+   Task Server before OrchestratorApi, loads the frontend in a real browser,
+   probes `/api/v1/protocol` through the API proxy, and reattaches a verified
+   detached Stable checkout to `main`. The external watchdog also probes Task
+   Server on every tick and heals only through the S4U Scheduled Task.
+5. Submit one representative coding task. Preserve evidence that its runner
+   claim, fenced completion, review claim and report, result submission, Human
+   Review transition, and board projection all refer to the migrated task and
+   monotonically increasing fences. Do not infer this from health endpoints.
+6. Record `git branch --show-current`, `git rev-parse HEAD`, Task Server
+   `--version`, Scheduled Task state, `/readyz`, proxy protocol response, and the
+   representative task identifiers in `results/runbook-execution.md`. Release
+   the rollout hold only when the branch is `main` and every end-to-end check is
+   green.
 
 The automated acceptance suite rehearses inventory, freeze enforcement,
 transactional import, integrity verification, backup/restore, evidence Git

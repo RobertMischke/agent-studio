@@ -405,12 +405,79 @@ public sealed class TaskServerStoreTests
                 Directory.CreateDirectory(Path.Combine(taskDirectory, "results"));
                 Directory.CreateDirectory(Path.Combine(legacy.Path, ".git"));
                 await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".git", "HEAD"), "ref: refs/heads/main\n");
-                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "job.json"), """
-                    {"id":"AGT-1","title":"Migrated task","state":"2-ready","projectName":"Agent Studio"}
+                await File.WriteAllTextAsync(Path.Combine(taskDirectory, "task.json"), """
+                    {"id":"AGT-1","title":"Migrated task","state":"4-auto-review","projectName":"Agent Studio"}
                     """);
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "prompt.md"), "Migrated prompt");
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "timeline.jsonl"), "{\"kind\":\"created\",\"timestamp\":\"2026-07-17T10:00:00Z\"}\n");
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "results", "evidence.txt"), "proof");
+                Directory.CreateDirectory(Path.Combine(legacy.Path, ".metadata"));
+                await File.WriteAllTextAsync(
+                    Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"),
+                    """
+                    {
+                      "schemaVersion": 4,
+                      "authorityEpoch": 9,
+                      "lastFenceByTask": { "AGT-1": 12 },
+                      "runAttempts": [
+                        {
+                          "attemptId": "run_source",
+                          "taskKey": "AGT-1",
+                          "repositoryId": "repo_agent_studio",
+                          "state": "Completed",
+                          "lastFence": 11,
+                          "createdAt": "2026-08-16T17:00:00Z",
+                          "terminalAt": "2026-08-16T17:15:00Z",
+                          "resultSha": "1111111111111111111111111111111111111111"
+                        },
+                        {
+                          "attemptId": "run_live",
+                          "taskKey": "AGT-1",
+                          "repositoryId": "repo_agent_studio",
+                          "state": "Leased",
+                          "lastFence": 12,
+                          "createdAt": "2026-08-16T17:20:00Z",
+                          "lease": {
+                            "leaseId": "lease_coding",
+                            "executorId": "coding_runner",
+                            "executorDisplayName": "Coding Runner",
+                            "hostId": "windows-host",
+                            "leaseInstanceId": "coding-instance",
+                            "acquiredAt": "2026-08-16T17:20:00Z",
+                            "expiresAt": "2026-08-16T18:20:00Z"
+                          }
+                        }
+                      ],
+                      "reviewAttempts": [
+                        {
+                          "attemptId": "review_live",
+                          "taskKey": "AGT-1",
+                          "repositoryId": "repo_agent_studio",
+                          "sourceRunAttemptId": "run_source",
+                          "state": "Leased",
+                          "lastFence": 4,
+                          "createdAt": "2026-08-16T17:16:00Z",
+                          "subject": {
+                            "subjectId": "subject_source",
+                            "repositoryId": "repo_agent_studio",
+                            "expectedResultSha": "1111111111111111111111111111111111111111",
+                            "sourceRunAttemptId": "run_source",
+                            "reviewPolicyHash": "policy-v1",
+                            "createdAt": "2026-08-16T17:15:30Z"
+                          },
+                          "lease": {
+                            "leaseId": "lease_review",
+                            "executorId": "review_runner",
+                            "executorDisplayName": "Review Runner",
+                            "hostId": "windows-host",
+                            "leaseInstanceId": "review-instance",
+                            "acquiredAt": "2026-08-16T17:16:00Z",
+                            "expiresAt": "2026-08-16T18:16:00Z"
+                          }
+                        }
+                      ]
+                    }
+                    """);
 
                 var store = Store(data.Path);
                 await store.InitializeAsync();
@@ -421,6 +488,10 @@ public sealed class TaskServerStoreTests
                 Assert.Equal(1, inventory.Tasks);
                 Assert.Equal(1, inventory.Events);
                 Assert.Equal(1, inventory.Artifacts);
+                Assert.Equal(2, inventory.RunnerIdentities);
+                Assert.Equal(2, inventory.RunAttempts);
+                Assert.Equal(2, inventory.ActiveLeases);
+                Assert.Equal(1, inventory.ReviewAttempts);
 
                 request = request with { ExpectedMigrationId = inventory.MigrationId };
                 await store.ChangeModeAsync(new ChangeModeRequest(TaskServerMode.Maintenance, "single-writer cutover"), "operator", default);
@@ -429,6 +500,10 @@ public sealed class TaskServerStoreTests
                 Assert.False(string.IsNullOrWhiteSpace(result.IntegritySha256));
                 Assert.Contains("Restore backup", result.RollbackBoundary);
                 Assert.True(Directory.Exists(Path.Combine(data.Path, "migration-evidence", result.MigrationId)));
+                Assert.Equal(2, result.RunnerIdentities);
+                Assert.Equal(2, result.RunAttempts);
+                Assert.Equal(2, result.ActiveLeases);
+                Assert.Equal(1, result.ReviewAttempts);
 
                 var project = Assert.Single(await store.ListProjectsAsync(null, default));
                 var migrated = Assert.Single(await store.ListTasksAsync(project.ProjectId, default));
@@ -436,6 +511,21 @@ public sealed class TaskServerStoreTests
                 Assert.Equal("Migrated prompt", migrated.Body);
                 Assert.Single(await store.ListEventsAsync(string.Empty, 0, default));
                 Assert.Single(await store.ListArtifactsAsync(string.Empty, default));
+
+                await using (var connection = new SqliteConnection($"Data Source={store.DatabasePath};Pooling=False"))
+                {
+                    await connection.OpenAsync();
+                    Assert.Equal(2L, await ScalarAsync(connection, "SELECT count(*) FROM runners;"));
+                    Assert.Equal(2L, await ScalarAsync(connection, "SELECT count(*) FROM runs;"));
+                    Assert.Equal(1L, await ScalarAsync(connection,
+                        "SELECT count(*) FROM runs WHERE status = 'process-unknown';"));
+                    Assert.Equal(1L, await ScalarAsync(connection,
+                        "SELECT count(*) FROM leases WHERE status = 'process-unknown';"));
+                    Assert.Equal(1L, await ScalarAsync(connection,
+                        "SELECT count(*) FROM review_attempts WHERE status = 'process-unknown';"));
+                    Assert.Equal(12L, await ScalarAsync(connection,
+                        "SELECT last_fence FROM fence_counters;"));
+                }
 
                 var migrationBackup = Assert.Single(Directory.EnumerateFiles(
                     store.BackupDirectory,
@@ -474,6 +564,53 @@ public sealed class TaskServerStoreTests
             default));
 
         Assert.Equal("legacy-inventory-changed", conflict.Code);
+        Assert.Empty(await store.ListProjectsAsync(null, default));
+    }
+
+    [Fact]
+    public async Task Legacy_import_fails_closed_when_attempt_authority_references_an_absent_task()
+    {
+        using var data = new TempDirectory();
+        using var legacy = new TempDirectory();
+        var taskDirectory = Path.Combine(legacy.Path, "projects", "agent-studio", "2-ready", "AGT-1");
+        Directory.CreateDirectory(taskDirectory);
+        await File.WriteAllTextAsync(Path.Combine(taskDirectory, "task.json"), """
+            {"id":"AGT-1","title":"Migrated task","state":"2-ready","projectName":"Agent Studio"}
+            """);
+        Directory.CreateDirectory(Path.Combine(legacy.Path, ".metadata"));
+        await File.WriteAllTextAsync(
+            Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"),
+            """
+            {
+              "lastFenceByTask": { "AGT-404": 7 },
+              "runAttempts": [{
+                "attemptId": "run_missing_task",
+                "taskKey": "AGT-404",
+                "repositoryId": "repo",
+                "state": "Leased",
+                "lastFence": 7,
+                "createdAt": "2026-08-16T17:00:00Z"
+              }],
+              "reviewAttempts": []
+            }
+            """);
+
+        var store = Store(data.Path);
+        await store.InitializeAsync();
+        var migration = new LegacyMigrationService(store);
+        var request = new LegacyMigrationRequest(legacy.Path, "Agent Studio", true);
+        var inventory = await migration.InventoryAsync(request, default);
+        await store.ChangeModeAsync(
+            new ChangeModeRequest(TaskServerMode.Maintenance, "single-writer cutover"),
+            "operator",
+            default);
+
+        var conflict = await Assert.ThrowsAsync<TaskServerConflictException>(() => migration.ImportAsync(
+            request with { ExpectedMigrationId = inventory.MigrationId },
+            "operator",
+            default));
+
+        Assert.Equal("legacy-authority-task-missing", conflict.Code);
         Assert.Empty(await store.ListProjectsAsync(null, default));
     }
 
@@ -1377,6 +1514,13 @@ public sealed class TaskServerStoreTests
         using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
         Assert.True(stream.CanRead);
         Assert.True(stream.CanWrite);
+    }
+
+    private static async Task<long> ScalarAsync(SqliteConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
     }
 
     private static async Task<(WorkspaceDto Workspace, ProjectDto Project, TaskDto Task)> SeedReadyTaskAsync(TaskServerStore store)

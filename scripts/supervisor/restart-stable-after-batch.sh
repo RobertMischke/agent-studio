@@ -42,6 +42,10 @@
 #                            max wait for an active merge gate (default: 120)
 #   ATP_GATE_DRAIN_POLL_SECONDS
 #                            merge-gate poll interval (default: 2)
+#   ATP_TASK_SERVER_REQUIRED  supervise the standalone authority (default: 1)
+#   ATP_TASK_SERVER_URL       standalone authority URL (default: loopback :5071)
+#   ATP_TASK_SERVER_ENSURE_COMMAND
+#                            executable used for the Windows S4U recovery script
 #
 # Exit codes:
 #   0  decision tick handled (no-op or successful restart)
@@ -71,6 +75,10 @@ DEPLOY_REMOTE="${ATP_DEPLOY_REMOTE:-origin}"
 UPDATE_SCRIPT="${ATP_UPDATE_SCRIPT:-$THIS_CHECKOUT/scripts/update-stable.sh}"
 GATE_DRAIN_TIMEOUT="${ATP_GATE_DRAIN_TIMEOUT_SECONDS:-120}"
 GATE_DRAIN_POLL="${ATP_GATE_DRAIN_POLL_SECONDS:-2}"
+TASK_SERVER_REQUIRED="${ATP_TASK_SERVER_REQUIRED:-1}"
+TASK_SERVER_URL="${ATP_TASK_SERVER_URL:-http://127.0.0.1:5071}"
+TASK_SERVER_ENSURE_COMMAND="${ATP_TASK_SERVER_ENSURE_COMMAND:-powershell.exe}"
+TASK_SERVER_ENSURE_SCRIPT="${ATP_TASK_SERVER_ENSURE_SCRIPT:-$STABLE/deploy/windows/task-server/ensure-task-server.ps1}"
 
 LANE_DIR="$WORKSPACE/projects/$PROJECT/${ATP_RESTART_LANE:-4-auto-review}"
 LOG_DIR="$WORKSPACE/logs"
@@ -202,6 +210,23 @@ if [ "$GATE_DRAIN_POLL" -eq 0 ]; then
 fi
 
 mkdir -p "$STATE_DIR" "$LOG_DIR"
+
+if [ "$TASK_SERVER_REQUIRED" -eq 1 ]; then
+  if ! curl -fsS --max-time 3 "${TASK_SERVER_URL%/}/readyz" >/dev/null 2>&1; then
+    if [ ! -f "$TASK_SERVER_ENSURE_SCRIPT" ] || ! command -v "$TASK_SERVER_ENSURE_COMMAND" >/dev/null 2>&1; then
+      log "ERROR: Task Server is unavailable and its supervised recovery path is missing"
+      exit 2
+    fi
+    log "Task Server readiness failed; restarting its S4U Scheduled Task"
+    if ! "$TASK_SERVER_ENSURE_COMMAND" -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+      -File "$TASK_SERVER_ENSURE_SCRIPT" \
+      -ReadyUrl "${TASK_SERVER_URL%/}/readyz"; then
+      log "ERROR: Task Server supervised recovery failed; rollout remains held"
+      exit 2
+    fi
+    log "Task Server supervised recovery succeeded"
+  fi
+fi
 
 target_main=""
 new_count=0
