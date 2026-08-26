@@ -5,6 +5,10 @@ export { AddHostWizardComponent } from './components/add-host-wizard/add-host-wi
 export { RunnerSetupDialogComponent } from './components/runner-setup-dialog/runner-setup-dialog';
 export { RemoteHostsService } from './services/remote-hosts.service';
 export { ReviewQueueService } from './services/review-queue.service';
+export {
+  LocalCliCapabilityService,
+  projectLocalCliCapabilities,
+} from './services/local-cli-capability.service';
 export type { ReviewQueueSnapshot } from './services/review-queue.service';
 export { ProviderAuthStatusService } from './services/provider-auth-status.service';
 export * from './models/provider-auth.model';

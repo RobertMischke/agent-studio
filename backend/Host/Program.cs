@@ -494,6 +494,9 @@ builder.Services.AddSingleton<ICliModelRegistry, CliModelRegistry>();
 builder.Services.AddSingleton<ICliUsageParser, ClaudeUsageParser>();
 builder.Services.AddSingleton<ICliUsageParser, CodexUsageParser>();
 builder.Services.AddSingleton<CliUsageParserRegistry>();
+builder.Services.AddSingleton<LocalCliSelfHealService>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<LocalCliSelfHealService>());
 builder.Services.AddSingleton<BusAggregationCache>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedAdHocUsageReader>();
 builder.Services.AddSingleton<AgentStudio.Tokens.BusBackedTokenSummaryReader>();

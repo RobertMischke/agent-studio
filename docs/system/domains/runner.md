@@ -147,6 +147,16 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- `backend/Features/Cli/Execution/LocalCliSelfHealService.cs` owns the
+  monolith's local Claude and Codex capability probe. On Windows it separates a
+  truly absent npm package from the observed package-present, missing-shim
+  failure. Only the latter runs `npm install --global <package>`, with one
+  persisted attempt per CLI per hour. Each attempt appends a structured row to
+  `<TaskRepository>/logs/local-cli-repairs.jsonl`, including package and CLI
+  versions before and after plus bounded npm debug-log fingerprints and
+  normalized activity signals. `GET /api/cli/local-capabilities` exposes the
+  latest snapshot. A successful repair is quiet history in the status bar and
+  local Execution Host details; only a current repair failure is an alarm.
 - Remote provider credentials use one protected host file,
   `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
   `root:agent` mode `640`, loaded by both Coding and Review units after their

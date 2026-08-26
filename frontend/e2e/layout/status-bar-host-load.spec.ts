@@ -20,6 +20,9 @@ async function stubHostLoad(
   remoteRuns: number,
   telemetrySlots: number,
   load1: number,
+  localCliCapabilities: unknown = {
+    observedAt: new Date().toISOString(), capabilities: [], latestRepair: null, repairAlarm: false,
+  },
 ): Promise<void> {
   const now = new Date().toISOString();
   const baseTask = (id: string, projectName: string) => ({
@@ -149,6 +152,7 @@ async function stubHostLoad(
     findings: [],
   }));
   await page.route('**/api/v1/management/remote-hosts', json([]));
+  await page.route('**/api/cli/local-capabilities', json(localCliCapabilities));
 }
 
 test.describe('Status bar execution-host load companion signal', () => {
@@ -188,6 +192,46 @@ test.describe('Status bar execution-host load companion signal', () => {
     await expect(page.getByTestId('remote-hosts-panel')).toBeVisible();
     await expect(page.getByTestId('remote-hosts-panel').getByRole('heading', { level: 2 }))
       .toHaveText('Execution Hosts');
+  });
+
+  test('successful local CLI repair stays quiet in the status bar and host detail', async ({ page }) => {
+    const repairedAt = '2026-08-18T10:14:00Z';
+    await stubHostLoad(page, 0, 0, 0, 1.2, {
+      observedAt: repairedAt,
+      capabilities: [{
+        cliType: 'claude', status: 'ready', installState: 'Ready', configuredPath: 'claude',
+        resolvedPath: 'C:/Users/operator/AppData/Roaming/npm/claude.cmd', version: '2.1.234',
+        detail: 'claude CLI is available.', observedAt: repairedAt,
+      }],
+      latestRepair: {
+        cliType: 'claude', outcome: 'repaired', occurredAt: repairedAt,
+        versionBefore: '2.1.231', versionAfter: '2.1.234', detail: 'claude CLI repaired.',
+      },
+      repairAlarm: false,
+    });
+    await page.goto('/');
+
+    const repair = page.getByTestId('status-bar-cli-repair');
+    await expect(repair).toContainText('CLI repaired at');
+    await expect(page.getByTestId('status-bar-cli-repair-divergence')).toHaveCount(0);
+
+    await page.getByTestId('status-bar-running').click();
+    const local = page.locator('[data-host="local"]');
+    await local.getByTestId('remote-host-disclosure').click();
+    await expect(local.getByTestId('remote-host-cli-repair-note'))
+      .toContainText('2.1.231 → 2.1.234');
+    await expect(local.getByTestId('remote-host-cli-repair-alarm')).toHaveCount(0);
+
+    await setTheme(page, 'dark');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'local-cli-repaired-host-note-dark--mocked.png'),
+      fullPage: false,
+    });
+    await setTheme(page, 'light');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'local-cli-repaired-host-note-light--mocked.png'),
+      fullPage: false,
+    });
   });
 
   test('high load without runs becomes a quiet hint in both themes', async ({ page }) => {

@@ -2,6 +2,10 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { TaskService } from '../../../../services/task.service';
 import { RemoteHostsService } from '../../services/remote-hosts.service';
 import { ReviewQueueService } from '../../services/review-queue.service';
+import {
+  LocalCliCapabilityService,
+  projectLocalCliCapabilities,
+} from '../../services/local-cli-capability.service';
 import { RemoteHostCardComponent } from '../remote-host-card/remote-host-card';
 import type { HostActionKind, HostProjectSlots, RemoteHost } from '../../models/remote-host.model';
 import type {
@@ -46,9 +50,13 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private readonly service = inject(RemoteHostsService);
   private readonly tasks = inject(TaskService);
   private readonly reviewQueue = inject(ReviewQueueService);
+  private readonly localCliCapabilities = inject(LocalCliCapabilityService);
   private readonly tableState = new RemoteHostTableState();
 
-  readonly hosts = this.service.hosts;
+  readonly hosts = computed(() => projectLocalCliCapabilities(
+    this.service.hosts(),
+    this.localCliCapabilities.snapshot(),
+  ));
   readonly loading = this.service.loading;
   readonly error = this.service.error;
   readonly identityDiagnostics = this.service.identityDiagnostics;
@@ -102,6 +110,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.tableState.hydrate();
     this.service.ensureLoaded();
+    this.localCliCapabilities.refresh();
     this.reviewQueue.refresh();
     this.tickHandle = setInterval(() => this.now.set(Date.now()), 30_000);
   }
@@ -110,7 +119,10 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
     if (this.tickHandle) clearInterval(this.tickHandle);
   }
 
-  reload(): void { this.service.reload(); }
+  reload(): void {
+    this.service.reload();
+    this.localCliCapabilities.refresh();
+  }
 
   boardSlots(host: RemoteHost): number {
     const truth = this.boardRunningTruth();

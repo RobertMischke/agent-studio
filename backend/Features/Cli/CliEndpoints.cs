@@ -23,6 +23,12 @@ public static class CliEndpoints
         // the contract shown is the real one, not a frontend guess.
         cliGroup.MapGet("/contracts", () => Results.Ok(CliCompletionContracts.All));
 
+        // Host-local capability state is owned by the periodic self-heal probe.
+        // Reads never start npm or a coding CLI, so the status bar and Hosts
+        // page cannot accidentally multiply repair attempts by polling.
+        cliGroup.MapGet("/local-capabilities", (LocalCliSelfHealService selfHeal) =>
+            Results.Ok(selfHeal.Current));
+
         // ── Working Memory (ASS-1748 / T1c): per-CLI persistent-state panel ──
         // GET lists the memory / session state a CLI keeps on disk (path, size,
         // last-used, preview) plus its protected auth / config entries; DELETE

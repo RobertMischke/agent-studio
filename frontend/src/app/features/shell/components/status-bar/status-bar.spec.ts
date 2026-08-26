@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { LocalCliCapabilityService } from '../../../remote-hosts';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -59,5 +60,35 @@ describe('StatusBarComponent (smoke)', () => {
       console.warn('[smoke] StatusBarComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+  });
+
+  it('renders the latest successful local CLI repair as quiet status history', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StatusBarComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    TestBed.inject(LocalCliCapabilityService).snapshot.set({
+      observedAt: '2026-08-18T10:15:00Z',
+      capabilities: [],
+      latestRepair: {
+        cliType: 'claude', outcome: 'repaired', occurredAt: '2026-08-18T10:14:00Z',
+        versionBefore: '2.1.231', versionAfter: '2.1.234', detail: 'claude CLI repaired.',
+      },
+      repairAlarm: false,
+    });
+    const fixture = TestBed.createComponent(StatusBarComponent);
+    fixture.detectChanges();
+
+    const note = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="status-bar-cli-repair"]',
+    );
+    expect(note?.textContent).toContain('CLI repaired at');
+    expect(fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair-divergence"]')).toBeNull();
+    fixture.destroy();
   });
 });

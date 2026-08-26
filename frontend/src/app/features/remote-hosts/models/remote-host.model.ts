@@ -206,6 +206,33 @@ export interface TaskServerTelemetrySnapshot {
   taskServerConnectionLastRecoveredAt?: string | null;
 }
 
+export interface LocalCliCapability {
+  cliType: string;
+  status: 'ready' | 'unavailable' | 'repair-failed';
+  installState: string;
+  configuredPath: string;
+  resolvedPath: string | null;
+  version: string | null;
+  detail: string;
+  observedAt: string;
+}
+
+export interface LocalCliRepairEvent {
+  cliType: string;
+  outcome: 'repaired' | 'failed';
+  occurredAt: string;
+  versionBefore: string | null;
+  versionAfter: string | null;
+  detail: string;
+}
+
+export interface LocalCliCapabilitySnapshot {
+  observedAt: string;
+  capabilities: readonly LocalCliCapability[];
+  latestRepair: LocalCliRepairEvent | null;
+  repairAlarm: boolean;
+}
+
 /** Wire shape returned by GET /api/v1/management/remote-hosts. */
 export interface TaskServerRunnerCapabilitySnapshot {
   runnerId: string;
@@ -287,6 +314,10 @@ export interface RemoteHost {
   gateCapacity?: number;
   retireRequestedAt?: string | null;
   capabilityHealth?: readonly RemoteHostCapabilityHealth[];
+  /** Local monolith CLI probe and the latest bounded repair receipt. */
+  localCliCapabilities?: readonly LocalCliCapability[];
+  localCliRepair?: LocalCliRepairEvent | null;
+  localCliRepairAlarm?: boolean;
   hostAdmission?: RemoteHostAdmission | null;
   /** Task Server host key and its centrally managed runtime slot policy. */
   capacityHostId?: string | null;

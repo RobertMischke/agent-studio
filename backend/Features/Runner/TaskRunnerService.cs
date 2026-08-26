@@ -85,6 +85,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ILoadThrottleGate? _loadThrottle;
     private readonly AgentStudio.Clients.ClientIdentityStore? _clients;
     private readonly StartupExecutionAdmission? _executionAdmission;
+    private readonly LocalCliSelfHealService? _localCliSelfHeal;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     /// <summary>
@@ -152,7 +153,8 @@ public class TaskRunnerService : BackgroundService
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
         VisualQaService? visualQa = null,
-        StartupExecutionAdmission? executionAdmission = null)
+        StartupExecutionAdmission? executionAdmission = null,
+        LocalCliSelfHealService? localCliSelfHeal = null)
     {
         _config = config;
         _logger = logger;
@@ -201,6 +203,7 @@ public class TaskRunnerService : BackgroundService
         _clients = clients;
         _quotaWaitPolicy = quotaWaitPolicy;
         _executionAdmission = executionAdmission;
+        _localCliSelfHeal = localCliSelfHeal;
 
         Role = RunnerRoles.ResolveFromConfig(_config);
         BackendName = ResolveBackendName(_config);
@@ -625,7 +628,7 @@ public class TaskRunnerService : BackgroundService
         }
 
         var cli = _router.Get(info.CliType);
-        if (!cli.IsAvailable()) throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
+        await EnsureCliAvailableAsync(cli, ct);
 
         // Persist override on the job so subsequent runs reuse it
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
@@ -642,6 +645,17 @@ public class TaskRunnerService : BackgroundService
 
         var outcome = await runner.StartJobManualAsync(jobId, ct);
         return ShapeOutcome(outcome, info, jobId, watchPath, mode: ContinueModes.Continue, prompt: string.Empty);
+    }
+
+    private async Task EnsureCliAvailableAsync(ICliExecutionService cli, CancellationToken ct)
+    {
+        if (cli.IsAvailable()) return;
+        if (_localCliSelfHeal is not null)
+        {
+            await _localCliSelfHeal.RefreshAsync(ct);
+            if (cli.IsAvailable()) return;
+        }
+        throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
     }
 
     /// <summary>
@@ -669,7 +683,7 @@ public class TaskRunnerService : BackgroundService
         }
 
         var cli = _router.Get(info.CliType);
-        if (!cli.IsAvailable()) throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
+        await EnsureCliAvailableAsync(cli, ct);
 
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {

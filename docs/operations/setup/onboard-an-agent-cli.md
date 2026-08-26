@@ -29,7 +29,7 @@ The default runtime prompt that wraps every task already tells the agent to emit
 **Known quirks**:
 
 - **argv-length on Windows.** A multi-KB prompt passed as `-p <prompt>` on the Windows command line silently fails (empty CLI response). Production code paths use `ICliOneShot` ([../../backend/Services/Cli/OneShot/ICliOneShot.cs](../../../backend/Services/Cli/OneShot/ICliOneShot.cs)) or stdin-piped `Process.Start` to bypass this. The drift analyser in [`CodePatternDriftAnalysisService.cs`](../../../backend/Services/Drift/CodePatternDriftAnalysisService.cs) flags new `-p <multi-KB-string>` call sites as regressions.
-- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `%APPDATA%\npm\` (that is, `C:\Users\<you>\AppData\Roaming\npm\`). The fix is to reinstall the npm package (`npm install -g @anthropic-ai/claude-code`), which restores the shim and runs the postinstall step.
+- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `%APPDATA%\npm\` (that is, `C:\Users\<you>\AppData\Roaming\npm\`). The local capability probe now distinguishes this package-present, missing-shim state from a truly absent package. It automatically runs `npm install -g @anthropic-ai/claude-code` at most once per hour, journals version and npm-activity evidence under `<TaskRepository>/logs/local-cli-repairs.jsonl`, and shows `CLI repaired at <time>` in the status bar and local Execution Host details. Only a failed repair raises an alarm. Manual reinstall remains the fallback after inspecting the journal.
 
 ## Codex
 
@@ -74,6 +74,7 @@ When you bypass that codepath (one-off `codex exec --json "<your prompt>"` from 
 
 ### Other Codex quirks
 
+- **Missing global npm shim.** The same local Windows probe repairs a missing `codex.cmd` with `npm install -g @openai/codex` only when the package remains present under the global npm root. The same one-hour budget, journal, and UI receipt apply.
 - **Trust prompt accepts a bare `Enter`.** Use `<Enter>` alone over a PTY; `1<Enter>` works but leaves a stray `1` in the input box. The `/status` probe relies on this.
 - **`exec resume <uuid>` is positional** before `--json`. `--resume=<uuid>` is Copilot's flag; `-r <uuid>` is Claude/Gemini's. Codex is different.
 - **Codex token-usage frames** don't reach the message bus today (tracked as `bug-codex-token-usage-not-on-bus`). Pricing displays are approximate.
