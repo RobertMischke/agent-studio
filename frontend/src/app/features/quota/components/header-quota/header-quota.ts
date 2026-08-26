@@ -16,6 +16,7 @@ import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../services/quota-api.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { buildCliRepairNote, type CliRepairNote } from './header-quota-repair-note';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';
 
@@ -140,6 +141,9 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       return snap ? this.buildCard(snap, ttlMs, now) : this.emptyCard(cli);
     });
   });
+
+  readonly repairNote = computed<CliRepairNote | null>(() =>
+    buildCliRepairNote(this.report()?.latestCliRepair, cliType => this.cliLabel(cliType)));
 
   ngOnInit(): void {
     this.pollingStarted = true;

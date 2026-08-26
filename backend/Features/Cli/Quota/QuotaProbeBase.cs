@@ -16,12 +16,18 @@ public abstract class QuotaProbeBase : IQuotaProbe
     protected readonly ILogger _logger;
     protected readonly CliRouter _router;
     protected readonly CliEnvironment _env;
+    private readonly LocalCliSelfHealService? _localCliSelfHeal;
 
-    protected QuotaProbeBase(ILogger logger, CliRouter router, CliEnvironment env)
+    protected QuotaProbeBase(
+        ILogger logger,
+        CliRouter router,
+        CliEnvironment env,
+        LocalCliSelfHealService? localCliSelfHeal = null)
     {
         _logger = logger;
         _router = router;
         _env = env;
+        _localCliSelfHeal = localCliSelfHeal;
     }
 
     public abstract string CliType { get; }
@@ -38,10 +44,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
         int settleAfterSendMs,
         CancellationToken ct)
     {
-        var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
-        if (!available)
-            throw new InvalidOperationException($"{CliType} CLI not available");
+        var resolvedPath = await ResolveHealthyCliPathAsync(ct);
 
         var scratch = Path.Combine(Path.GetTempPath(), "agent-taskboard-quota", CliType);
         Directory.CreateDirectory(scratch);
@@ -79,10 +82,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
         int initialIdleMs,
         CancellationToken ct)
     {
-        var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
-        if (!available)
-            throw new InvalidOperationException($"{CliType} CLI not available");
+        var resolvedPath = await ResolveHealthyCliPathAsync(ct);
 
         var scratch = Path.Combine(Path.GetTempPath(), "agent-taskboard-quota", CliType);
         Directory.CreateDirectory(scratch);
@@ -136,6 +136,23 @@ public abstract class QuotaProbeBase : IQuotaProbe
         var snap = pty.SnapshotStripped();
         try { await pty.SendKeysAsync("<Esc><Esc>", ct); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaProbeBase:140"); }
         return snap;
+    }
+
+    private async Task<string> ResolveHealthyCliPathAsync(CancellationToken ct)
+    {
+        var cli = _router.Get(CliType);
+        if (_localCliSelfHeal is not null)
+        {
+            var result = await _localCliSelfHeal.ProbeAndRepairAsync(cli, ct);
+            if (!result.Available)
+                throw new InvalidOperationException($"{CliType} CLI not available: {result.Error}");
+            return result.Path;
+        }
+
+        var (available, _, resolvedPath) = cli.TestCliPath();
+        if (!available)
+            throw new InvalidOperationException($"{CliType} CLI not available");
+        return resolvedPath;
     }
 
     public sealed record ProbeStep(

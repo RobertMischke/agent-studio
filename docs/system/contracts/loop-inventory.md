@@ -144,6 +144,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet observed in production; AGT-2525 introduces the stable store and its retention owner.
 - **Notes:** Attempt teardown only refreshes last use. A fresh home whose CLI launch was never adopted is deleted immediately. Ownership shape and task-marker validation prevent the sweep or a continuation from adopting another task's directory.
 
+### cli.local-shim-repair
+
+- **Kind:** Pre-Guard
+- **Where:** [`backend/Features/Cli/Execution/LocalCliSelfHealService.cs`](../../../backend/Features/Cli/Execution/LocalCliSelfHealService.cs) `ProbeAndRepairAsync`
+- **Re-entry trigger:** A local Windows Claude or Codex `--version` capability probe fails while the matching npm global package directory is still present and the `<cli>.cmd` launch shim is missing.
+- **Budget:** `LocalCliSelfHealService.MinimumAttemptInterval = 1 hour` per CLI, restored from the durable repair journal after backend restart.
+- **Action when budget exhausted:** Do not run npm again. Keep the capability unavailable, return the next allowed timestamp, and retain the latest completed repair result for the status surface. A later probe may retry only after the hour expires.
+- **Breaker test:** [`backend.Tests/Architecture/LocalCliSelfHealBreakerTests.cs`](../../../backend.Tests/Architecture/LocalCliSelfHealBreakerTests.cs), plus portable filesystem classification in [`backend.Tests/LocalCliSelfHealTests.cs`](../../../backend.Tests/LocalCliSelfHealTests.cs)
+- **Last fired:** 2026-08-18, operator repair from Claude Code 2.1.231 to 2.1.234 after the global shims vanished for the second time. This entry describes the automatic path introduced after that incident; the historical repair itself was manual.
+- **Notes:** Every attempt writes an `attempting` row and a terminal `repaired` or `failed` row to `<workspace>/logs/cli-repairs.jsonl`. The detector never auto-installs a truly absent package. Recent npm debug-log evidence and package timestamps make the updater/postinstall hypothesis testable on the next occurrence.
+
 ## Candidates (LLM-proposed, human-reviewed)
 
 This section mirrors `loop-inventory.md.candidates` once the weekly `LoopDiscoveryTest` starts running. Items move from candidates to **Entries** above only after a human review confirms the loop is real and assigns a budget + test. Empty for now.

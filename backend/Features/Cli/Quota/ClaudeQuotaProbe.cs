@@ -83,8 +83,9 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         ILogger<ClaudeQuotaProbe> logger,
         CliRouter router,
         CliEnvironment env,
-        IConfiguration configuration)
-        : base(logger, router, env)
+        IConfiguration configuration,
+        LocalCliSelfHealService? localCliSelfHeal = null)
+        : base(logger, router, env, localCliSelfHeal)
     {
         _configuration = configuration;
     }

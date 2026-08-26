@@ -50,4 +50,15 @@ export interface QuotaReport {
    */
   ttlSeconds?: number;
   snapshots: QuotaSnapshot[];
+  /** Latest completed local npm-shim repair, projected as a quiet status-bar note. */
+  latestCliRepair?: CliRepairNotice | null;
+}
+
+export interface CliRepairNotice {
+  cliType: CliType;
+  status: 'repaired' | 'failed';
+  completedAt: string;
+  versionBefore: string | null;
+  versionAfter: string | null;
+  message: string | null;
 }
