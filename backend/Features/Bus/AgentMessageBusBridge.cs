@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Cli;
 
 namespace AgentStudio.Bus;
 
@@ -576,6 +577,55 @@ public sealed class AgentMessageBusBridge
             createdAt: createdAt,
             payload: evt,
             tags: new[] { "quota-snapshot", $"phase:{evt.Phase}", $"cli:{cliType}" });
+        return EmitAsync(msg, ct);
+    }
+
+    /// <summary>
+    /// Publish the operator-visible result of a local npm CLI shim repair.
+    /// A completed repair is quiet lifecycle history. Only a failed repair is
+    /// an alarm-level error, because successful self-healing must not train the
+    /// operator to ignore the Activity badge.
+    /// </summary>
+    public Task EmitCliRepairAsync(
+        string cliType,
+        bool succeeded,
+        DateTime? repairedAt,
+        string? versionBefore,
+        string? versionAfter,
+        string detail,
+        string journalPath,
+        CancellationToken ct = default)
+    {
+        var msg = NewMessage(
+            participantId: ParticipantRuntime,
+            role: succeeded ? "evidence" : "system",
+            kind: succeeded ? "lifecycle" : "error",
+            severity: succeeded ? "Info" : "High",
+            project: null,
+            topic: succeeded ? "cli-repaired" : "cli-repair-failed",
+            summary: succeeded
+                ? $"{cliType} CLI repaired at {repairedAt:O}."
+                : $"{cliType} CLI automatic repair failed.",
+            body: detail,
+            createdAt: repairedAt,
+            payload: new
+            {
+                cliType,
+                succeeded,
+                repairedAt,
+                versionBefore,
+                versionAfter,
+            },
+            artifacts:
+            [
+                new AgentArtifactRef
+                {
+                    Kind = "json-document",
+                    Uri = journalPath,
+                    Label = LocalCliRepairService.JournalFileName,
+                },
+            ],
+            tags: ["cli-repair", $"cli:{cliType}", succeeded ? "repaired" : "repair-failed"]);
         return EmitAsync(msg, ct);
     }
 

@@ -12,7 +12,7 @@ import {
 } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
-import type { CliType } from '../../../../models/task.model';
+import type { CliRepairStatus, CliType } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import {
   clearVisibleInterval,
@@ -53,6 +53,24 @@ export function formatRunningLabel(
     return codingSlotCeiling !== null ? `coding 0/${codingSlotCeiling}` : 'coding idle';
   }
   return 'no runners';
+}
+
+export function formatCliRepairTime(value: string, locale?: string, timeZone?: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  return new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone,
+  }).format(timestamp);
+}
+
+export function latestSuccessfulCliRepair(
+  repairs: readonly CliRepairStatus[],
+): CliRepairStatus | null {
+  return repairs
+    .filter(item => item.outcome === 'repaired' && !!item.repairedAt)
+    .sort((a, b) => Date.parse(b.repairedAt!) - Date.parse(a.repairedAt!))[0] ?? null;
 }
 
 @Component({
@@ -190,6 +208,21 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   });
 
   readonly projectCount = computed(() => this.projectNames().length || Object.keys(this.jobService.runnerStatus().projects).length);
+  readonly latestCliRepair = computed(() => {
+    return latestSuccessfulCliRepair(this.jobService.runnerStatus().cliRepairs ?? []);
+  });
+  readonly cliRepairLabel = computed(() => {
+    const repair = this.latestCliRepair();
+    return repair?.repairedAt ? `CLI repaired at ${formatCliRepairTime(repair.repairedAt)}` : '';
+  });
+  readonly cliRepairTooltip = computed(() => {
+    const repair = this.latestCliRepair();
+    if (!repair?.repairedAt) return '';
+    const versions = repair.versionBefore || repair.versionAfter
+      ? ` Version ${repair.versionBefore ?? 'unknown'} → ${repair.versionAfter ?? 'unknown'}.`
+      : '';
+    return `${repair.cliType} CLI was repaired automatically at ${new Date(repair.repairedAt).toLocaleString()}.${versions} ${repair.detail}`;
+  });
   readonly orchestratorLabel = computed(() => this.orchestratorActiveChatCount() > 0
     ? `Orchestrator · ${this.orchestratorActiveChatCount()} active`
     : 'Orchestrator');

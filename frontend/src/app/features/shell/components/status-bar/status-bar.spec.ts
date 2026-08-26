@@ -4,7 +4,12 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import {
+  formatCliRepairTime,
+  formatRunningLabel,
+  latestSuccessfulCliRepair,
+  StatusBarComponent,
+} from './status-bar';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -26,6 +31,35 @@ describe('formatRunningLabel', () => {
 
   it('shows the honest coding slot ceiling once it is known', () => {
     expect(formatRunningLabel(0, 0, 3, 8)).toBe('coding 0/8');
+  });
+});
+
+describe('formatCliRepairTime', () => {
+  it('renders a stable hour and minute from the repair timestamp', () => {
+    expect(formatCliRepairTime('2026-08-18T14:07:00Z', 'en-GB', 'UTC')).toBe('14:07');
+  });
+
+  it('leaves malformed timestamps visible for diagnostics', () => {
+    expect(formatCliRepairTime('not-a-time', 'en-GB')).toBe('not-a-time');
+  });
+});
+
+describe('latestSuccessfulCliRepair', () => {
+  it('keeps failed repairs out of the quiet status note', () => {
+    expect(latestSuccessfulCliRepair([{
+      cliType: 'claude', outcome: 'failed', observedAt: '2026-08-18T15:00:00Z',
+      repairedAt: null, detail: 'npm failed',
+    }])).toBeNull();
+  });
+
+  it('selects the most recent successful repair across CLIs', () => {
+    expect(latestSuccessfulCliRepair([{
+      cliType: 'claude', outcome: 'repaired', observedAt: '2026-08-18T14:00:00Z',
+      repairedAt: '2026-08-18T14:01:00Z', detail: 'done',
+    }, {
+      cliType: 'codex', outcome: 'repaired', observedAt: '2026-08-18T15:00:00Z',
+      repairedAt: '2026-08-18T15:01:00Z', detail: 'done',
+    }])?.cliType).toBe('codex');
   });
 });
 

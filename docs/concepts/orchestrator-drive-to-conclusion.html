@@ -2134,6 +2134,31 @@
             replay queue.
           </td>
         </tr>
+        <tr id="case-agt-2673">
+          <td>2026-08-13 and 2026-08-18</td>
+          <td><code>AGT-2673</code><br><span class="small">Windows local CLI npm launchers vanished twice</span></td>
+          <td>
+            The global Claude package remained under <code>node_modules/@anthropic-ai</code>, but the
+            <code>claude</code> and <code>claude.cmd</code> launchers disappeared from PATH. Local Claude runs could not
+            start and the capability banner flipped. The operator restored service twice with
+            <code>npm install -g @anthropic-ai/claude-code</code>; the observed package version moved from 2.1.231 to
+            2.1.234 on the second repair.
+          </td>
+          <td>
+            The exact trigger remains an evidence-backed hypothesis: the version movement supports Claude's own
+            auto-update path, while the filesystem shape matches an interrupted npm install or postinstall. Earlier
+            recovery only handled some Claude stubs immediately before spawn and did not journal npm activity, cover
+            Codex, distinguish a retained package from a true uninstall, or enforce a durable repair budget.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the local capability loop now repairs only the
+            package-present and shim-missing shape for Claude and Codex, once per CLI per hour. It journals launcher and
+            package timestamps, nearby npm logs, updater artifacts, relevant processes, command output, and the CLI
+            version before and after. Success reaches the recovered local capability terminal and leaves a quiet
+            <code>CLI repaired at &lt;time&gt;</code> note; only repair failure raises a workspace alarm. A guarded Windows
+            rehearsal script preserves and restores the original launchers if the expected terminal is not observed.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -147,6 +147,15 @@ state.
   is evaluated first and always describes the already claimed run. Capability
   matching never rewrites the card's model or thinking selection; those remain
   governed by [the model-routing policy](model-routing-policy.md).
+- The Windows control-plane local capability loop uses
+  `backend/Features/Cli/Execution/LocalCliRepairService.cs` to classify a
+  missing Claude or Codex launcher. An absent npm package stays a manual install;
+  an intact global package with missing shims receives one bounded
+  `npm install -g` repair attempt per hour. The durable
+  `<TaskRepository>/.runtime/cli-repairs.jsonl` journal captures the package,
+  npm/updater activity, command output, and version transition. Runner status
+  projects successful recovery as a quiet status-bar note, while the Agent
+  Message Bus emits a high-severity workspace error only when repair fails.
 - Remote provider credentials use one protected host file,
   `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
   `root:agent` mode `640`, loaded by both Coding and Review units after their

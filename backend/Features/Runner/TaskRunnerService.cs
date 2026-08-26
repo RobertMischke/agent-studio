@@ -36,6 +36,7 @@ public class TaskRunnerService : BackgroundService
     private readonly GlobalOrchestratorBootstrap _globalOrchestrator;
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
+    private readonly LocalCliRepairService? _cliRepair;
     // Forwarded to each ProjectRunner. DI injects the registered singleton even
     // into this optional slot; null only when a test fixture builds the service
     // directly, in which case ProjectRunner builds its own workspace-less fallback.
@@ -152,7 +153,8 @@ public class TaskRunnerService : BackgroundService
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
         VisualQaService? visualQa = null,
-        StartupExecutionAdmission? executionAdmission = null)
+        StartupExecutionAdmission? executionAdmission = null,
+        LocalCliRepairService? cliRepair = null)
     {
         _config = config;
         _logger = logger;
@@ -178,6 +180,7 @@ public class TaskRunnerService : BackgroundService
         _git = git;
         _pickupFailures = pickupFailures;
         _infraBreaker = infraBreaker;
+        _cliRepair = cliRepair;
         _humanReviewEscalation = humanReviewEscalation;
         _taskAccess = taskAccess;
         _bus = bus;
@@ -546,7 +549,11 @@ public class TaskRunnerService : BackgroundService
         {
             projects[name] = runner.GetStatus();
         }
-        return new RunnerStatus { Projects = projects };
+        return new RunnerStatus
+        {
+            Projects = projects,
+            CliRepairs = _cliRepair?.Snapshot() ?? [],
+        };
     }
 
     public bool SetMode(string projectName, string mode, string? reason = null)

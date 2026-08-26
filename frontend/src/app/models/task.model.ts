@@ -1681,6 +1681,19 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
+  /** Latest local npm CLI self-heal outcome per CLI. */
+  cliRepairs?: CliRepairStatus[];
+}
+
+export interface CliRepairStatus {
+  cliType: string;
+  outcome: 'repaired' | 'failed' | string;
+  observedAt: string;
+  attemptedAt?: string | null;
+  repairedAt?: string | null;
+  versionBefore?: string | null;
+  versionAfter?: string | null;
+  detail: string;
 }
 
 /**
