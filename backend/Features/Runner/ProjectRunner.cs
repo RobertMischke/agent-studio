@@ -1800,9 +1800,12 @@ public class ProjectRunner
         try
         {
             var resolver = _router.Get(resolverCliType);
-            if (resolver.CliType == AgentTypes.Human || !resolver.IsAvailable())
+            var resolverHealthy = resolver.CliType == AgentTypes.Human
+                ? (Ok: false, Error: (string?)"human resolver cannot execute a managed CLI step")
+                : await resolver.EnsureCliHealthyAsync(CancellationToken.None);
+            if (!resolverHealthy.Ok)
             {
-                var unavailable = $"{resolverCliType} resolver is unavailable at `{resolver.GetCliPath()}`.";
+                var unavailable = $"{resolverCliType} resolver is unavailable at `{resolver.GetCliPath()}`: {resolverHealthy.Error}.";
                 var result = new IntegrationResult(IntegrationOutcome.Conflict, null, unavailable, conflict.ConflictedFiles);
                 RecordConflictResolutionStep(info, PipelineStepStatus.Failed, "merge-blocked",
                     IntegrationSummary(unavailable, run, workBranch, result), started, model: resolverModel);

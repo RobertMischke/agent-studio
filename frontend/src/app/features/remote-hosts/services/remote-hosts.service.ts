@@ -5,6 +5,7 @@ import type {
   HostActionKind,
   HostRampStrategy,
   HostTelemetrySeries,
+  LocalCliHealthSnapshot,
   RemoteHost,
   TaskServerTelemetrySnapshot,
   TaskServerRunnerCapabilitySnapshot,
@@ -140,6 +141,7 @@ export class RemoteHostsService {
             : { ...current, stats: null, telemetry: null, telemetryLoading: true });
           this.hydrateTelemetry(host.id, host.clientId, telemetryWindow, preserveLongTelemetry);
         }
+        this.hydrateLocalCliHealth();
         this.hydrateCapabilityRegistry();
       },
       error: error => {
@@ -152,6 +154,21 @@ export class RemoteHostsService {
           durationMs: Math.round(performance.now() - startedAt),
         });
       },
+    });
+  }
+
+  private hydrateLocalCliHealth(): void {
+    if (!this.http) return;
+    if (!this.hosts().some(host => host.role === 'local' && host.lastHeartbeatAt)) return;
+    this.http.get<LocalCliHealthSnapshot>('/api/cli/local-health').subscribe({
+      next: snapshot => {
+        this.hosts.update(hosts => hosts.map(host => host.role === 'local'
+          ? { ...host, cliRepairs: snapshot.repairs ?? [] }
+          : host));
+      },
+      error: error => this.log('local-cli-health-failed', {
+        message: error?.message ?? 'unknown',
+      }),
     });
   }
 

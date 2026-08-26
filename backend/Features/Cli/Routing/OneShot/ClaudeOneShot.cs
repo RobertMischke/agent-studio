@@ -38,19 +38,22 @@ public sealed class ClaudeOneShot : ICliOneShot
     private readonly ICliUsageParser _claudeUsage;
     private readonly ICliModelRegistry _modelRegistry;
     private readonly AdHocUsageRecorder? _usage;
+    private readonly LocalCliRepairService? _localCliRepair;
 
     public ClaudeOneShot(
         IConfiguration configuration,
         ILogger<ClaudeOneShot> logger,
         CliUsageParserRegistry parsers,
         ICliModelRegistry modelRegistry,
-        AdHocUsageRecorder? usage = null)
+        AdHocUsageRecorder? usage = null,
+        LocalCliRepairService? localCliRepair = null)
     {
         _configuration = configuration;
         _logger = logger;
         _claudeUsage = parsers.Get("claude") ?? new ClaudeUsageParser();
         _modelRegistry = modelRegistry;
         _usage = usage;
+        _localCliRepair = localCliRepair;
     }
 
     public string CliType => "claude";
@@ -63,23 +66,16 @@ public sealed class ClaudeOneShot : ICliOneShot
         var executable = GenericCliExecutionService.ResolveExecutable(cliPath);
         var timeout = request.Timeout ?? DefaultTimeout;
 
-        // CAR owns npm-shim healing for CAR-backed agent runs. One-shot calls
-        // do not use CAR yet, so retain their existing best-effort repair until
-        // T4 removes this temporary non-agent invocation exception.
-        if (!QuickProbe(executable))
+        if (!QuickProbe(executable) && _localCliRepair is not null)
         {
-            _logger.LogWarning(
-                "claude --version failed pre-OneShot at '{Path}'; running rollback NpmShimHealer", executable);
-            var outcome = await NpmShimHealer.TryHealClaudeAsync(_logger, ct);
-            if (outcome.Actions.Count > 0)
+            var repair = await _localCliRepair.EnsureAvailableAsync(
+                CliTypes.Claude,
+                () => ProbeVersion(cliPath),
+                ct).ConfigureAwait(false);
+            if (repair.Ok)
             {
-                _logger.LogInformation(
-                    "Rollback NpmShimHealer (one-shot) actions for claude: {Actions}",
-                    string.Join("; ", outcome.Actions));
+                executable = GenericCliExecutionService.ResolveExecutable(cliPath);
             }
-            // Preserve the established one-shot contract: a failed repair does
-            // not abort here. The spawn below returns the existing SpawnFailure
-            // result and its callers apply their own fallback policy.
         }
 
         var psi = new ProcessStartInfo
@@ -357,5 +353,29 @@ public sealed class ClaudeOneShot : ICliOneShot
         {
             return false;
         }
+    }
+
+    private static (bool Available, string? Version, string Path) ProbeVersion(string configuredPath)
+    {
+        var executable = GenericCliExecutionService.ResolveExecutable(configuredPath);
+        if (!QuickProbe(executable)) return (false, null, executable);
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = "--version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            if (process is null) return (false, null, executable);
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5_000);
+            var version = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+            return (process.ExitCode == 0, version, executable);
+        }
+        catch { return (false, null, executable); }
     }
 }

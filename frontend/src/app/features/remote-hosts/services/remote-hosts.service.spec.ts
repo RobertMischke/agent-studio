@@ -79,6 +79,40 @@ describe('RemoteHostsService', () => {
 });
 
 describe('RemoteHostsService client registry hydration', () => {
+  it('hydrates the local CLI repair receipt only for a live local control-plane host', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([{
+      id: 'local-default',
+      displayName: 'Local machine',
+      kind: 'service',
+      registeredAt: now,
+      lastSeenAt: now,
+    }]);
+    http.expectOne('/api/clients/local-default/telemetry?window=14d').flush({
+      clientId: 'local-default', window: '14d', points: [], findings: [],
+    });
+    http.expectOne('/api/cli/local-health').flush({
+      at: now,
+      repairs: [{
+        cliType: 'claude', state: 'repaired', repairedAt: now, attemptedAt: now,
+        packageVersion: '2.1.234', cliVersion: '2.1.234', detail: 'CLI repaired at now',
+      }],
+    });
+    http.expectOne('/api/v1/management/remote-hosts').flush([]);
+
+    expect(svc.hosts().find(host => host.id === 'local')?.cliRepairs).toEqual([
+      expect.objectContaining({ cliType: 'claude', state: 'repaired' }),
+    ]);
+    http.verify();
+  });
+
   it('surfaces a corrupt identity and does not request telemetry for it', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],

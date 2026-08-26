@@ -119,8 +119,17 @@ public static class CliEndpoints
             }
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
-        cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions, TaskRunnerService runners) =>
+        cliGroup.MapGet("/usage", async (
+            CliRouter router,
+            SessionRegistry sessions,
+            TaskRunnerService runners,
+            LocalCliRepairService repairs,
+            CancellationToken ct) =>
         {
+            // Availability is an active local capability probe. On Windows it
+            // repairs only the package-present/missing-shim npm failure shape;
+            // true uninstalls remain visible and untouched.
+            await repairs.ProbeConfiguredAsync(router, ct);
             // Snapshot the runner's per-project active job so the
             // LinkedJob chip can render `active` (green) when the linked
             // session belongs to the project's currently-running task.
@@ -132,6 +141,16 @@ public static class CliEndpoints
             }
             return Results.Ok(sessions.BuildReport(router, activeJobByProject));
         });
+
+        cliGroup.MapGet("/local-health", async (
+            CliRouter router,
+            LocalCliRepairService repairs,
+            CancellationToken ct) =>
+            Results.Ok(new
+            {
+                at = DateTimeOffset.UtcNow,
+                repairs = await repairs.ProbeConfiguredAsync(router, ct),
+            }));
 
         // Lazy deep-read of one session (row expand in the CLI-session tool).
         // Parses exactly one transcript on demand so the list report stays

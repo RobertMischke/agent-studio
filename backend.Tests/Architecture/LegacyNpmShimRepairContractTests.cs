@@ -5,25 +5,32 @@ using Xunit;
 namespace AgentStudio.Tests;
 
 /// <summary>
-/// Pins the temporary npm-shim repair ownership during the CAR rollout. CAR
-/// owns repair for CAR-backed runs; only the explicit legacy rollback and the
-/// non-agent Claude one-shot may retain the Studio helper until AGT-2373.
+/// Pins local npm-shim repair to one bounded coordinator. Capability probes,
+/// legacy launches, and one-shot launches may call that coordinator, while the
+/// low-level historical healer is no longer invoked directly.
 /// </summary>
 public class LegacyNpmShimRepairContractTests
 {
     [Fact]
-    public void Repair_helper_is_wired_only_to_legacy_and_one_shot_paths()
+    public void Repair_is_wired_through_the_shared_local_coordinator()
     {
         var root = RepoRoot();
-        var helper = Source(root, "backend/Features/Cli/Execution/NpmShimHealer.cs");
+        var coordinator = Source(root, "backend/Features/Cli/Execution/LocalCliRepairService.cs");
         var legacy = Source(root, "backend/Features/Cli/Execution/BuiltInCliBehaviors.cs");
+        var engine = Source(root, "backend/Features/Cli/Execution/CliExecutionServiceBase.cs");
         var oneShot = Source(root, "backend/Features/Cli/Routing/OneShot/ClaudeOneShot.cs");
-        var car = Source(root, "backend/Features/Cli/Execution/BackendCarExecution.cs");
+        var endpoints = Source(root, "backend/Features/Cli/CliEndpoints.cs");
+        var runner = Source(root, "backend/Features/Runner/TaskRunnerService.cs");
 
-        Assert.Contains("TryHealClaudeAsync", helper, StringComparison.Ordinal);
-        Assert.Equal(1, Count(legacy, "NpmShimHealer.TryHealClaudeAsync"));
-        Assert.Equal(1, Count(oneShot, "NpmShimHealer.TryHealClaudeAsync"));
-        Assert.DoesNotContain("NpmShimHealer", car, StringComparison.Ordinal);
+        Assert.Contains("MissingShimWithPackage", coordinator, StringComparison.Ordinal);
+        Assert.Contains("RepairCooldown = TimeSpan.FromHours(1)", coordinator, StringComparison.Ordinal);
+        Assert.Contains("cli-repairs.jsonl", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("NpmShimHealer.TryHealClaudeAsync", legacy, StringComparison.Ordinal);
+        Assert.Contains("_localCliRepair.EnsureAvailableAsync", engine, StringComparison.Ordinal);
+        Assert.Contains("_localCliRepair.EnsureAvailableAsync", oneShot, StringComparison.Ordinal);
+        Assert.Contains("repairs.ProbeConfiguredAsync", endpoints, StringComparison.Ordinal);
+        Assert.Contains("EnsureCliHealthyAsync(stoppingToken)", runner, StringComparison.Ordinal);
+        Assert.Equal(2, Count(runner, "await cli.EnsureCliHealthyAsync(ct)"));
     }
 
     private static string Source(string root, string relativePath)

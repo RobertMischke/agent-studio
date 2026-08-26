@@ -15,6 +15,19 @@ public interface ICliExecutionService
     bool IsAvailable();
     (bool Available, string? Version, string Path) TestCliPath(string? path = null);
 
+    /// <summary>
+    /// Performs the launch admission health check. Local Claude and Codex
+    /// adapters override this through the shared Windows npm-shim coordinator;
+    /// other adapters retain the read-only version probe.
+    /// </summary>
+    Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+    {
+        var probe = TestCliPath();
+        return Task.FromResult(probe.Available
+            ? (true, (string?)null)
+            : (false, $"--version probe failed at '{probe.Path}'"));
+    }
+
     Task<(CliExecution? Execution, string? Error)> StartAsync(
         string jobId,
         string jobKey,

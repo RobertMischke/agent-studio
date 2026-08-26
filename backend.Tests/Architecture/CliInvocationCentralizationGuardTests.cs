@@ -366,6 +366,16 @@ public class CliInvocationCentralizationGuardTests
         IReadOnlyList<string> code,
         int markerLine)
     {
+        if (string.Equals(
+                relativePath,
+                "backend/Features/Cli/Execution/LocalCliRepairService.cs",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var repairMethodFrom = Math.Max(0, markerLine - 80);
+            return Enumerable.Range(repairMethodFrom, markerLine - repairMethodFrom + 1)
+                .Any(line => code[line].Contains("RunNpmInstallAsync(", StringComparison.Ordinal));
+        }
+
         if (!string.Equals(
                 relativePath,
                 "backend/Features/Cli/Execution/CliExecutionServiceBase.cs",

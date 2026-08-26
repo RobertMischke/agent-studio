@@ -188,6 +188,51 @@ describe('RemoteHostCardComponent', () => {
       .toContain('ready → unavailable');
   });
 
+  it('shows a quiet local receipt after a successful CLI repair', () => {
+    const fixture = mount({
+      ...HOST,
+      id: 'local',
+      role: 'local',
+      cliRepairs: [{
+        cliType: 'claude',
+        state: 'repaired',
+        repairedAt: '2026-07-10T11:58:00Z',
+        attemptedAt: '2026-07-10T11:58:00Z',
+        packageVersion: '2.1.234',
+        cliVersion: '2.1.234',
+        detail: 'CLI repaired at 7/10/26, 1:58 PM',
+      }],
+    });
+    const note = fixture.nativeElement.querySelector('[data-testid="local-cli-repair-note"]') as HTMLElement;
+
+    expect(note.textContent).toContain('CLI repaired at');
+    expect(note.textContent).toContain('claude');
+    expect(note.getAttribute('data-state')).toBe('repaired');
+    expect(fixture.debugElement
+      .query(By.css('[data-testid="local-cli-repair-note"]'))
+      .injector.get(AppTooltipDirective).appTooltip()).toContain('CLI repaired');
+  });
+
+  it('reserves the acute local repair note for a failed repair', () => {
+    const note: HTMLElement = mount({
+      ...HOST,
+      id: 'local',
+      role: 'local',
+      cliRepairs: [{
+        cliType: 'codex',
+        state: 'failed',
+        repairedAt: null,
+        attemptedAt: '2026-07-10T11:58:00Z',
+        packageVersion: '0.146.0',
+        cliVersion: null,
+        detail: 'npm install exited 1',
+      }],
+    }).nativeElement.querySelector('[data-testid="local-cli-repair-note"]');
+
+    expect(note.textContent).toContain('CLI repair failed at');
+    expect(note.getAttribute('data-state')).toBe('failed');
+  });
+
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
     const el: HTMLElement = mount({
       ...HOST,

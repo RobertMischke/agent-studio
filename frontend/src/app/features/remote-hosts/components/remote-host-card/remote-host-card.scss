@@ -157,6 +157,7 @@
 .detail > app-capability-health,
 .detail > app-git-token-capability,
 .detail > app-host-telemetry-history,
+.cli-repair-note,
 .detail__empty,
 .host__stale,
 .host__no-stats { margin-bottom: var(--studio-spacing-3); }
@@ -174,6 +175,30 @@
 .detail__badges { flex-wrap: wrap; gap: var(--studio-spacing-2); margin-top: var(--studio-spacing-3); }
 
 .provider-auth { flex-wrap: wrap; gap: var(--studio-spacing-2); }
+.cli-repair-note {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  margin: 0;
+  border: 1px solid var(--studio-border);
+  border-radius: 5px;
+  background: var(--notify-success-tint);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  color: var(--studio-fg-muted);
+  font-size: 11px;
+}
+.cli-repair-note[data-state='failed'] {
+  background: var(--notify-error-tint);
+  color: var(--notify-error-icon-fg);
+}
+.cli-repair-note__dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--severity-pass);
+}
+.cli-repair-note[data-state='failed'] .cli-repair-note__dot { background: var(--severity-high); }
 .provider-auth__badge {
   display: inline-flex;
   align-items: center;

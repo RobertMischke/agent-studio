@@ -418,10 +418,16 @@ public class TaskRunnerService : BackgroundService
             _logger.LogInformation("Initialized runner for project '{Name}' (Root: {RootPath})", entry.Name, entry.RootPath);
         }
 
-        // Check CLI availability (default backend = Claude)
-        if (!_router.Get(CliTypes.Claude).IsAvailable())
+        // Check CLI availability (default backend = Claude). This is also the
+        // startup capability probe, so let the shared coordinator repair the
+        // package-present/missing-shim shape before the banner is projected.
+        var (defaultCliHealthy, defaultCliError) =
+            await _router.Get(CliTypes.Claude).EnsureCliHealthyAsync(stoppingToken);
+        if (!defaultCliHealthy)
         {
-            _logger.LogWarning("Claude CLI not available - runners will be in manual/board-only mode");
+            _logger.LogWarning(
+                "Claude CLI not available - runners will be in manual/board-only mode: {Error}",
+                defaultCliError);
         }
 
         // Boot the orchestrator's long-lived Claude session per project so
@@ -625,7 +631,9 @@ public class TaskRunnerService : BackgroundService
         }
 
         var cli = _router.Get(info.CliType);
-        if (!cli.IsAvailable()) throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
+        var (cliHealthy, cliHealthError) = await cli.EnsureCliHealthyAsync(ct);
+        if (!cliHealthy)
+            throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH: {cliHealthError}", 400);
 
         // Persist override on the job so subsequent runs reuse it
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
@@ -669,7 +677,9 @@ public class TaskRunnerService : BackgroundService
         }
 
         var cli = _router.Get(info.CliType);
-        if (!cli.IsAvailable()) throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
+        var (cliHealthy, cliHealthError) = await cli.EnsureCliHealthyAsync(ct);
+        if (!cliHealthy)
+            throw new TaskOperationException($"{cli.CliType} CLI is not installed or not on PATH: {cliHealthError}", 400);
 
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {

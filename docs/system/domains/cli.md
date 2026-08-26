@@ -49,6 +49,9 @@ CLI execution tests.
 - `frontend/src/app/features/cli/`, `frontend/src/app/features/tokens/`, and
   `frontend/src/app/components/cli-model-selector/`: CLI status, usage, quota,
   and model UI.
+- `backend/Features/Cli/Execution/LocalCliRepairService.cs`: Windows-local npm
+  shim classification, one-attempt-per-hour package reinstall, repair journal,
+  and the latest receipt shown by Execution Hosts.
 
 ## Invariants
 
@@ -62,6 +65,14 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- A failed local `claude --version` or `codex --version` probe may reinstall the
+  matching global npm package only when its package directory is still present
+  and every Windows-launchable global command shim is missing. A true uninstall
+  and an unusable executable with intact launch shims are never auto-installed. Attempts are limited
+  to one per CLI per hour across restarts and appended to
+  `logs/backend/cli-repairs.jsonl` with last-observed, package-before, and
+  CLI-after versions plus bounded npm activity. Successful repair is an
+  informational host receipt; only repair failure is an alarm.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

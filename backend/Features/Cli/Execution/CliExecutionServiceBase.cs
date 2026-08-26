@@ -21,6 +21,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
     protected readonly IConfiguration _configuration;
     internal readonly ConcurrentDictionary<string, ProcInfo> _processes = new();
     private readonly CliBehavior _behavior;
+    private readonly LocalCliRepairService? _localCliRepair;
 
     /// <summary>
     /// Per-task clean-context homes (jobKey → live preparation). Session-state
@@ -100,11 +101,16 @@ public partial class GenericCliExecutionService : ICliExecutionService
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
     }
 
-    internal GenericCliExecutionService(CliBehavior behavior, ILogger logger, IConfiguration configuration)
+    internal GenericCliExecutionService(
+        CliBehavior behavior,
+        ILogger logger,
+        IConfiguration configuration,
+        LocalCliRepairService? localCliRepair = null)
     {
         _behavior = behavior;
         _logger = logger;
         _configuration = configuration;
+        _localCliRepair = localCliRepair;
     }
 
     /// <summary>
@@ -128,10 +134,11 @@ public partial class GenericCliExecutionService : ICliExecutionService
         IConfiguration configuration,
         CliUsageParserRegistry? usageParsers = null,
         ICliModelRegistry? modelRegistry = null,
-        ClaudeModelDiscovery? modelDiscovery = null)
+        ClaudeModelDiscovery? modelDiscovery = null,
+        LocalCliRepairService? localCliRepair = null)
         => new GenericCliExecutionService(
             BuiltInCliBehaviors.Claude(usageParsers, modelRegistry ?? new CliModelRegistry(), modelDiscovery),
-            logger, configuration);
+            logger, configuration, localCliRepair);
 
     /// <summary>Build a Codex engine from the per-CLI dependencies.</summary>
     internal static GenericCliExecutionService ForCodex(
@@ -139,10 +146,11 @@ public partial class GenericCliExecutionService : ICliExecutionService
         IConfiguration configuration,
         CodexModelDiscovery modelDiscovery,
         CliUsageParserRegistry usageParsers,
-        ICliModelRegistry modelRegistry)
+        ICliModelRegistry modelRegistry,
+        LocalCliRepairService? localCliRepair = null)
         => new GenericCliExecutionService(
             BuiltInCliBehaviors.Codex(modelDiscovery, usageParsers, modelRegistry),
-            logger, configuration);
+            logger, configuration, localCliRepair);
 
     /// <summary>Build an Antigravity/Gemini engine (no extra dependencies).</summary>
     internal static GenericCliExecutionService ForAntigravity(
@@ -256,12 +264,18 @@ public partial class GenericCliExecutionService : ICliExecutionService
     public Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
         => _behavior.EnsureCliHealthy?.Invoke(this, ct) ?? DefaultEnsureCliHealthyAsync(ct);
 
-    internal Task<(bool Ok, string? Error)> DefaultEnsureCliHealthyAsync(CancellationToken ct)
+    internal async Task<(bool Ok, string? Error)> DefaultEnsureCliHealthyAsync(CancellationToken ct)
     {
+        if (_localCliRepair is not null
+            && CliType is CliTypes.Claude or CliTypes.Codex)
+        {
+            return await _localCliRepair.EnsureAvailableAsync(this, ct).ConfigureAwait(false);
+        }
+
         var probe = TestCliPath();
-        return Task.FromResult(probe.Available
+        return probe.Available
             ? (true, (string?)null)
-            : (false, $"--version probe failed at '{probe.Path}'"));
+            : (false, $"--version probe failed at '{probe.Path}'");
     }
 
     /// <summary>
