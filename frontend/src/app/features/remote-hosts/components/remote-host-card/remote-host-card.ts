@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import type { CliType } from '../../../../models/task.model';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
@@ -7,6 +7,11 @@ import { CapabilityHealthComponent } from '../capability-health/capability-healt
 import { GitTokenCapabilityComponent } from '../git-token-capability/git-token-capability';
 import { HostWorkloadSummaryComponent } from '../host-workload-summary/host-workload-summary';
 import { HostTelemetryHistoryComponent } from '../host-telemetry-history/host-telemetry-history';
+import { RemoteHostDetailSummaryComponent } from '../remote-host-detail-summary/remote-host-detail-summary';
+import {
+  RemoteHostRoleRowComponent,
+  roleSlotTotal,
+} from '../remote-host-role-row/remote-host-role-row';
 import {
   RuntimeCapacityEditorComponent,
   type HostProjectPolicyChange,
@@ -63,6 +68,8 @@ interface Meter {
     HostWorkloadSummaryComponent,
     HostTelemetryHistoryComponent,
     RuntimeCapacityEditorComponent,
+    RemoteHostRoleRowComponent,
+    RemoteHostDetailSummaryComponent,
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
@@ -76,6 +83,8 @@ interface Meter {
 })
 export class RemoteHostCardComponent {
   readonly host = input.required<RemoteHost>();
+  readonly roles = input<readonly RemoteHost[]>([]);
+  readonly roleActiveSlots = input<Readonly<Record<string, number>>>({});
   /** Board-local process runs or remote leased runs attributed to this host. */
   readonly boardActiveSlots = input(0);
   /**
@@ -92,6 +101,7 @@ export class RemoteHostCardComponent {
   readonly projectPolicyChange = output<HostProjectPolicyChange>();
   readonly setup = output<RemoteHost>();
   readonly expandedChange = output<boolean>();
+  readonly expandedSections = signal<readonly DetailSection[]>([]);
 
   readonly liveLoading = computed(() => this.host().liveDataState === 'loading');
   readonly liveError = computed(() => this.host().liveDataState === 'error');
@@ -193,16 +203,12 @@ export class RemoteHostCardComponent {
     (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
   );
   readonly providerAuthBadges = computed(() => providerAuthBadgesForHost(this.host(), this.now()));
-  readonly slotTotal = computed(() => {
-    const host = this.host();
-    if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
-    if (host.effectiveMaxParallelism !== null && host.effectiveMaxParallelism !== undefined) {
-      return host.effectiveMaxParallelism;
-    }
-    if (host.activeTaskCount !== undefined && host.availableSlots !== undefined) {
-      return host.activeTaskCount + host.availableSlots;
-    }
-    return null;
+  readonly slotTotal = computed(() => roleSlotTotal(this.host()));
+  readonly roleSlotCapacity = computed(() => {
+    const totals = this.roles().map(roleSlotTotal).filter((value): value is number => value !== null);
+    return totals.length === this.roles().length
+      ? totals.reduce((total, value) => total + value, 0)
+      : null;
   });
   readonly occupiedSlots = computed(() => this.boardActiveSlots());
   readonly loadPct = computed(() => {
@@ -210,9 +216,47 @@ export class RemoteHostCardComponent {
     const load = this.host().stats?.cpuLoadPct;
     return load === null || load === undefined ? null : Math.round(clampPct(load));
   });
-  readonly loadLabel = computed(() => this.loadPct() === null ? 'Not reported' : `${this.loadPct()}%`);
-  readonly releaseLabel = computed(() => this.host().releaseId?.trim() || 'Not reported');
+  readonly loadLabel = computed(() => this.loadPct() === null ? null : `${this.loadPct()}%`);
+  readonly releaseLabel = computed(() => this.host().releaseId?.trim() || null);
   readonly detailId = computed(() => `remote-host-detail-${this.host().id.replace(/[^a-zA-Z0-9_-]/g, '-')}`);
+  readonly healthyCapabilityCount = computed(() => {
+    const health = this.host().capabilityHealth ?? [];
+    if (!health.length) return this.host().capabilities.length;
+    return health.filter(capability => capability.isFresh
+      && capability.healthState === 'healthy'
+      && capability.advertisedStatus === 'ready').length;
+  });
+  readonly unavailableAuthCount = computed(() =>
+    this.providerAuthBadges().filter(auth => auth.state === 'unavailable').length);
+  readonly totalActiveSlots = computed(() => this.roles()
+    .reduce((total, role) => total + this.activeSlotsFor(role), 0));
+  readonly identitySummary = computed(() => {
+    const count = this.roles().length || 1;
+    return `${count} ${count === 1 ? 'role' : 'roles'} · ${this.host().os}`;
+  });
+  readonly connectionSummary = computed(() =>
+    `${this.daemonLabel()} · Task Server ${this.taskServerRouteLabel()} · ${this.heartbeatLabel()}`);
+  readonly capabilitySummary = computed(() => {
+    const ok = this.healthyCapabilityCount();
+    const unavailable = this.unavailableAuthCount();
+    if (unavailable) return `${ok} capabilities ok · ${unavailable} auth unavailable`;
+    return `${ok} ${ok === 1 ? 'capability' : 'capabilities'} ok`;
+  });
+  readonly capacitySummary = computed(() => {
+    const total = this.roleSlotCapacity();
+    return total === null
+      ? `${this.totalActiveSlots()} active · capacity not reported`
+      : `${this.totalActiveSlots()} / ${total} role slots active`;
+  });
+  readonly projectAccessSummary = computed(() => {
+    const failed = this.failedProjectPreflights().length;
+    if (failed) return `${failed} ${failed === 1 ? 'project block' : 'project blocks'}`;
+    const policy = this.host().projectPolicy;
+    if (!policy || policy.allowAllProjects) return 'All registered projects allowed';
+    return `${policy.allowedProjectIds.length} selected projects allowed`;
+  });
+  readonly hostWorkSummary = computed(() => `${this.runSlotsLabel()} · ${this.gateWorkLabel()}`);
+  readonly systemLoadSummary = computed(() => this.loadLabel() ?? 'System load not reported');
 
   latestAuthTransition(badge: ProviderAuthBadge) {
     return badge.history.at(-1) ?? null;
@@ -231,6 +275,20 @@ export class RemoteHostCardComponent {
     this.action.emit({ kind, id: this.host().id });
   }
 
+  activeSlotsFor(role: RemoteHost): number {
+    return this.roleActiveSlots()[role.id] ?? 0;
+  }
+
+  isSectionExpanded(section: DetailSection): boolean {
+    return this.expandedSections().includes(section);
+  }
+
+  toggleSection(section: DetailSection): void {
+    this.expandedSections.update(sections => sections.includes(section)
+      ? sections.filter(item => item !== section)
+      : [...sections, section]);
+  }
+
   requestSetup(): void {
     const host = this.host();
     if (host.role !== 'remote' || host.status === 'retired' || host.busyAction) return;
@@ -238,3 +296,12 @@ export class RemoteHostCardComponent {
   }
 
 }
+
+export type DetailSection =
+  | 'identity'
+  | 'connection'
+  | 'capabilities'
+  | 'capacity'
+  | 'projects'
+  | 'work'
+  | 'load';

@@ -26,11 +26,21 @@
   </header>
 
   <div class="rh__summary" data-testid="remote-hosts-summary">
-    <span class="rh__count"><strong>{{ total() }}</strong> {{ total() === 1 ? 'host' : 'hosts' }}</span>
+    <span class="rh__count"><strong>{{ total() }}</strong> {{ total() === 1 ? 'machine' : 'machines' }}</span>
     <span class="rh__sep" aria-hidden="true">·</span>
     <span class="rh__count"><strong>{{ onlineCount() }}</strong> online</span>
     <span class="rh__sep" aria-hidden="true">·</span>
-    <span class="rh__count"><strong>{{ remoteCount() }}</strong> remote</span>
+    <span class="rh__count"><strong>{{ roleCount() }}</strong> {{ roleCount() === 1 ? 'role' : 'roles' }}</span>
+    @if (retiredCount()) {
+      <button class="rh__retired-filter"
+              type="button"
+              data-testid="remote-hosts-retired-filter"
+              [attr.aria-pressed]="showRetired()"
+              (click)="toggleRetired()">
+        {{ showRetired() ? 'Hide retired' : 'Show retired' }}
+        <span>{{ retiredCount() }}</span>
+      </button>
+    }
   </div>
 
   @if (reviewQueueSnapshot(); as review) {
@@ -90,43 +100,46 @@
 
   @if (total() === 0 && !loading()) {
     <div class="rh__empty" data-testid="remote-hosts-empty">
-      No execution hosts registered yet. This local machine and remote runners
-      appear here once they report a heartbeat.
+      @if (retiredCount()) {
+        No active or recently seen execution hosts. Retired roles are hidden.
+      } @else {
+        No execution hosts registered yet. Hosts appear here after their first heartbeat.
+      }
     </div>
   }
 
-  @if (hosts().length) {
+  @if (total()) {
     <div class="rh__table-wrap" data-testid="remote-hosts-active">
       <table class="rh__table" data-testid="remote-hosts-table">
         <caption>Execution hosts and their current operating state</caption>
         <thead>
           <tr>
-            <th [attr.aria-sort]="ariaSort('name')">
+            <th class="rh__col-name" [attr.aria-sort]="ariaSort('name')">
               <button type="button" data-testid="remote-host-sort-name" (click)="sort('name')">
                 Name <span aria-hidden="true">{{ sortIndicator('name') }}</span>
               </button>
             </th>
-            <th [attr.aria-sort]="ariaSort('status')">
+            <th class="rh__col-status" [attr.aria-sort]="ariaSort('status')">
               <button type="button" data-testid="remote-host-sort-status" (click)="sort('status')">
                 Status <span aria-hidden="true">{{ sortIndicator('status') }}</span>
               </button>
             </th>
-            <th [attr.aria-sort]="ariaSort('slots')">
+            <th class="rh__col-slots" [attr.aria-sort]="ariaSort('slots')">
               <button type="button" data-testid="remote-host-sort-slots" (click)="sort('slots')">
                 Slots <span aria-hidden="true">{{ sortIndicator('slots') }}</span>
               </button>
             </th>
-            <th [attr.aria-sort]="ariaSort('load')">
+            <th class="rh__col-load" [attr.aria-sort]="ariaSort('load')">
               <button type="button" data-testid="remote-host-sort-load" (click)="sort('load')">
                 Load <span aria-hidden="true">{{ sortIndicator('load') }}</span>
               </button>
             </th>
-            <th [attr.aria-sort]="ariaSort('activity')">
+            <th class="rh__col-activity" [attr.aria-sort]="ariaSort('activity')">
               <button type="button" data-testid="remote-host-sort-activity" (click)="sort('activity')">
                 Last activity <span aria-hidden="true">{{ sortIndicator('activity') }}</span>
               </button>
             </th>
-            <th [attr.aria-sort]="ariaSort('release')">
+            <th class="rh__col-release" [attr.aria-sort]="ariaSort('release')">
               <button type="button" data-testid="remote-host-sort-release" (click)="sort('release')">
                 Release <span aria-hidden="true">{{ sortIndicator('release') }}</span>
               </button>
@@ -134,14 +147,16 @@
             <th>Actions</th>
           </tr>
         </thead>
-        @for (host of sortedHosts(); track host.id) {
+        @for (group of sortedHostGroups(); track group.id) {
           <tbody appRemoteHostCard
-            [host]="host"
+            [host]="group.machine"
+            [roles]="group.roles"
+            [roleActiveSlots]="roleSlots(group)"
             [now]="now()"
-            [boardActiveSlots]="boardSlots(host)"
-            [projectSlots]="projectSlots(host)"
-            [expanded]="isExpanded(host.id)"
-            (expandedChange)="setExpanded(host.id, $event)"
+            [boardActiveSlots]="groupSlots(group)"
+            [projectSlots]="projectSlots(group.machine)"
+            [expanded]="isExpanded(group.id)"
+            (expandedChange)="setExpanded(group.id, $event)"
             (action)="onAction($event)"
             (capacityChange)="onCapacityChange($event)"
             (projectPolicyChange)="onProjectPolicyChange($event)"

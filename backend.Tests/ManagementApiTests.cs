@@ -78,7 +78,8 @@ public sealed class ManagementApiTests : IDisposable
                 instanceId,
                 "1.2.3",
                 Contract.TaskServerProtocol.Current,
-                [Contract.ReviewCapabilities.CodingExecutor]));
+                [Contract.ReviewCapabilities.CodingExecutor],
+                BootstrapMaxParallelism: 6));
         registry.AdvertiseCapabilities(
             runnerId,
             new Contract.CapabilityAdvertisementRequest(
@@ -121,6 +122,7 @@ public sealed class ManagementApiTests : IDisposable
         var snapshot = Assert.Single(snapshots!);
         Assert.Equal(runnerId, snapshot.RunnerId);
         Assert.Equal(instanceId, snapshot.InstanceId);
+        Assert.Equal(6, snapshot.RoleMaxParallelism);
         Assert.Contains(
             snapshot.Capabilities,
             capability => capability.Key == "cli-execution:claude"

@@ -1,0 +1,6 @@
+<button type="button"
+        [attr.data-testid]="testId()"
+        [attr.aria-expanded]="expanded()"
+        (click)="toggled.emit()">
+  <strong>{{ label() }}</strong><span>{{ summary() }}</span><i aria-hidden="true">›</i>
+</button>

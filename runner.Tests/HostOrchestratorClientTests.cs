@@ -219,6 +219,9 @@ public sealed class HostOrchestratorClientTests
         Assert.Equal(
             HostOrchestratorContract.Current,
             requestBody.GetProperty("hostOrchestratorMaximum").GetString());
+        Assert.Equal(
+            RunnerReleaseIdentity.Current,
+            requestBody.GetProperty("runnerVersion").GetString());
         var capabilities = requestBody.GetProperty("capabilities")
             .EnumerateArray()
             .Select(value => value.GetString())

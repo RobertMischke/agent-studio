@@ -14,6 +14,7 @@ import type { RunnerProjectPreflight } from '../../../models/task.model';
 
 /** Where a host sits relative to the operator. */
 export type HostRole = 'local' | 'remote';
+export type RunnerServiceRole = 'local' | 'coding' | 'review' | 'runner';
 
 /**
  * Heartbeat-derived liveness. Ordered loosely from healthiest to gone:
@@ -225,6 +226,8 @@ export interface TaskServerRunnerCapabilitySnapshot {
   runtimeCapacityAppliedAt?: string | null;
   runtimeCapacityAppliedVersion?: number | null;
   projectPolicy?: NonNullable<RemoteHost['projectPolicy']> | null;
+  /** Role-local RUNNER_MAX_PARALLELISM declared by this runner process. */
+  roleMaxParallelism?: number | null;
 }
 
 export interface RemoteHostAdmission {
@@ -242,6 +245,8 @@ export interface RemoteHost {
   /** Display name / hostname. */
   name: string;
   role: HostRole;
+  /** Executor role advertised by this runner identity. */
+  serviceRole?: RunnerServiceRole;
   /** SSH target for remote hosts; null for the local machine. */
   address: string | null;
   /** Task-server client identity used as X-Client-Id by this host. */
@@ -293,6 +298,8 @@ export interface RemoteHost {
   runtimeCapacity?: RuntimeCapacitySettings | null;
   /** Latest capacity value reported as adopted by this daemon process. */
   effectiveMaxParallelism?: number | null;
+  /** Role-local ceiling advertised from RUNNER_MAX_PARALLELISM. */
+  roleMaxParallelism?: number | null;
   runtimeCapacityAppliedAt?: string | null;
   /** Exact Task Server policy version confirmed by this daemon. */
   runtimeCapacityAppliedVersion?: number | null;
@@ -369,6 +376,16 @@ export function hostStatusTone(status: HostHeartbeatStatus): HostStatusTone {
 /** Human label for a host role. */
 export function hostRoleLabel(role: HostRole): string {
   return role === 'local' ? 'Local' : 'Remote';
+}
+
+export function runnerServiceRoleLabel(role: RunnerServiceRole | null | undefined): string {
+  switch (role) {
+    case 'local': return 'Local';
+    case 'coding': return 'Coding';
+    case 'review': return 'Review';
+    case 'runner':
+    default: return 'Runner';
+  }
 }
 
 /** Which execution plane a runner belongs to: the coding daemon or the review (auto-review post-processing) daemon. */

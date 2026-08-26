@@ -55,7 +55,7 @@ const HOST: RemoteHost = {
   },
 };
 
-function mount(host: RemoteHost, expanded = true) {
+function mount(host: RemoteHost, expanded = true, expandSections = true) {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     imports: [RemoteHostCardComponent],
@@ -63,9 +63,18 @@ function mount(host: RemoteHost, expanded = true) {
   });
   const fixture = TestBed.createComponent(RemoteHostCardComponent);
   fixture.componentRef.setInput('host', host);
+  fixture.componentRef.setInput('roles', [host]);
+  fixture.componentRef.setInput('roleActiveSlots', { [host.id]: 0 });
   fixture.componentRef.setInput('now', Date.parse('2026-07-10T12:00:00Z'));
   fixture.componentRef.setInput('expanded', expanded);
   fixture.detectChanges();
+  if (expanded && expandSections) {
+    const toggles = fixture.nativeElement.querySelectorAll(
+      '[data-testid^="remote-host-detail-toggle-"]',
+    ) as NodeListOf<HTMLButtonElement>;
+    toggles.forEach(toggle => toggle.click());
+    fixture.detectChanges();
+  }
   return fixture;
 }
 
@@ -77,6 +86,19 @@ describe('RemoteHostCardComponent', () => {
     expect(el.querySelector('[data-testid="remote-host-load"]')?.textContent).toContain('54%');
     expect(el.querySelector('[data-testid="remote-host-release"]')?.textContent)
       .toContain('release-20260811.1');
+  });
+
+  it('opens to compact one-line section summaries before revealing internals', () => {
+    const fixture = mount(HOST, true, false);
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelectorAll('[data-testid^="remote-host-detail-toggle-"]').length).toBe(7);
+    expect(el.querySelector('[data-testid="remote-host-detail-toggle-capabilities"]')?.textContent)
+      .toContain('2 capabilities ok');
+    expect(el.querySelector('.meter')).toBeNull();
+
+    (el.querySelector('[data-testid="remote-host-detail-toggle-load"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('.meter').length).toBe(3);
   });
 
   it('renders name, status badge, role, and the three vitals meters', () => {

@@ -381,10 +381,13 @@ without a parallel surface.
   Legacy CLI-admin and usage links resolve to the CLI Management section at
   `#/workspace/settings/caps`.
 - The Execution Hosts destination at `#/workspace/settings/execution-hosts`
-  uses one sortable table row per host for status, occupied and total slots,
-  load, activity, release, and lifecycle actions. A persisted row disclosure
-  keeps identity, connection, capability, authentication, capacity, lease, and
-  telemetry internals out of the primary operator scan path.
+  uses one sortable machine row for status, load, activity, and exact release
+  identity. Coding and Review runner processes advertised with the same host id
+  are role sub-rows with their own slot ceilings and lifecycle actions. Retired
+  roles are hidden until the compact history filter is enabled. The persisted
+  machine disclosure opens first to one-line summaries for identity,
+  connection, capabilities, capacity, project access, host work, and system
+  load; each section discloses its internals independently.
 - The System prompts destination is the prompt registry and observability
   surface. Its overview groups runtime-step, orchestrator, drift, and framing
   templates, explains application and project pipeline override precedence, and
