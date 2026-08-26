@@ -26,6 +26,10 @@ export interface QuotaWindow {
 export interface QuotaSnapshot {
   cliType: CliType;
   fetchedAt: string;
+  /** Exact output from the CLI's `--version` probe. */
+  cliVersion?: string | null;
+  /** Most recent failed probe time. Windows remain the last-good values. */
+  probeFailedAt?: string | null;
   plan: string | null;
   windows: QuotaWindow[];
   source: string | null;

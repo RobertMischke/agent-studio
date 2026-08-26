@@ -268,7 +268,7 @@ locks default resolution in both cases plus vendor isolation.
 ## Quirks (and what to do about them)
 
 1. **Trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter.** Sending `1<Enter>` works but leaves a stray `1` in the input box that prefixes the next slash command. Use `<Enter>` alone when scripting Codex over a PTY (the quota probe does this).
-2. **`/status` PTY probe is fragile.** Trust + welcome + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. See comments in [`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` and lock with a fixture-based test.
+2. **`/status` PTY probe is fragile.** Trust + ready prompt + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. Codex 0.149.0 can continue starting MCP servers after the banner appears, so the probe waits for the real input affordance before submitting `/status`. See comments in [`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs). When updating, capture the new ANSI-stripped PTY transcript under `backend.Tests/Fixtures/quota/codex/codex-status-v<exact-version>.txt` and lock it with a fixture-based test. Keep older version fixtures as fallbacks.
 3. **Codex reports % left, we report % used.** The probe inverts the value so the UI's `UsedPct` semantics stay consistent across CLIs. Don't double-invert.
 4. **`--json` is required.** Without it, stdout is a colored panel that can't be parsed. The runner always passes it.
 
@@ -369,9 +369,18 @@ locked by:
 
 ## Quota probe
 
-[`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs) returns two windows: a 5-hour bucket and a weekly bucket. Implementation runs `codex` over a PTY, accepts the trust prompt, navigates to `/status`, scrapes the panel.
+[`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs) runs `codex` over a PTY, conditionally accepts the trust prompt, waits for the ready affordance, navigates to `/status`, and scrapes every visible standard and Spark window. A standard window can be absent from the panel, as seen in the real 0.130.0 and 0.149.0 fixtures, without invalidating the remaining windows.
 
-The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
+The probe reports `% used` (1 - `% left`). Source string is `/status`; each
+snapshot also carries the exact `codex --version` result.
+
+**Failure is stale data, not an empty replacement.** `GET /api/cli/quota`
+returns the disk/in-memory cache immediately and starts a stale probe in the
+background under a bounded timeout. A failed live probe retains last-good
+windows, plan, and `fetchedAt`, then adds `probeFailedAt`, `cliVersion`, and the
+explicit probe error. The UI renders `probe failed HH:mm, codex <version>` and
+puts the error in its tooltip. Framework cancellation text such as
+`A task was canceled.` is normalized and must never become the display error.
 
 **Spark-block split is version-agnostic (AGT-2064).** `/status` renders a
 `<model>-Spark limit:` sub-block with its own near-empty 5h/Weekly lines. The

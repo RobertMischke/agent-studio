@@ -1,6 +1,6 @@
 # CLI Domain Map
 
-Version: 2026-06-09
+Version: 2026-08-26
 Status: System-of-record map for CLI adapter and quota changes.
 
 Use this when a change touches Claude, Codex, Copilot, Gemini, prompt handoff,
@@ -62,6 +62,14 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- `GET /api/cli/quota` is cache-only on the request path. Missing or stale
+  entries start a bounded background probe that is detached from the request
+  cancellation token. A failed probe retains last-good values and their
+  `fetchedAt`, adds `probeFailedAt`, the exact `cliVersion`, and an actionable
+  error, so the UI can identify the data as stale without losing it.
+- Installed CLI versions are observed at startup and every 15 minutes by
+  default. Keep the stable `CLI version changed` log phrase when changing that
+  monitor because operator diagnostics and CLI self-heal work key off it.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

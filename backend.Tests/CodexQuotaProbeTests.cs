@@ -5,6 +5,44 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "codex",
+            name));
+
+    [Theory]
+    [InlineData("codex-status-v0.130.0.txt", 14)]
+    [InlineData("codex-status-v0.149.0.txt", 13)]
+    public void ParseStatusWindows_RealVersionedPtyCapture_AllowsMissingStandardFiveHour(
+        string fixture,
+        double expectedWeeklyUsedPct)
+    {
+        var windows = CodexQuotaProbe.ParseStatusWindows(ReadFixture(fixture));
+
+        Assert.DoesNotContain(windows, w => w.Label == "5-hour");
+        Assert.Contains(windows, w => w.Label == "Weekly" && w.UsedPct == expectedWeeklyUsedPct);
+        Assert.Contains(windows, w => w.Label == "Spark 5-hour" && w.UsedPct == 0);
+        Assert.Contains(windows, w => w.Label == "Spark Weekly" && w.UsedPct == 0);
+        Assert.Equal(3, windows.Count);
+    }
+
+    [Fact]
+    public void ParseStatusWindows_V0149CompactFooter_StillReadsBothWindows()
+    {
+        const string snapshot =
+            "Account: operator@example.invalid (Pro)\n" +
+            "5-hour 41% left | Weekly 87% left\n";
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+
+        Assert.Contains(windows, w => w.Label == "5-hour" && w.UsedPct == 59);
+        Assert.Contains(windows, w => w.Label == "Weekly" && w.UsedPct == 13);
+        Assert.Equal("Pro", CodexQuotaProbe.ParsePlan(snapshot));
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {

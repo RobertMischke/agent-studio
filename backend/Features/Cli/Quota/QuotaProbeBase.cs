@@ -27,6 +27,32 @@ public abstract class QuotaProbeBase : IQuotaProbe
     public abstract string CliType { get; }
     public abstract Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
 
+    protected sealed record CliProbeTarget(string Path, string? Version);
+
+    /// <summary>
+    /// Resolve the executable and capture its exact version before entering the
+    /// interactive PTY. Keeping this attribution beside the probe result makes
+    /// parser drift diagnosable without a second operator-side command.
+    /// </summary>
+    protected CliProbeTarget ResolveCliTarget()
+    {
+        var cli = _router.Get(CliType);
+        var (available, version, resolvedPath) = cli.TestCliPath();
+        if (!available)
+            throw new InvalidOperationException($"{CliType} CLI not available");
+        return new CliProbeTarget(resolvedPath, version);
+    }
+
+    protected string? TryReadCliVersion()
+    {
+        try { return _router.Get(CliType).TestCliPath().Version; }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "QuotaProbeBase: CLI version attribution is best-effort");
+            return null;
+        }
+    }
+
     /// <summary>
     /// Spawn the CLI, optionally send a slash-command sequence, wait for output to settle,
     /// return the ANSI-stripped snapshot. Always sends two Esc presses at the end so
@@ -77,12 +103,10 @@ public abstract class QuotaProbeBase : IQuotaProbe
     protected async Task<string> ProbeWithStepsAsync(
         IEnumerable<ProbeStep> steps,
         int initialIdleMs,
-        CancellationToken ct)
+        CancellationToken ct,
+        CliProbeTarget? target = null)
     {
-        var cli = _router.Get(CliType);
-        var (available, _, resolvedPath) = cli.TestCliPath();
-        if (!available)
-            throw new InvalidOperationException($"{CliType} CLI not available");
+        target ??= ResolveCliTarget();
 
         var scratch = Path.Combine(Path.GetTempPath(), "agent-taskboard-quota", CliType);
         Directory.CreateDirectory(scratch);
@@ -96,7 +120,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
             _logger.LogDebug(ex, "Pre-probe environment setup failed (best-effort)");
         }
 
-        await using var pty = await PtySession.SpawnAsync(app: resolvedPath, cwd: scratch, ct: ct);
+        await using var pty = await PtySession.SpawnAsync(app: target.Path, cwd: scratch, ct: ct);
         await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: initialIdleMs, ct);
 
         foreach (var step in steps)

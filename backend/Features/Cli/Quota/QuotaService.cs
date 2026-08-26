@@ -21,6 +21,7 @@ public sealed class QuotaService
     private readonly ConcurrentDictionary<string, QuotaSnapshot> _cache = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
     private readonly TimeSpan _ttl;
+    private readonly TimeSpan _probeTimeout;
     private readonly QuotaCacheStore _store;
 
     public QuotaService(
@@ -33,6 +34,8 @@ public sealed class QuotaService
         _probes = probes.ToDictionary(p => p.CliType, StringComparer.OrdinalIgnoreCase);
         var ttlSec = int.TryParse(configuration["Quota:TtlSeconds"], out var t) ? t : 600;
         _ttl = TimeSpan.FromSeconds(ttlSec);
+        var probeTimeoutSec = int.TryParse(configuration["Quota:ProbeTimeoutSeconds"], out var p) ? p : 45;
+        _probeTimeout = TimeSpan.FromSeconds(Math.Clamp(probeTimeoutSec, 1, 120));
         _store = store;
 
         // Hydrate the in-memory cache from disk on startup so the
@@ -84,12 +87,19 @@ public sealed class QuotaService
     /// Returns the cached snapshot for every probe immediately, kicking off a background
     /// re-probe for any entry that is missing or older than the TTL.
     /// </summary>
-    public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
+    public QuotaReport GetWithBackgroundRefresh()
     {
         foreach (var k in _probes.Keys)
         {
             var stale = !_cache.TryGetValue(k, out var s) || (DateTime.UtcNow - s.FetchedAt) > _ttl;
-            if (stale) _ = RefreshAsync(k, ct);
+            // This work must outlive the HTTP request that triggered it. Passing
+            // RequestAborted here canceled the probe as soon as the cached GET
+            // response completed, producing the operator-visible framework text
+            // "A task was canceled.".
+            if (stale)
+            {
+                _ = Task.Run(() => RefreshAsync(k, CancellationToken.None));
+            }
         }
         return GetCached();
     }
@@ -114,9 +124,18 @@ public sealed class QuotaService
         try
         {
             _cache.TryGetValue(cliType, out var previous);
+            var observedAt = DateTime.UtcNow;
             var snap = await ProbeOnceAsync(probe, ct);
-            snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
-            snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
+            if (QuotaSnapshotRefreshPolicy.Failed(snap))
+            {
+                snap = QuotaSnapshotRefreshPolicy.Apply(previous, snap, observedAt);
+            }
+            else
+            {
+                snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
+                snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, observedAt);
+                snap = QuotaSnapshotRefreshPolicy.Apply(previous, snap, observedAt);
+            }
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -128,13 +147,14 @@ public sealed class QuotaService
             // fails right after a ground-truth invalidation (AGT-2064) must not
             // silently drop the block and re-open the admission gate.
             _cache.TryGetValue(cliType, out var prior);
-            var snap = new QuotaSnapshot
+            var failed = new QuotaSnapshot
             {
                 CliType = cliType,
                 Error = ex.Message,
                 Suspicious = prior?.Suspicious ?? false,
                 SuspiciousReason = prior?.Suspicious == true ? prior.SuspiciousReason : null
             };
+            var snap = QuotaSnapshotRefreshPolicy.Apply(prior, failed, DateTime.UtcNow);
             _cache[cliType] = snap;
             PersistCache();
             return snap;
@@ -142,10 +162,10 @@ public sealed class QuotaService
         finally { sem.Release(); }
     }
 
-    private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
+    private async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(45));
+        cts.CancelAfter(_probeTimeout);
         return await probe.ProbeAsync(cts.Token);
     }
 

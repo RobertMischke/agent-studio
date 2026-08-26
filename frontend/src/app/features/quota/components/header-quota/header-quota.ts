@@ -15,7 +15,9 @@ import type { CliType } from '../../../../models/task.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota.model';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../services/quota-api.service';
+import { buildQuotaFreshness } from '../../models/quota-freshness';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';
 
@@ -76,6 +78,7 @@ interface QuotaCardModel {
   windows: QuotaWindow[];
   error: string | null;
   source: string | null;
+  tooltip: string;
 }
 
 /**
@@ -93,6 +96,7 @@ interface QuotaCardModel {
 @Component({
   selector: 'app-header-quota',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './header-quota.html',
   styleUrl: './header-quota.scss'
@@ -169,33 +173,29 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   }
 
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
-    const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
-    const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
-    const freshness = !s.fetchedAt
-      ? 'never refreshed'
-      : 'updated ' + this.formatAgo(ageMs);
+    const freshness = buildQuotaFreshness(s, ttlMs, now);
     const label = this.cliLabel(s.cliType);
     const shortWindow = this.buildWindowDisplay(s.windows, 'five_hour');
     const weekWindow = this.buildWindowDisplay(s.windows, 'weekly');
     const primary = this.buildPrimaryDisplay(s.windows);
     const chips = this.buildChips(shortWindow, weekWindow, primary, s.windows);
     const tone = this.cardTone(shortWindow, weekWindow, !!s.error, primary);
-    const state = this.cardState(tone, stale, !!s.error, shortWindow, weekWindow, primary);
+    const state = this.cardState(tone, freshness.stale, !!s.error, shortWindow, weekWindow, primary);
     return {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, chips),
+      ariaLabel: `${this.cardAriaLabel(label, chips)}; ${freshness.label}`,
       chips,
       tone,
       state,
       fetchedAt: s.fetchedAt,
-      stale,
-      freshness,
+      stale: freshness.stale,
+      freshness: freshness.label,
       windows: s.windows,
       error: s.error,
-      source: s.source
+      source: s.source,
+      tooltip: s.error ? freshness.tooltip : freshness.label,
     };
   }
 
@@ -214,7 +214,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness: 'never refreshed',
       windows: [],
       error: null,
-      source: null
+      source: null,
+      tooltip: 'never refreshed'
     };
   }
 
@@ -419,16 +420,4 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     }
   }
 
-  private formatAgo(ms: number): string {
-    if (!Number.isFinite(ms)) return 'never';
-    const sec = Math.floor(ms / 1000);
-    if (sec < 5) return 'just now';
-    if (sec < 60) return `${sec} s ago`;
-    const min = Math.floor(sec / 60);
-    if (min < 60) return `${min} min ago`;
-    const hr = Math.floor(min / 60);
-    if (hr < 24) return `${hr} h ago`;
-    const d = Math.floor(hr / 24);
-    return `${d} d ago`;
-  }
 }

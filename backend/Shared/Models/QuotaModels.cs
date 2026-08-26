@@ -40,6 +40,13 @@ public record QuotaSnapshot
 {
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
+    /// <summary>Exact version string reported by the CLI's <c>--version</c> command.</summary>
+    public string? CliVersion { get; init; }
+    /// <summary>
+    /// UTC time of the most recent failed probe. When set alongside windows,
+    /// those windows are the retained last-good values rather than a fresh read.
+    /// </summary>
+    public DateTime? ProbeFailedAt { get; init; }
     /// <summary>"Pro" / "Pro+" / "Plus" / "Free" — null when unknown.</summary>
     public string? Plan { get; init; }
     public List<QuotaWindow> Windows { get; init; } = [];

@@ -8,6 +8,7 @@
             [class.hquota__card--stale]="card.stale"
             [attr.data-tone]="card.tone"
             [attr.data-state]="card.state"
+            [cacTooltip]="card.tooltip"
             (click)="select(card.cliType)">
       <span class="hquota__lead" aria-hidden="true">
         <span class="hquota__icon">{{ card.icon }}</span>

@@ -11,7 +11,15 @@
 
   <div class="cum" [attr.data-testid]="'cli-usage-modal-body-' + cliType()">
     @if (row()?.error; as err) {
-      <div class="cum__error" role="alert">{{ err }}</div>
+      <div class="cum__stale"
+           role="status"
+           data-testid="cli-usage-stale-marker"
+           [attr.aria-label]="err"
+           [cacTooltip]="row()?.errorTooltip ?? err">
+        <span class="cum__stale-dot" aria-hidden="true"></span>
+        <strong>Stale snapshot</strong>
+        <span>{{ row()?.freshness }}</span>
+      </div>
     }
 
     <section class="cum__panel">

@@ -4,3 +4,5 @@ export type { CliModelRouteProfile, CliQuotaWaitPolicy, ProjectCliQuotaWaitPolic
 export { QuotaStripComponent } from './components/quota-strip/quota-strip';
 export { HeaderQuotaComponent } from './components/header-quota/header-quota';
 export type { QuotaWindow, QuotaSnapshot, QuotaReport } from './models/quota.model';
+export { buildQuotaFreshness } from './models/quota-freshness';
+export type { QuotaFreshness } from './models/quota-freshness';
