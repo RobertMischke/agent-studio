@@ -415,11 +415,11 @@ public sealed class TaskServerStoreTests
                 await File.WriteAllTextAsync(Path.Combine(taskDirectory, "results", "evidence.txt"), "proof");
                 await File.WriteAllTextAsync(Path.Combine(legacy.Path, "identities", "idle-runner.json"), """
                     {
-                      "id": "idle-runner",
-                      "displayName": "Idle Runner",
-                      "kind": "service",
-                      "registeredAt": "2026-07-16T09:00:00Z",
-                      "lastSeenAt": "2026-07-17T09:59:00Z"
+                      "Id": "idle-runner",
+                      "DisplayName": "Idle Runner",
+                      "Kind": "service",
+                      "RegisteredAt": "2026-07-16T09:00:00Z",
+                      "LastSeenAt": "2026-07-17T09:59:00Z"
                     }
                     """);
                 await File.WriteAllTextAsync(Path.Combine(legacy.Path, ".metadata", "attempt-authority.json"), """

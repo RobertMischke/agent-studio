@@ -206,7 +206,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
             var json = document.RootElement;
             var epoch = ReadLong(json, "authorityEpoch", 1);
             var fences = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-            if (json.TryGetProperty("lastFenceByTask", out var fenceJson))
+            if (TryGetProperty(json, "lastFenceByTask", out var fenceJson))
                 foreach (var property in fenceJson.EnumerateObject())
                     fences[property.Name.Trim().ToUpperInvariant()] = property.Value.GetInt64();
 
@@ -287,7 +287,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
 
     private static bool IsRunnerIdentity(JsonElement json)
     {
-        if (!json.TryGetProperty("kind", out var kind)) return false;
+        if (!TryGetProperty(json, "kind", out var kind)) return false;
         if (kind.ValueKind == JsonValueKind.Number)
             return kind.TryGetInt32(out var number) && number is 1 or 3 or 4;
         var value = kind.GetString()?.Replace("-", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
@@ -309,7 +309,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
 
     private static LegacyReviewAttemptImport ReadReviewAttempt(JsonElement json)
     {
-        if (!json.TryGetProperty("subject", out var subject))
+        if (!TryGetProperty(json, "subject", out var subject))
             throw new InvalidDataException("A legacy review attempt has no immutable subject.");
         return new LegacyReviewAttemptImport(
             Required(json, "attemptId"),
@@ -332,7 +332,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
                 ReadString(subject, "reviewPolicyHash") ?? "legacy",
                 ReadString(subject, "repositoryUrl"),
                 ReadString(subject, "resultRef"),
-                subject.TryGetProperty("plan", out var plan) && plan.ValueKind != JsonValueKind.Null
+                TryGetProperty(subject, "plan", out var plan) && plan.ValueKind != JsonValueKind.Null
                     ? plan.GetRawText()
                     : "{\"commands\":[],\"requiredAspects\":[]}",
                 ReadDate(subject, "createdAt") ?? DateTime.UnixEpoch));
@@ -340,7 +340,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
 
     private static LegacyLeaseImport? ReadLease(JsonElement json)
     {
-        if (!json.TryGetProperty("lease", out var lease) || lease.ValueKind == JsonValueKind.Null)
+        if (!TryGetProperty(json, "lease", out var lease) || lease.ValueKind == JsonValueKind.Null)
             return null;
         return new LegacyLeaseImport(
             Required(lease, "leaseId"),
@@ -355,7 +355,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
     }
 
     private static IEnumerable<JsonElement> ReadArray(JsonElement json, string property)
-        => json.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Array
+        => TryGetProperty(json, property, out var value) && value.ValueKind == JsonValueKind.Array
             ? value.EnumerateArray().Select(item => item.Clone())
             : [];
 
@@ -365,11 +365,11 @@ public sealed class LegacyMigrationService(TaskServerStore store)
             : throw new InvalidDataException($"Legacy authority property '{property}' is required.");
 
     private static long ReadLong(JsonElement json, string property, long fallback)
-        => json.TryGetProperty(property, out var value) && value.TryGetInt64(out var parsed) ? parsed : fallback;
+        => TryGetProperty(json, property, out var value) && value.TryGetInt64(out var parsed) ? parsed : fallback;
 
     private static string ReadState(JsonElement json)
     {
-        if (!json.TryGetProperty("state", out var value)) return "pending";
+        if (!TryGetProperty(json, "state", out var value)) return "pending";
         if (value.ValueKind == JsonValueKind.String) return value.GetString()?.ToLowerInvariant() ?? "pending";
         return value.TryGetInt32(out var number) ? number switch
         {
@@ -384,7 +384,7 @@ public sealed class LegacyMigrationService(TaskServerStore store)
 
     private static string? ReadReviewOutcome(JsonElement json)
     {
-        if (!json.TryGetProperty("outcome", out var value) || value.ValueKind == JsonValueKind.Null)
+        if (!TryGetProperty(json, "outcome", out var value) || value.ValueKind == JsonValueKind.Null)
             return null;
         if (value.ValueKind == JsonValueKind.String) return value.GetString();
         return value.TryGetInt32(out var number) ? number switch
@@ -545,7 +545,20 @@ public sealed class LegacyMigrationService(TaskServerStore store)
         => long.TryParse(taskKey.Split('-', 2).ElementAtOrDefault(1), out var value) ? value : 0;
 
     private static string? ReadString(JsonElement element, string property)
-        => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        => TryGetProperty(element, property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static bool TryGetProperty(JsonElement element, string property, out JsonElement value)
+    {
+        if (element.TryGetProperty(property, out value)) return true;
+        foreach (var candidate in element.EnumerateObject())
+        {
+            if (!string.Equals(candidate.Name, property, StringComparison.OrdinalIgnoreCase)) continue;
+            value = candidate.Value;
+            return true;
+        }
+        value = default;
+        return false;
+    }
 
     private static DateTime? ReadDate(JsonElement element, string property)
         => DateTime.TryParse(ReadString(element, property), out var value) ? value.ToUniversalTime() : null;
