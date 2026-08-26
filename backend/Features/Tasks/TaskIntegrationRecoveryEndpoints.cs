@@ -21,9 +21,7 @@ public static class TaskIntegrationRecoveryEndpoints
             ProjectSettingsService settings,
             TaskIntegrationStatusService integrationStatus,
             PipelineExecutionLog pipeline,
-            TaskMutationService mutations,
-            TaskStateMachine states,
-            TimelineLog timeline) =>
+            TaskIntegrationRecoveryService recovery) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
             var job = scanner.FindJob(jobId, watchPath);
@@ -71,87 +69,29 @@ public static class TaskIntegrationRecoveryEndpoints
                 });
             }
 
-            var subject = ReviewSubjectStore.Read(job.FolderPath);
-            if (subject is null || string.IsNullOrWhiteSpace(subject.ResultRef))
+            var result = recovery.Queue(
+                job,
+                status,
+                failure.Code,
+                TaskIntegrationRecoveryService.OperatorSource);
+            if (!result.Queued)
             {
-                return Results.Conflict(new
-                {
-                    error = "The accepted task has no fenced remote delivery ref to recover.",
-                });
+                return result.InternalError
+                    ? Results.Json(
+                        new { error = result.Error },
+                        statusCode: StatusCodes.Status500InternalServerError)
+                    : Results.Conflict(new { error = result.Error });
             }
-
-            var integrationBranch = status.IntegrationBranch;
-            var prompt =
-                $"Integration recovery for {job.Key ?? job.Id}. "
-                + $"Resume the existing delivery branch '{subject.ResultRef}' at the fenced result {subject.ResultSha}. "
-                + $"Fetch the latest '{integrationBranch}', rebase the delivery onto it, resolve every conflict without dropping the task's intended changes, "
-                + "run the relevant tests, and finish with the normal task terminal sentinel. "
-                + "Do not merge or push the integration branch yourself; publish only the updated delivery branch for a new delivery gate and review round.";
-
-            var intent = mutations.SavePendingIntent(
-                job.Id,
-                ContinueModes.Steer,
-                prompt,
-                reason: failure.Code,
-                activeJobId: null,
-                watchPath: job.WatchPath);
-            if (intent is null)
-            {
-                return Results.Conflict(new
-                {
-                    error = "The integration recovery steer intent could not be persisted.",
-                });
-            }
-
-            mutations.AppendContinuationNote(job.Id, prompt, job.WatchPath);
-            var supersession = mutations.SupersedeCurrentDeliveryOnFolder(
-                job.FolderPath,
-                TaskCommitSupersession.PendingAttempt);
-            if (!supersession.Succeeded)
-            {
-                return Results.Json(
-                    new { error = "The recovery intent was persisted, but the superseded delivery history could not be marked." },
-                    statusCode: StatusCodes.Status500InternalServerError);
-            }
-            // An operator queues the recovery round, but the ledger cause is the
-            // integration recovery it serves; the failure code is the qualifier.
-            var position = states.PromoteToReadyTop(
-                job.Id, job.WatchPath,
-                transitionCause: LaneChangeCauses.IntegrationRecovery,
-                transitionDetail: failure.Code);
-            var queued = scanner.FindJob(job.Id, job.WatchPath);
-            if (queued is null || queued.State != TaskStates.Ready)
-            {
-                return Results.Conflict(new
-                {
-                    error = "The recovery prompt was persisted, but the task could not be queued in Ready.",
-                });
-            }
-
-            timeline.Append(
-                queued.FolderPath,
-                TimelineEventKinds.IntegrationRecoveryQueued,
-                TimelineActors.System,
-                $"Integration recovery queued: rebase {subject.ResultRef} onto {integrationBranch}.",
-                details: new Dictionary<string, string>
-                {
-                    ["deliveryRef"] = subject.ResultRef,
-                    ["resultSha"] = subject.ResultSha,
-                    ["integrationBranch"] = integrationBranch,
-                    ["mode"] = ContinueModes.Steer,
-                    ["supersededCommits"] = supersession.MarkedCommits.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture),
-                });
 
             return Results.Accepted(value: new
             {
                 status = "queued",
                 mode = ContinueModes.Steer,
                 targetState = TaskStates.Ready,
-                position,
-                deliveryRef = subject.ResultRef,
-                resultSha = subject.ResultSha,
-                integrationBranch,
+                position = result.Position,
+                deliveryRef = result.DeliveryRef,
+                resultSha = result.ResultSha,
+                integrationBranch = result.IntegrationBranch,
             });
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Continue);
     }

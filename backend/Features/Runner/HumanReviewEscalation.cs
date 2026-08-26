@@ -133,6 +133,10 @@ public static class HumanReviewEscalationCategories
     /// after the retired 1b-needs-human-review lane was removed.</summary>
     public const string HumanDecisionNeeded = "human-decision-needed";
 
+    /// <summary>The deterministic integration recovery rail exhausted its
+    /// configured conflict-requeue budget.</summary>
+    public const string IntegrationRecoveryExhausted = "integration-recovery-exhausted";
+
     /// <summary>An unanswered steer / NeedsInput question timed out (Run-Liveness
     /// Slice B, concept Rule 2) and the answer was not derivable from the task
     /// context. Routed to 5e-escalated with a clear reason instead of waiting

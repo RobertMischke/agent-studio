@@ -4,7 +4,7 @@ namespace AgentStudio.Tasks;
 
 /// <summary>
 /// AGT-2202 - computes the honest, git-derived integration verdict for delivered
-/// cards (4-auto-review / 5-human-review / 6-completed / 7-archive): is the task's
+/// cards (4-auto-review / 5-human-review / 5e-escalated / 6-completed / 7-archive): is the task's
 /// work actually folded into the integration branch (develop)? The result is attached to
 /// <see cref="TaskInfo.Integration"/> so the board renders a single, unambiguous
 /// "integrated / not integrated / conflict / no branch" badge on every delivered
@@ -61,6 +61,7 @@ public sealed class TaskIntegrationStatusService
     internal static readonly HashSet<string> DeliveredLanes = new(StringComparer.Ordinal)
     {
         TaskStates.AutoReview,
+        TaskStates.Escalated,
         TaskStates.HumanReview,
         TaskStates.Completed,
         TaskStates.Archive,

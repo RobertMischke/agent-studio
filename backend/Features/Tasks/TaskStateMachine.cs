@@ -342,7 +342,8 @@ public class TaskStateMachine
         string? watchPath = null,
         string? cause = null,
         string? transitionCause = null,
-        string? transitionDetail = null)
+        string? transitionDetail = null,
+        string? expectedSourceState = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return 0;
@@ -350,6 +351,7 @@ public class TaskStateMachine
         if (info.State != TaskStates.Ready)
         {
             var moved = MoveJob(jobId, TaskStates.Ready, watchPath, cause,
+                expectedSourceState: expectedSourceState,
                 transitionCause: transitionCause, transitionDetail: transitionDetail);
             if (moved.Status != MoveJobStatus.Success) return 0;
         }
