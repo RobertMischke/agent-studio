@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Operating an Autonomous Fleet</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f0f4fa;
+      --surface-strong: #e8eef7;
+      --text: #172033;
+      --muted: #5a6578;
+      --faint: #798397;
+      --line: #d7deea;
+      --line-strong: #bac5d5;
+      --link: #1559b7;
+      --blue: #1d66d2;
+      --blue-soft: #e8f1ff;
+      --green: #177245;
+      --green-soft: #e6f5ed;
+      --amber: #8a5200;
+      --amber-soft: #fff2d9;
+      --red: #a33131;
+      --red-soft: #fdecec;
+      --violet: #6551a6;
+      --violet-soft: #f0ecff;
+      --shadow: 0 18px 48px rgba(30, 49, 78, 0.09);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1420;
+        --surface: #141d2b;
+        --surface-soft: #192536;
+        --surface-strong: #213149;
+        --text: #e8edf5;
+        --muted: #a8b3c5;
+        --faint: #8290a6;
+        --line: #2b3a50;
+        --line-strong: #41536d;
+        --link: #8dbdff;
+        --blue: #76adfa;
+        --blue-soft: #172b47;
+        --green: #76d2a4;
+        --green-soft: #183529;
+        --amber: #f0bd66;
+        --amber-soft: #3c2d16;
+        --red: #f19a9a;
+        --red-soft: #402326;
+        --violet: #c1b3f5;
+        --violet-soft: #2b2547;
+        --shadow: 0 20px 56px rgba(0, 0, 0, 0.28);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.65 var(--sans);
+    }
+    a { color: var(--link); text-underline-offset: 3px; }
+    a:hover { text-decoration-thickness: 2px; }
+    a:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 3px; }
+    code {
+      padding: 0.08rem 0.32rem;
+      border-radius: 4px;
+      background: var(--surface-strong);
+      font: 0.88em/1.5 var(--mono);
+    }
+    pre {
+      margin: 1rem 0;
+      padding: 1rem;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-soft);
+      color: var(--text);
+      font: 12.5px/1.6 var(--mono);
+    }
+    pre code { padding: 0; background: transparent; font: inherit; }
+    strong { font-weight: 500; }
+    h1, h2, h3, h4 { line-height: 1.2; font-weight: 500; letter-spacing: -0.018em; }
+    h1 { max-width: 900px; margin: 0.4rem 0 0.8rem; font-size: clamp(2rem, 5vw, 3.7rem); }
+    h2 { margin: 0 0 1rem; font-size: clamp(1.45rem, 3vw, 2rem); }
+    h3 { margin: 0 0 0.55rem; font-size: 1.08rem; }
+    h4 { margin: 0 0 0.35rem; font-size: 0.98rem; }
+    p { margin: 0.55rem 0 0.95rem; }
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: 0.35rem; }
+
+    .page { width: min(100%, 1320px); margin: 0 auto; padding: 24px clamp(16px, 4vw, 52px) 88px; }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(26px, 6vw, 64px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 92% 12%, color-mix(in srgb, var(--blue) 17%, transparent) 0, transparent 36%),
+        linear-gradient(145deg, var(--surface), var(--surface-soft));
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0;
+      color: var(--blue);
+      font: 500 0.76rem/1.2 var(--mono);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .lede { max-width: 880px; margin-bottom: 1.3rem; color: var(--muted); font-size: 1.08rem; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
+    .dot.green { background: var(--green); }
+    .dot.amber { background: var(--amber); }
+    .dot.red { background: var(--red); }
+
+    .toc {
+      margin: 22px 0 0;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .toc strong { display: block; margin-bottom: 8px; }
+    .toc-links { display: flex; flex-wrap: wrap; gap: 7px 16px; }
+    .toc a { font-size: 0.88rem; text-decoration: none; }
+
+    main > section { padding: clamp(34px, 6vw, 68px) 0; border-bottom: 1px solid var(--line); }
+    .section-head { max-width: 900px; margin-bottom: 1.25rem; }
+    .section-head > p:last-child { color: var(--muted); }
+    .grid { display: grid; gap: 14px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .tint-blue { background: var(--blue-soft); }
+    .tint-green { background: var(--green-soft); }
+    .tint-amber { background: var(--amber-soft); }
+    .tint-red { background: var(--red-soft); }
+    .tint-violet { background: var(--violet-soft); }
+    .label {
+      display: inline-block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font: 500 0.72rem/1.2 var(--mono);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+    .big-number { display: block; margin: 0.12rem 0 0.3rem; font-size: 2.15rem; line-height: 1; font-weight: 500; }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.84rem; }
+    .principle {
+      margin: 18px 0;
+      padding: 18px 20px;
+      border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--line));
+      border-radius: 16px;
+      background: var(--blue-soft);
+    }
+    .principle p:last-child { margin-bottom: 0; }
+
+    .stacked {
+      display: grid;
+      grid-template-columns: 18fr 1fr 5fr;
+      min-height: 54px;
+      margin: 18px 0 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .stacked > div { display: grid; place-items: center; padding: 8px; text-align: center; font-size: 0.8rem; }
+    .stacked .build { background: var(--red-soft); }
+    .stacked .completion { background: var(--violet-soft); }
+    .stacked .other { background: var(--amber-soft); }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 0.82rem; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      margin: 18px 0;
+    }
+    .flow-step {
+      position: relative;
+      min-height: 116px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 43%;
+      right: -16px;
+      z-index: 2;
+      width: 20px;
+      color: var(--faint);
+      text-align: center;
+    }
+    .flow-step b { display: block; margin-bottom: 5px; font-weight: 500; }
+    .flow-step span { color: var(--muted); font-size: 0.82rem; }
+
+    .substrate {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 10px 0 0;
+    }
+    .substrate .bar {
+      padding: 12px 14px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 12px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+    .substrate .bar strong { color: var(--text); }
+
+    .glossary dt { margin-bottom: 0.35rem; font-weight: 500; }
+    .glossary dd { margin: 0; color: var(--muted); }
+    .glossary .card { min-height: 150px; }
+
+    .layer {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr) 230px;
+      align-items: center;
+      gap: 18px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .layer:last-child { border-bottom: 0; }
+    .layer-name { font-weight: 500; }
+    .layer-copy { color: var(--muted); }
+    .layer-outcome { padding: 9px 11px; border-radius: 10px; background: var(--surface-soft); font-size: 0.82rem; }
+
+    table { width: 100%; margin: 16px 0; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { padding: 11px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--surface-strong); font-weight: 500; }
+    tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-soft) 55%, transparent); }
+    .table-wrap { overflow-x: auto; border-radius: 12px; }
+
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { position: relative; padding-left: 28px; }
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 0.02rem;
+      display: grid;
+      place-items: center;
+      width: 19px;
+      height: 19px;
+      border-radius: 50%;
+      background: var(--green-soft);
+      color: var(--green);
+      font-size: 0.72rem;
+    }
+    .anti li::before { content: "×"; background: var(--red-soft); color: var(--red); }
+
+    .state-strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+    .state {
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.82rem;
+    }
+    .arrow { color: var(--faint); }
+
+    .xref { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+    .xref a {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      text-decoration: none;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .xref a:hover { border-color: var(--blue); }
+    .xref .k { color: var(--muted); font: 500 0.72rem/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
+
+    footer { padding-top: 34px; color: var(--muted); font-size: 0.85rem; }
+
+    @media (max-width: 1040px) {
+      .grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .flow-step:nth-child(3)::after { display: none; }
+    }
+    @media (max-width: 720px) {
+      .page { padding: 12px 14px 64px; }
+      .hero { padding: 24px 18px; border-radius: 18px; }
+      .grid.two, .grid.three, .grid.four { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .flow-step { min-height: auto; }
+      .flow-step:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -18px; }
+      .flow-step:nth-child(3)::after { display: block; }
+      .substrate { grid-template-columns: 1fr; }
+      .layer { grid-template-columns: 1fr; gap: 6px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      body { background: #fff; color: #111; }
+      .page { width: 100%; padding: 0; }
+      .hero, .card, .toc { box-shadow: none; break-inside: avoid; }
+      a { color: #111; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <p class="eyebrow">Working concept · 2026-08-27</p>
+    <h1>Operating an Autonomous Fleet</h1>
+    <p class="lede">A self-running fleet of coding agents does not fail loudly. There is no exception on
+    a screen, no paged operator, no user who complains — there is only a feed that stops moving. This is
+    the engineering account of eleven ways such a system stalled in production over two weeks, what each
+    one actually was underneath the identical symptom, and the small set of principles that turn a quiet
+    stall into a visible, self-healing event.</p>
+    <div class="chips" aria-label="Document status">
+      <span class="chip"><span class="dot green"></span>Field-grounded postmortem synthesis</span>
+      <span class="chip"><span class="dot"></span>Mechanisms, not incident log</span>
+      <span class="chip"><span class="dot amber"></span>Several hardenings still landing</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <strong>Contents</strong>
+    <div class="toc-links">
+      <a href="#problem">1. The quiet-failure problem</a>
+      <a href="#loop">2. The control loop</a>
+      <a href="#families">3. Failure families</a>
+      <a href="#measurement">4. Why quiet fools you</a>
+      <a href="#principles">5. Resilience principles</a>
+      <a href="#links">6. Where this leads</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="problem">
+      <div class="section-head">
+        <p class="eyebrow">1 · The quiet-failure problem</p>
+        <h2>Six unrelated faults arrived under one sentence: “it looks stalled”</h2>
+        <p>When a person runs the pipeline, faults announce themselves: a red test, a stack trace, an
+        angry ticket. When the pipeline runs itself, the failure surface collapses. The board keeps
+        rendering the last known state, the queue keeps its last depth, and the only signal is the
+        <em>absence</em> of new events. Over a two-week window, at least six causally distinct faults
+        produced the same operator observation — “the system appears stalled” — and each one needed a
+        different fix.</p>
+      </div>
+
+      <div class="grid three">
+        <article class="card tint-red">
+          <span class="label">The trap</span>
+          <h3>Absence is not an event</h3>
+          <p>Monitoring built around things that happen cannot see a thing that stopped happening. A dead
+          control loop emits nothing, and nothing is exactly what the dashboard was built to ignore.</p>
+        </article>
+        <article class="card tint-amber">
+          <span class="label">The amplifier</span>
+          <h3>One shared resource, whole-fleet blast radius</h3>
+          <p>A shared account, a single-reader queue, a roaming control host — each turns a local defect
+          into a fleet outage, because every worker depends on the one thing that broke.</p>
+        </article>
+        <article class="card tint-blue">
+          <span class="label">The work</span>
+          <h3>Resilience is making the quiet visible</h3>
+          <p>Most of these fixes are not clever recoveries. They are the far duller act of surfacing a
+          state that was already true: a closed gate, a paused breaker, a stale binary.</p>
+        </article>
+      </div>
+
+      <div class="principle">
+        <strong>The recurring shape.</strong>
+        <p>Nearly every fix in this document is one of two moves. Either <strong>make the quiet
+        visible</strong> — give the closed gate a reason, the paused breaker a cause, the delivered card
+        an honest live-check — or <strong>take the mover out of the session</strong> — move the logic
+        that advances work off an ephemeral process and onto the platform, where it cannot die when a
+        terminal closes.</p>
+      </div>
+    </section>
+
+    <section id="loop">
+      <div class="section-head">
+        <p class="eyebrow">2 · The control loop</p>
+        <h2>A card travels a loop, and it can stall at any station</h2>
+        <p>The fleet runs a closed loop. A coding run <strong>delivers</strong> a commit; a
+        <strong>gate</strong> builds and tests it; a <strong>review</strong> judges it; an
+        <strong>integrate</strong> step merges it; an <strong>accept</strong> step closes the card. A
+        separate <strong>deploy</strong> makes the result live — integration is not deployment. Beneath
+        the loop sit two load-bearing layers: the <strong>control plane</strong> that connects the
+        orchestrator to the execution host, and the <strong>substrate</strong> of processes, shims,
+        accounts, and the operating system underneath.</p>
+      </div>
+
+      <div class="flow" aria-label="Control loop: deliver, gate, review, integrate, accept, deploy">
+        <div class="flow-step tint-green"><b>Deliver</b><span>Agent edits a worktree; the platform commits and fences the result.</span></div>
+        <div class="flow-step"><b>Gate</b><span>Build and test against the integration head; a build-profile gate fails closed.</span></div>
+        <div class="flow-step"><b>Review</b><span>Named aspects and a grade; a single-reader queue feeds the reviewers.</span></div>
+        <div class="flow-step"><b>Integrate</b><span>Merge into the integration branch; git ancestry, not a badge, decides.</span></div>
+        <div class="flow-step"><b>Accept</b><span>An acceptance rail advances integrated cards; humans read verdicts.</span></div>
+        <div class="flow-step tint-amber"><b>Deploy</b><span>A separate release. Only here does “integrated” become “live”.</span></div>
+      </div>
+
+      <div class="substrate">
+        <div class="bar"><strong>Control plane.</strong> A reverse tunnel from the orchestrator host to
+        the execution host, plus the session cron and supervision that keep the loop ticking. If the
+        host sleeps or roams, the tunnel dies and both planes stall silently.</div>
+        <div class="bar"><strong>Substrate.</strong> The long-lived API process, the CLI shims agents
+        are launched through, the shared provider account they all authenticate with, and the operating
+        system whose path limits and missing files surface as “environmental” flakes.</div>
+      </div>
+
+      <p class="muted small">Every failure family below strikes at exactly one station or one substrate
+      layer. Locating the strike is most of the diagnosis; the symptom, being always the same, tells you
+      almost nothing.</p>
+    </section>
+
+    <section id="families">
+      <div class="section-head">
+        <p class="eyebrow">3 · Failure families</p>
+        <h2>Eleven faults, seven families</h2>
+        <p>Grouped by mechanism rather than by symptom. The card identifiers and host specifics live in
+        the internal dossier; what travels here are the mechanisms and the lessons.</p>
+      </div>
+
+      <h3 style="margin-top:0.5rem;">3.1 · Control-plane liveness</h3>
+      <div class="grid three">
+        <article class="card">
+          <span class="label">Roaming control host</span>
+          <h3>A laptop that sleeps is not a control plane</h3>
+          <p>The orchestrator ran on a roaming Wi-Fi laptop. Every sleep, network roam, or update reboot
+          tore the reverse tunnel, and both planes stalled until a human healed it — repeatedly, once for
+          eleven hours. Three amplifiers hid the cause: a scheduled task barred from running on battery,
+          an unguarded remote call that turned a failed connect into a <em>silent script death</em>, and
+          a cleanup step that was a no-op because it lacked privilege.</p>
+        </article>
+        <article class="card">
+          <span class="label">Restart discipline</span>
+          <h3>Quiet mistaken for dead, then killed</h3>
+          <p>The orchestrator measured liveness in thirty-second windows and restarted eagerly. A normal
+          quiet spell read as a stall; the restart then killed planes that still held live workers,
+          orphaning their work into lease-recovery requeues. Lease recovery alone accounted for the
+          large majority of a month's backward card moves.</p>
+        </article>
+        <article class="card">
+          <span class="label">Process replacement</span>
+          <h3>A restart that never replaced the process</h3>
+          <p>The restart command's stop step missed the listener, so the old process kept serving.
+          Config patches and full rollouts were hollow: a stale process from hours earlier answered
+          every request, and once even held a lock that failed the next build while still serving. Fixes
+          looked applied and were not live.</p>
+        </article>
+      </div>
+      <div class="principle">
+        <strong>The lesson under all three.</strong>
+        <p>Liveness of the control plane is a first-class concern, not an assumption. Guard every remote
+        call so a failure logs and retries instead of dying silently; never restart a plane without
+        proof of silence — no claims <em>and</em> no live workers; and after every restart, assert a
+        <em>new</em> process start time rather than trusting the command's exit code.</p>
+      </div>
+
+      <h3>3.2 · Session-bound control loops</h3>
+      <div class="grid two">
+        <article class="card tint-violet">
+          <span class="label">Acceptance</span>
+          <h3>The mover died with the terminal</h3>
+          <p>The loop that accepts integrated cards and requeues skipped ones was bound to an ephemeral
+          session and died with it every night. The band-aid — recreating the cron each session — failed
+          nightly. The runner itself was healthy; work piled up only in the human-review lane, thirty-plus
+          cards deep, because nothing was moving them out. One manual tick cleared the entire backlog in a
+          single pass.</p>
+        </article>
+        <article class="card tint-violet">
+          <span class="label">Supervision</span>
+          <h3>Observer, not mover</h3>
+          <p>The durable fix is an always-on platform service: it auto-accepts integrated cards, requeues
+          conflict-skipped ones with bounded retry and escalation, and respects operator holds. The
+          session orchestrator is demoted to an observer. A supervision loop, also platform-side, kills
+          wedged workers and heals the tunnel and leases between ticks.</p>
+        </article>
+      </div>
+
+      <h3>3.3 · Queue liveness and unbounded retry</h3>
+      <div class="grid two">
+        <article class="card">
+          <span class="label">Wedged workers</span>
+          <h3>A single reader with no watchdog</h3>
+          <p>For two hours, every review run returned zero operations and zero tokens — the reviewer CLI
+          never attached — and the cancelled runs wedged a single-reader queue that had no watchdog and
+          no run reclaim. One stuck reader starves the whole review plane. The deterministic layer beside
+          it stayed trustworthy; the failure was purely in attach-and-reclaim.</p>
+        </article>
+        <article class="card">
+          <span class="label">Unbounded retry</span>
+          <h3>A card whose scope exceeds any delivery</h3>
+          <p>A queue of cards asked an agent to “implement all recommendations,” but one delivery carries
+          one slice. Build and test passed every time; the requirement-fit aspect blocked every time,
+          because the stated scope structurally exceeds a single deliverable. The result was an infinite
+          carousel — block, requeue, re-code, same block — that kept post-processing full while the
+          review plane itself was perfectly healthy.</p>
+        </article>
+      </div>
+      <div class="principle">
+        <strong>Two rules fall out.</strong>
+        <p>Any single-reader queue needs a watchdog and a reclaim path, or one wedged run is a plane
+        outage. And every automatic retry must be bounded and must escalate: the same aspect blocking N
+        rounds in a row is not a coding problem to retry, it is a scoping problem to route to a human —
+        and open-ended cards must be cut one slice per card in the first place.</p>
+      </div>
+
+      <h3>3.4 · Shared-resource single points of failure</h3>
+      <div class="card tint-red">
+        <span class="label">Shared provider account</span>
+        <h3>One account limit, every card fails, and failures escalate</h3>
+        <p>The fleet's agents all authenticated through a single provider account. When that account hit
+        its usage limit overnight, every agent card failed at once — and because failures escalate, a
+        limit became an escalation storm of dozens of cards by morning, with zero successful claims for
+        nine hours. Worse, the circuit breaker then paused with an <em>empty</em> halt reason and did not
+        resume when the limit reset. The systemic fix is limit-aware behavior: detect an account-level
+        limit, pause claims with a visible “waiting on quota” banner instead of failing and escalating,
+        and auto-resume at reset — and make every breaker pause carry a human-readable reason.</p>
+      </div>
+
+      <h3>3.5 · Integration is not deployment</h3>
+      <div class="grid two">
+        <article class="card tint-amber">
+          <span class="label">Delivered but absent</span>
+          <h3>A green card over a stale binary</h3>
+          <p>A fix was integrated days earlier, yet its symptom returned in production — because the
+          execution host still ran a binary from two weeks before. A verification sweep of eight recent
+          “deliveries” found half were not live at all: some were merged but never deployed, some were
+          conflict-skipped yet reported as delivered, some were still only proposals. “Delivered” was
+          measuring the wrong thing.</p>
+        </article>
+        <article class="card tint-amber">
+          <span class="label">Silent gate closure</span>
+          <h3>A five-day starvation with no banner</h3>
+          <p>An edit to a project's build profile reset its status, which quietly closed the auto-pickup
+          gate for every card in that project. For five days the cards sat queued with no rejection
+          reason and no banner; nothing surfaced why. The local validation could never pass because it
+          ran in a workspace without the project's sources, even though the profile was proven on the
+          host that actually runs it.</p>
+        </article>
+      </div>
+      <div class="principle">
+        <strong>The distinction the board must hold.</strong>
+        <p>A card's live state is a fact about the running system, not a lane color or a prose claim.
+        Recompute “delivered” from what is actually deployed; when a fix touches host-side code, a deploy
+        is due before it counts. And a gate that closes must say so — with a reason, surfaced — and must
+        validate where the work actually runs, not in a workspace that structurally cannot pass.</p>
+      </div>
+
+      <h3>3.6 · Platform defects disguised as flakes</h3>
+      <div class="card">
+        <span class="label">“Environmental” failures</span>
+        <h3>Six flaky tests were six real platform bugs</h3>
+        <p>A flaky-test hunt found that every one of six “environmental” failures was a genuine product
+        defect on one operating system: a path-length limit emptied review subjects; a database
+        connection pool held a file open so backups silently failed; an atomic file writer's two-rename
+        window dropped writes under concurrent readers; a review admission gate required a file that does
+        not exist on that OS, so it never opened at all. Each had been dismissed as noise for weeks. Made
+        honest, the suite settled at a stable, near-green number.</p>
+        <p class="muted small">The lesson is discipline, not cleverness: a test that fails only on one
+        platform is a claim about that platform, and “flaky” is a hypothesis to disprove, not a
+        diagnosis to file under.</p>
+      </div>
+
+      <h3>3.7 · Runtime self-healing</h3>
+      <div class="card">
+        <span class="label">Vanishing tooling</span>
+        <h3>The agent CLI left the path — twice</h3>
+        <p>The command-line tool agents are launched through disappeared from the path a second time: an
+        auto-update removed its executable shims while leaving the package installed. Both times a
+        reinstall healed it. The durable answer is a runtime that detects its own missing shims, repairs
+        them within a bounded budget, and makes the repair visible — a small instance of the same theme,
+        applied to the toolchain the fleet stands on.</p>
+      </div>
+    </section>
+
+    <section id="measurement">
+      <div class="section-head">
+        <p class="eyebrow">4 · Why quiet fools you</p>
+        <h2>The measurement, not the machinery, is usually wrong</h2>
+        <p>In most of these incidents the machinery was fine and the <em>observation</em> of it was
+        broken. The window was too short, the reason field was empty, the badge lied. Three layers of
+        truth were being conflated, and separating them is what makes an autonomous system legible.</p>
+      </div>
+
+      <div class="card">
+        <div class="layer">
+          <div class="layer-name">Hard facts</div>
+          <div class="layer-copy">Process start time, claim counts, live worker presence, deployed
+          binary hash, gate status, breaker mode. Machine-observable, unambiguous, and the only sound
+          basis for a restart-or-wait decision.</div>
+          <div class="layer-outcome">Observed, never inferred</div>
+        </div>
+        <div class="layer">
+          <div class="layer-name">Interpretation</div>
+          <div class="layer-copy">Whether a quiet spell means a stall, whether a blocked aspect means bad
+          code or bad scope, whether a limit is transient or terminal. Judgment over a window wide enough
+          to be honest — fifteen minutes of proven silence, not thirty seconds.</div>
+          <div class="layer-outcome">Bounded, and it escalates</div>
+        </div>
+        <div class="layer">
+          <div class="layer-name">Human decision</div>
+          <div class="layer-copy">Product acceptance, whether to override, when a repeated same-aspect
+          block should stop retrying and reach a person. The loop advances work on its own but hands off
+          the decisions it should not make.</div>
+          <div class="layer-outcome">Reached, not silently absorbed</div>
+        </div>
+      </div>
+
+      <div class="grid two" style="margin-top:14px;">
+        <article class="card tint-red">
+          <span class="label">What made the quiet dangerous</span>
+          <ul class="checklist anti">
+            <li>A closed auto-pickup gate with a null rejection reason.</li>
+            <li>A circuit breaker paused with an empty halt reason and no auto-resume.</li>
+            <li>A thirty-second window that read normal quiet as death.</li>
+            <li>A “delivered” badge computed from a lane, not from what is deployed.</li>
+            <li>A cron whose life was tied to a terminal that closed nightly.</li>
+          </ul>
+        </article>
+        <article class="card tint-green">
+          <span class="label">What made it visible</span>
+          <ul class="checklist">
+            <li>Every gate closure and breaker pause carries a surfaced reason.</li>
+            <li>Restart decisions read hard facts: claims, live workers, aged pendings.</li>
+            <li>“Delivered” is recomputed from the deployed system, cross-checked live.</li>
+            <li>The mover is a platform service; the session only observes.</li>
+            <li>Retries are bounded and the same-aspect block escalates to a human.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="principles">
+      <div class="section-head">
+        <p class="eyebrow">5 · Resilience principles</p>
+        <h2>Seven rules that survived the two weeks</h2>
+        <p>Each is cheap to state and was expensive to learn. Together they describe an autonomous system
+        that fails loudly enough to be caught and heals often enough not to need catching.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Principle</th><th>What it prevents</th><th>Concretely</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Make the quiet visible</strong></td>
+              <td>Silent starvation; empty halt reasons</td>
+              <td>Every closed gate and paused breaker carries a surfaced, human-readable reason.</td>
+            </tr>
+            <tr>
+              <td><strong>Move the mover off the session</strong></td>
+              <td>Nightly loop death</td>
+              <td>Acceptance, requeue, and supervision run as an always-on platform service; the session observes.</td>
+            </tr>
+            <tr>
+              <td><strong>Bound every retry, then escalate</strong></td>
+              <td>Infinite carousels; escalation storms</td>
+              <td>The same aspect blocking N rounds routes to a human instead of re-coding forever.</td>
+            </tr>
+            <tr>
+              <td><strong>No restart without proven silence</strong></td>
+              <td>Killing live in-flight work</td>
+              <td>Fifteen minutes of no claims and no live workers, and compare release trees before theorizing topology.</td>
+            </tr>
+            <tr>
+              <td><strong>A shared resource is a single point of failure</strong></td>
+              <td>Whole-fleet outage from one limit</td>
+              <td>Detect account-level limits; pause with quota-wait instead of failing and escalating.</td>
+            </tr>
+            <tr>
+              <td><strong>Validate where it runs</strong></td>
+              <td>Gates that can never pass locally</td>
+              <td>A profile proven on the execution host must not be blocked by a source-less local dry run.</td>
+            </tr>
+            <tr>
+              <td><strong>Integration is not deployment</strong></td>
+              <td>“Delivered” lies</td>
+              <td>Recompute live state from what is deployed; a host-side fix owes a deploy before it counts.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="principle">
+        <strong>The single sentence.</strong>
+        <p>An autonomous fleet is not made reliable by never failing — it fails constantly and in
+        mundane ways. It is made reliable by refusing to fail <em>quietly</em>: by giving every stall a
+        surfaced cause and every recovery a path that does not depend on a human noticing that nothing is
+        happening.</p>
+      </div>
+    </section>
+
+    <section id="links">
+      <div class="section-head">
+        <p class="eyebrow">6 · Where this leads</p>
+        <h2>The full catalog and the public thesis</h2>
+        <p>The internal dossier holds all eleven classes with dates, card identifiers, and the exact code
+        fixes; the website carries the compact thesis for a general reader.</p>
+      </div>
+      <div class="xref">
+        <a href="../operations/operational-resilience/index.html">
+          <span class="k">Internal dossier</span>
+          <span>Operative Resilienz — eleven classes, symptom → cause → fix, with cards</span>
+        </a>
+        <a href="https://agent-orchestrator.dev/operating-an-autonomous-fleet/" rel="noopener">
+          <span class="k">Website ↗</span>
+          <span>Autonomous fleets fail quietly — the public thesis</span>
+        </a>
+      </div>
+    </section>
+
+    <footer>
+      <p>Agent Orchestrator · operational-resilience synthesis. The mechanisms are general; the operator
+      specifics and card-level detail live in the internal dossier.</p>
+    </footer>
+  </main>
+</div>
+</body>
+</html>
