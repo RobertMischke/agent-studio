@@ -17,6 +17,12 @@ public static class CliEndpoints
 
         cliGroup.MapGet("/types", () => Results.Ok(CliTypes.All));
 
+        // Lightweight local-host capability note. The background and pre-spawn
+        // probes share this repair coordinator, so the UI sees the same durable
+        // success/failure verdict that controls execution admission.
+        cliGroup.MapGet("/local-capabilities", (LocalCliRepairService repairs) =>
+            Results.Ok(repairs.Snapshot()));
+
         // Per-CLI completion contract: how each backend signals turn
         // completion (native frame -> typed CliRunEvent). Static, derived
         // from the live adapter mappings; the Admin/CLI page renders it so

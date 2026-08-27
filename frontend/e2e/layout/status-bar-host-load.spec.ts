@@ -383,4 +383,40 @@ test.describe('Status bar execution-host load companion signal', () => {
       fullPage: false,
     });
   });
+
+  test('shows a calm repaired note and reserves the alarm for repair failure', async ({ page }) => {
+    await stubHostLoad(page, 0, 0, 0, 0.4);
+    await page.route('**/api/cli/local-capabilities', json({
+      at: '2026-08-18T09:01:00Z',
+      latestRepair: {
+        detectedAt: '2026-08-18T09:00:00Z',
+        completedAt: '2026-08-18T09:01:00Z',
+        cliType: 'claude',
+        packageName: '@anthropic-ai/claude-code',
+        installState: 'missing-shim-package-present',
+        outcome: 'repaired',
+        cliVersionBefore: '2.1.231',
+        cliVersionAfter: '2.1.234',
+        detail: 'Reinstalled @anthropic-ai/claude-code and restored the claude shim.',
+      },
+      activeFailure: null,
+      journalPath: 'C:/agent-taskboard/logs/cli-repairs.jsonl',
+    }));
+    await page.goto('/');
+
+    const note = page.getByTestId('status-bar-cli-repair');
+    await expect(note).toContainText('CLI repaired at');
+    await expect(note.getByTestId('status-bar-cli-repair-warning')).toHaveCount(0);
+    await note.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('2.1.231 → 2.1.234');
+
+    await setTheme(page, 'dark');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-cli-repaired-dark--mocked.png'),
+    });
+    await setTheme(page, 'light');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-cli-repaired-light--mocked.png'),
+    });
+  });
 });

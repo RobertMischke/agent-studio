@@ -14,6 +14,8 @@ export type {
   CliUsageProjectGroup,
   CliUsageSection,
   CliUsageReport,
+  LocalCliRepairEvent,
+  LocalCliRepairSnapshot,
   CliSessionDetail,
   CliSessionDeleteResult,
   LinkedJobRef,

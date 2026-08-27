@@ -18,8 +18,8 @@
     <span>{{ label() }}</span>
     @if (warning()) {
       <span class="statusbar__warning"
-            [attr.data-testid]="testid() ? testid() + '-divergence' : null"
-            aria-label="Running sources disagree">
+            [attr.data-testid]="testid() ? testid() + '-' + warningTestidSuffix() : null"
+            [attr.aria-label]="warningAriaLabel()">
         <app-studio-icon name="warn" [size]="10"></app-studio-icon>
       </span>
     }
@@ -41,8 +41,8 @@
     <span>{{ label() }}</span>
     @if (warning()) {
       <span class="statusbar__warning"
-            [attr.data-testid]="testid() ? testid() + '-divergence' : null"
-            aria-label="Running sources disagree">
+            [attr.data-testid]="testid() ? testid() + '-' + warningTestidSuffix() : null"
+            [attr.aria-label]="warningAriaLabel()">
         <app-studio-icon name="warn" [size]="10"></app-studio-icon>
       </span>
     }

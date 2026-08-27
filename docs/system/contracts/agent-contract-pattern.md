@@ -142,7 +142,7 @@ Three rules apply to every decider:
 
 | Command id | Effect |
 |---|---|
-| `check-cli-shims` | Run [`tools/check-cli-shims.sh`](../../../tools/check-cli-shims.sh) to repair half-installed npm shims and orphaned postinstall stubs. Idempotent. |
+| `check-cli-shims` | Run [`tools/check-cli-shims.sh`](../../../tools/check-cli-shims.sh) to repair half-installed npm shims and orphaned postinstall stubs. Idempotent. Local capability probing also repairs the narrower package-present/shim-missing Claude or Codex state through one bounded `npm install -g` attempt per hour. |
 | `git-fetch-and-prune` | `git fetch --prune` against `origin` in the workspace root. No working-tree mutation. |
 | `restart-cli-quota-probe` | Bounce the in-process `QuotaService` so a failing-then-fixed CLI is observed sooner. |
 
@@ -263,7 +263,7 @@ If any guard fires, the runner writes a `pickup-diagnosis-skipped` banner and st
 }
 ```
 
-**Decider.** Category `infra-cli-broken` always halts the pipeline, regardless of `proposedAction` or `confidence`. The decider also notes that `check-cli-shims` is allow-listed, so the dispatcher may run it before raising the banner — but only the decider, not the agent, decides whether to run it. The action that ships:
+**Decider.** Category `infra-cli-broken` always halts the pipeline, regardless of `proposedAction` or `confidence`. Before this category is raised, local capability probing may repair the narrowly classified package-present/shim-missing state. A successful repair is journalled and does not raise the category. A truly absent package remains unavailable without an implicit install. A failed bounded repair raises the alarm and enters this existing halt path. The decider also notes that `check-cli-shims` is allow-listed, so the dispatcher may run it before raising the banner, but only the decider, not the agent, decides whether to run it. The action that ships:
 
 - Set the project's runner mode to `manual`.
 - Write a high-severity banner to `<workspace>/logs/banners/pickup-infra-halt-<utc>.json`.

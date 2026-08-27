@@ -14,6 +14,13 @@ public interface ICliExecutionService
     string GetCliPath();
     bool IsAvailable();
     (bool Available, string? Version, string Path) TestCliPath(string? path = null);
+    Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+    {
+        var probe = TestCliPath();
+        return Task.FromResult(probe.Available
+            ? (true, (string?)null)
+            : (false, $"--version probe failed at '{probe.Path}'"));
+    }
 
     Task<(CliExecution? Execution, string? Error)> StartAsync(
         string jobId,

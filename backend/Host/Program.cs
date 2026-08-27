@@ -394,6 +394,7 @@ builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccessHost>(sp =>
 builder.Services.AddSingleton<CliEnvironment>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
 builder.Services.AddSingleton<ClaudeModelDiscovery>();
+builder.Services.AddSingleton<LocalCliRepairService>();
 // The per-CLI execution engines: one concrete GenericCliExecutionService per
 // CLI, parameterized by a CliBehavior from BuiltInCliBehaviors. Keyed by CLI
 // type so the router + the Claude-specific consumers (orchestrator runner,
@@ -405,14 +406,16 @@ builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Claude, 
         sp.GetRequiredService<IConfiguration>(),
         sp.GetService<CliUsageParserRegistry>(),
         sp.GetService<ICliModelRegistry>(),
-        sp.GetService<ClaudeModelDiscovery>()));
+        sp.GetService<ClaudeModelDiscovery>(),
+        sp.GetRequiredService<LocalCliRepairService>()));
 builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Codex, (sp, _) =>
     GenericCliExecutionService.ForCodex(
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.CodexCliService"),
         sp.GetRequiredService<IConfiguration>(),
         sp.GetRequiredService<CodexModelDiscovery>(),
         sp.GetRequiredService<CliUsageParserRegistry>(),
-        sp.GetRequiredService<ICliModelRegistry>()));
+        sp.GetRequiredService<ICliModelRegistry>(),
+        sp.GetRequiredService<LocalCliRepairService>()));
 builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Gemini, (sp, _) =>
     GenericCliExecutionService.ForAntigravity(
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.AntigravityCliService"),
@@ -423,6 +426,8 @@ builder.Services.AddSingleton<CliRouter>(sp => new CliRouter(
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude),
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Codex),
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Gemini)));
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService<LocalCliCapabilityMonitor>();
 builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();

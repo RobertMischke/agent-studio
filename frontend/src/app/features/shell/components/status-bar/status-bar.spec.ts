@@ -60,4 +60,37 @@ describe('StatusBarComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('surfaces a successful local CLI repair without an alarm', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StatusBarComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StatusBarComponent);
+    fixture.componentInstance.localCliRepair.set({
+      at: '2026-08-18T09:01:00Z',
+      latestRepair: {
+        detectedAt: '2026-08-18T09:00:00Z',
+        completedAt: '2026-08-18T09:01:00Z',
+        cliType: 'claude',
+        packageName: '@anthropic-ai/claude-code',
+        installState: 'missing-shim-package-present',
+        outcome: 'repaired',
+        cliVersionBefore: '2.1.231',
+        cliVersionAfter: '2.1.234',
+        detail: 'Reinstalled the package and restored the shim.',
+      },
+      activeFailure: null,
+      journalPath: 'C:/workspace/logs/cli-repairs.jsonl',
+    });
+
+    expect(fixture.componentInstance.cliRepairLabel()).toContain('CLI repaired at');
+    expect(fixture.componentInstance.cliRepairFailed()).toBe(false);
+    expect(fixture.componentInstance.cliRepairTooltip()).toContain('2.1.231 → 2.1.234');
+  });
 });

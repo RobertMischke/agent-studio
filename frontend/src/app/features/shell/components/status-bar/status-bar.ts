@@ -20,6 +20,7 @@ import {
   type VisibleIntervalHandle,
 } from '../../../../utils/visible-interval';
 import { UsageHoverPanelComponent } from '../../../tokens';
+import type { LocalCliRepairSnapshot } from '../../../cli';
 import {
   deriveBoardRunningTruth,
   freshRemoteTelemetrySlots,
@@ -53,6 +54,12 @@ export function formatRunningLabel(
     return codingSlotCeiling !== null ? `coding 0/${codingSlotCeiling}` : 'coding idle';
   }
   return 'no runners';
+}
+
+export function formatCliRepairTime(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return 'unknown time';
+  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 @Component({
@@ -203,12 +210,33 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     }
     return null;
   });
+  readonly localCliRepair = signal<LocalCliRepairSnapshot | null>(null);
+  readonly cliRepairEvent = computed(() =>
+    this.localCliRepair()?.activeFailure ?? this.localCliRepair()?.latestRepair ?? null);
+  readonly cliRepairFailed = computed(() => !!this.localCliRepair()?.activeFailure);
+  readonly cliRepairLabel = computed(() => {
+    const event = this.cliRepairEvent();
+    if (!event) return null;
+    return this.cliRepairFailed()
+      ? `${event.cliType} CLI repair failed`
+      : `CLI repaired at ${formatCliRepairTime(event.completedAt)}`;
+  });
+  readonly cliRepairTooltip = computed(() => {
+    const event = this.cliRepairEvent();
+    const snapshot = this.localCliRepair();
+    if (!event || !snapshot) return '';
+    const versions = event.cliVersionBefore || event.cliVersionAfter
+      ? ` Version ${event.cliVersionBefore ?? 'unknown'} → ${event.cliVersionAfter ?? 'unknown'}.`
+      : '';
+    return `${event.detail}${versions} Journal: ${snapshot.journalPath}`;
+  });
 
   ngOnInit(): void {
     this.remoteHosts.refresh();
     this.reviewQueue.refresh();
+    this.refreshLocalCliRepair();
     this.hostLoadRefreshHandle = setVisibleInterval(
-      () => { this.remoteHosts.refresh(); this.reviewQueue.refresh(); },
+      () => { this.remoteHosts.refresh(); this.reviewQueue.refresh(); this.refreshLocalCliRepair(); },
       HOST_LOAD_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {
@@ -256,6 +284,13 @@ export class StatusBarComponent implements OnInit, OnDestroy {
       window.location.hash,
       '/workspace/settings/execution-hosts',
     );
+  }
+
+  private refreshLocalCliRepair(): void {
+    this.jobService.getLocalCliRepairSnapshot().subscribe({
+      next: snapshot => this.localCliRepair.set(snapshot),
+      error: () => { /* capability note is non-blocking; existing host status remains available */ },
+    });
   }
 
   /** Atomic commit from the unified selector. Persists to localStorage and

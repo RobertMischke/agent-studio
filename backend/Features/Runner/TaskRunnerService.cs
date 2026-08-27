@@ -422,11 +422,23 @@ public class TaskRunnerService : BackgroundService
             _logger.LogInformation("Initialized runner for project '{Name}' (Root: {RootPath})", entry.Name, entry.RootPath);
         }
 
-        // Check CLI availability (default backend = Claude)
-        if (!_router.Get(CliTypes.Claude).IsAvailable())
+        // Probe both local execution CLIs before the first pickup. The shared
+        // health boundary distinguishes a truly absent package from the
+        // Windows package-present/shim-missing failure and repairs only the
+        // latter. The minute monitor repeats this check for updater races that
+        // happen after boot.
+        var claudeHealth = await _router.Get(CliTypes.Claude)
+            .EnsureCliHealthyAsync(stoppingToken);
+        if (!claudeHealth.Ok)
         {
-            _logger.LogWarning("Claude CLI not available - runners will be in manual/board-only mode");
+            _logger.LogWarning(
+                "Claude CLI not available - runners will be in manual/board-only mode: {Detail}",
+                claudeHealth.Error);
         }
+        var codexHealth = await _router.Get(CliTypes.Codex)
+            .EnsureCliHealthyAsync(stoppingToken);
+        if (!codexHealth.Ok)
+            _logger.LogWarning("Codex CLI not available for local Codex runs: {Detail}", codexHealth.Error);
 
         // Boot the orchestrator's long-lived Claude session per project so
         // it has warm context (project README, recent activity, lane

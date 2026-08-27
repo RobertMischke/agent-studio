@@ -30,6 +30,11 @@ CLI execution tests.
 - [Model Routing Policy](./model-routing-policy.md) is the canonical selection
   policy above the live model catalog and quota fallback machinery.
 - `backend/Services/Cli/`: CLI drivers and shared execution base.
+- `backend/Features/Cli/Execution/LocalCliRepairService.cs`: local Windows
+  capability monitor and bounded npm-shim repair. It distinguishes a retained
+  global Claude/Codex package with missing shims from a truly absent package,
+  allows one reinstall attempt per CLI per hour, and journals version and npm
+  activity evidence to `logs/cli-repairs.jsonl`.
 - `backend/Services/Cli/CliRouter.cs`: `cliType` routing.
 - `backend/Services/Quota/*QuotaProbe.cs`: per-CLI quota probes.
 - `backend/Services/Quota/QuotaService.cs`: aggregate quota surface.
@@ -62,6 +67,11 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- Local Claude/Codex availability is re-probed once per minute and immediately
+  before a spawn. A missing npm shim is repaired only when the matching global
+  package directory is still present. A truly uninstalled CLI is never
+  installed implicitly. Successful repair is a calm status-bar note; only a
+  failed repair is an alarm.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.
@@ -114,6 +124,10 @@ CLI execution tests.
 
 - Driver changes need focused unit tests for frame parsing, session capture,
   error classification, and command construction.
+- Local npm repair changes need portable classifier and throttle tests. The
+  Windows host rehearsal removes only the three CLI shim files, preserves the
+  package directory, waits for the capability probe, and verifies the journal,
+  restored `--version`, and status-bar note.
 - Prompt or execution-path changes need the matching live probe, such as
   `claude-hello-world.spec.ts` or the equivalent for the affected CLI.
 - Quota/model UI changes need frontend tests plus Playwright when behavior or

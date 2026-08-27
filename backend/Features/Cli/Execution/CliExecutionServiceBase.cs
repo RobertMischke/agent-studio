@@ -21,6 +21,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
     protected readonly IConfiguration _configuration;
     internal readonly ConcurrentDictionary<string, ProcInfo> _processes = new();
     private readonly CliBehavior _behavior;
+    private readonly LocalCliRepairService? _localCliRepairs;
 
     /// <summary>
     /// Per-task clean-context homes (jobKey → live preparation). Session-state
@@ -100,11 +101,16 @@ public partial class GenericCliExecutionService : ICliExecutionService
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
     }
 
-    internal GenericCliExecutionService(CliBehavior behavior, ILogger logger, IConfiguration configuration)
+    internal GenericCliExecutionService(
+        CliBehavior behavior,
+        ILogger logger,
+        IConfiguration configuration,
+        LocalCliRepairService? localCliRepairs = null)
     {
         _behavior = behavior;
         _logger = logger;
         _configuration = configuration;
+        _localCliRepairs = localCliRepairs;
     }
 
     /// <summary>
@@ -128,10 +134,11 @@ public partial class GenericCliExecutionService : ICliExecutionService
         IConfiguration configuration,
         CliUsageParserRegistry? usageParsers = null,
         ICliModelRegistry? modelRegistry = null,
-        ClaudeModelDiscovery? modelDiscovery = null)
+        ClaudeModelDiscovery? modelDiscovery = null,
+        LocalCliRepairService? localCliRepairs = null)
         => new GenericCliExecutionService(
             BuiltInCliBehaviors.Claude(usageParsers, modelRegistry ?? new CliModelRegistry(), modelDiscovery),
-            logger, configuration);
+            logger, configuration, localCliRepairs);
 
     /// <summary>Build a Codex engine from the per-CLI dependencies.</summary>
     internal static GenericCliExecutionService ForCodex(
@@ -139,10 +146,11 @@ public partial class GenericCliExecutionService : ICliExecutionService
         IConfiguration configuration,
         CodexModelDiscovery modelDiscovery,
         CliUsageParserRegistry usageParsers,
-        ICliModelRegistry modelRegistry)
+        ICliModelRegistry modelRegistry,
+        LocalCliRepairService? localCliRepairs = null)
         => new GenericCliExecutionService(
             BuiltInCliBehaviors.Codex(modelDiscovery, usageParsers, modelRegistry),
-            logger, configuration);
+            logger, configuration, localCliRepairs);
 
     /// <summary>Build an Antigravity/Gemini engine (no extra dependencies).</summary>
     internal static GenericCliExecutionService ForAntigravity(
@@ -253,8 +261,35 @@ public partial class GenericCliExecutionService : ICliExecutionService
     /// remains the safety net if heal itself is failing repeatedly.
     /// </para>
     /// </summary>
-    public Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
-        => _behavior.EnsureCliHealthy?.Invoke(this, ct) ?? DefaultEnsureCliHealthyAsync(ct);
+    public async Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+    {
+        var probe = TestCliPath();
+        if (probe.Available)
+        {
+            _localCliRepairs?.ObserveAvailable(CliType, probe.Version);
+            return (true, null);
+        }
+
+        if (_localCliRepairs is not null)
+        {
+            var repair = await _localCliRepairs.TryRepairMissingShimAsync(
+                CliType,
+                () => TestCliPath(),
+                ct).ConfigureAwait(false);
+            if (repair.Outcome == LocalCliRepairOutcomes.Repaired)
+            {
+                var verified = TestCliPath();
+                return verified.Available
+                    ? (true, null)
+                    : (false, $"{CliType} --version still failed after shim repair at '{verified.Path}'");
+            }
+            if (repair.Outcome is LocalCliRepairOutcomes.Failed or LocalCliRepairOutcomes.RateLimited)
+                return (false, repair.Detail);
+        }
+
+        return await (_behavior.EnsureCliHealthy?.Invoke(this, ct)
+                      ?? DefaultEnsureCliHealthyAsync(ct)).ConfigureAwait(false);
+    }
 
     internal Task<(bool Ok, string? Error)> DefaultEnsureCliHealthyAsync(CancellationToken ct)
     {
