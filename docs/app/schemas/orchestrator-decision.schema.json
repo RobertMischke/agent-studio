@@ -59,6 +59,11 @@
       "type": ["string", "null"],
       "description": "Optional normalized failure identity used by bounded retry guards."
     },
+    "failureFingerprints": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "description": "All normalized aspect-block identities in this review round. This lets one unchanged aspect reach its convergence bound while unrelated aspect findings change."
+    },
     "failureKind": {
       "type": ["string", "null"],
       "description": "Optional typed failure classification."

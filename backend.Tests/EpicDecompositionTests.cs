@@ -81,6 +81,70 @@ public class EpicDecompositionTests : IDisposable
     }
 
     [Fact]
+    public void ParseAndCreate_PreservesBoundedAcceptanceScope()
+    {
+        var output = """
+            ```json
+            {
+              "subTasks": [
+                {
+                  "title": "Implement Dossier slice S1",
+                  "prompt": "Implement only S1. One slice per delivery.",
+                  "acceptanceScope": {
+                    "deliveryMode": "bounded-slice",
+                    "slice": "S1: retry loop breaker",
+                    "criteria": ["Escalates the repeated requirement-fit reason"]
+                  }
+                }
+              ]
+            }
+            ```
+            """;
+
+        var parsed = EpicDecompositionParser.Parse(output);
+        var spec = Assert.Single(parsed.SubTasks);
+
+        Assert.Equal(TaskAcceptanceDeliveryModes.BoundedSlice, spec.AcceptanceScope!.DeliveryMode);
+        Assert.Equal("S1: retry loop breaker", spec.AcceptanceScope.Slice);
+
+        var (scanner, mutations) = Build();
+        var epic = CreateEpic("epic-slices");
+        var created = EpicSubTaskFactory.CreateSubTasks(
+            mutations, epic, parsed.SubTasks, TaskStates.Backlog);
+        var child = scanner.FindJob(Assert.Single(created), _watchPath)!;
+
+        Assert.Equal("S1: retry loop breaker", child.AcceptanceScope!.Slice);
+        Assert.Equal(
+            "Escalates the repeated requirement-fit reason",
+            Assert.Single(child.AcceptanceScope.Criteria));
+    }
+
+    [Fact]
+    public void Parse_SkipsAnExplicitlyInvalidAcceptanceScope()
+    {
+        var output = """
+            {
+              "subTasks": [
+                {
+                  "title": "Invalid slice",
+                  "prompt": "Missing concrete criteria.",
+                  "acceptanceScope": {
+                    "deliveryMode": "bounded-slice",
+                    "slice": "S1",
+                    "criteria": []
+                  }
+                },
+                { "title": "Legacy valid task", "prompt": "Still accepted without the additive field." }
+              ]
+            }
+            """;
+
+        var result = EpicDecompositionParser.Parse(output);
+
+        Assert.Equal("Legacy valid task", Assert.Single(result.SubTasks).Title);
+    }
+
+    [Fact]
     public void Parse_BareFencedArray_IsAccepted()
     {
         var output = """

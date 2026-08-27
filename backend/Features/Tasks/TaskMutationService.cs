@@ -1249,6 +1249,9 @@ public class TaskMutationService
 
         if (entry == null) return null;
 
+        var acceptanceScope = TaskAcceptanceScopes.Normalize(req.AcceptanceScope);
+        if (req.AcceptanceScope is not null && acceptanceScope is null) return null;
+
         // Backlog is the default landing lane when the caller supplies no
         // targetState. An explicit valid lane is authoritative. In particular,
         // operator and automation callers may intentionally create a card in a
@@ -1357,6 +1360,8 @@ public class TaskMutationService
             ["agent"] = effectiveAgent,
             ["ownerClientId"] = ownerClientId
         };
+        if (acceptanceScope is not null)
+            jobJson["acceptanceScope"] = acceptanceScope;
         if (!string.IsNullOrWhiteSpace(effectiveModel))
             jobJson["model"] = effectiveModel;
         jobJson["modelExplicit"] = req.ModelExplicit ?? !string.IsNullOrWhiteSpace(req.Model);

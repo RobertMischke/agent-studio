@@ -29,6 +29,7 @@ unter `app/` und werden nur zusammen mit Code geändert.
 | [decision-surface/](decision-surface/README.md) | Ownership, artifact, action, and lifecycle contract for operator decisions on escalated tasks. |
 | [board-statusmodell-ist-soll/](board-statusmodell-ist-soll/index.html) | German decision Dossier mapping every board lane transition and proposing integration, acceptance, and archive guards (AGT-2424, with AGT-2301 field evidence). |
 | [research-deliverables/](research-deliverables/index.html) | Primary HTML report, companion-link, prompt-block, and lightweight-pipeline convention for Research tasks. |
+| [workflow-sized-task-cutting.md](workflow-sized-task-cutting.md) | One-delivery card-cutting rules, bounded acceptance-scope contract, Dossier slice convention, and repeated-review escalation behavior. |
 | [remote-hosts.md](remote-hosts.md) | Add, connect, drain, retire, revive, and permanently remove remote runner hosts. |
 | [remote-task-server-local-studio.md](remote-task-server-local-studio.md) | Phase A architecture, security, migration, and sub-15-minute rollback plan for a private Hetzner Task Server with Robert's Angular Studio kept local. |
 | [releases.md](releases.md) | Tag-driven release assets, component version matrix, guided install, drain-first update, health-gated auto-rollback, and honest CI contract. |

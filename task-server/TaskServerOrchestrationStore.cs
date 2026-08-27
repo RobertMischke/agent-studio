@@ -492,6 +492,20 @@ public sealed partial class TaskServerStore
                 throw new KeyNotFoundException("Orchestration task was not found.");
 
             var maxReissues = await ReadRunMaxReissuesAsync(connection, transaction, runId, ct);
+            RepeatedReviewBlockDiagnosis? repeatedBlock = null;
+            if (request.Action == OrchestrationAction.Reissue)
+            {
+                var priorDecisionPayloads = await ReadPriorDecisionPayloadsAsync(
+                    connection,
+                    transaction,
+                    run.TaskId,
+                    runId,
+                    ct);
+                repeatedBlock = RepeatedReviewBlockPolicy.Diagnose(
+                    run.PayloadJson,
+                    priorDecisionPayloads,
+                    OrchestrationDefaults.MaxIdenticalAspectBlockRounds);
+            }
             var decision = OrchestrationSettlementPolicy.Decide(
                 request.Action,
                 stages,
@@ -500,7 +514,8 @@ public sealed partial class TaskServerStore
                 maxReissues,
                 currentTaskState,
                 run.TaskVersion,
-                currentTaskVersion);
+                currentTaskVersion,
+                repeatedBlock);
             var completedAt = decision.IsTerminal ? now : (DateTime?)null;
 
             await ExecuteAsync(connection, """
@@ -554,6 +569,7 @@ public sealed partial class TaskServerStore
                             stage = request.Stage.ToString(),
                             action = request.Action.ToString(),
                             nextState = decision.TaskState,
+                            reason = decision.SettlementReason,
                         },
                         ct);
                     await AppendLifecycleEventAsync(
@@ -572,6 +588,7 @@ public sealed partial class TaskServerStore
                             decision = decision.RunStatus,
                             reissueAttempts = decision.ReissueAttempts,
                             nextState = decision.TaskState,
+                            reason = decision.SettlementReason,
                         },
                         ct);
                 }
@@ -596,6 +613,7 @@ public sealed partial class TaskServerStore
                     nextTaskState = decision.TaskState,
                     reissueAttempts = decision.ReissueAttempts,
                     decision.SupersededReason,
+                    decision.SettlementReason,
                 }),
                 ct);
             result = await ReadOrchestrationRunAsync(connection, transaction, runId, ct)
@@ -861,6 +879,34 @@ public sealed partial class TaskServerStore
             transaction,
             ("$run", runId)) ?? 0,
             CultureInfo.InvariantCulture);
+
+    private static async Task<IReadOnlyList<string>> ReadPriorDecisionPayloadsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string taskId,
+        string currentRunId,
+        CancellationToken ct)
+    {
+        await using var command = Command(connection, """
+            SELECT run.payload_json
+              FROM orchestration_runs run
+             WHERE run.task_id = $task
+               AND run.id <> $current_run
+               AND EXISTS (
+                   SELECT 1
+                     FROM orchestration_stage_results result
+                    WHERE result.run_id = run.id
+                      AND result.stage = 'ReviewDecision'
+               )
+             ORDER BY run.updated_at DESC, run.id DESC;
+            """, transaction,
+            ("$task", taskId),
+            ("$current_run", currentRunId));
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var payloads = new List<string>();
+        while (await reader.ReadAsync(ct)) payloads.Add(reader.GetString(0));
+        return payloads;
+    }
 
     private static async Task<(string RunAttemptId, long Fence)?> ReadPayloadRunAuthorityAsync(
         SqliteConnection connection,

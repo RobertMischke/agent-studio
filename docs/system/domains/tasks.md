@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-08-11
+Version: 2026-08-27
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -59,7 +59,10 @@ or commit attribution.
   when the agent reports `NEEDS_INPUT`; it is not an escalation.
 - Sight-review acceptance moves the concept to `6-completed`. The concept
   promotion endpoint creates idempotent coding cards in `1-preparation` and
-  relates them to the source concept.
+  relates them to the source concept. Each `implementationTasks` entry is one
+  independently reviewable slice and becomes one card with a bounded
+  `acceptanceScope`. Promotion rejects an open-ended entry such as `implement
+  all recommendations`; use one entry per slice or an Epic with slice children.
 
 ## Entry Points
 
@@ -550,6 +553,11 @@ cannot erase an operator decision.
   Every explicit valid `targetState` is authoritative, including review and
   terminal lanes used by operator or automation workflows. Invalid states fail
   creation instead of silently selecting another lane.
+- `job.json.acceptanceScope` is the card-owned requirement-fit boundary. A
+  `bounded-slice` scope requires one slice name and one or more concrete
+  criteria. Reviewers may not demand a parent Dossier or broader wishlist
+  outside that boundary. Missing scope means full-task acceptance. See
+  [workflow-sized task cutting](../../operations/workflow-sized-task-cutting.md).
 - `4-auto-review` remains the disk/API key even when the UI labels it Post
   Processing.
 - `5-human-review` is where the user gets the final say. The orchestrator does
@@ -561,6 +569,9 @@ cannot erase an operator decision.
   Engine settlement then moves the task to `2-ready`, `5-human-review`, or
   `5e-escalated`. The bounded reissue count spans decision runs and coding
   attempts for the task; it does not reset with Studio or Engine restart.
+  Consecutive Remote Review decisions with the same blocking aspect,
+  classification, and summary escalate with that reason after two rounds by
+  default, even when the broader reissue budget remains.
 - Integration remains an explicit operator decision after Human Review. The
   Remote control plane may durably accept and schedule that command, but Post
   Processing does not infer acceptance or move directly to `6-completed`.

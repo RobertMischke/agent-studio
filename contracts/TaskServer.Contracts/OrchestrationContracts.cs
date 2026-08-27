@@ -21,6 +21,7 @@ public enum OrchestrationAction
 public static class OrchestrationDefaults
 {
     public const int MaxReissueAttempts = 2;
+    public const int MaxIdenticalAspectBlockRounds = 2;
 
     public static IReadOnlyList<OrchestrationStage> CreateStages()
         =>

@@ -17,6 +17,13 @@ public record TaskInfo
     /// </summary>
     public string? Key { get; init; }
     public string Title { get; init; } = "";
+    /// <summary>
+    /// Explicit requirement-fit boundary for this delivery. Null preserves the
+    /// legacy rule that the complete task body is the acceptance scope, subject
+    /// to the narrow compatibility inference for prompts that explicitly say
+    /// one slice per delivery or partial delivery is success.
+    /// </summary>
+    public TaskAcceptanceScope? AcceptanceScope { get; init; }
     public string State { get; init; } = "draft";
     /// <summary>
     /// Explicit content-release approval. This is deliberately independent of

@@ -8,7 +8,8 @@ internal sealed record OrchestrationSettlementDecision(
     int ReissueAttempts,
     string? TaskState,
     bool IsTerminal,
-    string? SupersededReason = null);
+    string? SupersededReason = null,
+    string? SettlementReason = null);
 
 internal static class OrchestrationSettlementPolicy
 {
@@ -20,7 +21,8 @@ internal static class OrchestrationSettlementPolicy
         int maxReissueAttempts,
         string currentTaskState,
         long expectedTaskVersion,
-        long currentTaskVersion)
+        long currentTaskVersion,
+        RepeatedReviewBlockDiagnosis? repeatedBlock = null)
     {
         if (!string.Equals(currentTaskState, "4-auto-review", StringComparison.Ordinal))
         {
@@ -50,7 +52,8 @@ internal static class OrchestrationSettlementPolicy
             OrchestrationAction.Reissue => Reissue(
                 currentStage,
                 currentReissueAttempts,
-                maxReissueAttempts),
+                maxReissueAttempts,
+                repeatedBlock),
             OrchestrationAction.Escalate => Terminal(
                 "escalated", currentStage, currentReissueAttempts, "5e-escalated"),
             OrchestrationAction.Complete => Terminal(
@@ -83,20 +86,38 @@ internal static class OrchestrationSettlementPolicy
     private static OrchestrationSettlementDecision Reissue(
         OrchestrationStage currentStage,
         int currentReissueAttempts,
-        int maxReissueAttempts)
+        int maxReissueAttempts,
+        RepeatedReviewBlockDiagnosis? repeatedBlock)
     {
         var reissueAttempts = currentReissueAttempts + 1;
+        if (repeatedBlock?.MustEscalate == true)
+        {
+            return Terminal(
+                "escalated",
+                currentStage,
+                reissueAttempts,
+                "5e-escalated",
+                $"The same aspect block repeated for {repeatedBlock.ConsecutiveRounds} consecutive review rounds " +
+                $"(limit {repeatedBlock.MaximumRounds}): {repeatedBlock.Finding}. " +
+                "Escalated for a human scope decision instead of reissuing the same work again.");
+        }
         return reissueAttempts <= maxReissueAttempts
             ? Terminal("reissued", currentStage, reissueAttempts, "2-ready")
-            : Terminal("escalated", currentStage, reissueAttempts, "5e-escalated");
+            : Terminal(
+                "escalated",
+                currentStage,
+                reissueAttempts,
+                "5e-escalated",
+                $"The task-wide review reissue budget is exhausted ({reissueAttempts - 1}/{maxReissueAttempts} retries used).");
     }
 
     private static OrchestrationSettlementDecision Terminal(
         string status,
         OrchestrationStage currentStage,
         int reissueAttempts,
-        string taskState)
-        => new(status, currentStage, reissueAttempts, taskState, true);
+        string taskState,
+        string? settlementReason = null)
+        => new(status, currentStage, reissueAttempts, taskState, true, SettlementReason: settlementReason);
 }
 
 internal static class OrchestrationStageListExtensions

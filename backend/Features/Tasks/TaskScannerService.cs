@@ -573,6 +573,7 @@ public class TaskScannerService : ITaskScanner
                 Key = ReadReferenceKey(raw),
                 OwnerClientId = ownerClientId,
                 Title = raw.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
+                AcceptanceScope = ReadAcceptanceScope(raw),
                 State = resolvedState,
                 Order = raw.TryGetProperty("order", out var ord) && ord.TryGetInt32(out var orderVal) ? orderVal : 999,
                 Agent = raw.TryGetProperty("agent", out var agent) ? agent.GetString() ?? "" : "",
@@ -795,6 +796,23 @@ public class TaskScannerService : ITaskScanner
             ProjectName = info.ProjectName,
             Attachments = attachments,
         };
+    }
+
+    private static TaskAcceptanceScope? ReadAcceptanceScope(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("acceptanceScope", out var element)
+            || element.ValueKind != JsonValueKind.Object)
+            return null;
+        try
+        {
+            return TaskAcceptanceScopes.Normalize(
+                JsonSerializer.Deserialize<TaskAcceptanceScope>(element.GetRawText(), TaskJsonFile.ReadOpts));
+        }
+        catch (JsonException ex)
+        {
+            SilentCatch.Note(ex, "TaskScannerService: malformed acceptanceScope ignored");
+            return null;
+        }
     }
 
     private static List<TaskIntegrationRecord> ReadIntegrationRecords(JsonElement raw)

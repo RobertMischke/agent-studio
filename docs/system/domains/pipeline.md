@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-12
+Version: 2026-08-27
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -653,6 +653,18 @@ Result-SHA, policy hash, report hash, verdicts, and gate facts. Only a fenced
 Engine settlement can request reissue, escalation, or Human Review handoff, and
 only the Task Server can apply the version-fenced lane mutation plus lifecycle
 evidence. Studio and its BFF are read and command surfaces, not loop owners.
+Requirement-fit receives the card's normalized `acceptanceScope` as a separate,
+authoritative prompt section. For `bounded-slice`, it judges only the named
+slice and criteria; a linked Dossier, parent objective, or open recommendation
+list is context. Cards without a scope retain full-task review, with a narrow
+legacy inference only for explicit one-slice or partial-success declarations.
+
+The lane decision also has a semantic convergence bound. Each blocking aspect,
+classification, and summary set is normalized and fingerprinted. The second
+consecutive identical Remote Review block escalates the card with the exact
+finding instead of reissuing it. Local review journals apply the same rule
+within the operator-owned attempt epoch. Changing findings may continue only
+within the existing task-wide reissue budget.
 
 Integration is a pipeline-owned delivery decision. The canonical Remote order
 is **delivery -> settled Review/build gate -> integration -> Human Review ->
@@ -873,6 +885,12 @@ operator changes cause the step to fail before its writer runs.
   remain unchanged. A missing or non-append-only update fails the visible row
   and follows the existing completion-gate reissue or escalation budget before
   build and aspect review continue.
+- Dossier implementation work is cut one card per slice. Each
+  `workbench.json.implementationTasks` entry carries, or is normalized to, a
+  `bounded-slice` acceptance scope. Promotion rejects a single open-ended
+  `implement all recommendations` entry. Multi-slice work uses separate entries
+  or an Epic parent with one child per slice; see
+  [workflow-sized task cutting](../../operations/workflow-sized-task-cutting.md).
 - `PipelineHealthService` is the visibility-only sensor for pipeline-wide
   failure modes. `BuildTestGateRunner` reports acquired/completed pairs into
   it, and the service reads the existing append-only `lane_changed` ledgers.
@@ -907,7 +925,9 @@ operator changes cause the step to fail before its writer runs.
   embedded canonical v2 article template and store `pattern: concept`; callers
   may request `ui`, while readers tolerate missing or unknown values as
   `concept`. The template includes the canonical append-only Implementation
-  section and log markers. The concept pipeline deliberately does not run
+  section and log markers. Its implementation convention requires one
+  `implementationTasks` entry per independently reviewable slice, never one
+  open-ended all-recommendations entry. The concept pipeline deliberately does not run
   build, test, code aspects, or integration.
   A complete Dossier moves to `5-human-review` with a durable
   `concept-sight-review` marker. `DONE` and `NEEDS_INPUT` both count as

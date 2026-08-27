@@ -38,4 +38,9 @@ public sealed record EpicSubTaskRef(
 /// </summary>
 public sealed record CreateEpicSubTasksRequest(IReadOnlyList<EpicSubTaskSpec> SubTasks);
 
-public sealed record EpicSubTaskSpec(string Title, string? PromptMarkdown = null, string? CliType = null, string? Model = null);
+public sealed record EpicSubTaskSpec(
+    string Title,
+    string? PromptMarkdown = null,
+    string? CliType = null,
+    string? Model = null,
+    TaskAcceptanceScope? AcceptanceScope = null);
