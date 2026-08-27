@@ -1,0 +1,15 @@
+<div class="cli-repair"
+     [attr.data-tone]="repair().succeeded ? 'note' : 'alarm'"
+     data-testid="remote-host-cli-repair">
+  <span class="cli-repair__dot" aria-hidden="true"></span>
+  <strong>{{ label() }} at {{ repair().completedAt | date:'shortTime' }}</strong>
+  @if (repair().lastObservedVersionBefore || repair().packageVersionBefore) {
+    <span>
+      {{ repair().lastObservedVersionBefore || repair().packageVersionBefore }}
+      → {{ repair().versionAfter || 'unknown' }}
+    </span>
+  }
+  @if (repair().error) {
+    <span>{{ repair().error }}</span>
+  }
+</div>

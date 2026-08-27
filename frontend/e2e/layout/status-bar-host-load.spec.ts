@@ -20,6 +20,7 @@ async function stubHostLoad(
   remoteRuns: number,
   telemetrySlots: number,
   load1: number,
+  localCliHealth: unknown = { at: new Date().toISOString(), capabilities: [], latestRepair: null },
 ): Promise<void> {
   const now = new Date().toISOString();
   const baseTask = (id: string, projectName: string) => ({
@@ -149,6 +150,7 @@ async function stubHostLoad(
     findings: [],
   }));
   await page.route('**/api/v1/management/remote-hosts', json([]));
+  await page.route('**/api/cli/local-health', json(localCliHealth));
 }
 
 test.describe('Status bar execution-host load companion signal', () => {
@@ -188,6 +190,44 @@ test.describe('Status bar execution-host load companion signal', () => {
     await expect(page.getByTestId('remote-hosts-panel')).toBeVisible();
     await expect(page.getByTestId('remote-hosts-panel').getByRole('heading', { level: 2 }))
       .toHaveText('Execution Hosts');
+  });
+
+  test('successful local CLI repair stays quiet and is disclosed on the host', async ({ page }) => {
+    const repairedAt = '2026-08-18T10:42:00Z';
+    await stubHostLoad(page, 0, 0, 0, 0.4, {
+      at: repairedAt,
+      capabilities: [{
+        cliType: 'claude', available: true, version: '2.1.234', path: 'C:/npm/claude.cmd',
+        classification: 'repaired', checkedAt: repairedAt,
+      }],
+      latestRepair: {
+        cliType: 'claude', packageName: '@anthropic-ai/claude-code',
+        attemptedAt: '2026-08-18T10:41:00Z', completedAt: repairedAt,
+        succeeded: true, trigger: 'periodic', lastObservedVersionBefore: '2.1.231',
+        packageVersionBefore: '2.1.234', versionAfter: '2.1.234', error: null,
+      },
+    });
+    await page.goto('/');
+
+    const note = page.getByTestId('status-bar-cli-repair');
+    await expect(note).toContainText('Claude CLI repaired at');
+    await expect(note).toHaveAttribute('data-signal-tone', 'calm');
+    await setTheme(page, 'light');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'local-cli-repaired-status-bar-light--mocked.png'),
+    });
+
+    await note.click();
+    const local = page.getByTestId('remote-host-card').filter({ hasText: 'Local machine' });
+    await local.getByTestId('remote-host-disclosure').click();
+    await local.getByTestId('remote-host-detail-toggle-capabilities').click();
+    const hostNote = local.getByTestId('remote-host-cli-repair');
+    await expect(hostNote).toContainText('Claude CLI repaired');
+    await expect(hostNote).toContainText('2.1.231 → 2.1.234');
+    await expect(hostNote).toHaveAttribute('data-tone', 'note');
+    await local.screenshot({
+      path: join(RESULTS_DIR, 'local-cli-repaired-host-detail-light--mocked.png'),
+    });
   });
 
   test('high load without runs becomes a quiet hint in both themes', async ({ page }) => {

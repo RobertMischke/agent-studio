@@ -119,8 +119,14 @@ public static class CliEndpoints
             }
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
-        cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions, TaskRunnerService runners) =>
+        cliGroup.MapGet("/usage", async (
+            CliRouter router,
+            SessionRegistry sessions,
+            TaskRunnerService runners,
+            LocalCliSelfHealService selfHeal,
+            CancellationToken ct) =>
         {
+            await selfHeal.ProbeAllAsync(router, "cli-usage", ct);
             // Snapshot the runner's per-project active job so the
             // LinkedJob chip can render `active` (green) when the linked
             // session belongs to the project's currently-running task.
@@ -132,6 +138,9 @@ public static class CliEndpoints
             }
             return Results.Ok(sessions.BuildReport(router, activeJobByProject));
         });
+
+        cliGroup.MapGet("/local-health", (LocalCliSelfHealService selfHeal) =>
+            Results.Ok(selfHeal.Snapshot()));
 
         // Lazy deep-read of one session (row expand in the CLI-session tool).
         // Parses exactly one transcript on demand so the list report stays

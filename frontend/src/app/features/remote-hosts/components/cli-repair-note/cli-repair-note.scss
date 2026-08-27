@@ -1,0 +1,18 @@
+:host { display: block; margin-bottom: var(--studio-spacing-3); }
+
+.cli-repair {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--studio-spacing-2);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border-radius: 5px;
+  background: var(--notify-success-tint);
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+}
+
+.cli-repair strong { color: var(--studio-fg-strong); }
+.cli-repair__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-success); }
+.cli-repair[data-tone='alarm'] { background: var(--notify-error-tint); color: var(--notify-error-icon-fg); }
+.cli-repair[data-tone='alarm'] .cli-repair__dot { background: var(--severity-high); }

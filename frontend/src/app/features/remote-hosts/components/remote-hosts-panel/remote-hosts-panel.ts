@@ -25,6 +25,7 @@ import {
   groupPhysicalHosts,
   type PhysicalHostGroup,
 } from '../../models/physical-host-group';
+import { LocalCliHealthStore } from '../../../cli';
 
 /**
  * Execution Hosts settings page (AGT-1921).
@@ -50,6 +51,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private readonly service = inject(RemoteHostsService);
   private readonly tasks = inject(TaskService);
   private readonly reviewQueue = inject(ReviewQueueService);
+  readonly localCliHealth = inject(LocalCliHealthStore);
   private readonly tableState = new RemoteHostTableState();
 
   readonly hosts = this.service.hosts;
@@ -110,6 +112,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
     this.tableState.hydrate();
     this.service.ensureLoaded();
     this.reviewQueue.refresh();
+    this.localCliHealth.refresh();
     this.tickHandle = setInterval(() => this.now.set(Date.now()), 30_000);
   }
 
@@ -117,7 +120,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
     if (this.tickHandle) clearInterval(this.tickHandle);
   }
 
-  reload(): void { this.service.reload(); }
+  reload(): void { this.service.reload(); this.localCliHealth.refresh(); }
 
   boardSlots(host: RemoteHost): number {
     const truth = this.boardRunningTruth();

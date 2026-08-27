@@ -35,6 +35,31 @@ What to check:
 2. The bus event stream (`logs/bus/<project>/<date>.jsonl`) carries the circuit-breaker transitions and the reason it tripped.
 3. Fix the underlying cause (sandbox config, CLI install, network), then resume manually with the runner-mode pill.
 
+## "Claude or Codex vanished from PATH on Windows"
+
+Symptom: `claude --version` or `codex --version` reports that the command is not
+found, but the corresponding package still exists under the global npm
+`node_modules` directory.
+
+Behavior: the startup, periodic, and CLI-usage capability probes classify this
+as a missing shim rather than a truly uninstalled CLI. Agent Studio runs
+`npm install -g @anthropic-ai/claude-code` or `npm install -g @openai/codex`,
+limited to one attempt per CLI per hour. A successful repair appears as a quiet
+`CLI repaired at <time>` note in the status bar and local Execution Host detail.
+Only a failed repair uses the alarm treatment.
+
+Evidence: inspect `logs/backend/cli-repairs.jsonl`. Each row records the last
+observed version, package version and manifest timestamp before repair, missing
+shim names, nearby npm debug-log metadata, the version after repair, and bounded
+credential-redacted npm output. Safe package-relevant lines from nearby npm logs
+are included too. This is the first place to correlate a future occurrence with
+npm or CLI auto-update activity.
+
+If the package is absent too, Agent Studio treats the CLI as uninstalled and
+does not install it automatically. Install it explicitly, then refresh the CLI
+environment. For the older orphan-shim, renamed-binary, and stub-binary shapes,
+run `bash tools/check-cli-shims.sh`.
+
 ## "Counters in the header look wrong"
 
 Symptom: the per-project counters in the header strip show numbers that don't match the lanes you see on the board, or show counts from a different project.

@@ -14,6 +14,9 @@ public sealed class CliVersionTracker
 
     public CliVersionTracker(ILogger<CliVersionTracker> logger) => _logger = logger;
 
+    public string? Current(string cliType)
+        => _versions.TryGetValue(cliType, out var version) ? version : null;
+
     public void Seed(string cliType, string? version)
     {
         if (string.IsNullOrWhiteSpace(cliType) || string.IsNullOrWhiteSpace(version)) return;

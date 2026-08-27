@@ -24,6 +24,15 @@
       [iconSize]="11"
       [label]="autoCount() + '/' + projectCount() + ' auto'"
       [tooltip]="autoTooltip()" />
+    @if (cliRepairEvent()) {
+      <app-statusbar-item
+        bullet="●"
+        [signalTone]="cliRepairEvent()?.succeeded ? 'calm' : 'mismatch'"
+        [label]="cliRepairLabel()"
+        [tooltip]="cliRepairTooltip()"
+        testid="status-bar-cli-repair"
+        (activated)="navigateToExecutionHosts()" />
+    }
 
     <span class="statusbar__sep" aria-hidden="true"></span>
 

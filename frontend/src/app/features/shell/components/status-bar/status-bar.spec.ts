@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { LocalCliHealthStore } from '../../../cli';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -59,5 +60,48 @@ describe('StatusBarComponent (smoke)', () => {
       console.warn('[smoke] StatusBarComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+  });
+
+  it('shows a quiet repaired note and reserves the alarm tone for failure', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StatusBarComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StatusBarComponent);
+    const health = TestBed.inject(LocalCliHealthStore);
+    health.snapshot.set({
+      at: '2026-08-18T10:42:00Z',
+      capabilities: [{
+        cliType: 'claude', available: true, version: '2.1.234', path: 'C:/npm/claude.cmd',
+        classification: 'repaired', checkedAt: '2026-08-18T10:42:00Z',
+      }],
+      latestRepair: {
+        cliType: 'claude', packageName: '@anthropic-ai/claude-code',
+        attemptedAt: '2026-08-18T10:41:00Z', completedAt: '2026-08-18T10:42:00Z',
+        succeeded: true, trigger: 'periodic', lastObservedVersionBefore: '2.1.231',
+        packageVersionBefore: '2.1.234', versionAfter: '2.1.234', error: null,
+      },
+    });
+
+    fixture.detectChanges();
+
+    const note = fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair"]') as HTMLElement;
+    expect(note.textContent).toContain('Claude CLI repaired at');
+    expect(note.getAttribute('data-signal-tone')).toBe('calm');
+
+    health.snapshot.update(snapshot => ({
+      ...snapshot!,
+      capabilities: snapshot!.capabilities.map(item => ({ ...item, available: false, classification: 'repair-failed' })),
+      latestRepair: { ...snapshot!.latestRepair!, succeeded: false, error: 'npm install exited 1' },
+    }));
+    fixture.detectChanges();
+
+    expect(note.textContent).toContain('Claude CLI repair failed at');
+    expect(note.getAttribute('data-signal-tone')).toBe('mismatch');
   });
 });

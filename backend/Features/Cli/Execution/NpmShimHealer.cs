@@ -36,6 +36,83 @@ public sealed record HealOutcome(
     IReadOnlyList<string> Actions,
     string? Error);
 
+internal sealed record NpmInstallResult(
+    int? ExitCode,
+    string? OutputTail,
+    string? ErrorTail,
+    string? Error);
+
+internal interface INpmGlobalInstaller
+{
+    Task<NpmInstallResult> InstallAsync(string packageName, CancellationToken ct);
+}
+
+/// <summary>
+/// Runs the bounded global npm reinstall used by the proactive capability
+/// repair. Process ownership stays beside the established npm shim healer.
+/// </summary>
+internal sealed class NpmGlobalInstaller : INpmGlobalInstaller
+{
+    public async Task<NpmInstallResult> InstallAsync(string packageName, CancellationToken ct)
+    {
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = GenericCliExecutionService.ResolveExecutable("npm"),
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                },
+            };
+            process.StartInfo.ArgumentList.Add("install");
+            process.StartInfo.ArgumentList.Add("-g");
+            process.StartInfo.ArgumentList.Add(packageName);
+            if (!process.Start())
+                return new NpmInstallResult(null, null, null, "npm process did not start");
+
+            var stdout = process.StandardOutput.ReadToEndAsync(ct);
+            var stderr = process.StandardError.ReadToEndAsync(ct);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromMinutes(5));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (Exception ex) { SilentCatch.Note(ex, "LocalCliSelfHeal: npm timeout kill"); }
+                return new NpmInstallResult(
+                    null,
+                    Tail(await stdout),
+                    Tail(await stderr),
+                    "npm install timed out after 5 minutes");
+            }
+
+            return new NpmInstallResult(
+                process.ExitCode,
+                Tail(await stdout),
+                Tail(await stderr),
+                process.ExitCode == 0 ? null : $"npm install exited {process.ExitCode}");
+        }
+        catch (Exception ex)
+        {
+            return new NpmInstallResult(null, null, null, ex.Message);
+        }
+    }
+
+    private static string? Tail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = LogRedactor.Scrub(value).Trim();
+        return trimmed.Length <= 4000 ? trimmed : trimmed[^4000..];
+    }
+}
+
 public static class NpmShimHealer
 {
     /// <summary>

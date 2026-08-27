@@ -155,6 +155,7 @@
             [now]="now()"
             [boardActiveSlots]="groupSlots(group)"
             [projectSlots]="projectSlots(group.machine)"
+            [cliHealth]="localCliHealth.snapshot()"
             [expanded]="isExpanded(group.id)"
             (expandedChange)="setExpanded(group.id, $event)"
             (action)="onAction($event)"

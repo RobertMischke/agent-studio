@@ -69,6 +69,14 @@ CLI execution tests.
 - Claude and Codex version changes are checked after startup and periodically.
   Keep the structured `CLI version changed` log line when editing version or
   self-heal behavior.
+- Local Claude and Codex probes distinguish an absent npm package from a
+  package whose Windows command shim disappeared. Only the second state may
+  run `npm install -g`, with one attempt per CLI per hour. Each attempt is
+  appended to `logs/backend/cli-repairs.jsonl` with package and CLI versions,
+  shim facts, safe package-relevant npm log lines, and credential-redacted
+  installer output tails. A successful repair is a quiet status-bar and
+  Execution Hosts note; an unsuccessful repair is the only repair state that
+  raises an alarm.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

@@ -117,6 +117,7 @@
             testId="remote-host-detail-toggle-capabilities" [expanded]="isSectionExpanded('capabilities')"
             (toggled)="toggleSection('capabilities')" />
           @if (isSectionExpanded('capabilities')) {
+          @if (cliRepairEvent(); as repair) { <app-cli-repair-note [repair]="repair" /> }
           @if (providerAuthBadges().length) {
             <div class="provider-auth" data-testid="remote-host-provider-auth" aria-label="Provider authentication">
               @for (auth of providerAuthBadges(); track auth.id) {

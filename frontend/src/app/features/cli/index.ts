@@ -14,6 +14,9 @@ export type {
   CliUsageProjectGroup,
   CliUsageSection,
   CliUsageReport,
+  LocalCliCapabilityState,
+  LocalCliRepairEvent,
+  LocalCliHealthSnapshot,
   CliSessionDetail,
   CliSessionDeleteResult,
   LinkedJobRef,
@@ -24,3 +27,4 @@ export type {
 export { CLAUDE_FALLBACK_MODEL_ID, MODEL_IDS } from './models/model-ids';
 export { orderModelCatalog } from './models/model-catalog-ordering';
 export { CliCatalogStore } from './services/cli-catalog.store';
+export { LocalCliHealthStore } from './services/local-cli-health.store';

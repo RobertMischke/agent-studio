@@ -10,19 +10,19 @@ public sealed class CliVersionMonitorHostedService : BackgroundService
     public const int DefaultIntervalMinutes = 10;
 
     private readonly CliRouter _router;
-    private readonly CliVersionTracker _tracker;
+    private readonly LocalCliSelfHealService _selfHeal;
     private readonly IConfiguration _configuration;
     private readonly ILogger<CliVersionMonitorHostedService> _logger;
 
     public CliVersionMonitorHostedService(
         CliRouter router,
-        CliVersionTracker tracker,
+        LocalCliSelfHealService selfHeal,
         QuotaService quotaService,
         IConfiguration configuration,
         ILogger<CliVersionMonitorHostedService> logger)
     {
         _router = router;
-        _tracker = tracker;
+        _selfHeal = selfHeal;
         _configuration = configuration;
         _logger = logger;
         // Resolving QuotaService hydrates the tracker from the disk cache
@@ -30,19 +30,15 @@ public sealed class CliVersionMonitorHostedService : BackgroundService
         _ = quotaService;
     }
 
-    internal void CheckOnce(string source)
+    internal async Task CheckOnceAsync(string source, CancellationToken ct = default)
     {
-        foreach (var cliType in new[] { CliTypes.Claude, CliTypes.Codex })
+        try
         {
-            try
-            {
-                var probe = _router.Get(cliType).TestCliPath();
-                if (probe.Available) _tracker.Observe(cliType, probe.Version, source);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "CLI version check failed for {Cli}; the next periodic check will retry", cliType);
-            }
+            await _selfHeal.ProbeAllAsync(_router, source, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Local CLI capability check failed; the next periodic check will retry");
         }
     }
 
@@ -50,7 +46,7 @@ public sealed class CliVersionMonitorHostedService : BackgroundService
     {
         // Do not run synchronous process probes on the host startup thread.
         await Task.Yield();
-        CheckOnce("startup");
+        await CheckOnceAsync("startup", stoppingToken);
 
         var minutes = Math.Clamp(
             _configuration.GetValue<int?>("CliVersionMonitor:IntervalMinutes")
@@ -62,7 +58,7 @@ public sealed class CliVersionMonitorHostedService : BackgroundService
         {
             try { await timer.WaitForNextTickAsync(stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
-            CheckOnce("periodic");
+            await CheckOnceAsync("periodic", stoppingToken);
         }
     }
 }

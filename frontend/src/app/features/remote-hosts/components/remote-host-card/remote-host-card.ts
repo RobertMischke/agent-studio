@@ -37,6 +37,8 @@ import {
 } from '../../models/remote-host.model';
 import { freshHostTelemetry, latestHostTelemetry } from '../../models/running-truth';
 import { providerAuthBadgesForHost, type ProviderAuthBadge } from '../../models/provider-auth.model';
+import type { LocalCliHealthSnapshot, LocalCliRepairEvent } from '../../../cli';
+import { CliRepairNoteComponent } from '../cli-repair-note/cli-repair-note';
 
 /** One meter row (RAM / CPU / Disk) resolved for the template. */
 interface Meter {
@@ -70,6 +72,7 @@ interface Meter {
     RuntimeCapacityEditorComponent,
     RemoteHostRoleRowComponent,
     RemoteHostDetailSummaryComponent,
+    CliRepairNoteComponent,
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
@@ -94,6 +97,7 @@ export class RemoteHostCardComponent {
    */
   readonly projectSlots = input<readonly HostProjectSlots[]>([]);
   readonly expanded = input(false);
+  readonly cliHealth = input<LocalCliHealthSnapshot | null>(null);
   /** Injected clock so the relative heartbeat label ticks without a per-card timer. */
   readonly now = input<number>(Date.now());
   readonly action = output<{ kind: HostActionKind; id: string }>();
@@ -218,6 +222,17 @@ export class RemoteHostCardComponent {
   });
   readonly loadLabel = computed(() => this.loadPct() === null ? null : `${this.loadPct()}%`);
   readonly releaseLabel = computed(() => this.host().releaseId?.trim() || null);
+  readonly cliRepairEvent = computed<LocalCliRepairEvent | null>(() => {
+    if (this.host().role !== 'local') return null;
+    const snapshot = this.cliHealth();
+    const repair = snapshot?.latestRepair;
+    if (!repair) return null;
+    if (repair.succeeded) return repair;
+    return snapshot.capabilities.find(item => item.cliType === repair.cliType)?.available === false
+      ? repair
+      : null;
+  });
+
   readonly detailId = computed(() => `remote-host-detail-${this.host().id.replace(/[^a-zA-Z0-9_-]/g, '-')}`);
   readonly healthyCapabilityCount = computed(() => {
     const health = this.host().capabilityHealth ?? [];

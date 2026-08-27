@@ -188,6 +188,29 @@ describe('RemoteHostCardComponent', () => {
       .toContain('ready → unavailable');
   });
 
+  it('shows the local CLI repair evidence without alarming on success', () => {
+    const fixture = mount({ ...HOST, id: 'local', role: 'local', name: 'Local machine' });
+    fixture.componentRef.setInput('cliHealth', {
+      at: '2026-08-18T10:42:00Z',
+      capabilities: [{
+        cliType: 'claude', available: true, version: '2.1.234', path: 'C:/npm/claude.cmd',
+        classification: 'repaired', checkedAt: '2026-08-18T10:42:00Z',
+      }],
+      latestRepair: {
+        cliType: 'claude', packageName: '@anthropic-ai/claude-code',
+        attemptedAt: '2026-08-18T10:41:00Z', completedAt: '2026-08-18T10:42:00Z',
+        succeeded: true, trigger: 'periodic', lastObservedVersionBefore: '2.1.231',
+        packageVersionBefore: '2.1.234', versionAfter: '2.1.234', error: null,
+      },
+    });
+    fixture.detectChanges();
+
+    const note = fixture.nativeElement.querySelector('[data-testid="remote-host-cli-repair"]') as HTMLElement;
+    expect(note.textContent).toContain('Claude CLI repaired');
+    expect(note.textContent).toContain('2.1.231 → 2.1.234');
+    expect(note.getAttribute('data-tone')).toBe('note');
+  });
+
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
     const el: HTMLElement = mount({
       ...HOST,

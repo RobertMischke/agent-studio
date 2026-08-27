@@ -31,6 +31,7 @@ import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.compone
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { summarizeStatusBarHostLoad, summarizeStatusBarSlotsByRole } from './status-bar-host-load';
 import { withRouteSegment } from '../../../../services/url-hash.util';
+import { LocalCliHealthStore, type LocalCliRepairEvent } from '../../../cli';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -69,6 +70,7 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   private readonly clientDefaults = inject(ClientDefaultsService);
   private readonly remoteHosts = inject(RemoteHostsService);
   private readonly reviewQueue = inject(ReviewQueueService);
+  private readonly localCliHealth = inject(LocalCliHealthStore);
   private hostLoadRefreshHandle: VisibleIntervalHandle | null = null;
 
   readonly projectNames = input<string[]>([]);
@@ -204,11 +206,39 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     return null;
   });
 
+  readonly cliRepairEvent = computed<LocalCliRepairEvent | null>(() => {
+    const snapshot = this.localCliHealth.snapshot();
+    const repair = snapshot?.latestRepair;
+    if (!repair) return null;
+    if (repair.succeeded) return repair;
+    const capability = snapshot.capabilities.find(item => item.cliType === repair.cliType);
+    return capability?.available === false ? repair : null;
+  });
+
+  readonly cliRepairLabel = computed(() => {
+    const repair = this.cliRepairEvent();
+    if (!repair) return '';
+    const cli = repair.cliType === 'claude' ? 'Claude CLI' : 'Codex CLI';
+    const verb = repair.succeeded ? 'repaired' : 'repair failed';
+    return `${cli} ${verb} at ${this.formatRepairTime(repair.completedAt)}`;
+  });
+
+  readonly cliRepairTooltip = computed(() => {
+    const repair = this.cliRepairEvent();
+    if (!repair) return '';
+    const versions = repair.lastObservedVersionBefore || repair.packageVersionBefore
+      ? ` Version ${repair.lastObservedVersionBefore || repair.packageVersionBefore} to ${repair.versionAfter || 'unknown'}.`
+      : '';
+    const failure = repair.error ? ` ${repair.error}` : '';
+    return `${this.cliRepairLabel()}.${versions}${failure} Open execution hosts for details.`;
+  });
+
   ngOnInit(): void {
     this.remoteHosts.refresh();
     this.reviewQueue.refresh();
+    this.localCliHealth.refresh();
     this.hostLoadRefreshHandle = setVisibleInterval(
-      () => { this.remoteHosts.refresh(); this.reviewQueue.refresh(); },
+      () => { this.remoteHosts.refresh(); this.reviewQueue.refresh(); this.localCliHealth.refresh(); },
       HOST_LOAD_REFRESH_MS,
     );
     void this.clientDefaults.hydrate().then(() => {
@@ -256,6 +286,13 @@ export class StatusBarComponent implements OnInit, OnDestroy {
       window.location.hash,
       '/workspace/settings/execution-hosts',
     );
+  }
+
+  private formatRepairTime(iso: string): string {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+      ? iso
+      : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   /** Atomic commit from the unified selector. Persists to localStorage and
