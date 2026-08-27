@@ -123,7 +123,13 @@
           </button>
         </header>
 
-        @if (row.error) {
+        @if (row.showingLastGood && row.probeFailureLabel) {
+          <div class="cud__stale"
+               data-testid="cli-usage-detail-probe-stale"
+               [cacTooltip]="row.error ?? row.probeFailureLabel">
+            {{ row.probeFailureLabel }} · showing last-good quota values
+          </div>
+        } @else if (row.error) {
           <div class="cud__error">{{ row.error }}</div>
         }
 

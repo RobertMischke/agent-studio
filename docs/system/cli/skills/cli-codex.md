@@ -373,6 +373,25 @@ locked by:
 
 The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
 
+**Versioned status fixtures and startup gates (AGT-2679).** Codex 0.149.0
+introduced an update-choice dialog before the ready prompt and moved reset text
+onto a separate visual row. The quota driver only sends trust confirmation when
+the trust prompt matched, selects "Skip until next version" when the update
+dialog appears, and then submits `/status`. Parser fixtures live under
+`backend.Tests/Fixtures/quota/codex/` with the CLI version in each filename.
+Keep an older fixture when adding a new layout so compatibility remains an
+explicit test contract. A missing standard 5-hour row is valid; Spark rows must
+never be promoted into that missing standard bucket.
+
+**Stale-while-revalidate failure contract (AGT-2679).** `GET /api/cli/quota`
+serves the cache immediately and schedules a coalesced, bounded background
+probe. A failed probe does not replace the last good plan or windows. The
+snapshot retains their original `fetchedAt` and adds `probeFailedAt`,
+`cliVersion`, and a normalized `error`. The UI marks those values stale and
+puts the probe error in the marker tooltip. Startup and periodic version checks
+compare Claude and Codex against the disk-cached baseline and log
+`CLI version changed` with the previous version, current version, and source.
+
 **Spark-block split is version-agnostic (AGT-2064).** `/status` renders a
 `<model>-Spark limit:` sub-block with its own near-empty 5h/Weekly lines. The
 standard windows are read only from the region ABOVE that header, so the Spark

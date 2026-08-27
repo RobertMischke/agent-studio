@@ -20,13 +20,32 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed class CodexQuotaProbe : QuotaProbeBase
 {
-    // "5h limit: [bar] NN% left (resets HH:MM[ on D Mon])"
+    // Codex 0.149.0 moved the reset onto a following visual row and can omit
+    // the reset altogether while the status panel is refreshing. Read the
+    // percentage first and make the reset suffix optional. The legacy regexes
+    // below remain as fallbacks for the older single-line panel.
     private static readonly Regex FiveHourRegex = new(
-        @"5h\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        @"5h\s*limit\s*:?\s*(?:\[[^\]]*\]\s*)?(?<left>\d+)\s*%\s*left",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex WeeklyRegex = new(
-        @"Weekly\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        @"Weekly\s*limit\s*:?\s*(?:\[[^\]]*\]\s*)?(?<left>\d+)\s*%\s*left",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex NextLimitHeaderRegex = new(
+        @"(?:5h|Weekly|Spark)\s*limit\s*:?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex ResetSuffixRegex = new(
+        @"\(?\s*resets\s*(?<reset>[^)\r\n│]+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex LegacyFiveHourRegex = new(
+        @"5h\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+)\s*\)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex LegacyWeeklyRegex = new(
+        @"Weekly\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+)\s*\)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Header of the Spark sub-block: "<model>-Spark limit:". It is
@@ -63,9 +82,11 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
 
     public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
     {
+        var cliVersion = DetectCliVersion();
         try
         {
             var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
+            var updatePattern  = new Regex(@"Update\s*available|Skip\s*until\s*next\s*version", RegexOptions.IgnoreCase);
             var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
             var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
 
@@ -75,7 +96,11 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
                 // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
                 // stray "1" in the chat input box, which then prefixes the next slash
                 // command and turns "/status" into a chat message instead of a command.
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
+                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 4000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300, SendKeysOnlyIfMatched: true),
+                // 0.149.0 can interpose an update picker before the ready REPL.
+                // Move off "Update now" and persist "Skip until next version"
+                // so a quota probe never attempts to mutate the global CLI.
+                new ProbeStep("dismiss-update", WaitForPattern: updatePattern, WaitTimeoutMs: 4000, SendKeys: "<Down><Enter>", SettleIdleMs: 1000, SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
                 // Clear the buffer so the await-welcome match only sees post-trust content.
                 new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
                 // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
@@ -86,9 +111,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             initialIdleMs: 8000,
             ct);
 
-            string? plan = PlanRegex.Match(snap) is { Success: true } pm
-                ? pm.Groups["plan"].Value.Trim()
-                : null;
+            string? plan = ParsePlan(snap);
 
             var windows = ParseStatusWindows(snap);
 
@@ -106,6 +129,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = cliVersion,
                 Plan      = plan,
                 Source    = "/status",
                 RawSample = TruncateForDebug(snap),
@@ -118,7 +142,13 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Codex quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = cliVersion,
+                Source = "/status",
+                Error = DescribeProbeFailure(ex)
+            };
         }
     }
 
@@ -133,14 +163,14 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         // version-agnostic.
         var standardSnap = sparkHeader.Success ? snap[..sparkHeader.Index] : snap;
 
-        AddLimitWindow(windows, standardSnap, FiveHourRegex, "5-hour");
-        AddLimitWindow(windows, standardSnap, WeeklyRegex, "Weekly");
+        AddLimitWindow(windows, standardSnap, FiveHourRegex, LegacyFiveHourRegex, "5-hour");
+        AddLimitWindow(windows, standardSnap, WeeklyRegex, LegacyWeeklyRegex, "Weekly");
 
         if (sparkHeader.Success)
         {
             var sparkSnap = snap[(sparkHeader.Index + sparkHeader.Length)..];
-            AddLimitWindow(windows, sparkSnap, FiveHourRegex, "Spark 5-hour");
-            AddLimitWindow(windows, sparkSnap, WeeklyRegex, "Spark Weekly");
+            AddLimitWindow(windows, sparkSnap, FiveHourRegex, LegacyFiveHourRegex, "Spark 5-hour");
+            AddLimitWindow(windows, sparkSnap, WeeklyRegex, LegacyWeeklyRegex, "Spark Weekly");
         }
 
         // Footer fallback when /status didn't render: at least we still
@@ -156,23 +186,49 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         return windows;
     }
 
-    private static void AddLimitWindow(List<QuotaWindow> windows, string snap, Regex regex, string label)
+    public static string? ParsePlan(string snap)
+        => PlanRegex.Match(snap) is { Success: true } match
+            ? match.Groups["plan"].Value.Trim()
+            : null;
+
+    private static void AddLimitWindow(
+        List<QuotaWindow> windows,
+        string snap,
+        Regex currentRegex,
+        Regex legacyRegex,
+        string label)
     {
-        if (regex.Match(snap) is not { Success: true } match
+        var match = currentRegex.Match(snap);
+        if (!match.Success) match = legacyRegex.Match(snap);
+        if (!match.Success
             || !int.TryParse(match.Groups["left"].Value, out var left))
         {
             return;
         }
 
-        var resetRaw = match.Groups["reset"].Value.Trim();
+        var resetRaw = ReadResetSuffix(snap, match);
         windows.Add(new QuotaWindow
         {
             Label      = label,
             UsedPct    = 100 - left,
             Unit       = "%",
-            ResetAt    = ParseResetUtc(resetRaw),
+            ResetAt    = resetRaw == null ? null : ParseResetUtc(resetRaw),
             ResetLabel = resetRaw
         });
+    }
+
+    private static string? ReadResetSuffix(string snap, Match limitMatch)
+    {
+        if (limitMatch.Groups["reset"].Success)
+            return limitMatch.Groups["reset"].Value.Trim();
+
+        var tail = snap[(limitMatch.Index + limitMatch.Length)..];
+        var nextLimit = NextLimitHeaderRegex.Match(tail);
+        if (nextLimit.Success) tail = tail[..nextLimit.Index];
+        if (tail.Length > 240) tail = tail[..240];
+
+        var reset = ResetSuffixRegex.Match(tail);
+        return reset.Success ? reset.Groups["reset"].Value.Trim() : null;
     }
 
     /// <summary>

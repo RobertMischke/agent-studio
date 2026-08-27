@@ -773,7 +773,10 @@ builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
+builder.Services.AddSingleton<CliVersionTracker>();
 builder.Services.AddSingleton<QuotaService>();
+if (!builder.Environment.IsEnvironment("Test") && !underTestHost)
+    builder.Services.AddHostedService<CliVersionMonitorHostedService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddSingleton<CliQuotaWaitPolicyService>();
 builder.Services.AddSingleton<CliQuotaFallbackService>();

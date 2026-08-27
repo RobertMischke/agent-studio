@@ -28,6 +28,27 @@ public abstract class QuotaProbeBase : IQuotaProbe
     public abstract Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
 
     /// <summary>
+    /// Read the CLI version through the same centrally resolved executable used
+    /// by the probe. Version detection is best-effort so an unavailable binary
+    /// is still reported through the normal probe error path.
+    /// </summary>
+    protected string? DetectCliVersion()
+    {
+        try { return _router.Get(CliType).TestCliPath().Version; }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not read {Cli} version before quota probe", CliType);
+            return null;
+        }
+    }
+
+    /// <summary>Keep cancellation implementation details out of operator-facing quota errors.</summary>
+    protected static string DescribeProbeFailure(Exception ex)
+        => ex is OperationCanceledException
+            ? "Quota probe timed out before the CLI panel rendered."
+            : ex.Message;
+
+    /// <summary>
     /// Spawn the CLI, optionally send a slash-command sequence, wait for output to settle,
     /// return the ANSI-stripped snapshot. Always sends two Esc presses at the end so
     /// modal pickers close before the process is torn down.

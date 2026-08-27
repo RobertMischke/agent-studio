@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/dev-backend';
 import { mkdirSync } from 'node:fs';
 import { setTheme, type Theme } from '../helpers/theme';
 
@@ -29,6 +29,8 @@ function codexPercentQuotaReport() {
       {
         cliType: 'codex',
         fetchedAt: new Date().toISOString(),
+        cliVersion: 'codex-cli 0.149.0',
+        probeFailedAt: null,
         plan: 'Pro',
         windows: [
           { label: 'Current session (5h)', usedPct: 66, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '02:33' },
@@ -47,6 +49,7 @@ function codexPercentQuotaReport() {
 test.describe('Status bar quota: Codex %-only payload', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SHOT_DIR, { recursive: true });
+    await page.route('**/api/crash-recovery/pending', route => route.fulfill({ json: { pending: [] } }));
     // Specific quota route first (first-registered route wins here) so the
     // Codex card renders our fixture regardless of the live stack.
     await page.route('**/api/cli/quota', async (route) => {
@@ -111,5 +114,76 @@ test.describe('Status bar quota: Codex %-only payload', () => {
         path: `${SHOT_DIR}/cli-usage-modal-after--${theme}--playwright.png`,
       });
     }
+  });
+
+  test('failed probe keeps last-good values with an attributable stale marker', async ({ page, devBackend: _devBackend }) => {
+    await page.unroute('**/api/cli/quota');
+    const lastGoodAt = '2026-08-27T18:55:00Z';
+    const failedAt = '2026-08-27T19:07:00Z';
+    let payload: { at: string; ttlSeconds: number; snapshots: Array<Record<string, unknown>> } = {
+      at: failedAt,
+      ttlSeconds: 600,
+      snapshots: [{
+        cliType: 'codex',
+        fetchedAt: failedAt,
+        cliVersion: 'codex-cli 0.149.0',
+        probeFailedAt: null,
+        plan: null,
+        windows: [],
+        source: '/status',
+        rawSample: null,
+        error: 'A task was canceled.',
+      }],
+    };
+    await page.route('**/api/cli/quota', route => route.fulfill({ json: payload }));
+
+    await page.reload();
+    await page.keyboard.press('Escape');
+    const beforeCard = page.getByTestId('hquota-card-codex');
+    await expect(beforeCard).toHaveAttribute('data-state', 'error');
+    await beforeCard.click();
+    let modal = page.getByTestId('cli-usage-modal-codex');
+    await expect(modal).toContainText('A task was canceled.');
+    await expect(modal.getByTestId('cli-usage-modal-windows')).toHaveCount(0);
+    await modal.screenshot({ path: `${SHOT_DIR}/quota-probe-before--mocked.png` });
+
+    await page.keyboard.press('Escape');
+    payload = {
+      at: failedAt,
+      ttlSeconds: 600,
+      snapshots: [{
+        cliType: 'codex',
+        fetchedAt: lastGoodAt,
+        cliVersion: 'codex-cli 0.149.0',
+        probeFailedAt: failedAt,
+        plan: 'Pro',
+        windows: [
+          { label: 'Weekly', usedPct: 61, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '17:12 on 1 Sep' },
+          { label: 'Spark 5-hour', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '09:56' },
+          { label: 'Spark Weekly', usedPct: 0, used: null, limit: null, unit: '%', resetAt: null, resetLabel: '04:56 on 3 Sep' },
+        ],
+        source: '/status',
+        rawSample: null,
+        error: 'Quota probe timed out before the CLI panel rendered.',
+      }],
+    };
+
+    await page.reload();
+    await page.keyboard.press('Escape');
+    const card = page.getByTestId('hquota-card-codex');
+    await expect(card).toHaveAttribute('data-state', 'stale');
+    await expect(card.getByTestId('hquota-stale-marker')).toHaveText('stale');
+    await card.click();
+    modal = page.getByTestId('cli-usage-modal-codex');
+    const stale = modal.getByTestId('cli-usage-probe-stale');
+    await expect(stale).toContainText('probe failed');
+    await expect(stale).toContainText('codex 0.149.0');
+    await expect(stale).toContainText('showing last-good quota values');
+    await expect(modal.getByText('61% used')).toBeVisible();
+    await stale.hover();
+    await expect(page.getByText('Quota probe timed out before the CLI panel rendered.')).toBeVisible();
+    await modal.screenshot({ path: `${SHOT_DIR}/quota-probe-after--mocked.png` });
+    await setTheme(page, 'dark');
+    await modal.screenshot({ path: `${SHOT_DIR}/quota-probe-after-dark--mocked.png` });
   });
 });

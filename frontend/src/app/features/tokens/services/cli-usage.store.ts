@@ -4,7 +4,7 @@ import type { CliType } from '../../../models/task.model';
 import { cliTypeIcon } from '../../../services/format.util';
 import { JobsHubClient } from '../../../services/jobs-hub-client.service';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../quota';
-import { QuotaApiService } from '../../quota';
+import { QuotaApiService, quotaProbeFailureLabel, quotaSnapshotIsStale } from '../../quota';
 import { TokensApiService } from './tokens-api.service';
 import type {
   AdHocUsageAggregate,
@@ -26,6 +26,10 @@ export interface CliUsageQuotaRow {
   fetchedAt: string | null;
   freshness: string;
   stale: boolean;
+  cliVersion?: string | null;
+  probeFailedAt?: string | null;
+  probeFailureLabel?: string | null;
+  showingLastGood?: boolean;
   source: string | null;
   error: string | null;
   windows: QuotaWindow[];
@@ -255,7 +259,7 @@ export class CliUsageStore {
   private buildRow(s: QuotaSnapshot, ttlMs: number, now: number): CliUsageQuotaRow {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
+    const stale = quotaSnapshotIsStale(s, ttlMs, now);
     const freshness = !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
     const primary = s.windows.length > 0
       ? [...s.windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1))[0]
@@ -268,6 +272,10 @@ export class CliUsageStore {
       plan: s.plan,
       fetchedAt: s.fetchedAt,
       stale,
+      cliVersion: s.cliVersion ?? null,
+      probeFailedAt: s.probeFailedAt ?? null,
+      probeFailureLabel: quotaProbeFailureLabel(s),
+      showingLastGood: !!s.probeFailedAt && (s.windows.length > 0 || !!s.plan),
       freshness,
       source: s.source,
       error: s.error,
