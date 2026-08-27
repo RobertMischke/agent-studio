@@ -93,6 +93,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
 
     public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
     {
+        var cliVersion = DetectCliVersion();
         try
         {
             var trustPattern  = new Regex(@"trust\s*this\s*folder|Quick\s*safety\s*check", RegexOptions.IgnoreCase);
@@ -186,6 +187,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             return new QuotaSnapshot
             {
                 CliType   = CliType,
+                CliVersion = cliVersion,
                 Plan      = plan,
                 Source    = "/usage",
                 RawSample = TruncateForDebug(snap),
@@ -200,7 +202,13 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Claude quota probe failed");
-            return new QuotaSnapshot { CliType = CliType, Source = "/usage", Error = ex.Message };
+            return new QuotaSnapshot
+            {
+                CliType = CliType,
+                CliVersion = cliVersion,
+                Source = "/usage",
+                Error = DescribeProbeFailure(ex)
+            };
         }
     }
 

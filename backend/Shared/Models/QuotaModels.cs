@@ -40,6 +40,18 @@ public record QuotaSnapshot
 {
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
+    /// <summary>
+    /// Version reported by the CLI's <c>--version</c> command for this probe.
+    /// Keeping it on the quota snapshot makes parser drift attributable without
+    /// requiring a second operator-side reproduction.
+    /// </summary>
+    public string? CliVersion { get; init; }
+    /// <summary>
+    /// UTC time of the most recent failed probe. When this is set,
+    /// <see cref="FetchedAt"/>, <see cref="Plan"/>, and <see cref="Windows"/>
+    /// still describe the last good reading.
+    /// </summary>
+    public DateTime? ProbeFailedAt { get; init; }
     /// <summary>"Pro" / "Pro+" / "Plus" / "Free" — null when unknown.</summary>
     public string? Plan { get; init; }
     public List<QuotaWindow> Windows { get; init; } = [];

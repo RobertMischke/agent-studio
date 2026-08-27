@@ -5,6 +5,46 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "codex",
+            name));
+
+    [Fact]
+    public void ParseStatusWindows_V0_144_1Fixture_KeepsLegacySingleLineLayout()
+    {
+        var snapshot = ReadFixture("codex-status-v0.144.1.txt");
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+
+        Assert.Equal("Plus", CodexQuotaProbe.ParsePlan(snapshot));
+        Assert.Collection(
+            windows,
+            w => { Assert.Equal("5-hour", w.Label); Assert.Equal(3, w.UsedPct); Assert.Equal("20:09", w.ResetLabel); },
+            w => { Assert.Equal("Weekly", w.Label); Assert.Equal(14, w.UsedPct); Assert.Equal("23:43 on 11 Jun", w.ResetLabel); },
+            w => { Assert.Equal("Spark 5-hour", w.Label); Assert.Equal(0, w.UsedPct); Assert.Equal("21:25", w.ResetLabel); },
+            w => { Assert.Equal("Spark Weekly", w.Label); Assert.Equal(0, w.UsedPct); Assert.Equal("16:25 on 14 Jun", w.ResetLabel); });
+    }
+
+    [Fact]
+    public void ParseStatusWindows_V0_149_0Fixture_ReadsSplitResetRowsWithoutInventingFiveHour()
+    {
+        var snapshot = ReadFixture("codex-status-v0.149.0.txt");
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+
+        Assert.Equal("Pro", CodexQuotaProbe.ParsePlan(snapshot));
+        Assert.DoesNotContain(windows, window => window.Label == "5-hour");
+        Assert.Collection(
+            windows,
+            w => { Assert.Equal("Weekly", w.Label); Assert.Equal(61, w.UsedPct); Assert.Equal("17:12 on 1 Sep", w.ResetLabel); },
+            w => { Assert.Equal("Spark 5-hour", w.Label); Assert.Equal(0, w.UsedPct); Assert.Equal("09:56", w.ResetLabel); },
+            w => { Assert.Equal("Spark Weekly", w.Label); Assert.Equal(0, w.UsedPct); Assert.Equal("04:56 on 3 Sep", w.ResetLabel); });
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {

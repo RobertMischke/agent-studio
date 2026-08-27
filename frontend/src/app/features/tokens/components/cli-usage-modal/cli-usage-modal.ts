@@ -87,6 +87,11 @@ export class CliUsageModalComponent {
 
   readonly title = computed(() => this.row()?.label ?? this.cliLabel(this.cliType()));
 
+  readonly failureLabel = computed(() => {
+    const row = this.row();
+    return row?.showingLastGood ? row.probeFailureLabel ?? null : null;
+  });
+
   readonly subtitle = computed(() => {
     const r = this.row();
     if (!r) return 'No data yet';

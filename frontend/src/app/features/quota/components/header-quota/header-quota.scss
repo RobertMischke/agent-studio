@@ -105,6 +105,14 @@
   line-height: 1;
 }
 
+.hquota__stale-label {
+  color: var(--studio-accent-warn-strong);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .hquota__chips {
   display: inline-flex;
   align-items: center;

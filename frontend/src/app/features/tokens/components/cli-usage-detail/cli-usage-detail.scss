@@ -293,6 +293,17 @@
   font-size: 12px;
 }
 
+.cud__stale {
+  margin-top: var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  color: var(--studio-accent-warn-strong);
+  background: color-mix(in srgb, var(--studio-accent-warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-warn) 35%, var(--studio-border));
+  border-radius: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 .cud__empty {
   font-size: 12px;
 }
