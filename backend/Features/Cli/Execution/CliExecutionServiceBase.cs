@@ -21,6 +21,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
     protected readonly IConfiguration _configuration;
     internal readonly ConcurrentDictionary<string, ProcInfo> _processes = new();
     private readonly CliBehavior _behavior;
+    private readonly LocalCliSelfHealService? _localCliSelfHeal;
 
     /// <summary>
     /// Per-task clean-context homes (jobKey → live preparation). Session-state
@@ -100,11 +101,16 @@ public partial class GenericCliExecutionService : ICliExecutionService
         catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
     }
 
-    internal GenericCliExecutionService(CliBehavior behavior, ILogger logger, IConfiguration configuration)
+    internal GenericCliExecutionService(
+        CliBehavior behavior,
+        ILogger logger,
+        IConfiguration configuration,
+        LocalCliSelfHealService? localCliSelfHeal = null)
     {
         _behavior = behavior;
         _logger = logger;
         _configuration = configuration;
+        _localCliSelfHeal = localCliSelfHeal;
     }
 
     /// <summary>
@@ -128,10 +134,11 @@ public partial class GenericCliExecutionService : ICliExecutionService
         IConfiguration configuration,
         CliUsageParserRegistry? usageParsers = null,
         ICliModelRegistry? modelRegistry = null,
-        ClaudeModelDiscovery? modelDiscovery = null)
+        ClaudeModelDiscovery? modelDiscovery = null,
+        LocalCliSelfHealService? localCliSelfHeal = null)
         => new GenericCliExecutionService(
             BuiltInCliBehaviors.Claude(usageParsers, modelRegistry ?? new CliModelRegistry(), modelDiscovery),
-            logger, configuration);
+            logger, configuration, localCliSelfHeal);
 
     /// <summary>Build a Codex engine from the per-CLI dependencies.</summary>
     internal static GenericCliExecutionService ForCodex(
@@ -139,10 +146,11 @@ public partial class GenericCliExecutionService : ICliExecutionService
         IConfiguration configuration,
         CodexModelDiscovery modelDiscovery,
         CliUsageParserRegistry usageParsers,
-        ICliModelRegistry modelRegistry)
+        ICliModelRegistry modelRegistry,
+        LocalCliSelfHealService? localCliSelfHeal = null)
         => new GenericCliExecutionService(
             BuiltInCliBehaviors.Codex(modelDiscovery, usageParsers, modelRegistry),
-            logger, configuration);
+            logger, configuration, localCliSelfHeal);
 
     /// <summary>Build an Antigravity/Gemini engine (no extra dependencies).</summary>
     internal static GenericCliExecutionService ForAntigravity(
@@ -377,7 +385,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
         });
     }
 
-    public Task<(CliExecution? Execution, string? Error)> StartAsync(
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(
         string jobId,
         string jobKey,
         string prompt,
@@ -392,10 +400,24 @@ public partial class GenericCliExecutionService : ICliExecutionService
         string? executionEngine = null,
         CancellationToken ct = default)
     {
+        if (_localCliSelfHeal is not null
+            && CliType is CliTypes.Claude or CliTypes.Codex)
+        {
+            var repair = await _localCliSelfHeal.ProbeAndRepairAsync(
+                CliType,
+                GetCliPath(),
+                () => TestCliPath(),
+                ct);
+            if (repair.Handled && !repair.Available)
+            {
+                return (null, repair.Error ?? $"{CliType} global npm shim repair did not restore the command.");
+            }
+        }
+
         var engine = CliExecutionEngines.Normalize(executionEngine);
         if (engine == CliExecutionEngines.Car && SupportsCarExecution)
         {
-            return StartCarAsync(
+            return await StartCarAsync(
                 jobId, jobKey, prompt, workingDirectory, sessionName,
                 resumeSession, model, thinkingLevel, jobFolderPath,
                 permissionMode, contextMode, ct);
@@ -408,7 +430,7 @@ public partial class GenericCliExecutionService : ICliExecutionService
                 CliType);
         }
 
-        return StartLegacyAsync(
+        return await StartLegacyAsync(
             jobId, jobKey, prompt, workingDirectory, sessionName,
             resumeSession, model, thinkingLevel, jobFolderPath,
             permissionMode, contextMode, ct);

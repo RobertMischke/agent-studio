@@ -7,6 +7,8 @@ import {
   hostRoleLabel,
   hostStatusLabel,
   hostStatusTone,
+  latestCliRepair,
+  localCliRepairNote,
   meterTone,
   ramUsedPct,
   relativeHeartbeat,
@@ -84,6 +86,26 @@ describe('remote-host.model helpers', () => {
     expect(relativeHeartbeat('2026-07-10T09:00:00Z', now)).toBe('3h ago');
     expect(relativeHeartbeat('2026-07-08T12:00:00Z', now)).toBe('2d ago');
     expect(relativeHeartbeat('not-a-date', now)).toBe('never');
+  });
+
+  it('keeps a successful CLI repair quiet and selects the latest host event', () => {
+    const older = {
+      cliType: 'claude', state: 'failed' as const, occurredAt: '2026-08-18T09:00:00Z',
+      cliVersionBefore: '2.1.231', cliVersionAfter: null,
+      packageVersionBefore: '2.1.234', packageVersionAfter: '2.1.234',
+      detail: 'repair failed',
+    };
+    const repaired = {
+      ...older,
+      state: 'repaired' as const,
+      occurredAt: '2026-08-18T09:05:00Z',
+      cliVersionAfter: '2.1.234',
+      detail: 'CLI repaired at 2026-08-18T09:05:00Z.',
+    };
+
+    expect(latestCliRepair([{ cliRepairs: [older, repaired] }])).toBe(repaired);
+    expect(localCliRepairNote(repaired)).toMatch(/^CLI repaired at /);
+    expect(localCliRepairNote(older)).toMatch(/^CLI repair failed at /);
   });
 
   it('treats an expired connectivity capability as an unavailable route', () => {

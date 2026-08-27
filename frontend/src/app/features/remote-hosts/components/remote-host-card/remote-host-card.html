@@ -1,5 +1,4 @@
 @let h = host();
-
 <tr class="host__row" [attr.data-tone]="tone()" data-testid="remote-host-primary-row">
   <td class="host__name-cell">
     <button class="host__disclosure"
@@ -45,14 +44,12 @@
   </td>
   <td class="host__actions"><span class="host__placeholder" title="Actions are per runner role">–</span></td>
 </tr>
-
 @for (role of roles(); track role.id) {
   <tr appRemoteHostRoleRow
       [host]="role"
       [activeSlots]="activeSlotsFor(role)"
       (action)="action.emit($event)"></tr>
 }
-
 @if (expanded()) {
   <tr class="host__detail-row" data-testid="remote-host-detail-row">
     <td colspan="7">
@@ -73,7 +70,6 @@
           </dl>
           }
         </section>
-
         <section class="detail" data-testid="remote-host-detail-section-connection">
           <app-remote-host-detail-summary label="Connection" [summary]="connectionSummary()"
             testId="remote-host-detail-toggle-connection" [expanded]="isSectionExpanded('connection')"
@@ -111,12 +107,19 @@
           </div>
           }
         </section>
-
         <section class="detail" data-testid="remote-host-detail-section-capabilities">
           <app-remote-host-detail-summary label="Capabilities" [summary]="capabilitySummary()"
             testId="remote-host-detail-toggle-capabilities" [expanded]="isSectionExpanded('capabilities')"
             (toggled)="toggleSection('capabilities')" />
           @if (isSectionExpanded('capabilities')) {
+          @if (cliRepair(); as repair) {
+            <p class="cli-repair-note" [attr.data-state]="repair.state"
+               data-testid="remote-host-cli-repair-note" [appTooltip]="cliRepairTooltip()">
+              <span class="cli-repair-note__dot" aria-hidden="true"></span>
+              <strong>{{ cliRepairNote() }}</strong>
+              <span>{{ repair.cliType }} · {{ repair.cliVersionAfter || repair.packageVersionAfter || 'version unavailable' }}</span>
+            </p>
+          }
           @if (providerAuthBadges().length) {
             <div class="provider-auth" data-testid="remote-host-provider-auth" aria-label="Provider authentication">
               @for (auth of providerAuthBadges(); track auth.id) {
@@ -169,7 +172,6 @@
           <app-capability-health [host]="h" />
           }
         </section>
-
         <section class="detail" data-testid="remote-host-detail-section-capacity">
           <app-remote-host-detail-summary label="Capacity and leases" [summary]="capacitySummary()"
             testId="remote-host-detail-toggle-capacity" [expanded]="isSectionExpanded('capacity')"
@@ -185,7 +187,6 @@
           }
           }
         </section>
-
         <section class="detail" data-testid="remote-host-detail-section-projects"
                  [attr.data-attention]="failedProjectPreflights().length ? 'true' : null">
           <app-remote-host-detail-summary label="Project access" [summary]="projectAccessSummary()"

@@ -5,6 +5,7 @@ import type {
   HostActionKind,
   HostRampStrategy,
   HostTelemetrySeries,
+  LocalCliRepairStatusResponse,
   RemoteHost,
   TaskServerTelemetrySnapshot,
   TaskServerRunnerCapabilitySnapshot,
@@ -141,6 +142,7 @@ export class RemoteHostsService {
           this.hydrateTelemetry(host.id, host.clientId, telemetryWindow, preserveLongTelemetry);
         }
         this.hydrateCapabilityRegistry();
+        this.hydrateLocalCliRepairs();
       },
       error: error => {
         this.identityDiagnostics.set([]);
@@ -263,6 +265,19 @@ export class RemoteHostsService {
         this.log('capabilities-hydrated', { runners: snapshots?.length ?? 0 });
       },
       error: error => this.log('capabilities-hydrate-failed', { message: error?.message ?? 'unknown' }),
+    });
+  }
+
+  private hydrateLocalCliRepairs(): void {
+    if (!this.http) return;
+    this.http.get<LocalCliRepairStatusResponse>('/api/cli/repair-status').subscribe({
+      next: snapshot => {
+        this.hosts.update(hosts => hosts.map(host => host.role === 'local'
+          ? { ...host, cliRepairs: snapshot.repairs ?? [] }
+          : host));
+        this.log('local-cli-repairs-hydrated', { repairs: snapshot.repairs?.length ?? 0 });
+      },
+      error: error => this.log('local-cli-repairs-hydrate-failed', { message: error?.message ?? 'unknown' }),
     });
   }
 

@@ -399,20 +399,23 @@ builder.Services.AddSingleton<ClaudeModelDiscovery>();
 // type so the router + the Claude-specific consumers (orchestrator runner,
 // session-info endpoint) resolve the exact engine. The log category is kept
 // stable (per-CLI) via a named logger so existing log filters still match.
+builder.Services.AddSingleton<LocalCliSelfHealService>();
 builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Claude, (sp, _) =>
     GenericCliExecutionService.ForClaude(
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.ClaudeCliService"),
         sp.GetRequiredService<IConfiguration>(),
         sp.GetService<CliUsageParserRegistry>(),
         sp.GetService<ICliModelRegistry>(),
-        sp.GetService<ClaudeModelDiscovery>()));
+        sp.GetService<ClaudeModelDiscovery>(),
+        sp.GetRequiredService<LocalCliSelfHealService>()));
 builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Codex, (sp, _) =>
     GenericCliExecutionService.ForCodex(
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.CodexCliService"),
         sp.GetRequiredService<IConfiguration>(),
         sp.GetRequiredService<CodexModelDiscovery>(),
         sp.GetRequiredService<CliUsageParserRegistry>(),
-        sp.GetRequiredService<ICliModelRegistry>()));
+        sp.GetRequiredService<ICliModelRegistry>(),
+        sp.GetRequiredService<LocalCliSelfHealService>()));
 builder.Services.AddKeyedSingleton<GenericCliExecutionService>(CliTypes.Gemini, (sp, _) =>
     GenericCliExecutionService.ForAntigravity(
         sp.GetRequiredService<ILoggerFactory>().CreateLogger("AgentStudio.Cli.AntigravityCliService"),
@@ -423,6 +426,9 @@ builder.Services.AddSingleton<CliRouter>(sp => new CliRouter(
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Claude),
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Codex),
     sp.GetRequiredKeyedService<GenericCliExecutionService>(CliTypes.Gemini)));
+builder.Services.AddSingleton<LocalCliCapabilityMonitor>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<LocalCliCapabilityMonitor>());
 builder.Services.AddSingleton<SessionToTaskIndex>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();

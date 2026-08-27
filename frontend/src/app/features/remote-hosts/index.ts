@@ -26,6 +26,7 @@ export type {
   HostRampStrategy,
   RuntimeCapacitySettings,
   HostCliQuota,
+  LocalCliRepairStatus,
   HostSystemStats,
   HostTelemetryPoint,
   HostTelemetryFinding,
@@ -48,4 +49,6 @@ export {
   diskUsedPct,
   relativeHeartbeat,
   hostExecutorRole,
+  latestCliRepair,
+  localCliRepairNote,
 } from './models/remote-host.model';

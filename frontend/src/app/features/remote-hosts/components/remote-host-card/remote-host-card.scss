@@ -174,6 +174,27 @@
 .detail__badges { flex-wrap: wrap; gap: var(--studio-spacing-2); margin-top: var(--studio-spacing-3); }
 
 .provider-auth { flex-wrap: wrap; gap: var(--studio-spacing-2); }
+.cli-repair-note {
+  display: flex;
+  align-items: center;
+  gap: var(--studio-spacing-2);
+  margin: 0 0 var(--studio-spacing-3);
+  color: var(--studio-fg-muted);
+  font-size: 10px;
+}
+.cli-repair-note strong { color: var(--studio-fg-strong); }
+.cli-repair-note__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--severity-pass);
+}
+.cli-repair-note[data-state='failed'] {
+  background: var(--notify-error-tint);
+  color: var(--notify-error-icon-fg);
+}
+.cli-repair-note[data-state='failed'] .cli-repair-note__dot { background: var(--severity-high); }
 .provider-auth__badge {
   display: inline-flex;
   align-items: center;

@@ -139,6 +139,24 @@ differences live in the
 
 **Contract.** `TestCliPath()` returns `(Available, Version, ResolvedPath)`. Availability and quota probes remain Studio services because they also feed settings and routing surfaces outside an active CAR run.
 
+**Windows-local npm shim recovery.** The local backend probes Claude and Codex
+at startup, every minute, and immediately before a local launch. When a command
+is missing, `NpmCliShimInspectionPolicy` distinguishes a matching global npm
+package with no usable shims from a true uninstall. Only the package-present
+case runs `npm install -g` automatically. The attempt is serialized and limited
+to once per CLI per hour across backend restarts. Explicit absolute CLI paths
+are never replaced, and non-Windows hosts remain unchanged.
+
+`LocalCliSelfHealService` appends JSONL evidence to
+`%LOCALAPPDATA%\agent-taskboard\cli-repair-journal.jsonl` by default, with an
+optional `CliRepair:JournalPath` override. Each attempt captures the last
+healthy CLI version, npm package version and timestamps, expected shim state,
+nearby npm cache logs, CLI update/debug/log metadata, npm exit/output tail, and
+the verified version after repair. `GET /api/cli/repair-status` projects the
+latest outcome onto the local Execution Host and status bar. Success is a quiet
+`CLI repaired at <time>` note. Only failure alarms; a later healthy probe clears
+that alarm while retaining the journal.
+
 **Authentication.** Studio-local CLIs may still authenticate out of band.
 Remote hosts use the protected provider-auth provisioning flow. Environment
 credentials live only in `/etc/agent-runner/provider-auth.env` on the selected
@@ -219,7 +237,18 @@ Context mode resolution remains task override, then project setting, then the `c
 
 CAR 0.7.0 raises typed events before the matching raw-output callback. Studio must parse raw usage and session metadata before subscribers handle `TurnCompleted`, so [`CarCallbackBridge`](../../../backend/Features/Cli/Execution/BackendCarExecution.cs) buffers each typed batch, handles the raw line, and then publishes its events. This ordering is part of the token and cost ledger contract.
 
-The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR owns npm-shim healing for CAR-backed Claude launches. CAR 0.7.0 keeps its healer internal, so the existing Studio `NpmShimHealer` remains temporarily for the explicit legacy rollback and non-agent `ClaudeOneShot` only; T4 removes it with those paths. Studio uses the public `ICliProcessSpawner` seam only to attach host bookkeeping and the Claude rules-file overlay. The remaining public API gaps are tracked in PROJ-011 as `public-clean-context-lease`, `public-hardened-spawner-composition`, `public-cli-launch-overlay`, and `public-pre-spawn-health`. Do not solve CAR's internal Windows process helpers by copying them back into this repository.
+The old Studio-local `WindowsHandleScrubSpawner` no longer exists. CAR retains
+its internal per-launch npm-shim healing for CAR-backed Claude launches. The
+host-level recovery in section 2.7 is a separate availability boundary: it
+covers Claude and Codex while idle, journals evidence, and supplies the operator
+status surface before either execution engine is selected. The existing Studio
+`NpmShimHealer` remains temporarily for the explicit legacy rollback and
+non-agent `ClaudeOneShot` only; T4 removes it with those paths. Studio uses the
+public `ICliProcessSpawner` seam only to attach host bookkeeping and the Claude
+rules-file overlay. The remaining public API gaps are tracked in PROJ-011 as
+`public-clean-context-lease`, `public-hardened-spawner-composition`,
+`public-cli-launch-overlay`, and `public-pre-spawn-health`. Do not solve CAR's
+internal Windows process helpers by copying them back into this repository.
 
 ---
 
