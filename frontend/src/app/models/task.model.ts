@@ -1692,6 +1692,17 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
+  cliRepairs?: CliRepairStatus[];
+}
+
+export interface CliRepairStatus {
+  cliType: string;
+  state: 'repaired' | 'repair-failed' | 'repair-throttled' | 'truly-uninstalled' | 'non-shim-failure' | string;
+  observedAt: string;
+  message: string;
+  versionBefore?: string | null;
+  versionAfter?: string | null;
+  nextAttemptAt?: string | null;
 }
 
 /**

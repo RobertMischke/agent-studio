@@ -160,7 +160,18 @@ public static class TaskRunActivityClassifier
 public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
+    /// <summary>Latest local npm CLI repair classification or outcome per CLI.</summary>
+    public IReadOnlyList<CliRepairStatus> CliRepairs { get; init; } = [];
 }
+
+public sealed record CliRepairStatus(
+    string CliType,
+    string State,
+    DateTime ObservedAt,
+    string Message,
+    string? VersionBefore,
+    string? VersionAfter,
+    DateTime? NextAttemptAt);
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);
 

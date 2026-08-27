@@ -139,6 +139,17 @@ differences live in the
 
 **Contract.** `TestCliPath()` returns `(Available, Version, ResolvedPath)`. Availability and quota probes remain Studio services because they also feed settings and routing surfaces outside an active CAR run.
 
+**Local Windows npm repair.** The periodic Claude and Codex version probe
+distinguishes a truly absent npm package from the recurring state where the
+package remains under the global `node_modules` tree but its launchable Windows
+command shim has disappeared. Only the missing-shim state runs `npm install -g`
+for the matching package. Repair is limited to one attempt per CLI per hour across
+backend restarts. The append-only `.runtime/cli-self-heal.jsonl` journal records
+the CLI and package versions before and after, package and orphan-shim
+timestamps, nearby npm debug-log filenames, and the npm result. A successful
+repair is a quiet `CLI repaired at <time>` status-bar note. A failed repair is
+the only self-heal alarm and keeps the next eligible attempt time visible.
+
 **Authentication.** Studio-local CLIs may still authenticate out of band.
 Remote hosts use the protected provider-auth provisioning flow. Environment
 credentials live only in `/etc/agent-runner/provider-auth.env` on the selected

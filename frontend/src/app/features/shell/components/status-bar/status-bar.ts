@@ -13,6 +13,7 @@ import {
 import { TaskService } from '../../../../services/task.service';
 import { ClientDefaultsService } from '../../../../services/client-defaults.service';
 import type { CliType } from '../../../../models/task.model';
+import type { CliRepairStatus } from '../../../../models/task.model';
 import { CLI_TYPES } from '../../../../models/task.model';
 import {
   clearVisibleInterval,
@@ -53,6 +54,19 @@ export function formatRunningLabel(
     return codingSlotCeiling !== null ? `coding 0/${codingSlotCeiling}` : 'coding idle';
   }
   return 'no runners';
+}
+
+export function formatCliRepairLabel(event: CliRepairStatus): string {
+  const cli = event.cliType.length
+    ? event.cliType[0].toUpperCase() + event.cliType.slice(1)
+    : 'CLI';
+  const time = new Date(event.observedAt);
+  const timeLabel = Number.isNaN(time.getTime())
+    ? event.observedAt
+    : time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return event.state === 'repair-failed'
+    ? `${cli} CLI repair failed at ${timeLabel}`
+    : `${cli} CLI repaired at ${timeLabel}`;
 }
 
 @Component({
@@ -203,6 +217,24 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     }
     return null;
   });
+
+  readonly cliRepairEvent = computed(() => (this.jobService.runnerStatus().cliRepairs ?? [])
+    .filter(event => event.state === 'repaired' || event.state === 'repair-failed')
+    .sort((left, right) => Date.parse(right.observedAt) - Date.parse(left.observedAt))[0] ?? null);
+
+  cliRepairLabel(event: CliRepairStatus): string {
+    return formatCliRepairLabel(event);
+  }
+
+  cliRepairTooltip(event: CliRepairStatus): string {
+    const versions = event.versionBefore || event.versionAfter
+      ? ` Version ${event.versionBefore ?? 'unknown'} to ${event.versionAfter ?? 'unknown'}.`
+      : '';
+    const retry = event.state === 'repair-failed' && event.nextAttemptAt
+      ? ` Next automatic attempt after ${new Date(event.nextAttemptAt).toLocaleString()}.`
+      : '';
+    return `${event.message}.${versions}${retry}`;
+  }
 
   ngOnInit(): void {
     this.remoteHosts.refresh();

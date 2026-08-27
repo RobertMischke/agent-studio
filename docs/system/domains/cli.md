@@ -45,6 +45,10 @@ CLI execution tests.
   central one-prompt adapters used by model-backed pipeline steps. Codex uses
   stdin plus the JSONL protocol, read-only sandboxing, final-agent-message
   extraction, and `turn.completed` usage parsing.
+- `backend/Features/Cli/Execution/LocalCliSelfHeal.cs` and
+  `backend/Features/Cli/Quota/CliVersionMonitorHostedService.cs`: local Windows
+  npm package-versus-shim classification, hourly repair gate, root-cause
+  journal, and repair status projection.
 - `prompts/runtime/`: prompt templates handed to the CLIs.
 - `frontend/src/app/features/cli/`, `frontend/src/app/features/tokens/`, and
   `frontend/src/app/components/cli-model-selector/`: CLI status, usage, quota,
@@ -69,6 +73,10 @@ CLI execution tests.
 - Claude and Codex version changes are checked after startup and periodically.
   Keep the structured `CLI version changed` log line when editing version or
   self-heal behavior.
+- A missing local Claude or Codex package is never auto-installed. Automatic
+  npm repair is reserved for a package-present, command-shim-missing state, is
+  limited to one attempt per hour, and is journaled before it becomes a quiet
+  repair note or a failed-repair alarm.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

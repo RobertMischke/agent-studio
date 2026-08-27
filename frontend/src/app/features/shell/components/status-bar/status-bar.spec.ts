@@ -4,7 +4,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { formatCliRepairLabel, formatRunningLabel, StatusBarComponent } from './status-bar';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -26,6 +26,29 @@ describe('formatRunningLabel', () => {
 
   it('shows the honest coding slot ceiling once it is known', () => {
     expect(formatRunningLabel(0, 0, 3, 8)).toBe('coding 0/8');
+  });
+});
+
+describe('formatCliRepairLabel', () => {
+  it('keeps a successful self-heal informational', () => {
+    const label = formatCliRepairLabel({
+      cliType: 'claude',
+      state: 'repaired',
+      observedAt: '2026-08-27T10:15:00Z',
+      message: 'CLI repaired at 2026-08-27T10:15:00Z',
+    });
+
+    expect(label).toContain('Claude CLI repaired at');
+    expect(label).not.toContain('failed');
+  });
+
+  it('names a failed repair as the alarm condition', () => {
+    expect(formatCliRepairLabel({
+      cliType: 'codex',
+      state: 'repair-failed',
+      observedAt: '2026-08-27T10:15:00Z',
+      message: 'CLI repair failed',
+    })).toContain('Codex CLI repair failed at');
   });
 });
 

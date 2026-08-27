@@ -20,6 +20,7 @@ async function stubHostLoad(
   remoteRuns: number,
   telemetrySlots: number,
   load1: number,
+  cliRepairs: unknown[] = [],
 ): Promise<void> {
   const now = new Date().toISOString();
   const baseTask = (id: string, projectName: string) => ({
@@ -96,7 +97,7 @@ async function stubHostLoad(
     archive: [],
   }));
   await page.route('**/api/tasks', json([]));
-  await page.route('**/api/runner/status', json({ projects: runnerProjects }));
+  await page.route('**/api/runner/status', json({ projects: runnerProjects, cliRepairs }));
   await page.route('**/api/clients', json([{
     id: 'agent-runner-01',
     displayName: 'agent-runner-01',
@@ -173,6 +174,53 @@ test.describe('Status bar execution-host load companion signal', () => {
       path: join(RESULTS_DIR, 'status-bar-runners-both-positive-light--mocked.png'),
       fullPage: false,
     });
+  });
+
+  test('successful CLI repair is a quiet status note in both themes', async ({ page }) => {
+    await stubHostLoad(page, 0, 0, 0, 0.3, [{
+      cliType: 'claude',
+      state: 'repaired',
+      observedAt: '2026-08-27T10:15:00Z',
+      message: 'CLI repaired at 2026-08-27T10:15:00.0000000Z',
+      versionBefore: '2.1.231',
+      versionAfter: '2.1.234',
+      nextAttemptAt: null,
+    }]);
+    await page.goto('/');
+
+    const repair = page.getByTestId('status-bar-cli-repair');
+    await expect(repair).toContainText('Claude CLI repaired at');
+    await expect(repair).toHaveAttribute('data-signal-tone', 'calm');
+    await expect(page.getByTestId('status-bar-cli-repair-divergence')).toHaveCount(0);
+    await repair.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Version 2.1.231 to 2.1.234');
+
+    await setTheme(page, 'dark');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-cli-repaired-dark--mocked.png'),
+    });
+    await setTheme(page, 'light');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-cli-repaired-light--mocked.png'),
+    });
+  });
+
+  test('failed CLI repair is the only repair alarm state', async ({ page }) => {
+    await stubHostLoad(page, 0, 0, 0, 0.3, [{
+      cliType: 'codex',
+      state: 'repair-failed',
+      observedAt: '2026-08-27T10:15:00Z',
+      message: 'CLI repair failed at 2026-08-27T10:15:00.0000000Z: npm install exited with code 1',
+      versionBefore: '1.2.3',
+      versionAfter: null,
+      nextAttemptAt: '2026-08-27T11:15:00Z',
+    }]);
+    await page.goto('/');
+
+    const repair = page.getByTestId('status-bar-cli-repair');
+    await expect(repair).toContainText('Codex CLI repair failed at');
+    await expect(repair).toHaveAttribute('data-signal-tone', 'mismatch');
+    await expect(page.getByTestId('status-bar-cli-repair-divergence')).toBeVisible();
   });
 
   test('click opens Execution Hosts management', async ({ page }) => {

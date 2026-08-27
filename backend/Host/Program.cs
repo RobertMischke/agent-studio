@@ -774,6 +774,7 @@ builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, AntigravityQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<CliVersionTracker>();
+builder.Services.AddSingleton<LocalCliSelfHeal>();
 builder.Services.AddSingleton<QuotaService>();
 if (!builder.Environment.IsEnvironment("Test") && !underTestHost)
     builder.Services.AddHostedService<CliVersionMonitorHostedService>();

@@ -29,7 +29,7 @@ The default runtime prompt that wraps every task already tells the agent to emit
 **Known quirks**:
 
 - **argv-length on Windows.** A multi-KB prompt passed as `-p <prompt>` on the Windows command line silently fails (empty CLI response). Production code paths use `ICliOneShot` ([../../backend/Services/Cli/OneShot/ICliOneShot.cs](../../../backend/Services/Cli/OneShot/ICliOneShot.cs)) or stdin-piped `Process.Start` to bypass this. The drift analyser in [`CodePatternDriftAnalysisService.cs`](../../../backend/Services/Drift/CodePatternDriftAnalysisService.cs) flags new `-p <multi-KB-string>` call sites as regressions.
-- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `%APPDATA%\npm\` (that is, `C:\Users\<you>\AppData\Roaming\npm\`). The fix is to reinstall the npm package (`npm install -g @anthropic-ai/claude-code`), which restores the shim and runs the postinstall step.
+- **Claude CLI repair on Windows after an interrupted update.** Dot-prefix shims and missing postinstall under `%APPDATA%\npm\` (that is, `C:\Users\<you>\AppData\Roaming\npm\`). The local capability monitor now reinstalls `@anthropic-ai/claude-code` automatically when the package is present but the launchable command shim is missing, at most once per hour. It does not auto-install a truly absent package. Inspect `<TaskRepository>/.runtime/cli-self-heal.jsonl` for version, npm-log, orphan-shim, and outcome evidence. The manual fallback remains `npm install -g @anthropic-ai/claude-code`.
 
 ## Codex
 
