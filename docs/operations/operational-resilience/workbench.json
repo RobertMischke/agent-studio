@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "operational-resilience",
+  "title": "Operative Resilienz",
+  "summary": "Synthese-Dossier zur operativen Resilienz einer selbstfahrenden Agenten-Fleet: elf Ausfallklassen aus dem Live-Betrieb, jeweils mit Symptom, Ursache, Härtung und zuständiger Karte. Verbindende These: Fleet-Ausfälle sind fast immer still - das Symptom heißt fast immer 'System appears stalled'. Enthält ein Regelkreis-Diagramm (deliver -> gate -> review -> integrate -> accept) mit Markierung, wo jede Klasse zuschlägt, eine Symptom-Ursache-Fix-Tabelle und Querverweise auf die Quell-Dossiers sowie den öffentlichen Concept-Doc.",
+  "entrypoint": "index.html",
+  "status": "accepted",
+  "phase": "documented",
+  "updatedAt": "2026-08-27T00:00:00Z",
+  "sourceTaskKeys": [],
+  "relatedTaskKeys": [
+    "AGT-2658",
+    "AGT-2664",
+    "AGT-2683",
+    "AGT-2662",
+    "AGT-2677",
+    "AGT-2678",
+    "AGT-2680",
+    "AGT-2685",
+    "AGT-2673",
+    "AGT-2660",
+    "AGT-2544",
+    "AGT-2646",
+    "AGT-2220",
+    "QS-93",
+    "QS-94",
+    "QS-95",
+    "QS-90"
+  ],
+  "key": "AGT-W42"
+}

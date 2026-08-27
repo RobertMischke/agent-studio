@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operative Resilienz | Konzept-Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;      /* Branch-Identität: develop */
+    --taskbr: #4a3aa7;       /* Branch-Identität: task/<slug> */
+    --salvage: #eb6834;      /* Branch-Identität: runner/<id>/<key> (Salvage) */
+    --rescue: #b58500;       /* Branch-Identität: rescue/WIP */
+    --ok: #008300;           /* Status gut (immer mit Icon+Text) */
+    --bad: #c93736;          /* Status Problem (immer mit Icon+Text) */
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--surface-1);
+    color: var(--ink-1);
+    font: 16px/1.6 system-ui, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page {
+    border-bottom: 1px solid var(--line);
+    padding: 44px 0 26px; margin-bottom: 8px;
+  }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface-2); padding: 18px 22px; margin: 20px 0;
+  }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 4px; border-radius: 2px; margin-right: 7px; vertical-align: middle; background: var(--c); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.part { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  /* SVG-Rollen */
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-commit { stroke-width: 2.5; fill: var(--surface-1); }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  .building-blocks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 20px 0; }
+  .building-block { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--surface-2); }
+  .building-block h4 { margin: 0 0 4px; font-size: 16px; }
+  .building-block figure { margin: 12px 0 0; }
+  .building-block figure svg { min-height: 170px; }
+  .building-block figcaption { margin-bottom: 0; }
+  .evidence-link { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  .term-table td:first-child { width: 180px; white-space: nowrap; }
+  .term-table td:nth-child(2) { width: 210px; }
+  .lease-explainer { display: flow-root; }
+  .sequence-wrap { overflow-x: auto; margin: 26px 0; }
+  .sequence-wrap figure { min-width: 900px; margin: 0; }
+  .sequence-wrap figure svg { min-width: 900px; }
+  .seq-head { fill: var(--surface-2); stroke: var(--line); }
+  .seq-head-control { fill: var(--accent-soft); stroke: var(--develop); }
+  .seq-head-exec { fill: var(--ok-soft); stroke: var(--ok); }
+  .seq-head-recovery { fill: var(--warn-soft); stroke: var(--warn); }
+  .seq-life { stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 5 6; }
+  .seq-control { stroke: var(--develop); stroke-width: 2; fill: none; }
+  .seq-exec { stroke: var(--ok); stroke-width: 2; fill: none; }
+  .seq-warn { stroke: var(--warn); stroke-width: 2; fill: none; }
+  .seq-reject { stroke: var(--bad); stroke-width: 2.4; fill: none; }
+  .seq-label { fill: var(--ink-1); font: 600 12px system-ui, sans-serif; }
+  .seq-meta { fill: var(--ink-2); font: 11px ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .seq-chip-control { fill: var(--accent-soft); stroke: var(--develop); }
+  .seq-chip-exec { fill: var(--ok-soft); stroke: var(--ok); }
+  .seq-chip-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .seq-chip-bad { fill: var(--bad-soft); stroke: var(--bad); }
+  .seq-phase { fill: var(--surface-2); stroke: var(--line); stroke-dasharray: 4 4; }
+  .seq-time { fill: var(--ink-3); font: 10.5px ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .more-link { white-space: nowrap; }
+  @media (max-width: 760px) { .building-blocks { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Konzept-Dossier · Agent Studio</p>
+  <h1>Operative Resilienz</h1>
+  <p class="lede">Was bricht, wenn eine Fleet sich selbst fährt — und warum das Symptom fast immer
+  „System appears stalled" heißt. Elf Ausfallklassen aus dem Live-Betrieb, je mit Symptom, Ursache,
+  Härtung und zuständiger Karte.</p>
+  <div class="meta">
+    <span><b>Stand:</b> 27.08.2026</span>
+    <span><b>Anlass:</b> Ausfallwellen 08-13 bis 08-26 (Tunnel-Tode, Abnahme-Stau, Limit-Sturm, Gate-Aushungerung)</span>
+    <span><b>Verbindende These:</b> Stille ist der Normalzustand des Ausfalls; Resilienz macht die Stille sichtbar.</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#tldr">Kernaussagen</a></li>
+    <li><a href="#regelkreis">§1 Regelkreis und Bruchstellen</a></li>
+    <li><a href="#c1">§2 Reverse-Tunnel-Tode</a></li>
+    <li><a href="#c2">§3 Sitzungsgebundene Abnahmeschleife</a></li>
+    <li><a href="#c3">§4 Verklemmte Review-Worker</a></li>
+    <li><a href="#c4">§5 Restart-Stille und Lease-Churn</a></li>
+    <li><a href="#c5">§6 api.sh-Restart-Defekt</a></li>
+    <li><a href="#c6">§7 Verschwindende CLI-Shims</a></li>
+    <li><a href="#c7">§8 Provider-Limit-Sturm</a></li>
+    <li><a href="#c8">§9 Build-Profile-Gate: stille Aushungerung</a></li>
+    <li><a href="#c9">§10 Requirement-Fit-Karussell</a></li>
+    <li><a href="#c10">§11 „Delivered"-Lügen</a></li>
+    <li><a href="#c11">§12 Windows-Produktbugs</a></li>
+    <li><a href="#tabelle">§13 Übersicht: Symptom → Ursache → Fix</a></li>
+    <li><a href="#querverweise">§14 Querverweise</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>Kernaussagen</h4>
+  <ul>
+    <li><b>Ein selbstfahrendes System fällt still aus, nicht laut.</b> Es gibt keine Exception, keinen
+        Alarm, keinen Nutzer, der schreit — es gibt nur einen Feed, der aufhört, sich zu bewegen.
+        Sechs verschiedene Ursachen liefen unter demselben Satz auf: „System appears stalled".</li>
+    <li><b>Das eigentliche Werk ist nicht der Fix, sondern die Sichtbarkeit.</b> Jede Klasse wird erst
+        gefährlich, weil nichts sie an die Oberfläche bringt: geschlossene Auto-Pickups mit
+        <code>lastRejection=null</code>, ein Breaker auf <code>mode=paused</code> mit leerem
+        Halt-Grund, ein „Delivered"-Badge über nicht gelieferter Arbeit.</li>
+    <li><b>Sitzungsgebundene Kontrolle ist die häufigste Bruchstelle.</b> Abnahme-Tick, Supervision-Cron
+        und Tunnel-Keeper hingen alle am Leben einer Claude-Sitzung. Der dauerhafte Fix ist immer
+        derselbe Schnitt: die bewegende Logik auf die Plattform (HostedService), die Sitzung nur noch
+        als Beobachter.</li>
+    <li><b>„Integriert" heißt nicht „live".</b> Runner-Fixes werden erst mit einem Runner-Release
+        wirksam; conflict-skipped-Integrationen melden „Delivered", ohne stable je erreicht zu haben.
+        Verifikation gegen die laufende Instanz ist Pflicht, nicht Kür.</li>
+    <li><b>Geteilte Ressourcen sind einzelne Fehlerquellen.</b> Ein Provider-Konto für die ganze Fleet,
+        ein Single-Reader für die Review-Queue, ein Roaming-Laptop als Kontrollebene — jede Teilung
+        macht aus einem lokalen Defekt einen Fleet-Ausfall.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<h2 id="regelkreis"><span class="no">§1</span>Regelkreis und Bruchstellen</h2>
+<p class="dim">Die Fleet fährt einen Regelkreis: eine Lieferung entsteht, ein Gate prüft sie, ein Review
+urteilt, die Integration merged, die Abnahme schließt die Karte — und ein separater Deploy macht das
+Ergebnis erst live. Unter diesem Kreis liegen zwei tragende Schichten: die <b>Kontrollebene</b> (der
+SSH-Reverse-Tunnel vom Roaming-Laptop zum Runner-Host) und das <b>Substrat</b> (Runner-Prozess und API,
+CLI-Shims, das geteilte Provider-Konto, der Windows-Host). Jede der elf Ausfallklassen schlägt an genau
+einer Stelle dieses Bildes zu.</p>
+
+<figure>
+<svg viewBox="0 0 1040 560" role="img" aria-label="Regelkreis der Fleet mit den elf markierten Ausfallklassen">
+  <defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+    <marker id="arr-accent" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--salvage)"/>
+    </marker>
+  </defs>
+
+  <!-- Regelkreis-Zeile -->
+  <text class="s-tiny" x="30" y="34">DER REGELKREIS</text>
+  <g>
+    <rect class="s-node" x="30" y="48" width="176" height="78" rx="9"/>
+    <text class="s-label" x="46" y="76">Deliver</text>
+    <text class="s-sub" x="46" y="98">Agent codiert im</text>
+    <text class="s-sub" x="46" y="114">Worktree, Plattform committet</text>
+
+    <rect class="s-node" x="238" y="48" width="176" height="78" rx="9"/>
+    <text class="s-label" x="254" y="76">Gate</text>
+    <text class="s-sub" x="254" y="98">Build + Test,</text>
+    <text class="s-sub" x="254" y="114">Build-Profile fail-closed</text>
+
+    <rect class="s-node" x="446" y="48" width="176" height="78" rx="9"/>
+    <text class="s-label" x="462" y="76">Review</text>
+    <text class="s-sub" x="462" y="98">Aspekte, Grade,</text>
+    <text class="s-sub" x="462" y="114">Single-Reader-Queue</text>
+
+    <rect class="s-node" x="654" y="48" width="176" height="78" rx="9"/>
+    <text class="s-label" x="670" y="76">Integrate</text>
+    <text class="s-sub" x="670" y="98">Merge nach develop,</text>
+    <text class="s-sub" x="670" y="114">Ancestry entscheidet</text>
+
+    <rect class="s-node" x="862" y="48" width="148" height="78" rx="9"/>
+    <text class="s-label" x="878" y="76">Accept</text>
+    <text class="s-sub" x="878" y="98">Human-Review,</text>
+    <text class="s-sub" x="878" y="114">Abnahme-Rail</text>
+  </g>
+
+  <path class="s-flow" d="M206 87 H238" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M414 87 H446" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M622 87 H654" marker-end="url(#arr)"/>
+  <path class="s-flow" d="M830 87 H862" marker-end="url(#arr)"/>
+
+  <!-- Reissue-Rücklauf -->
+  <path d="M534 126 V162 H118 V126" stroke="var(--salvage)" stroke-width="2" fill="none" stroke-dasharray="6 5" marker-end="url(#arr-accent)"/>
+  <text class="s-tiny" x="250" y="156" fill="var(--salvage)">REISSUE / REQUEUE — muss beschränkt sein und eskalieren</text>
+
+  <!-- Deploy-Arm -->
+  <rect class="s-node2" x="654" y="188" width="356" height="52" rx="9"/>
+  <text class="s-label" x="670" y="212">Deploy (separates Ereignis)</text>
+  <text class="s-sub" x="670" y="230">Runner-Release / Rollout — erst hier wird „integriert" zu „live"</text>
+  <path class="s-flow" d="M742 126 V188" marker-end="url(#arr)"/>
+
+  <!-- Kontrollebene -->
+  <rect class="badge-warn" x="30" y="272" width="980" height="58" rx="9" stroke-width="1.4"/>
+  <text class="s-label" x="46" y="298">Kontrollebene</text>
+  <text class="s-sub" x="46" y="318">SSH-Reverse-Tunnel: Roaming-Laptop (Orchestrator) → Runner-Host · Session-Cron · Supervision</text>
+
+  <!-- Substrat -->
+  <text class="s-tiny" x="30" y="360">DAS SUBSTRAT</text>
+  <rect class="s-node2" x="30" y="372" width="232" height="64" rx="9"/>
+  <text class="s-label" x="46" y="398">Runner-Prozess + API</text>
+  <text class="s-tiny" x="46" y="418">restart, lease, measurement</text>
+
+  <rect class="s-node2" x="278" y="372" width="232" height="64" rx="9"/>
+  <text class="s-label" x="294" y="398">CLI-Shims</text>
+  <text class="s-tiny" x="294" y="418">npm-verwaltete bin-Shims</text>
+
+  <rect class="s-node2" x="526" y="372" width="232" height="64" rx="9"/>
+  <text class="s-label" x="542" y="398">Provider-Konto</text>
+  <text class="s-tiny" x="542" y="418">geteilt über die ganze Fleet</text>
+
+  <rect class="s-node2" x="774" y="372" width="236" height="64" rx="9"/>
+  <text class="s-label" x="790" y="398">Windows-Host</text>
+  <text class="s-tiny" x="790" y="418">MAX_PATH, /proc, Pooling</text>
+
+  <!-- Badges: wo jede Klasse zuschlägt -->
+  <g font="600 12px system-ui, sans-serif">
+    <!-- 1 Tunnel -->
+    <circle cx="946" cy="272" r="12" class="badge-bad" stroke-width="1.4"/><text class="t-bad" x="942" y="276">1</text>
+    <!-- 2 Accept -->
+    <circle cx="998" cy="48" r="12" class="badge-bad" stroke-width="1.4"/><text class="t-bad" x="994" y="52">2</text>
+    <!-- 3 Review -->
+    <circle cx="610" cy="48" r="12" class="badge-bad" stroke-width="1.4"/><text class="t-bad" x="606" y="52">3</text>
+    <!-- 4 Restart-Stille -->
+    <circle cx="238" cy="372" r="12" class="badge-warn" stroke-width="1.4"/><text class="t-warn" x="234" y="376">4</text>
+    <!-- 5 api.sh restart -->
+    <circle cx="46" cy="372" r="12" class="badge-bad" stroke-width="1.4"/><text class="t-bad" x="42" y="376">5</text>
+    <!-- 6 CLI-Shims -->
+    <circle cx="486" cy="372" r="12" class="badge-warn" stroke-width="1.4"/><text class="t-warn" x="482" y="376">6</text>
+    <!-- 7 Provider-Limit -->
+    <circle cx="734" cy="372" r="12" class="badge-bad" stroke-width="1.4"/><text class="t-bad" x="730" y="376">7</text>
+    <!-- 8 Gate-Aushungerung -->
+    <circle cx="402" cy="48" r="12" class="badge-bad" stroke-width="1.4"/><text class="t-bad" x="398" y="52">8</text>
+    <!-- 9 Requirement-Fit-Karussell -->
+    <circle cx="118" cy="162" r="12" class="badge-warn" stroke-width="1.4"/><text class="t-warn" x="114" y="166">9</text>
+    <!-- 10 Delivered-Lügen -->
+    <circle cx="998" cy="188" r="12" class="badge-bad" stroke-width="1.4"/><text class="t-bad" x="994" y="192">10</text>
+    <!-- 11 Windows -->
+    <circle cx="986" cy="372" r="12" class="badge-warn" stroke-width="1.4"/><text class="t-warn" x="979" y="376">11</text>
+  </g>
+</svg>
+<figcaption><b>Abb. 1: Regelkreis und Bruchstellen.</b> Der Kreis Deliver → Gate → Review → Integrate →
+Accept mit separatem Deploy-Arm; darunter Kontrollebene und Substrat. Die Ziffern markieren, wo jede
+der elf Klassen zuschlägt: 1 Reverse-Tunnel (§2), 2 Abnahmeschleife (§3), 3 Review-Worker (§4),
+4 Restart-Stille (§5), 5 api.sh-Restart (§6), 6 CLI-Shims (§7), 7 Provider-Limit (§8),
+8 Gate-Aushungerung (§9), 9 Requirement-Fit-Karussell (§10), 10 „Delivered"-Lügen (§11),
+11 Windows-Produktbugs (§12). Rote Marker sind harte Ausfälle, gelbe schleichende.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="c1"><span class="no">§2</span>Reverse-Tunnel-Tode</h2>
+<p class="stx stx-part"><b>Härtung live, Registrierung offen:</b> Der geänderte Keeper läuft und ist
+Ende-zu-Ende verifiziert; zwei Admin-Aktionen bleiben beim Operator.</p>
+<h3>Symptom</h3>
+<p>Beide Ebenen stallen still, bis ein Mensch von Hand heilt — jedes Mal, wenn der Reverse-Tunnel
+stirbt. Vierter Tod am 08-18, fünfter am 08-20 (12 h stille Stille), erneut während des 08-23-Deploys;
+der 08-16-Vorfall war ein 11-Stunden-Stall. Indirekt zeigt sich derselbe Defekt als Board-Banner
+<code>„Waiting for Claude sign-in"</code>.</p>
+<h3>Ursache</h3>
+<p>Die Kontrollebene ist ein <b>roamender WLAN-Laptop, der schläft</b>. Jeder Schlaf, jeder Netzwechsel,
+jeder Windows-Update-Reboot reißt die SSH-Sitzung. Drei Verstärker: <b>(A)</b> die Power-Policy der
+TunnelKeeper-Task (<code>DisallowStartIfOnBatteries</code>, <code>StopIfGoingOnBatteries</code>, kein
+<code>WakeToRun</code>/<code>AtStartup</code>) hindert den Keeper am Laufen im Schlaf und auf Akku;
+<b>(B)</b> PowerShell-5.1 <code>$ErrorActionPreference=Stop</code> plus ungeschützte ssh-Aufrufe machten
+aus einem fehlgeschlagenen Connect einen stillen Skript-Tod — das war der 11-h-Stall vom 08-16 und die
+Antwort auf die offene Frage von AGT-2663 (nicht Auth, nicht Routen: der Keeper starb mitten im Lauf,
+während das WLAN roamte); <b>(C)</b> die Zombie-Port-Bereinigung war ein No-Op, weil <code>sudo ss</code>
+für das Agenten-Konto nicht erlaubt ist.</p>
+<h3>Härtung</h3>
+<p>Live am Ops-Keeper angewandt und Ende-zu-Ende verifiziert: geschützter ssh, Exit-Code-Logging plus
+Rotation, No-Sudo-Zombie-Kill. Eine spätere Regression — <code>ss -lnt | grep -c 15031</code> liefert
+Exit 1, wenn der Port <b>frei</b> ist, was der Guard als „Remote unerreichbar" fehldeutete und vor dem
+Neuaufbau abbrach — wurde live mit <code>|| true</code> gepatcht; der Keeper baute den Tunnel innerhalb
+eines Laufs neu auf. Serverseitiges <code>ClientAliveInterval</code> folgt. Zwei Admin-Aktionen bleiben:
+Watchdog registrieren (<code>register-tunnel-watchdog.ps1</code> in einer Admin-Shell) und die
+Power-/Startup-Bedingungen der TunnelKeeper-Task korrigieren (auf Akku erlauben, nicht auf Akku stoppen,
+<code>AtStartup</code>-Trigger).</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill done">AGT-2658</span> Watchdog geliefert
+(Registrierung ausstehend) · <span class="pill queued">AGT-2664</span> Produktivierung: Härtungen in den
+Repo-Keeper <code>deploy/windows/agent-runner-tunnel</code> inkl. <code>|| true</code>-Fix,
+serverseitiges <code>ClientAliveInterval</code>.</p>
+
+<!-- ============================================================ -->
+<h2 id="c2"><span class="no">§3</span>Sitzungsgebundene Abnahmeschleife</h2>
+<p class="stx stx-part"><b>Ein Tick heilt sofort, die Plattform-Rail ist die dauerhafte Antwort.</b></p>
+<h3>Symptom</h3>
+<p>„System appears stalled" — sechstes Auftreten, dieselbe einzelne Ursache. Der Runner lief die Nacht
+durch (131 Claims / 12 h); die Pipeline fror nur in <b>human-review</b>. Die Lanes stauten wiederholt:
+17 Karten am 08-13, 16 am 08-15, 38 in human-review bis zum 08-26.</p>
+<h3>Ursache</h3>
+<p>Die Orchestrator-Schleife (accept/requeue/train-Tick) ist <b>sitzungsgebunden</b> und stirbt mit der
+Claude-Sitzung; das Pflaster, den Cron je Sitzung neu anzulegen, scheitert jede Nacht. Die Cron-Mortalität
+je Sitzung biss drei- und mehrfach.</p>
+<h3>Härtung</h3>
+<p>Ein manueller Tick räumte sofort auf: 38 human-review → 8 in-progress + 23 ready in einem Durchgang
+(AGT-2677 dabei integriert und archiviert). Der dauerhafte Fix ist eine <b>plattformseitige Abnahme-Rail</b>:
+ein Backend-HostedService, der integrierte Karten auto-akzeptiert, conflict-skipped mit beschränktem
+Retry und Eskalation requeued, Operator-Holds respektiert, <b>standardmäßig an</b> — der Session-Orchestrator
+wird Beobachter, nicht Beweger. <code>heal_check.sh</code> killt inzwischen zusätzlich 2-h-Wedger
+automatisch und heilt Tunnel/Lease zwischen den Ticks; der 13-Minuten-Supervision-Cron ist wieder
+scharf.</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill queued">AGT-2683</span> plattformseitige
+Abnahme-Rail (= 2662 Szenario 2, höchste Priorität) · <span class="pill new">AGT-2662</span> Dossier
+Szenario 2 (decision-pending).</p>
+
+<!-- ============================================================ -->
+<h2 id="c3"><span class="no">§4</span>Verklemmte Review-Worker</h2>
+<p class="stx stx-open"><b>Offen:</b> drei Karten geschnitten, TE-42-Modellvergleich blockiert, bis
+Watchdog und Katalog stehen.</p>
+<h3>Symptom</h3>
+<p>In einer zweistündigen QS-Session lieferten <b>alle</b> claude-Review-Läufe 0 Operationen / 0 Tokens
+— die Reviewer-CLI hängt sich nie an; abgebrochene Läufe verklemmen die Single-Reader-Queue, ohne
+Watchdog und ohne Reclaim. Begleitende QS-Defekte derselben Session: <code>claude-opus-5</code>
+unsupported / <code>sonnet-5</code> fallbackOnly im QS-Katalog, der Boundary-Sensor läuft bei
+1269-Datei-Repos in den Timeout, und die Regel-Bibliothek ist leer (0/4 Guidelines installiert). Die
+deterministische Schicht war vertrauenswürdig (Boundary-Findings bestätigten unabhängig die QS-58-R-01-Zeilen;
+gitleaks sauber).</p>
+<h3>Ursache</h3>
+<p>Die Reviewer-CLI schafft das Attach nicht (0 ops / 0 tokens), und abgebrochene bzw. verklemmte Läufe
+blockieren die Single-Reader-Review-Queue, weil es weder Watchdog noch Run-Reclaim gibt; verschärft durch
+fehlenden Claude-5-Katalog-Support und einen nicht skalierten Boundary-Sensor.</p>
+<h3>Härtung</h3>
+<p>Drei Karten aus den zwei gepushten Dossiers geschnitten (security-concept <code>f902acd</code>,
+quality-concept <code>e31089c</code>): Watchdog + Queue-Reclaim auf opus-5, Claude-5-Katalog-Support
+(abgestimmt mit der Usage-Panel-Pricing-Arbeit) und Boundary-Sensor-Skalierung. Die Regel-Bibliothek-Lücke
+ist in die laufende QS-90 gefaltet. TE-42 bleibt blockiert, bis Watchdog-/Katalog-Karten landen.</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill queued">QS-93</span> Watchdog + Queue-Reclaim
+(opus-5) · <span class="pill queued">QS-94</span> Claude-5-Katalog (stimmt mit TE-44 ab) ·
+<span class="pill queued">QS-95</span> Boundary-Sensor-Skalierung · <span class="pill new">QS-90</span>
+Regel-Bibliothek-Lücke (in Arbeit).</p>
+
+<!-- ============================================================ -->
+<h2 id="c4"><span class="no">§5</span>Restart-Stille und Lease-Recovery-Churn</h2>
+<p class="stx stx-part"><b>Selbstregel gesetzt, Startup-Reconciliation räumt auf, Auto-Requeue fängt ab.</b></p>
+<h3>Symptom</h3>
+<p>Backend-Restarts erzeugen scheinbare Stille und töten laufende Arbeit: die 30-Sekunden-Messfenster des
+Orchestrators plus voreilige Restarts erzeugten scheinbare Stille und killten das in-flight AGT-2674
+(die Quarantäne-Bergung fing es über den Auto-Requeue-Pfad). Lease-Recovery macht <b>263 der
+30-Tage-Rückwärtsbewegungen</b> aus. Ein Trio von report-pendings war über eine Abend-Outage 4,7 h
+gealtert. Am 08-25 blieb der Pickup-Circuit-Breaker auf <code>mode=paused</code> mit <b>leerem</b>
+Halt-Grund und resümierte nicht selbst.</p>
+<h3>Ursache</h3>
+<p>Zu kurze (30 s) Messfenster plus voreilige Restarts verwechseln normale Ruhe mit einem Stall und
+starten Ebenen neu, die noch lebende / in-flight Worker haben — und verwaisen sie in
+Lease-Recovery-Requeues; der Startup lässt gealterte report-pendings zurück.</p>
+<h3>Härtung</h3>
+<p>Neue Selbstregel: <b>kein Ebenen-Restart ohne 15 Minuten bewiesener Stille</b> (keine Claims UND keine
+lebenden Worker UND gealterte Pendings) — Release-Bäume vergleichen, <i>bevor</i> Topologie-Theorien
+aufgestellt werden. Die Startup-Reconciliation räumt gealterte report-pendings sauber ab (das 4,7-h-Trio
+gepurgt). Quarantäne-Bergung / Auto-Requeue ist das Sicherheitsnetz, das gekillte in-flight-Karten
+zurückholt; AGT-2683s Rail formalisiert das beschränkte Requeue. (Die 15-Minuten-Regel selbst ist eine
+Operator-Selbstregel ohne eigene Karte.)</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill queued">AGT-2683</span> beschränktes Requeue in
+der Plattform-Rail · <span class="pill done">AGT-2544</span> Auto-Requeue fehlgeschlagener Deliveries ·
+<span class="pill done">AGT-2646</span> Attempts re-adoptieren.</p>
+
+<!-- ============================================================ -->
+<h2 id="c5"><span class="no">§6</span>api.sh-Restart-Defekt</h2>
+<p class="stx stx-part"><b>Manuell geheilt, Fix integriert 08-25 — wirksam aber erst beim nächsten sauberen Restart.</b></p>
+<h3>Symptom</h3>
+<p>Config-Patches und sogar Rollouts waren hohl: <code>api.sh restart</code> ersetzte den API-Prozess nie.
+Ein Live-Prozess von 12:34 überlebte zwei „Restarts"; am 08-25 bediente der 11:03-Prozess weiter, bis er
+über das PowerShell-Tool gekillt wurde; ein gesperrter Stale-Prozess ließ sogar den nächsten Build
+scheitern (MSB3027, 45-Zeilen-Log) und bediente dabei weiter. Fixes und Settings-Änderungen wirkten
+angewandt, waren es aber nicht.</p>
+<h3>Ursache</h3>
+<p>Der Stop-Schritt verfehlt den Listener, der alte API-Prozess wird nie gekillt und bedient weiter; neue
+Config / neuer Rollout / neuer Build wird nie wirksam, und der Stale-Prozess kann Locks halten, die den
+nächsten Build scheitern lassen.</p>
+<h3>Härtung</h3>
+<p>Manueller Kill + sauberer Start mit <b>verifizierter neuer Prozess-Startzeit</b> und verifiziertem
+Build; die QS-Claims resümierten binnen einer Minute. Die systemische Karte verlangt, dass der Restart
+den Prozess wirklich ersetzt, plus Self-Check. Tick-Checklisten-Lehren: nach jedem Restart eine
+<b>neue</b> Prozess-Startzeit belegen; nach jeder Projekt-Settings-Änderung das Gate per
+<code>GET build-profile</code> prüfen. Fix am 08-25 integriert, aber erst der <b>nächste</b> Restart
+führt ihn aus; erreicht stable mit dem nächsten Rollout.</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill done">AGT-2678</span> api.sh restart muss den
+Prozess ersetzen, mit Self-Check.</p>
+
+<!-- ============================================================ -->
+<h2 id="c6"><span class="no">§7</span>Verschwindende CLI-Shims</h2>
+<p class="stx stx-part"><b>Zweite Sichtung → Karte für lokalen Selbstheil-Pfad.</b></p>
+<h3>Symptom</h3>
+<p>Die lokale <code>claude</code>-CLI verschwand ein <b>zweites</b> Mal aus dem PATH — die
+npm-bin-Shims weg, das Paket noch da; die Version sprang <code>2.1.231 → 2.1.234</code> (Auto-Update
+vermutet). Beide Male per npm-Reinstall geheilt.</p>
+<h3>Ursache</h3>
+<p>Ein npm-Auto-Update entfernte/ersetzte die bin-Shims (Shims weg, Paket da) — eine
+Halb-installiert-Stub-Klasse, die auch in den <code>CrossSlugInfraCircuitBreaker</code>-Docs dokumentiert
+ist.</p>
+<h3>Härtung</h3>
+<p>Die zweite Sichtung per Log-Disziplin löste eine Karte für lokalen CLI-Selbstheil aus:
+Shim-Erkennung + beschränkte Auto-Reparatur + Sichtbarkeit.</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill queued">AGT-2673</span> lokaler CLI-Selbstheil:
+Shim-Erkennung + beschränkte Auto-Reparatur + Sichtbarkeit.</p>
+
+<!-- ============================================================ -->
+<h2 id="c7"><span class="no">§8</span>Provider-Limit-Sturm</h2>
+<p class="stx stx-part"><b>Morgen-Recovery vollzogen, limit-bewusstes Runner-Verhalten als systemische Karte.</b></p>
+<h3>Symptom</h3>
+<p>Nächtlicher Fleet-Ausfall: Operator-Limit gegen ~22:00 erreicht, die Runner-claude-Läufe teilen sich
+das Konto, also scheiterte <b>jede</b> claude-Karte und <b>eskalierte</b> (32 in <code>5e</code> bis zum
+Morgen), 0 Claims von 00:20 bis 09:00; der Flaky-Test-Agent starb mitten in der Arbeit (uncommittete
+Änderungen verloren). Der Folgemorgen war ein Null-Claim-Morgen: der Pickup-Circuit-Breaker kippte Agent
+Studio und Quality Studio auf <code>mode=paused</code> mit leerem Halt-Grund; nichts brachte es an die
+Oberfläche, und es resümierte nach dem Limit-Reset nicht selbst.</p>
+<h3>Ursache</h3>
+<p>Die claude-only-Fleet hat einen <b>Single-Account-Ausfallmodus</b>: alle Runner-claude-Läufe teilen
+das Operator-Konto, ein Konto-Limit scheitert jede claude-Karte und erzeugt — weil Fehler eskalieren —
+einen Eskalationssturm; der Breaker pausiert dann ohne sichtbaren Grund und ohne Auto-Resume bei
+Limit-Erholung.</p>
+<h3>Härtung</h3>
+<p>Morgen-Recovery: Massen-Requeue (33, dann 14 Claims in 90 s auf der GPT-Fleet; 8 Karten binnen Minuten
+zurück in progress) auf opus-5, Rollout von Release <code>193005Z</code> mit verifiziertem Prozesstausch,
+Runner-Handshake. Systemisch: <b>limit-bewusstes Runner-Verhalten</b> — Konto-Limits erkennen,
+claude-Claims mit <code>quotaWait</code> + Banner pausieren statt eines Eskalationssturms, Auto-Resume beim
+Reset; erweitert, sodass Breaker-Pausen sichtbare Gründe tragen und bei Provider-Limit-Erholung
+auto-resümieren. Der Flaky-Test-Agent wurde mit frischem Brief fortgesetzt.</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill queued">AGT-2680</span> limit-bewusstes
+Runner-Verhalten (erweitert: sichtbare Breaker-Gründe + Auto-Resume) · <span class="pill new">AGT-2679</span>
+Probe-Drift (verwandt, separat).</p>
+
+<!-- ============================================================ -->
+<h2 id="c8"><span class="no">§9</span>Build-Profile-Gate: stille Aushungerung</h2>
+<p class="stx stx-part"><b>Geheilt per Status-Patch + echter Restart; systemische Sichtbarkeits-Karte gesetzt.</b></p>
+<h3>Symptom</h3>
+<p>Fünftägige stille Aushungerung der gesamten QS-Fleet: jede QS-Karte saß auf <code>queued-remote</code>
+mit <code>lastRejection=null</code> und ohne Banner, Auto-Pickup seit 08-18 geschlossen, nichts zeigte den
+Grund.</p>
+<h3>Ursache</h3>
+<p>QS-92 schrieb das Quality-Studio-Build-Profile neu → Status auf <code>declared</code> zurückgesetzt →
+das <code>BuildProfileGate</code> schloss den Auto-Pickup für jede QS-Karte. Der lokale Validierungs-Dry-Run
+kann nie grün werden, weil er in einem Workspace <b>ohne</b> die Projekt-Quellen läuft, obwohl das Profil
+auf dem Runner erwiesen ist.</p>
+<h3>Härtung</h3>
+<p>Geheilt durch Patch <code>Status=pipeline-ready</code> in <code>project-settings.json</code> plus einen
+<b>echten</b> Prozess-Restart (was den api.sh-Restart-Defekt aus §6 überhaupt erst freilegte); die
+QS-Claims resümierten binnen einer Minute (QS-79/68/70…). Systemische Karte: Gate-Aushungerung muss
+sichtbar sein, dort validieren, wo sie läuft, und die Edit-Semantik darf das Gate nicht still schließen.
+Tick-Lehre: nach jeder Projekt-Settings-Änderung das Gate per <code>GET build-profile</code> prüfen.</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill queued">AGT-2677</span> Gate-Aushungerungs-Sichtbarkeit
++ validate-where-it-runs + nicht-stille Edit-Semantik.</p>
+
+<!-- ============================================================ -->
+<h2 id="c9"><span class="no">§10</span>Requirement-Fit-Karussell</h2>
+<p class="stx stx-part"><b>Schleife jetzt gebrochen, systemischer Scope-Bound + Eskalation offen.</b></p>
+<h3>Symptom</h3>
+<p>„Post-Processing voll + stale + appears stalled" — aber <b>kein</b> Stall. 17 von 19 Auto-Review-Karten
+waren QS-Karten der Art „implement dossier recommendations". Ihre Builds/Tests bestehen alle, aber der
+Aspekt Requirement-Fit <b>blockt</b> („required slice left undelivered despite approval to implement all
+recommendations") → ProductFailure → requeue → re-code → gleicher Block → ein endloses Karussell, das
+Post-Processing voll und Karten stale hält. Die Review-Ebene selbst war gesund (21 Finishes/Stunde).</p>
+<h3>Ursache</h3>
+<p>Der Prompt verlangte <b>alle</b> Empfehlungen, während eine Lieferung <b>eine</b> Scheibe trägt — also
+kann Requirement-Fit nie bestehen: der genannte Scope der Karte übersteigt strukturell jede einzelne
+Lieferung.</p>
+<h3>Härtung</h3>
+<p>Schleife jetzt gebrochen durch Anhängen eines One-Slice-Scope-Steers an 8 loopende QS-Karten
+(Teil-Lieferung einer Scheibe = Erfolg). Systemisch: Requirement-Fit darf nicht mehr verlangen als den
+Lieferumfang der Karte; ein Same-Aspect-Block über N Runden muss eskalieren (bindet an beschränktes
+Retry); „implement all recommendations"-Karten sind eine-Karte-je-Scheibe zu schneiden; die
+Karten-Schnitt-Anleitung wird aktualisiert.</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill queued">AGT-2685</span> Requirement-Fit
+Scope-Bound + Same-Aspect-Block-Eskalation · <span class="pill queued">AGT-2683</span> beschränktes Retry
+(Anbindung).</p>
+
+<!-- ============================================================ -->
+<h2 id="c10"><span class="no">§11</span>„Delivered"-Lügen</h2>
+<p class="stx stx-open"><b>Verifikationssweep deckte 4 von 8 als nicht-live auf; „Integriert ≠ live" als Tick-Lehre gesetzt.</b></p>
+<h3>Symptom</h3>
+<p>Als geliefert gezeigte Features sind in Live-stable abwesend oder defekt. 08-23: das Banner
+<code>„Waiting for Claude sign-in"</code> kehrte zurück, obwohl AGT-2660s Probe-Latch-Fix Tage zuvor
+integriert war — das <b>Runner-Binary</b> auf dem Host stammte vom 08-13 (kein Runner-Release-Deploy seit
+agt-2646). Der 08-25-Verifikationssweep von acht jüngsten Deliveries fand 4 noch nicht implementiert:
+AGT-2645 Status-Bar-Review-Plane (nie integriert, Endpoint 404, Karte läuft erneut), AGT-2653
+Execution-Hosts (conflict-skipped, Live-UI unverändert) und AGT-2643 Escalation-IA + Timeline W35 (beide
+dossier-only, decision-pending); dazu 3 defects-found und nur 1 vollständig ok (AGT-2676).</p>
+<h3>Ursache</h3>
+<p><b>Integration ist nicht Deployment:</b> runner-seitige Fixes sind erst live, wenn ein Runner-Release
+deployt ist. Getrennt davon melden conflict-skipped-Integrationen „Delivered", während die Änderung stable
+nie erreichte, und dossier-only/decision-pending-Karten werden als geliefert gezählt.</p>
+<h3>Härtung</h3>
+<p>Deployt <code>agt-2660-20260823T165926Z-8f34e8914</code> als vollständigen 12-Datei-Publish
+(Runner-Binary aufgefrischt). Tick-Checklisten-Lehre ergänzt: „Runner-Deploy fällig?" immer wenn
+<code>runner/</code>-Dateien integrieren. Read-only-Live-Verifikationssweep (headless-Probes von stable in
+hell/dunkel/schmal + API-Cross-Checks + Git-Lineage), volle Findings mit Severities und Per-Finding-Dedup
+in <code>verification-2026-08-25.html</code>. AGT-2653s geskippte Integration ist Orchestrator-Arbeit
+(Gate-Fix + Requeue); AGT-2645 läuft erneut.</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill done">AGT-2660</span> integriert, brauchte aber
+Runner-Release-Deploy · <span class="pill new">AGT-2645</span> Status-Bar-Review-Plane (läuft erneut,
+Endpoint 404) · <span class="pill open">AGT-2653</span> conflict-skipped (Gate-Fix + Requeue nötig) ·
+<span class="pill new">AGT-2643</span> Escalation-IA + Timeline W35 (dossier-only, decision-pending).</p>
+
+<!-- ============================================================ -->
+<h2 id="c11"><span class="no">§12</span>Windows-Produktbugs</h2>
+<p class="stx stx-ok"><b>Alle sechs „Umgebungs"-Flakes als Produktbugs geheilt; Suite ehrlich bei 5547/5576.</b></p>
+<h3>Symptom</h3>
+<p>Eine Flaky-Test-Jagd fand, dass alle sechs „Umgebungs"-Fehler <b>Produkt</b>-Bugs auf Windows waren
+(14 Commits): Review-Subjekte kamen leer; Backups scheiterten still; ~20 FileNotFound pro Write unter
+gleichzeitigen Readern; die Review-Slot-Admission blieb auf Windows-Hosts <b>für immer geschlossen</b>;
+dazu bash unauflösbar aus einem Git-cmd-only-PATH und ein hermetisches Review-Env ohne
+<code>SystemRoot</code>/<code>ComSpec</code>. 7 weitere rote MachineBound-e2e-Tests scheiterten ebenfalls.
+Volle Suite ehrlich gemacht bei 5547/5576.</p>
+<h3>Ursache</h3>
+<p>Echte Plattform-Defekte: <b>(1)</b> git MAX_PATH tötet <code>rev-list</code> auf langen Refs — der genaue
+Mechanismus hinter AGT-2220s geleertem Review-Subjekt; <b>(2)</b> SQLite-Pooling hielt
+<code>chat/.index.db</code> offen, also scheiterten Backups auf Windows still; <b>(3)</b>
+<code>AtomicJsonFileWriter</code> nutzte <code>File.Replace</code>, dessen Zwei-Rename-Fenster Writes unter
+Readern verlor; <b>(4)</b> Review-Slot-Admission verlangte <code>/proc/loadavg</code>, das es auf Windows
+nicht gibt, also öffnete das Gate nie; <b>(5)</b> bash nicht auflösbar aus Git-cmd-only-PATH; <b>(6)</b>
+hermetisches Review-Env ohne <code>SystemRoot</code>/<code>ComSpec</code>.</p>
+<h3>Härtung</h3>
+<p><b>(1)</b> <code>--</code>-Terminatoren + <code>core.longpaths</code>-Injektion; <b>(2)</b>
+<code>Pooling=false</code> + Exklusivitäts-Regressionstest; <b>(3)</b> einzelnes atomares <code>Move</code>
++ Retry, gemessen 0 FileNotFound; <b>(4)</b> Telemetrie-Naht + injizierte Load-Samples; <b>(5)</b>
+gemeinsamer <code>BashExecutable</code>-Resolver; <b>(6)</b> <code>SystemRoot</code>/<code>ComSpec</code>
+injizieren. Die Fixes ritten Release <code>20260825-113901Z</code> (dieser Rollout legte erneut den
+api.sh-Restart-Defekt frei — der Fix ist im Release, aber erst der nächste saubere Restart führt ihn aus).
+Rest-Fehler sind vorbestehende wall-clock-/TTL-sensitive Tests (markiert, nicht angefasst).
+Folge-Kandidaten: injizierbare Clocks für die TTL-Caches (5 wall-clock-Tests) und ein
+long-path-fähiger Temp-Sweep (~144 stecken gebliebene <code>atp-runner-e2e-*</code>-Verzeichnisse).</p>
+<p class="evidence-link"><b>Karten:</b> <span class="pill done">AGT-2220</span> historisches
+Geleertes-Review-Subjekt-Symptom, hier ursächlich geklärt · die sechs Fixes sind direkte Produkt-Commits
+im nächsten Zug (keine eigenen Karten; Folge-Kandidaten: injizierbare TTL-Cache-Clocks,
+long-path-Temp-Sweep).</p>
+
+<!-- ============================================================ -->
+<h2 id="tabelle"><span class="no">§13</span>Übersicht: Symptom → Ursache → Fix</h2>
+<p class="dim">Elf Klassen, eine Zeile pro Klasse. Der rote Faden steht in der letzten Spalte: fast jeder
+Fix ist entweder „mach die Stille sichtbar" oder „nimm die bewegende Logik aus der Sitzung heraus".</p>
+<table>
+  <thead>
+    <tr><th>§</th><th>Symptom</th><th>Ursache (Kern)</th><th>Fix</th><th>Karte</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>§2</td>
+      <td>Beide Ebenen stallen still bis zur Handheilung; Banner „Waiting for Claude sign-in"</td>
+      <td>Roaming-Laptop schläft → SSH stirbt; Power-Policy + ungeschützter ssh + No-Op-Zombie-Kill</td>
+      <td>Geschützter ssh, Exit-Log + Rotation, <code>|| true</code>, No-Sudo-Kill; ClientAliveInterval; Watchdog + Power-Policy (Admin)</td>
+      <td>AGT-2658, AGT-2664</td>
+    </tr>
+    <tr>
+      <td>§3</td>
+      <td>Pipeline friert nur in human-review; 17/16/38 Karten stauen</td>
+      <td>Abnahme-Tick sitzungsgebunden, stirbt mit der Sitzung</td>
+      <td>Plattform-Abnahme-Rail (HostedService, standardmäßig an); Sitzung wird Beobachter</td>
+      <td>AGT-2683, AGT-2662</td>
+    </tr>
+    <tr>
+      <td>§4</td>
+      <td>Alle claude-Reviews 0 ops / 0 tokens; Queue verklemmt</td>
+      <td>Reviewer-CLI attacht nicht; Single-Reader-Queue ohne Watchdog/Reclaim; Claude-5-Katalog fehlt</td>
+      <td>Watchdog + Queue-Reclaim; Katalog-Support; Boundary-Sensor skalieren</td>
+      <td>QS-93, QS-94, QS-95, QS-90</td>
+    </tr>
+    <tr>
+      <td>§5</td>
+      <td>Scheinbare Stille nach Restart; in-flight-Karten getötet; 263 Rückwärtsbewegungen</td>
+      <td>30-s-Messfenster + voreilige Restarts killen lebende Worker; Startup lässt Pendings zurück</td>
+      <td>15-Minuten-Stille-Selbstregel; Startup-Reconciliation; Auto-Requeue als Netz</td>
+      <td>AGT-2683, AGT-2544, AGT-2646</td>
+    </tr>
+    <tr>
+      <td>§6</td>
+      <td>Config/Rollout hohl; alter Prozess bedient weiter; Build scheitert an Lock</td>
+      <td>Stop-Schritt verfehlt den Listener; Prozess wird nie ersetzt</td>
+      <td>Prozess wirklich ersetzen + Self-Check; neue Startzeit belegen</td>
+      <td>AGT-2678</td>
+    </tr>
+    <tr>
+      <td>§7</td>
+      <td>Lokale claude-CLI verschwindet aus PATH (2. Mal)</td>
+      <td>npm-Auto-Update entfernt bin-Shims (Shims weg, Paket da)</td>
+      <td>Shim-Erkennung + beschränkte Auto-Reparatur + Sichtbarkeit</td>
+      <td>AGT-2673</td>
+    </tr>
+    <tr>
+      <td>§8</td>
+      <td>Nächtlicher Fleet-Ausfall; 32 Eskalationen; Null-Claim-Morgen; Breaker paused/leer</td>
+      <td>Geteiltes Provider-Konto → Konto-Limit scheitert jede claude-Karte; Fehler eskalieren</td>
+      <td>Limit-bewusster Runner (quotaWait + Banner, Auto-Resume); sichtbare Breaker-Gründe</td>
+      <td>AGT-2680, AGT-2679</td>
+    </tr>
+    <tr>
+      <td>§9</td>
+      <td>5-tägige QS-Aushungerung; queued-remote, lastRejection=null, kein Banner</td>
+      <td>Profil-Rewrite → Status <code>declared</code> → Gate schließt Auto-Pickup; Dry-Run ohne Quellen</td>
+      <td>Status=pipeline-ready + echter Restart; Gate sichtbar, validate-where-it-runs</td>
+      <td>AGT-2677</td>
+    </tr>
+    <tr>
+      <td>§10</td>
+      <td>Post-Processing voll + stale, aber kein Stall; 17/19 Karten loopen</td>
+      <td>Prompt fordert „alle Empfehlungen", Lieferung trägt eine Scheibe → Requirement-Fit unerfüllbar</td>
+      <td>Scope-Bound; Same-Aspect-Block eskaliert; eine Karte je Scheibe schneiden</td>
+      <td>AGT-2685, AGT-2683</td>
+    </tr>
+    <tr>
+      <td>§11</td>
+      <td>Als „Delivered" gezeigte Features in stable abwesend/defekt (4 von 8)</td>
+      <td>Integration ≠ Deployment; conflict-skipped/dossier-only als geliefert gezählt</td>
+      <td>Runner-Release deployen; „Runner-Deploy fällig?"-Lehre; Live-Verifikationssweep</td>
+      <td>AGT-2660, AGT-2645, AGT-2653, AGT-2643</td>
+    </tr>
+    <tr>
+      <td>§12</td>
+      <td>Sechs „Umgebungs"-Flakes; leere Review-Subjekte, stille Backups, geschlossenes Admission</td>
+      <td>Echte Windows-Produktbugs: MAX_PATH, SQLite-Pooling, File.Replace, /proc/loadavg fehlt</td>
+      <td>Sechs direkte Produkt-Fixes; Suite ehrlich bei 5547/5576</td>
+      <td>AGT-2220 (+ 6 Direkt-Commits)</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="querverweise"><span class="no">§14</span>Querverweise</h2>
+<p class="dim">Dieses Dossier verdichtet elf Ausfallklassen; die tiefe Behandlung der einzelnen
+Mechanismen steht in den folgenden Quell-Dossiers. Die öffentliche, anonymisierte Fassung der
+Ingenieurs-Geschichte liegt als Concept-Doc bereit.</p>
+
+<div class="box">
+  <h4>Quell-Dossiers (relative Links im Wiki-Baum)</h4>
+  <ul>
+    <li><a href="../haertung-verteilte-ausfuehrung/index.html">Verteilte Ausführung</a> —
+        <code>AGT-W7</code> · Result-SHA-Vertrag, Fencing, hermetische Gates, Lease-Lebenszyklus (Basis für §4, §5).</li>
+    <li><a href="../unverifizierte-lieferungen/index.html">Unverifizierte Lieferungen</a> —
+        <code>AGT-W23</code> · „Delivered ≠ live", Verifikation gegen die laufende Instanz (Basis für §11).</li>
+    <li><a href="../orchestrator-waechter/index.html">Global Orchestrator Watcher</a> —
+        <code>AGT-W15</code> · starkes Modell prüft/rettet/berichtet bei Problem-Karten (Basis für §3, §5).</li>
+    <li><a href="../zielbild-komponenten-protokolle/index.html">Zielbild: Komponenten, Protokolle, Schnitt, Build, Deploy</a> —
+        <code>AGT-W25</code> · Rollen-Dreiklang und Deploy-Schnitt (Rahmen für §6, §11).</li>
+    <li><a href="../log-retention/index.html">Task-Logs: Aufbewahrung, Deckelung & Bereinigung</a> —
+        <code>AGT-W11</code> · Log-Bloat und Bereinigung an der Quelle (Randbedingung für Sichtbarkeit).</li>
+    <li><a href="../remote-gate-zielbild/index.html">Remote Gate Target Architecture</a> —
+        <code>AGT-W18</code> · claimbare Remote-Gate-Schritte statt SSH-Brücke (Rahmen für §8, §9).</li>
+    <li><a href="../rebase-merge-and-steering/index.html">Rebase, merge, and bounce steering</a> —
+        <code>AGT-W37</code> · beschränktes Bounce-Steering (Basis für §5, §10 Retry-Bound).</li>
+    <li><a href="../batch-gate-concept/index.html">Batch Gate: one full suite for a delivery wave</a> —
+        <code>AGT-W36</code> · Gate-Kosten pro Lieferwelle (Randbedingung für §9).</li>
+    <li><a href="../telemetry-layer/index.html">Organization-wide telemetry layer</a> —
+        <code>AGT-W38</code> · organisationsweite Telemetrie — das Fundament, das Stille sichtbar macht.</li>
+    <li><a href="../token-retry-tax-analysis/index.html">Token and retry tax, 11–12 August 2026</a> —
+        <code>AGT-2652</code> · Kosten von Retry-Stürmen (Basis für §8, §10).</li>
+    <li><a href="../org-security-audit-2026-08/index.html">Org Security Audit — August 2026</a> —
+        <code>AGT-W41</code> · Konto-/Secret-Exposition (Rahmen für §8 Single-Account).</li>
+    <li><a href="../execution-model-shift/index.html">Ausführungsmodell: Container-Default</a> —
+        <code>AGT-W6</code> · Isolation und Gate-Isolation als Härtungspfeiler (Rahmen für §12).</li>
+    <li><a href="../live-improvement-log/index.html">Live improvement log</a> —
+        <code>AGT-W39</code> · der rollende Beobachtungs-Log, aus dem viele dieser Klassen als Karten hervorgingen.</li>
+  </ul>
+</div>
+
+<div class="box accent">
+  <h4>Öffentliche Fassung</h4>
+  <p>Die anonymisierte, erzählende Ingenieurs-Fassung derselben Mechanismen:
+    <a href="../../concepts/operating-an-autonomous-fleet.html">Operating an Autonomous Fleet</a>
+    (Concept-Doc, englisch). Die kompakte These für Außenstehende steht auf der Website:
+    <a href="https://agent-orchestrator.dev/operating-an-autonomous-fleet/">agent-orchestrator.dev/operating-an-autonomous-fleet</a>.</p>
+</div>
+
+</main>
+</body>
+</html>
