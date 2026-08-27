@@ -188,6 +188,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v candidate">new-candidate &rarr; card cut (highest priority)</td>
   <td>AGT-2683: platform-side acceptance rail (2662 scenario 2) &mdash; a backend HostedService that auto-accepts integrated cards, requeues conflict-skipped with bounded retry+escalation, respects operator holds, ON by default. The session orchestrator becomes observer, not mover. Ends this class permanently. Also improved: heal_check.sh now auto-kills 2h-wedgers + heals tunnel/lease between ticks; 13-min supervision cron re-armed.</td>
 </tr>
+<tr>
+  <td class="meta">08-27 morning</td>
+  <td><strong>"Post-Processing full + stale + appears stalled" root-caused: it was NOT a stall.</strong> 17 of 19 auto-review cards were QS "implement dossier recommendations" cards. Their builds/tests all PASS, but the requirement-fit review aspect BLOCKS ("required slice left undelivered despite approval to implement all recommendations") - the prompt asked for ALL recommendations, one delivery carries ONE slice, so requirement-fit can never pass -> ProductFailure -> requeue -> re-code -> same block -> infinite carousel that keeps Post-Processing full and cards stale. Review plane itself was healthy (21 finishes/hour).</td>
+  <td class="v action">operator-action (done) + card</td>
+  <td>Broke the loop now: appended a one-slice scope steer to 8 looping QS cards (partial delivery of one slice = success). Systemic card AGT-2685: requirement-fit must not demand more than the card's deliverable scope; same-aspect-block across N rounds escalates (ties to AGT-2683 bounded retry); "implement all recommendations" must be cut one-card-per-slice. Card-cutting guidance to be updated.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
