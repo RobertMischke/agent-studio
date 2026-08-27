@@ -2134,6 +2134,28 @@
             replay queue.
           </td>
         </tr>
+        <tr id="case-agt-2673">
+          <td>2026-08-13/18</td>
+          <td><code>AGT-2673</code><br><span class="small">local Claude npm shims disappeared twice</span></td>
+          <td>
+            The Windows control-plane host could no longer resolve <code>claude</code>, so local Claude runs could not
+            start and the capability indicator became unavailable. The global <code>@anthropic-ai/claude-code</code>
+            package remained installed, but its <code>claude</code> and <code>claude.cmd</code> shims were absent.
+            Operators restored service twice with a global npm reinstall; the second repair changed the observed CLI
+            version from 2.1.231 to 2.1.234.
+          </td>
+          <td>
+            The disappearing shims match the already observed interrupted npm postinstall class. The version change makes
+            Claude auto-update activity the leading hypothesis, but the prior incidents did not preserve npm activity
+            around the break, so the trigger is not yet proven.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the periodic local capability probe now distinguishes a retained npm
+            package with missing shims from a truly absent installation. Claude and Codex receive at most one persisted
+            global reinstall attempt per hour. The repair journal captures versions, npm output, package timestamps, and
+            nearby npm debug-log activity. Success appears as a quiet status-bar note; only failure raises an alarm.
+          </td>
+        </tr>
         <tr id="case-agt-2680">
           <td>2026-08-23/24</td>
           <td><code>AGT-2680</code><br><span class="small">Claude session limit caused fleet-wide escalation storm</span></td>

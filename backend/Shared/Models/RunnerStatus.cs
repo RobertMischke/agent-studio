@@ -160,6 +160,23 @@ public static class TaskRunActivityClassifier
 public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
+    /// <summary>
+    /// Latest local control-plane CLI repair outcome per provider. Successful
+    /// repairs are informational; failed repairs are operator alarms.
+    /// </summary>
+    public IReadOnlyList<LocalCliRepairStatus> CliRepairs { get; init; } = [];
+}
+
+/// <summary>Latest bounded npm-shim self-heal outcome for one local CLI.</summary>
+public sealed record LocalCliRepairStatus
+{
+    public string CliType { get; init; } = "";
+    /// <summary>Either <c>repaired</c> or <c>failed</c>.</summary>
+    public string Outcome { get; init; } = "";
+    public DateTimeOffset OccurredAt { get; init; }
+    public string? VersionBefore { get; init; }
+    public string? VersionAfter { get; init; }
+    public string Detail { get; init; } = "";
 }
 
 public sealed record QuotaFallbackStatus(string CliType, string? Model, string? Reason);

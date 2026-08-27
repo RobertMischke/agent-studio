@@ -20,6 +20,7 @@ async function stubHostLoad(
   remoteRuns: number,
   telemetrySlots: number,
   load1: number,
+  cliRepairs: unknown[] = [],
 ): Promise<void> {
   const now = new Date().toISOString();
   const baseTask = (id: string, projectName: string) => ({
@@ -96,7 +97,7 @@ async function stubHostLoad(
     archive: [],
   }));
   await page.route('**/api/tasks', json([]));
-  await page.route('**/api/runner/status', json({ projects: runnerProjects }));
+  await page.route('**/api/runner/status', json({ projects: runnerProjects, cliRepairs }));
   await page.route('**/api/clients', json([{
     id: 'agent-runner-01',
     displayName: 'agent-runner-01',
@@ -171,6 +172,37 @@ test.describe('Status bar execution-host load companion signal', () => {
     await setTheme(page, 'light');
     await page.screenshot({
       path: join(RESULTS_DIR, 'status-bar-runners-both-positive-light--mocked.png'),
+      fullPage: false,
+    });
+  });
+
+  test('successful local CLI repair is a quiet status note', async ({ page }) => {
+    await stubHostLoad(page, 0, 0, 0, 0.8, [{
+      cliType: 'claude',
+      outcome: 'repaired',
+      occurredAt: '2026-08-18T10:15:00Z',
+      versionBefore: '2.1.231',
+      versionAfter: '2.1.234',
+      detail: 'claude CLI npm shim restored; version 2.1.231 -> 2.1.234.',
+    }]);
+    await page.goto('/');
+
+    const note = page.getByTestId('status-bar-cli-repair');
+    await expect(note).toContainText('CLI repaired at');
+    await expect(note).not.toHaveAttribute('data-signal-tone', 'mismatch');
+    await note.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText(
+      'claude CLI npm shim restored; version 2.1.231 -> 2.1.234.',
+    );
+
+    await setTheme(page, 'light');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'local-cli-repaired-status-note-light--mocked.png'),
+      fullPage: false,
+    });
+    await setTheme(page, 'dark');
+    await page.screenshot({
+      path: join(RESULTS_DIR, 'local-cli-repaired-status-note-dark--mocked.png'),
       fullPage: false,
     });
   });

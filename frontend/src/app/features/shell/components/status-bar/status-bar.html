@@ -24,6 +24,17 @@
       [iconSize]="11"
       [label]="autoCount() + '/' + projectCount() + ' auto'"
       [tooltip]="autoTooltip()" />
+    @if (latestCliRepair(); as repair) {
+      <app-statusbar-item
+        [button]="false"
+        bullet="●"
+        [signalTone]="repair.outcome === 'failed' ? 'mismatch' : null"
+        [label]="cliRepairLabel()"
+        [tooltip]="repair.detail"
+        [warning]="repair.outcome === 'failed'"
+        warningLabel="CLI repair failed"
+        testid="status-bar-cli-repair" />
+    }
 
     <span class="statusbar__sep" aria-hidden="true"></span>
 

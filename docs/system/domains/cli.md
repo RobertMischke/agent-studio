@@ -33,6 +33,11 @@ CLI execution tests.
 - `backend/Services/Cli/CliRouter.cs`: `cliType` routing.
 - `backend/Services/Quota/*QuotaProbe.cs`: per-CLI quota probes.
 - `backend/Services/Quota/QuotaService.cs`: aggregate quota surface.
+- `backend/Features/Cli/Repair/LocalCliRepairService.cs`: Windows local-host
+  detection and bounded repair for the specific global npm state where a
+  Claude or Codex package remains installed but all command shims disappeared.
+  It persists repair and nearby npm-activity evidence to
+  `<TaskRepository>/logs/cli-self-heal.jsonl`.
 - `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
   endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
   (lazy single-transcript parse: model, thinking, message count, first prompt)
@@ -69,6 +74,10 @@ CLI execution tests.
 - Claude and Codex version changes are checked after startup and periodically.
   Keep the structured `CLI version changed` log line when editing version or
   self-heal behavior.
+- Local missing-shim repair is not a general installer. It may run only when
+  the matching global npm package is present, never for a truly absent package
+  or custom executable path, and is limited to one persisted attempt per CLI
+  per hour. Successful repair is informational; failure is the alarm boundary.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.
