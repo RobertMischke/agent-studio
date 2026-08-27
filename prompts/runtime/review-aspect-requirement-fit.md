@@ -51,6 +51,16 @@ the actual task goal, `pass`.
 
 {{card_mode}}
 
+## Delivery acceptance scope
+
+{{acceptance_scope}}
+
+**Scope authority.** The delivery acceptance scope above is the maximum this
+aspect may demand. When it says `bounded slice`, judge only that slice and its
+listed criteria. A broader Dossier, recommendation list, parent goal, or task
+body wishlist is context, not missing work for this delivery. Passing one
+bounded slice is success even while later slices remain unchecked.
+
 ## Task body (`prompt.md`)
 
 ```

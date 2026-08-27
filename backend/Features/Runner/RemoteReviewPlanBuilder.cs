@@ -147,6 +147,9 @@ public sealed class RemoteReviewPlanBuilder
         {
             ResultsInventory = ResultsInventory.Render(task.FolderPath),
             CardMode = ReviewCardMode.Describe(task.Mode),
+            AcceptanceScope = RequirementAcceptanceScope.Describe(
+                task.AcceptanceScope,
+                taskBody),
         };
     }
 

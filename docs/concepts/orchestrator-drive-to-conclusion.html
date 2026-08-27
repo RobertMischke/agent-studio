@@ -2178,6 +2178,26 @@
             every matching wait and resumes the card automatically.
           </td>
         </tr>
+        <tr id="case-agt-2687">
+          <td>2026-08-27</td>
+          <td><code>AGT-2687</code><br><span class="small">requirement-fit open-scope review carousel</span></td>
+          <td>
+            Post Processing stayed full with 17 looping QS cards. Wave-2 cards delivered one approved Dossier slice and
+            passed build-tests, but requirement-fit repeatedly blocked them because other recommendations remained open.
+          </td>
+          <td>
+            One leaf card asked to implement all Dossier recommendations while each delivery carried only one slice. The
+            reviewer received the whole task body without an authoritative delivery boundary, and repeated decision runs
+            did not identify an unchanged aspect reason as a convergence failure.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> cards can carry a structured bounded <code>acceptanceScope</code>, and
+            requirement-fit cannot demand work outside it. Dossier promotion and Epic decomposition now cut one card per
+            slice. The same normalized aspect block escalates with its exact reason after two consecutive review rounds,
+            while the ordinary task-wide budget still bounds changing findings. Regression coverage pins a passing
+            one-slice review and a passing-build repeated-block escalation to <span class="lane">5e-escalated</span>.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -47,6 +47,12 @@ public static class EpicDecompositionParser
         CommentHandling = JsonCommentHandling.Skip,
     };
 
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
+    {
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+    };
+
     /// <summary>
     /// Parse the joined CLI output lines into sub-task specs. Never throws -
     /// a malformed or empty output returns an empty list with an explanatory
@@ -124,11 +130,13 @@ public static class EpicDecompositionParser
                 if (item.ValueKind != JsonValueKind.Object) continue;
                 var title = GetString(item, "title", "name");
                 if (string.IsNullOrWhiteSpace(title)) continue;
+                if (!TryGetAcceptanceScope(item, out var acceptanceScope)) continue;
                 specs.Add(new EpicSubTaskSpec(
                     Title: title!.Trim(),
                     PromptMarkdown: GetString(item, "promptMarkdown", "prompt", "promptMd", "body"),
                     CliType: GetString(item, "cliType", "cli"),
-                    Model: GetString(item, "model")));
+                    Model: GetString(item, "model"),
+                    AcceptanceScope: acceptanceScope));
             }
             return true;
         }
@@ -174,5 +182,25 @@ public static class EpicDecompositionParser
             return string.IsNullOrWhiteSpace(s) ? null : s;
         }
         return null;
+    }
+
+    private static bool TryGetAcceptanceScope(
+        JsonElement item,
+        out TaskAcceptanceScope? acceptanceScope)
+    {
+        acceptanceScope = null;
+        if (!TryGetProp(item, out var value, "acceptanceScope", "acceptance_scope"))
+            return true;
+        if (value.ValueKind != JsonValueKind.Object) return false;
+        try
+        {
+            acceptanceScope = TaskAcceptanceScopes.Normalize(
+                JsonSerializer.Deserialize<TaskAcceptanceScope>(value.GetRawText(), SerializerOptions));
+            return acceptanceScope is not null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }

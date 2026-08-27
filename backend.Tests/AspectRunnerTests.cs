@@ -292,6 +292,67 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RequirementFitPrompt_BoundedSlicePassesWithoutDemandingTheDossierWishlist()
+    {
+        string? capturedPrompt = null;
+        var config = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?>()).Build();
+        var prompts = new RuntimePromptService(
+            config, NullLogger<RuntimePromptService>.Instance);
+        var runner = new AspectRunnerService(
+            prompts, NullLogger<AspectRunnerService>.Instance);
+        runner.CliRunner = (_, _, _, prompt, _, _) =>
+        {
+            capturedPrompt = prompt;
+            return Task.FromResult(
+                "[[ASPECT_VERDICT: status=pass; summary=The S1 slice meets its bounded acceptance scope.]]\n[[TASK_DONE]]");
+        };
+        var scope = TaskAcceptanceScopes.BoundedSlice(
+            "S1: stop identical requirement-fit review loops",
+            "Escalate the same requirement-fit block after two rounds.");
+        var body = "Implement all recommendations in the Dossier, including S1 through S9.";
+        var inputs = new AspectRunInputs(
+            Project: "demo",
+            JobId: "bounded-slice",
+            JobTitle: "Implement Dossier S1",
+            JobFolderPath: _jobFolder,
+            TaskBody: body,
+            RecentLog: "S1 implemented and focused tests passed.",
+            DiffSummary: "Review retry policy and tests changed.",
+            StatusSummary: "Delivered S1.")
+        {
+            AcceptanceScope = RequirementAcceptanceScope.Describe(scope, body),
+        };
+
+        var report = await runner.RunAsync(
+            inputs,
+            ["requirement-fit"],
+            "claude",
+            "claude-haiku-4-5",
+            TimeSpan.FromSeconds(5),
+            CancellationToken.None);
+
+        Assert.Equal(AspectStatus.Pass, report.Overall);
+        Assert.Contains("Acceptance mode: bounded slice", capturedPrompt);
+        Assert.Contains("S1: stop identical requirement-fit review loops", capturedPrompt);
+        Assert.Contains("Requirements outside this slice belong to the parent", capturedPrompt);
+    }
+
+    [Theory]
+    [InlineData("Partial delivery is success for this card.")]
+    [InlineData("Ship one slice per delivery and leave the rest in the Dossier.")]
+    public void RequirementAcceptanceScope_InfersOnlyExplicitLegacySliceDeclarations(string taskBody)
+    {
+        var scope = RequirementAcceptanceScope.Describe(null, taskBody);
+
+        Assert.Contains("Acceptance mode: bounded slice", scope);
+        Assert.Contains("inferred", scope);
+        Assert.Contains(
+            "Acceptance mode: full task",
+            RequirementAcceptanceScope.Describe(null, "Implement the approved change."));
+    }
+
+    [Fact]
     public async Task AspectPrompt_CarriesResultsInventoryAndCardMode_ForEvidenceCompleteness()
     {
         // AGT-2022: every aspect prompt must carry the results/ inventory and the

@@ -56,10 +56,12 @@ public sealed class ConceptPromotionService
                 }
 
                 var item = plan.Items[index];
+                var acceptanceScope = DossierImplementationCardPolicy.AcceptanceScopeFor(item);
                 var jobId = _mutations.CreateJob(new CreateTaskRequest
                 {
                     Title = item.Title.Trim(),
                     PromptMarkdown = BuildPrompt(plan.Source, item),
+                    AcceptanceScope = acceptanceScope,
                     WatchPath = source.WatchPath,
                     Mode = TaskModes.Coding,
                     TargetState = TaskStates.Preparation,

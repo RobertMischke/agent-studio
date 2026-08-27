@@ -1,5 +1,6 @@
 using AgentStudio.TaskServer;
 using AgentStudio.TaskServer.Contracts;
+using System.Text.Json;
 using Xunit;
 
 namespace TaskServer.Tests;
@@ -80,5 +81,55 @@ public sealed class OrchestrationSettlementPolicyTests
         Assert.Equal("superseded", decision.RunStatus);
         Assert.Null(decision.TaskState);
         Assert.NotNull(decision.SupersededReason);
+    }
+
+    [Fact]
+    public void Passing_build_with_same_requirement_fit_block_escalates_after_bounded_rounds()
+    {
+        var payload = JsonSerializer.Serialize(
+            new ReviewOrchestrationPayloadDto(
+                "run-1",
+                "subject-1",
+                "review-1",
+                new string('a', 40),
+                "policy-1",
+                new string('b', 64),
+                "ProductFailure",
+                "RequirementFit",
+                "Build passes but the broad card remains incomplete.",
+                [
+                    new ReviewVerdictDto(
+                        "build-tests", "pass", "Verified", "Build and tests passed."),
+                    new ReviewVerdictDto(
+                        "requirement-fit",
+                        "block",
+                        "MissingScope",
+                        "Required S1 slice left undelivered despite approval to implement all recommendations."),
+                ],
+                [new ReviewOrchestrationGateDto(
+                    "verify-build", "build-tests", "passed", "Verified")]),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var diagnosis = RepeatedReviewBlockPolicy.Diagnose(
+            payload,
+            [payload],
+            OrchestrationDefaults.MaxIdenticalAspectBlockRounds);
+
+        Assert.NotNull(diagnosis);
+        Assert.True(diagnosis!.MustEscalate);
+        var decision = OrchestrationSettlementPolicy.Decide(
+            OrchestrationAction.Reissue,
+            Stages,
+            OrchestrationStage.ReviewDecision,
+            currentReissueAttempts: 1,
+            maxReissueAttempts: 5,
+            currentTaskState: "4-auto-review",
+            expectedTaskVersion: 7,
+            currentTaskVersion: 7,
+            repeatedBlock: diagnosis);
+
+        Assert.Equal("escalated", decision.RunStatus);
+        Assert.Equal("5e-escalated", decision.TaskState);
+        Assert.Contains("requirement-fit", decision.SettlementReason);
+        Assert.Contains("Required S1 slice left undelivered", decision.SettlementReason);
     }
 }

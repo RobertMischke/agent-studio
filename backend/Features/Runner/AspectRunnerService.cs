@@ -451,6 +451,9 @@ public sealed class AspectRunnerService
             ["aspect_title"] = def.Title,
             ["aspect_namespace"] = def.ConcernNamespace,
             ["task_body"] = inputs.TaskBody,
+            ["acceptance_scope"] = string.IsNullOrWhiteSpace(inputs.AcceptanceScope)
+                ? RequirementAcceptanceScope.Describe(null, inputs.TaskBody)
+                : inputs.AcceptanceScope,
             ["recent_log"] = inputs.RecentLog,
             ["diff_summary"] = inputs.DiffSummary,
             ["status_summary"] = inputs.StatusSummary,
@@ -487,6 +490,11 @@ public sealed class AspectRunnerService
         sb.AppendLine($"## Project / Job: {inputs.Project} / {inputs.JobId} - {inputs.JobTitle}");
         sb.AppendLine();
         sb.AppendLine(string.IsNullOrWhiteSpace(inputs.CardMode) ? ReviewCardMode.Describe(null) : inputs.CardMode);
+        sb.AppendLine();
+        sb.AppendLine("## Delivery acceptance scope");
+        sb.AppendLine(string.IsNullOrWhiteSpace(inputs.AcceptanceScope)
+            ? RequirementAcceptanceScope.Describe(null, inputs.TaskBody)
+            : inputs.AcceptanceScope);
         sb.AppendLine();
         sb.AppendLine("## Task body");
         sb.AppendLine("```");
@@ -737,6 +745,12 @@ public sealed record AspectRunInputs(
     /// card is read as legitimate rather than as missing work.
     /// </summary>
     public string CardMode { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Rendered card-owned delivery boundary. Requirement-fit treats this as
+    /// authoritative over broader Dossier or wishlist text in the task body.
+    /// </summary>
+    public string AcceptanceScope { get; init; } = string.Empty;
 }
 
 /// <summary>

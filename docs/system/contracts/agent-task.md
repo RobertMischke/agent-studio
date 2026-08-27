@@ -77,7 +77,7 @@ Only successful CLI runs move automatically from `3-progress` to `4-auto-review`
 
 Each task folder may contain:
 
-- `job.json`: metadata owned by the application. The optional `phase` field carries an orchestrator-driven substate (Intake, Post Processing); agents do not write it.
+- `job.json`: metadata owned by the application. The optional `phase` field carries an orchestrator-driven substate (Intake, Post Processing); agents do not write it. The optional `acceptanceScope` field is the authoritative requirement-fit boundary. A `bounded-slice` scope names one slice and its complete acceptance criteria; broader parent or Dossier work is outside this delivery.
 - `prompt.md`: task description and follow-up notes.
 - `status.md`: generated review protocol owned by the application.
 - `lifecycle.json` (optional): application-owned sidecar with richer phase history. Absent on legacy folders.

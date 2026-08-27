@@ -37,6 +37,8 @@ public sealed record ReviewDecisionRecord(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FailureFingerprint { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? FailureFingerprints { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FailureKind { get; init; }
     /// <summary>Structured council reaction when this decision was driven by a quality-grade review.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

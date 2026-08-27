@@ -21,6 +21,12 @@ public sealed record ConceptImplementationTask
 {
     public string Title { get; init; } = "";
     public string PromptMarkdown { get; init; } = "";
+    /// <summary>
+    /// Optional explicit one-slice boundary. Promotion normalizes every Dossier
+    /// item to a bounded acceptance scope; older descriptors without this field
+    /// use the item title and prompt as their one-card boundary.
+    /// </summary>
+    public TaskAcceptanceScope? AcceptanceScope { get; init; }
 }
 
 /// <summary>

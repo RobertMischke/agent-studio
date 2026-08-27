@@ -38,6 +38,7 @@ public static class EpicSubTaskFactory
                 WatchPath = epic.WatchPath,
                 EpicId = epic.Id,
                 PromptMarkdown = spec.PromptMarkdown,
+                AcceptanceScope = spec.AcceptanceScope,
                 CliType = spec.CliType ?? epic.CliType,
                 Model = spec.Model ?? epic.Model,
                 TargetState = safeTargetState,

@@ -193,6 +193,8 @@ public static class ConceptWorkbenchContract
                 var item = descriptor.ImplementationTasks[i];
                 if (string.IsNullOrWhiteSpace(item.Title) || string.IsNullOrWhiteSpace(item.PromptMarkdown))
                     findings.Add($"implementationTasks[{i}] requires title and promptMarkdown.");
+                else if (DossierImplementationCardPolicy.Validate(item) is { } scopeFinding)
+                    findings.Add($"implementationTasks[{i}] is not workflow-sized: {scopeFinding}");
             }
         }
 

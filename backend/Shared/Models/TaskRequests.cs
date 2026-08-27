@@ -279,6 +279,12 @@ public record CreateTaskRequest
     /// </summary>
     public string WatchPath { get; init; } = "";
     public string? PromptMarkdown { get; init; }
+    /// <summary>
+    /// Optional structured delivery boundary used by requirement-fit review.
+    /// Use <c>bounded-slice</c> for one independently shippable Dossier or Epic
+    /// slice; omit it when the whole task body must be delivered together.
+    /// </summary>
+    public TaskAcceptanceScope? AcceptanceScope { get; init; }
     public string? Model { get; init; }
     public string? ThinkingLevel { get; init; }
     /// <summary>

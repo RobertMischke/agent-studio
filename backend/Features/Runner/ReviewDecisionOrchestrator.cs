@@ -2181,6 +2181,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             ResultsInventory = resultsInventory,
             CardMode = cardMode,
+            AcceptanceScope = RequirementAcceptanceScope.Describe(
+                current.AcceptanceScope,
+                taskBody),
         };
 
         // Bracket the aspect run with a pipeline-execution record so the
@@ -2462,22 +2465,32 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             // is acceptable here; pass that plus the empty-diff probe to the pure
             // breaker, which accepts an empty clean re-run and otherwise escalates
             // once the budget is spent rather than penduluming 2-ready <-> run.
+            var reviewRecords = ReviewDecisionLog.ReadAll(workspace, entry.Name);
+            var repeatedBlock = RepeatedAspectBlockPolicy.Diagnose(
+                report,
+                reviewRecords,
+                current.Id,
+                OperatorReviewRequeueService.ReadEpoch(current.FolderPath),
+                ConfiguredIdenticalBlockRounds());
             var loopBreak = ReissueLoopBreaker.Evaluate(
-                CountPriorReissues(workspace, entry.Name, current.Id),
+                CountReissuesInCurrentChain(reviewRecords, current.Id),
                 ConfiguredMaxReissues(),
                 emptyFollowupDiff: IsLatestRunEmptyDiff(current, entry.Path),
-                stateAcceptable: true);
+                stateAcceptable: true,
+                repeatedBlock);
             switch (loopBreak.Action)
             {
                 case ReissueLoopBreaker.LoopBreakAction.AcceptEmptyDiff:
                     await AcceptOnLoopBreakAsync(workspace, entry, current, report, loopBreak, ct);
                     return;
                 case ReissueLoopBreaker.LoopBreakAction.Escalate:
-                    EscalateOnLoopBreak(workspace, entry, current, report, loopBreak);
+                    EscalateOnLoopBreak(
+                        workspace, entry, current, report, loopBreak, repeatedBlock);
                     return;
             }
 
-            await ReissueOnBlockAsync(workspace, entry, pending, current, report, ct);
+            await ReissueOnBlockAsync(
+                workspace, entry, pending, current, report, repeatedBlock, ct);
             return;
         }
 
@@ -2780,6 +2793,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         PendingDecision pending,
         TaskInfo current,
         AspectRunReport report,
+        RepeatedAspectBlockDiagnosis? repeatedBlock,
         CancellationToken ct)
     {
         var followUp =
@@ -2839,7 +2853,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Reason: "Multi-aspect block: " + AspectSummaryLine(report),
             Prompt: "(multi-aspect run; per-aspect prompts written to aspect-*.md)",
             Response: AspectSummaryLine(report),
-            FollowUp: followUp),
+            FollowUp: followUp)
+        {
+            FailureKind = RepeatedAspectBlockPolicy.FailureKind,
+            FailureFingerprint = repeatedBlock?.Fingerprint,
+            FailureFingerprints = repeatedBlock?.CurrentFingerprints,
+        },
             current.FolderPath,
             moved.FolderPath);
     }
@@ -3072,16 +3091,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WatchPathEntry entry,
         TaskInfo current,
         AspectRunReport report,
-        ReissueLoopBreaker.Decision loopBreak)
+        ReissueLoopBreaker.Decision loopBreak,
+        RepeatedAspectBlockDiagnosis? repeatedBlock)
     {
         ConcernTagWriter.ReconcileConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Auto-review reissue budget spent; not reissuing again. Reason: {loopBreak.Reason}. Promoted to {TaskStates.Escalated}.");
+            $"Auto-review stopped its reissue loop. Reason: {loopBreak.Reason}. Promoted to {TaskStates.Escalated}.");
 
         var move = GuardedMoveJob(
             current.Id, TaskStates.Escalated, entry.Path,
-            transitionCause: LaneChangeCauses.Escalated, transitionDetail: "reissue-budget-exhausted");
+            transitionCause: LaneChangeCauses.Escalated, transitionDetail: loopBreak.Cause);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
@@ -3095,7 +3115,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         EmitVerdictTimeline(escalatedFolder, TimelineEventKinds.OrchestratorEscalated,
             TimelineActors.Orchestrator, loopBreak.Reason,
-            BuildEscalateDetails("reissue-budget-exhausted", loopBreak.Reason,
+            BuildEscalateDetails(loopBreak.Cause, loopBreak.Reason,
                 CountPriorReissues(workspace, entry.Name, current.Id)));
 
         _statusSnapshot.RecordEscalate();
@@ -3106,9 +3126,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Project: entry.Name,
             Kind: ReviewDecisionKind.Escalate,
             Reason: loopBreak.Reason,
-            Prompt: "(loop-break: reissue budget exhausted)",
+            Prompt: $"(loop-break: {loopBreak.Cause})",
             Response: AspectSummaryLine(report),
-            FollowUp: string.Empty),
+            FollowUp: string.Empty)
+        {
+            FailureKind = RepeatedAspectBlockPolicy.FailureKind,
+            FailureFingerprint = repeatedBlock?.Fingerprint,
+            FailureFingerprints = repeatedBlock?.CurrentFingerprints,
+        },
             current.FolderPath,
             escalatedFolder);
     }
@@ -6143,6 +6168,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     /// </summary>
     private int ConfiguredMaxReissues() =>
         _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
+
+    /// <summary>
+    /// Consecutive rounds allowed to return the exact same aspect/reason pair.
+    /// This is narrower than the shared reissue budget: changing findings may
+    /// still use that budget, while an unchanged semantic block stops early.
+    /// </summary>
+    private int ConfiguredIdenticalBlockRounds() =>
+        Math.Clamp(_configuration.GetValue(
+            "ReviewDecisionOrchestrator:MaxIdenticalAspectBlockRounds",
+            ReissueLoopBreaker.DefaultIdenticalBlockRounds), 1, 20);
 
     /// <summary>
     /// Tee one orchestrator verdict (accept / reopen / escalate) into the

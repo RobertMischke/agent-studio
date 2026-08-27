@@ -16,9 +16,14 @@ namespace AgentStudio.Runner;
 /// </para>
 ///
 /// <para>
-/// Two rules, applied in order:
+/// Three rules, applied in order:
 /// </para>
 /// <list type="number">
+/// <item>
+///   <b>Repeated aspect escalation.</b> When one aspect repeats the same
+///   normalized block through its configured round limit, escalate with that
+///   reason. An unchanged review finding is no longer useful coding input.
+/// </item>
 /// <item>
 ///   <b>Empty-diff accept.</b> When a card that was already re-issued at least
 ///   once comes back with an EMPTY follow-up diff (the latest run committed
@@ -44,6 +49,8 @@ namespace AgentStudio.Runner;
 /// </summary>
 public static class ReissueLoopBreaker
 {
+    public const int DefaultIdenticalBlockRounds = 2;
+
     public enum LoopBreakAction
     {
         /// <summary>No loop-break; fall through to the normal reissue.</summary>
@@ -67,6 +74,7 @@ public static class ReissueLoopBreaker
     {
         public LoopBreakAction Action { get; init; } = LoopBreakAction.None;
         public string Reason { get; init; } = "Reissue budget intact; no loop-break.";
+        public string Cause { get; init; } = "none";
 
         public bool BreaksLoop => Action != LoopBreakAction.None;
     }
@@ -95,9 +103,26 @@ public static class ReissueLoopBreaker
         int priorReissues,
         int maxReissues,
         bool emptyFollowupDiff,
-        bool stateAcceptable)
+        bool stateAcceptable,
+        RepeatedAspectBlockDiagnosis? repeatedBlock = null)
     {
-        // Rule 1: empty follow-up diff on an already-reissued, clean card -> accept.
+        // A reviewer that repeats the exact same semantic block has stopped
+        // producing new information. The task needs a human scope decision,
+        // not another automatic accept/re-code/review turn.
+        if (repeatedBlock?.MustEscalate == true)
+        {
+            return new Decision
+            {
+                Action = LoopBreakAction.Escalate,
+                Cause = "identical-aspect-block",
+                Reason =
+                    $"The same aspect block repeated for {repeatedBlock.ConsecutiveRounds} consecutive review rounds " +
+                    $"(limit {repeatedBlock.MaximumRounds}): {repeatedBlock.Finding}. " +
+                    "Escalating for a human scope decision instead of reissuing the same work again.",
+            };
+        }
+
+        // Rule 2: empty follow-up diff on an already-reissued, clean card -> accept.
         // This takes precedence over the budget rule: an empty clean re-run should
         // be accepted (low human burden), not escalated, even when the budget is
         // also spent.
@@ -106,6 +131,7 @@ public static class ReissueLoopBreaker
             return new Decision
             {
                 Action = LoopBreakAction.AcceptEmptyDiff,
+                Cause = "empty-followup-diff",
                 Reason =
                     $"Re-run after {priorReissues} prior reissue(s) produced no new commit/diff and the close-out is clean " +
                     "(open items none, build/tests green); the empty follow-up diff confirms nothing is open. " +
@@ -113,12 +139,13 @@ public static class ReissueLoopBreaker
             };
         }
 
-        // Rule 2: budget spent -> escalate, never reissue back to 2-ready again.
+        // Rule 3: budget spent -> escalate, never reissue back to 2-ready again.
         if (priorReissues >= maxReissues)
         {
             return new Decision
             {
                 Action = LoopBreakAction.Escalate,
+                Cause = "reissue-budget-exhausted",
                 Reason =
                     $"Reissue budget spent ({priorReissues} of {maxReissues} reissue(s) used); " +
                     "escalating to human review instead of reissuing again to avoid a 2-ready <-> run loop.",

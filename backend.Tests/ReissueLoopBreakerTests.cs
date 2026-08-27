@@ -7,8 +7,9 @@ namespace AgentStudio.Tests;
 /// Pure-policy coverage for <see cref="ReissueLoopBreaker"/> (ASS-794): the
 /// deterministic loop-breaker that stops a finished task from penduluming
 /// between <c>2-ready</c> and the run loop on the multi-aspect BLOCK path. Two
-/// rules in precedence order - empty follow-up diff on an already-reissued clean
-/// card -> accept; budget spent -> escalate; otherwise no loop-break.
+/// rules in precedence order: identical aspect block at its limit escalates;
+/// otherwise an empty follow-up diff on an already-reissued clean card accepts;
+/// budget spent escalates; otherwise there is no loop-break.
 /// </summary>
 public class ReissueLoopBreakerTests
 {
@@ -88,6 +89,112 @@ public class ReissueLoopBreakerTests
             priorReissues: 2, maxReissues: 2, emptyFollowupDiff: true, stateAcceptable: true);
 
         Assert.Equal(ReissueLoopBreaker.LoopBreakAction.AcceptEmptyDiff, decision.Action);
+    }
+
+    [Fact]
+    public void Evaluate_RepeatedAspectBlockEscalatesBeforeEmptyDiffAcceptance()
+    {
+        var diagnosis = new RepeatedAspectBlockDiagnosis(
+            "fingerprint",
+            "requirement-fit: Required S1 slice is still missing.",
+            ConsecutiveRounds: 2,
+            MaximumRounds: 2);
+
+        var decision = ReissueLoopBreaker.Evaluate(
+            priorReissues: 1,
+            maxReissues: 5,
+            emptyFollowupDiff: true,
+            stateAcceptable: true,
+            repeatedBlock: diagnosis);
+
+        Assert.Equal(ReissueLoopBreaker.LoopBreakAction.Escalate, decision.Action);
+        Assert.Equal("identical-aspect-block", decision.Cause);
+        Assert.Contains("Required S1 slice is still missing", decision.Reason);
+    }
+
+    [Fact]
+    public void Diagnose_SecondIdenticalAspectBlockInAttemptEpoch_ReachesLimit()
+    {
+        var report = AspectRunReport.From(
+        [
+            new AspectVerdict(
+                "requirement-fit",
+                AspectStatus.Block,
+                "Required S1 slice is still missing.",
+                "body",
+                "requirement:concerns"),
+        ]);
+        var first = RepeatedAspectBlockPolicy.Diagnose(
+            report, [], "AGT-1", attemptEpoch: 4, maximumRounds: 2)!;
+        var records = new[]
+        {
+            new ReviewDecisionRecord(
+                DateTime.UtcNow,
+                "AGT-1",
+                "Project",
+                ReviewDecisionKind.Reissue,
+                "blocked",
+                "prompt",
+                "response",
+                "follow-up")
+            {
+                AttemptEpoch = 4,
+                FailureKind = RepeatedAspectBlockPolicy.FailureKind,
+                FailureFingerprint = first.Fingerprint,
+            },
+        };
+
+        var second = RepeatedAspectBlockPolicy.Diagnose(
+            report, records, "AGT-1", attemptEpoch: 4, maximumRounds: 2)!;
+
+        Assert.True(second.MustEscalate);
+        Assert.Equal(2, second.ConsecutiveRounds);
+        Assert.Contains("requirement-fit", second.Finding);
+    }
+
+    [Fact]
+    public void Diagnose_TracksOneRepeatedAspectWhileAnotherFindingChanges()
+    {
+        var firstReport = AspectRunReport.From(
+        [
+            new AspectVerdict(
+                "code-quality", AspectStatus.Block, "First quality issue.", "body", "quality:concerns"),
+            new AspectVerdict(
+                "requirement-fit", AspectStatus.Block, "Same missing slice.", "body", "requirement:concerns"),
+        ]);
+        var first = RepeatedAspectBlockPolicy.Diagnose(
+            firstReport, [], "AGT-2", attemptEpoch: 1, maximumRounds: 2)!;
+        var records = new[]
+        {
+            new ReviewDecisionRecord(
+                DateTime.UtcNow,
+                "AGT-2",
+                "Project",
+                ReviewDecisionKind.Reissue,
+                "blocked",
+                "prompt",
+                "response",
+                "follow-up")
+            {
+                AttemptEpoch = 1,
+                FailureKind = RepeatedAspectBlockPolicy.FailureKind,
+                FailureFingerprint = first.Fingerprint,
+                FailureFingerprints = first.CurrentFingerprints,
+            },
+        };
+        var secondReport = AspectRunReport.From(
+        [
+            new AspectVerdict(
+                "code-quality", AspectStatus.Block, "Different quality issue.", "body", "quality:concerns"),
+            new AspectVerdict(
+                "requirement-fit", AspectStatus.Block, "Same missing slice.", "body", "requirement:concerns"),
+        ]);
+
+        var second = RepeatedAspectBlockPolicy.Diagnose(
+            secondReport, records, "AGT-2", attemptEpoch: 1, maximumRounds: 2)!;
+
+        Assert.True(second.MustEscalate);
+        Assert.Equal("requirement-fit: Same missing slice.", second.Finding);
     }
 
     [Fact]

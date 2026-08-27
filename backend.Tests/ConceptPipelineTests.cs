@@ -264,10 +264,28 @@ public sealed class ConceptPipelineTests : IDisposable
             Assert.NotNull(created);
             Assert.Equal(TaskModes.Coding, created!.Mode);
             Assert.Equal(TaskStates.Preparation, created.State);
+            Assert.Equal(TaskAcceptanceDeliveryModes.BoundedSlice,
+                created.AcceptanceScope!.DeliveryMode);
+            Assert.Equal(created.Title, created.AcceptanceScope.Slice);
             Assert.Contains(
                 "docs/delivery-flow/index.html",
                 File.ReadAllText(Path.Combine(created.FolderPath, "prompt.md")));
         }
+    }
+
+    [Fact]
+    public void DossierPolicy_RejectsOneOpenEndedImplementAllRecommendationsCard()
+    {
+        var item = new ConceptImplementationTask
+        {
+            Title = "Implement all Dossier recommendations",
+            PromptMarkdown = "Use the approved design as the implementation source.",
+        };
+
+        var error = Assert.Throws<InvalidDataException>(
+            () => DossierImplementationCardPolicy.AcceptanceScopeFor(item));
+
+        Assert.Contains("one implementationTasks entry per slice", error.Message);
     }
 
     [Fact]

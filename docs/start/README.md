@@ -155,6 +155,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Designated topics (AGENTS/wiki-sync current-state index; post-agents-wiki-sync) | [concepts/designated-topics/README.md](../concepts/designated-topics/README.md) |
 | API project identity / watchPath | [concepts/api-project-identity-and-watchpath.md](../concepts/api-project-identity-and-watchpath.md) |
 | Workflow arguments become unbounded fan-out | [common-problems/workflow-args-json-string-fanout/](../operations/common-problems/workflow-args-json-string-fanout/) |
+| Workflow-sized task cutting and Dossier slice acceptance | [operations/workflow-sized-task-cutting.md](../operations/workflow-sized-task-cutting.md) |
 | Services killed by a harness sweep | [common-problems/services-killed-by-harness-sweep/](../operations/common-problems/services-killed-by-harness-sweep/) |
 | api.sh restart reports success while the old backend keeps serving | [common-problems/hollow-api-restart/](../operations/common-problems/hollow-api-restart/) |
 | Orchestrator drive-to-conclusion & CLI-crash resilience | [concepts/orchestrator-drive-to-conclusion.html](../concepts/orchestrator-drive-to-conclusion.html) |

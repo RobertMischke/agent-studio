@@ -32,6 +32,13 @@ Guidance:
 - Order them so earlier sub-tasks unblock later ones.
 - Each sub-task should be doable in a single focused agent run.
 - Do not invent work the epic did not ask for.
+- A Dossier or recommendation list is not one implementation task. Cut one
+  sub-task per independently reviewable slice. Never emit a card whose scope is
+  "implement all recommendations" or an equivalent open-ended wishlist.
+- Give every delivery sub-task a structured `acceptanceScope` with
+  `deliveryMode: "bounded-slice"`, one `slice` name, and concrete `criteria`.
+  The criteria are the complete requirement-fit boundary for that card; later
+  slices remain outside it.
 
 ## Required output format
 
@@ -40,8 +47,24 @@ End your reply with a single fenced JSON block (and nothing after it) of exactly
 ```json
 {
   "subTasks": [
-    { "title": "First deliverable", "prompt": "Full self-contained instructions for sub-task 1." },
-    { "title": "Second deliverable", "prompt": "Full self-contained instructions for sub-task 2." }
+    {
+      "title": "First deliverable",
+      "prompt": "Full self-contained instructions for sub-task 1.",
+      "acceptanceScope": {
+        "deliveryMode": "bounded-slice",
+        "slice": "S1: first deliverable",
+        "criteria": ["The first deliverable is implemented and verified."]
+      }
+    },
+    {
+      "title": "Second deliverable",
+      "prompt": "Full self-contained instructions for sub-task 2.",
+      "acceptanceScope": {
+        "deliveryMode": "bounded-slice",
+        "slice": "S2: second deliverable",
+        "criteria": ["The second deliverable is implemented and verified."]
+      }
+    }
   ]
 }
 ```
