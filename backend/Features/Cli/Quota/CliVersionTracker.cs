@@ -20,6 +20,9 @@ public sealed class CliVersionTracker
         _versions.TryAdd(cliType, version.Trim());
     }
 
+    public string? CurrentVersion(string cliType)
+        => _versions.TryGetValue(cliType, out var version) ? version : null;
+
     public void Observe(string cliType, string? version, string source)
     {
         if (string.IsNullOrWhiteSpace(cliType) || string.IsNullOrWhiteSpace(version)) return;

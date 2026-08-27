@@ -16,9 +16,10 @@ public static class RunnerEndpoints
         var runnerGroup = app.MapGroup("/api/runner");
 
         runnerGroup.MapGet("/status", (HttpContext context, TaskRunnerService runner,
-            AgentStudio.Registry.ProjectRegistry projects) =>
+            AgentStudio.Registry.ProjectRegistry projects,
+            AgentStudio.Cli.LocalCliRepairService cliRepair) =>
         {
-            var status = runner.GetStatus();
+            var status = runner.GetStatus() with { CliRepairs = cliRepair.Current() };
             if (context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is HumanPrincipal human)
             {
                 status = status with

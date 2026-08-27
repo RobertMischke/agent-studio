@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { TaskService } from '../../../../services/task.service';
 
 describe('formatRunningLabel', () => {
   it.each([
@@ -59,5 +60,53 @@ describe('StatusBarComponent (smoke)', () => {
       console.warn('[smoke] StatusBarComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+  });
+});
+
+describe('StatusBarComponent CLI repair note', () => {
+  it('surfaces a successful repair as a note without an alarm tone', async () => {
+    await TestBed.configureTestingModule({
+      imports: [StatusBarComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(StatusBarComponent);
+    const service = TestBed.inject(TaskService);
+    service.runnerStatus.set({
+      projects: {},
+      cliRepairs: [{
+        cliType: 'claude',
+        outcome: 'repaired',
+        occurredAt: '2026-08-18T10:15:00Z',
+        versionBefore: '2.1.231',
+        versionAfter: '2.1.234',
+        detail: 'claude CLI npm shim restored; version 2.1.231 -> 2.1.234.',
+      }],
+    });
+
+    fixture.detectChanges();
+
+    const note = fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair"]');
+    expect(note?.textContent).toContain('CLI repaired at');
+    expect(note?.getAttribute('data-signal-tone')).not.toBe('mismatch');
+
+    service.runnerStatus.set({
+      projects: {},
+      cliRepairs: [{
+        cliType: 'claude',
+        outcome: 'failed',
+        occurredAt: '2026-08-18T11:15:00Z',
+        detail: 'npm install exited 1.',
+      }],
+    });
+    fixture.detectChanges();
+
+    expect(note?.textContent).toContain('CLI repair failed at');
+    expect(note?.getAttribute('data-signal-tone')).toBe('mismatch');
+    expect(note?.querySelector('[aria-label="CLI repair failed"]')).not.toBeNull();
   });
 });

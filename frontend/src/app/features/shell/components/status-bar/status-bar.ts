@@ -189,6 +189,26 @@ export class StatusBarComponent implements OnInit, OnDestroy {
     ).length;
   });
 
+  readonly latestCliRepair = computed(() => {
+    const repairs = this.jobService.runnerStatus().cliRepairs ?? [];
+    return repairs.reduce<(typeof repairs)[number] | null>((latest, item) =>
+      latest === null || Date.parse(item.occurredAt) > Date.parse(latest.occurredAt) ? item : latest,
+    null);
+  });
+
+  readonly cliRepairLabel = computed(() => {
+    const repair = this.latestCliRepair();
+    if (!repair) return '';
+    const parsed = Date.parse(repair.occurredAt);
+    const time = Number.isFinite(parsed)
+      ? new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
+        .format(new Date(parsed))
+      : 'unknown time';
+    return repair.outcome === 'repaired'
+      ? `CLI repaired at ${time}`
+      : `CLI repair failed at ${time}`;
+  });
+
   readonly projectCount = computed(() => this.projectNames().length || Object.keys(this.jobService.runnerStatus().projects).length);
   readonly orchestratorLabel = computed(() => this.orchestratorActiveChatCount() > 0
     ? `Orchestrator · ${this.orchestratorActiveChatCount()} active`

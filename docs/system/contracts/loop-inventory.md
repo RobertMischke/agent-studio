@@ -144,6 +144,17 @@ Each entry uses the same fields:
 - **Last fired:** Not yet observed in production; AGT-2525 introduces the stable store and its retention owner.
 - **Notes:** Attempt teardown only refreshes last use. A fresh home whose CLI launch was never adopted is deleted immediately. Ownership shape and task-marker validation prevent the sweep or a continuation from adopting another task's directory.
 
+### local-cli.missing-npm-shim-repair
+
+- **Kind:** Tick
+- **Where:** [`backend/Features/Cli/Quota/CliVersionMonitorHostedService.cs`](../../../backend/Features/Cli/Quota/CliVersionMonitorHostedService.cs) and [`backend/Features/Cli/Repair/LocalCliRepairService.cs`](../../../backend/Features/Cli/Repair/LocalCliRepairService.cs)
+- **Re-entry trigger:** The startup or periodic local Claude/Codex version probe cannot resolve the configured global command, while the matching package remains under the Windows npm global `node_modules` tree and every expected command shim is absent.
+- **Budget:** `LocalCliRepairService.AttemptWindow` (exactly one `npm install --global` attempt per CLI per hour, reconstructed from the durable JSONL journal after restart).
+- **Action when budget exhausted:** Keep the CLI unavailable and skip the repair until the hour expires. A successful prior repair remains a quiet host note; only a failed attempted repair raises an operator alarm.
+- **Breaker test:** [`backend.Tests/Architecture/LocalCliRepairBreakerTest.cs`](../../../backend.Tests/Architecture/LocalCliRepairBreakerTest.cs), plus the portable detection and journal suite in [`backend.Tests/LocalCliRepairServiceTests.cs`](../../../backend.Tests/LocalCliRepairServiceTests.cs).
+- **Last fired:** 2026-08-13 and 2026-08-18 were manually repaired before this loop existed. Both incidents had the Claude npm package present with all global shims absent; the second repair moved the observed version from 2.1.231 to 2.1.234.
+- **Notes:** The journal is `<TaskRepository>/logs/cli-self-heal.jsonl` (or `runtime/cli-self-heal.jsonl` without a task repository). Each attempt captures the last observed/package version, the post-repair CLI version, npm exit and redacted output, package metadata, and nearby npm debug-log activity. Truly uninstalled packages, custom executable paths, and present-but-broken shims are outside this automatic reinstall policy.
+
 ## Candidates (LLM-proposed, human-reviewed)
 
 This section mirrors `loop-inventory.md.candidates` once the weekly `LoopDiscoveryTest` starts running. Items move from candidates to **Entries** above only after a human review confirms the loop is real and assigns a budget + test. Empty for now.
