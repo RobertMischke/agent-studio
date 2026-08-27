@@ -5,6 +5,44 @@ namespace AgentStudio.Tests;
 
 public class CodexQuotaProbeTests
 {
+    private static string ReadFixture(string name)
+        => File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory,
+            "Fixtures",
+            "quota",
+            "codex",
+            name));
+
+    [Theory]
+    [InlineData("codex-status-v0.135.0-inline-reset-lines.txt", "Plus", 4, 40, 25)]
+    [InlineData("codex-status-v0.149.0-split-reset-lines.txt", "Pro", 3, null, 56)]
+    public void VersionedStatusFixture_ParsesPlanAndQuotaWindows(
+        string fixture,
+        string expectedPlan,
+        int expectedWindowCount,
+        int? expectedFiveHourUsed,
+        int expectedWeeklyUsed)
+    {
+        var snapshot = ReadFixture(fixture);
+
+        var windows = CodexQuotaProbe.ParseStatusWindows(snapshot);
+
+        Assert.Equal(expectedPlan, CodexQuotaProbe.ParsePlan(snapshot));
+        Assert.Equal(expectedWindowCount, windows.Count);
+        if (expectedFiveHourUsed.HasValue)
+        {
+            Assert.Contains(windows, w =>
+                w.Label == "5-hour" && w.UsedPct == expectedFiveHourUsed.Value);
+        }
+        else
+        {
+            Assert.DoesNotContain(windows, w => w.Label == "5-hour");
+        }
+        Assert.Contains(windows, w => w.Label == "Weekly" && w.UsedPct == expectedWeeklyUsed);
+        Assert.Contains(windows, w => w.Label == "Spark 5-hour" && w.UsedPct == 0);
+        Assert.Contains(windows, w => w.Label == "Spark Weekly" && w.UsedPct == 0);
+    }
+
     [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {

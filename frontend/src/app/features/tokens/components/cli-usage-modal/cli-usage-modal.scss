@@ -289,6 +289,15 @@
   border-radius: 6px;
   font-size: 12px;
 }
+.cum__stale {
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid color-mix(in srgb, var(--severity-warn) 34%, var(--studio-border));
+  border-radius: var(--studio-radius-md);
+  background: color-mix(in srgb, var(--severity-warn) 10%, transparent);
+  color: var(--severity-warn);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 
 .cum__footer {
   display: flex;

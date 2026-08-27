@@ -25,7 +25,13 @@ export interface QuotaWindow {
 
 export interface QuotaSnapshot {
   cliType: CliType;
+  /** Exact executable version used for the most recent probe attempt. */
+  cliVersion?: string | null;
   fetchedAt: string;
+  /** Most recent attempt, successful or failed. */
+  lastProbeAt?: string | null;
+  /** Most recent failed attempt. Null after a successful probe. */
+  probeFailedAt?: string | null;
   plan: string | null;
   windows: QuotaWindow[];
   source: string | null;

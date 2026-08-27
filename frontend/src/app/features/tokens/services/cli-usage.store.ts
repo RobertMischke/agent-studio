@@ -24,6 +24,10 @@ export interface CliUsageQuotaRow {
   label: string;
   plan: string | null;
   fetchedAt: string | null;
+  cliVersion?: string | null;
+  lastProbeAt?: string | null;
+  probeFailedAt?: string | null;
+  failureLabel?: string | null;
   freshness: string;
   stale: boolean;
   source: string | null;
@@ -255,8 +259,10 @@ export class CliUsageStore {
   private buildRow(s: QuotaSnapshot, ttlMs: number, now: number): CliUsageQuotaRow {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
-    const freshness = !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
+    const stale = !!s.error || !s.fetchedAt || ageMs > ttlMs;
+    const failureLabel = s.error ? this.probeFailureLabel(s) : null;
+    const freshness = failureLabel
+      ?? (!s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs));
     const primary = s.windows.length > 0
       ? [...s.windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1))[0]
       : null;
@@ -267,6 +273,10 @@ export class CliUsageStore {
       label: this.cliLabel(s.cliType),
       plan: s.plan,
       fetchedAt: s.fetchedAt,
+      cliVersion: s.cliVersion,
+      lastProbeAt: s.lastProbeAt,
+      probeFailedAt: s.probeFailedAt,
+      failureLabel,
       stale,
       freshness,
       source: s.source,
@@ -292,6 +302,19 @@ export class CliUsageStore {
       case 'gemini': return 'Gemini';
       default: return cli;
     }
+  }
+
+  private probeFailureLabel(s: QuotaSnapshot): string {
+    const failedAt = s.probeFailedAt ?? s.lastProbeAt;
+    const failedMs = failedAt ? Date.parse(failedAt) : NaN;
+    const time = Number.isFinite(failedMs)
+      ? new Date(failedMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      : 'unknown time';
+    const rawVersion = s.cliVersion?.trim();
+    const version = !rawVersion
+      ? 'version unknown'
+      : s.cliType === 'codex' ? rawVersion.replace(/^codex-cli\s+/i, '') : rawVersion;
+    return `probe failed ${time}, ${s.cliType} ${version}`;
   }
 
   private formatAgo(ms: number): string {

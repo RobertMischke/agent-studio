@@ -84,6 +84,12 @@
 }
 .qcard__refresh:hover:not(:disabled) { color: var(--studio-fg-strong); }
 .qcard__error { font-size: 11px; color: var(--severity-high); }
+.qcard__stale {
+  margin-bottom: 6px;
+  color: var(--severity-warn);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
 .qcard__hint  { font-size: 11px; color: var(--studio-fg-muted); font-style: italic; }
 .qwin + .qwin { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--studio-border); }
 .qwin__row { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }

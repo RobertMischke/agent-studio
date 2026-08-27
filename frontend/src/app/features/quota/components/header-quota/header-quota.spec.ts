@@ -311,3 +311,51 @@ describe('HeaderQuotaComponent (Codex %-only payload)', () => {
     expect(codex.state).not.toBe('unavailable');
   });
 });
+
+describe('HeaderQuotaComponent (failed probe fallback)', () => {
+  it('keeps last-good values and shows an attributable stale marker with the error tooltip', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeaderQuotaComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: JobsHubClient, useClass: JobsHubClientStub },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeaderQuotaComponent);
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne('/api/cli/quota').flush({
+      ttlSeconds: 600,
+      snapshots: [
+        {
+          cliType: 'codex',
+          cliVersion: 'codex-cli 0.149.0',
+          fetchedAt: new Date(Date.now() - 3_600_000).toISOString(),
+          lastProbeAt: '2026-08-23T21:07:00Z',
+          probeFailedAt: '2026-08-23T21:07:00Z',
+          plan: 'Pro',
+          source: '/status',
+          error: 'Timed out waiting for the Codex status panel.',
+          windows: [
+            { label: 'Weekly', usedPct: 56, used: null, limit: null, unit: '%', resetAt: null, resetLabel: null },
+          ],
+        },
+      ],
+    });
+    fixture.detectChanges();
+
+    const codexCard = fixture.nativeElement.querySelector('[data-testid="hquota-card-codex"]') as HTMLElement;
+    const value = fixture.nativeElement.querySelector('[data-testid="hquota-codex-wk"]') as HTMLElement;
+    const failure = fixture.nativeElement.querySelector('[data-testid="hquota-probe-failure"]') as HTMLElement;
+
+    expect(value.textContent).toContain('56%');
+    expect(codexCard.dataset['state']).toBe('error');
+    expect(codexCard.classList.contains('hquota__card--stale')).toBe(true);
+    expect(failure.textContent).toContain('probe failed');
+    expect(failure.textContent).toContain('codex 0.149.0');
+    expect(failure.getAttribute('title')).toBe('Timed out waiting for the Codex status panel.');
+    fixture.destroy();
+  });
+});

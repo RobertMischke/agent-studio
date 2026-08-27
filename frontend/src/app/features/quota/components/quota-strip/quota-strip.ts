@@ -149,6 +149,19 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
     return 'ok';
   }
 
+  probeFailureLabel(snap: QuotaSnapshot): string {
+    const failedAt = snap.probeFailedAt ?? snap.lastProbeAt;
+    const failedMs = failedAt ? Date.parse(failedAt) : NaN;
+    const time = Number.isFinite(failedMs)
+      ? new Date(failedMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      : 'unknown time';
+    const rawVersion = snap.cliVersion?.trim();
+    const version = !rawVersion
+      ? 'version unknown'
+      : snap.cliType === 'codex' ? rawVersion.replace(/^codex-cli\s+/i, '') : rawVersion;
+    return `probe failed ${time}, ${snap.cliType} ${version}`;
+  }
+
   /**
    * Live human-friendly "in 1h 23m" / "in 4d 3h" countdown when we have a
    * concrete reset timestamp; otherwise falls back to whatever the backend

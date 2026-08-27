@@ -75,6 +75,7 @@ interface QuotaCardModel {
   freshness: string;
   windows: QuotaWindow[];
   error: string | null;
+  failureLabel: string | null;
   source: string | null;
 }
 
@@ -171,7 +172,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
     const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
-    const stale = !s.fetchedAt || ageMs > ttlMs;
+    const stale = !!s.error || !s.fetchedAt || ageMs > ttlMs;
     const freshness = !s.fetchedAt
       ? 'never refreshed'
       : 'updated ' + this.formatAgo(ageMs);
@@ -182,11 +183,13 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const chips = this.buildChips(shortWindow, weekWindow, primary, s.windows);
     const tone = this.cardTone(shortWindow, weekWindow, !!s.error, primary);
     const state = this.cardState(tone, stale, !!s.error, shortWindow, weekWindow, primary);
+    const failureLabel = s.error ? this.probeFailureLabel(s) : null;
+    const quotaAriaLabel = this.cardAriaLabel(label, chips);
     return {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
       label,
-      ariaLabel: this.cardAriaLabel(label, chips),
+      ariaLabel: failureLabel ? `${quotaAriaLabel}. ${failureLabel}` : quotaAriaLabel,
       chips,
       tone,
       state,
@@ -195,6 +198,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness,
       windows: s.windows,
       error: s.error,
+      failureLabel,
       source: s.source
     };
   }
@@ -214,6 +218,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       freshness: 'never refreshed',
       windows: [],
       error: null,
+      failureLabel: null,
       source: null
     };
   }
@@ -417,6 +422,22 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       case 'gemini': return 'Gemini';
       default: return cli;
     }
+  }
+
+  private probeFailureLabel(s: QuotaSnapshot): string {
+    const failedAt = s.probeFailedAt ?? s.lastProbeAt;
+    const failedMs = failedAt ? Date.parse(failedAt) : NaN;
+    const time = Number.isFinite(failedMs)
+      ? new Date(failedMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+      : 'unknown time';
+    const version = this.displayCliVersion(s.cliType, s.cliVersion);
+    return `probe failed ${time}, ${s.cliType} ${version}`;
+  }
+
+  private displayCliVersion(cliType: string, raw: string | null | undefined): string {
+    if (!raw?.trim()) return 'version unknown';
+    const value = raw.trim();
+    return cliType === 'codex' ? value.replace(/^codex-cli\s+/i, '') : value;
   }
 
   private formatAgo(ms: number): string {

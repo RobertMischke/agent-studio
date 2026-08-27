@@ -39,7 +39,13 @@ public record QuotaWindow
 public record QuotaSnapshot
 {
     public string CliType { get; init; } = "";
+    /// <summary>Version reported by the CLI executable used for this probe.</summary>
+    public string? CliVersion { get; init; }
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
+    /// <summary>When the most recent probe attempt finished, whether it succeeded or failed.</summary>
+    public DateTime? LastProbeAt { get; init; }
+    /// <summary>When the most recent failed probe finished. Null after a successful probe.</summary>
+    public DateTime? ProbeFailedAt { get; init; }
     /// <summary>"Pro" / "Pro+" / "Plus" / "Free" — null when unknown.</summary>
     public string? Plan { get; init; }
     public List<QuotaWindow> Windows { get; init; } = [];

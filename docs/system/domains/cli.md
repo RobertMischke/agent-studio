@@ -62,6 +62,12 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- `GET /api/cli/quota` is cache-only and starts stale refreshes in the
+  background with a bounded timeout. A failed refresh preserves last-good
+  windows and `fetchedAt`, and records `cliVersion`, `lastProbeAt`,
+  `probeFailedAt`, and `error` so the UI can show an attributable stale marker.
+  Startup and periodic version checks log `CLI version changed` when the
+  installed Claude or Codex executable differs from the previous observation.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

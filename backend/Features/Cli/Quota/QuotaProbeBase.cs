@@ -28,6 +28,22 @@ public abstract class QuotaProbeBase : IQuotaProbe
     public abstract Task<QuotaSnapshot> ProbeAsync(CancellationToken ct);
 
     /// <summary>
+    /// Resolve the exact CLI version used by a probe so cached failures can be
+    /// attributed to an executable change instead of looking like generic PTY
+    /// instability.
+    /// </summary>
+    protected string? GetCliVersion()
+    {
+        var (_, version, _) = _router.Get(CliType).TestCliPath();
+        return string.IsNullOrWhiteSpace(version) ? null : version;
+    }
+
+    protected string DescribeProbeFailure(Exception ex)
+        => ex is OperationCanceledException
+            ? $"{CliType} quota probe timed out before the CLI panel became ready."
+            : ex.Message;
+
+    /// <summary>
     /// Spawn the CLI, optionally send a slash-command sequence, wait for output to settle,
     /// return the ANSI-stripped snapshot. Always sends two Esc presses at the end so
     /// modal pickers close before the process is torn down.
