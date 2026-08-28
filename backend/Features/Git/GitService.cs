@@ -25,6 +25,25 @@ public record GitPushResult(bool Success, string Sha, string Status, string? Err
 public record GitDiffLookupResult(bool Success, string Diff, string? Error);
 public record GitWorkerCommitCleanupResult(bool Success, string Status, string? Error);
 
+/// <summary>
+/// Whether a repository carries a <c>develop</c> line, and whether a candidate
+/// commit is exactly the published <c>origin/develop</c> tip. See
+/// <see cref="GitService.ProbeDevelopLine"/>.
+/// </summary>
+public record DevelopLineProbe(
+    bool Ok,
+    bool WasCancelled,
+    bool DevelopLineExists,
+    bool CandidateIsPublishedDevelopTip,
+    string? Error)
+{
+    public static DevelopLineProbe Failed(string error)
+        => new(false, false, false, false, error);
+
+    public static DevelopLineProbe Cancelled()
+        => new(false, true, false, false, "Cancelled.");
+}
+
 public enum IntegrationBranchSyncOutcome
 {
     UpToDate,
@@ -32,6 +51,13 @@ public enum IntegrationBranchSyncOutcome
     RemoteAhead,
     LocalAhead,
     NoRemote,
+
+    /// <summary>
+    /// The local branch had diverged from origin and was reconciled by merging
+    /// <c>origin/&lt;branch&gt;</c> into it, so the next push fast-forwards.
+    /// </summary>
+    Reconciled,
+
     Diverged,
     Error,
 }
@@ -2813,15 +2839,17 @@ public class GitService
         return Task.FromResult(new GitPushResult(false, sha, status, err));
     }
 
-    private GitPushResult? ValidateDirectMainAdvance(
-        string repoRoot,
-        string sha,
-        string targetBranch,
-        CancellationToken ct)
+    /// <summary>
+    /// Reports whether the repository has a <c>develop</c> line and whether
+    /// <paramref name="sha"/> is exactly the commit published as
+    /// <c>origin/develop</c>. This is the shared input to the lineage guard
+    /// (<see cref="ValidateDirectMainAdvance"/>) and to
+    /// <see cref="AgentStudio.Tasks.RunnerCommitDurabilityPolicy"/>, so the
+    /// decision "may this commit advance main?" and the decision "where does
+    /// this commit become durable instead?" can never read different truths.
+    /// </summary>
+    public DevelopLineProbe ProbeDevelopLine(string repoRoot, string sha, CancellationToken ct = default)
     {
-        if (!string.Equals(targetBranch, "main", StringComparison.OrdinalIgnoreCase))
-            return null;
-
         var (_, localDevelopError, localDevelopCode) = RunGitArgs(
             repoRoot,
             "rev-parse",
@@ -2829,10 +2857,7 @@ public class GitService
             "refs/heads/develop");
         if (localDevelopCode is not 0 and not 1 and not 128)
         {
-            return new GitPushResult(
-                false,
-                sha,
-                "lineage-check-failed",
+            return DevelopLineProbe.Failed(
                 $"Could not inspect the local develop line: {localDevelopError.Trim()}");
         }
 
@@ -2845,17 +2870,13 @@ public class GitService
             "origin",
             "refs/heads/develop");
         if (ct.IsCancellationRequested)
-            return new GitPushResult(false, sha, "cancelled", "Push cancelled.");
+            return DevelopLineProbe.Cancelled();
         if (remoteDevelopCode is not 0 and not 2)
         {
-            return new GitPushResult(
-                false,
-                sha,
-                "lineage-check-failed",
+            return DevelopLineProbe.Failed(
                 $"Could not inspect origin/develop before advancing main: {remoteDevelopError.Trim()}");
         }
 
-        var localDevelopAvailable = localDevelopCode == 0;
         var publishedDevelopTip = remoteDevelopCode == 0
             ? remoteDevelop.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
             : null;
@@ -2865,18 +2886,38 @@ public class GitService
             $"{sha}^{{commit}}");
         if (candidateCode != 0)
         {
-            return new GitPushResult(
-                false,
-                sha,
-                "lineage-check-failed",
+            return DevelopLineProbe.Failed(
                 $"Could not resolve the candidate before advancing main: {candidateError.Trim()}");
         }
 
+        return new DevelopLineProbe(
+            Ok: true,
+            WasCancelled: false,
+            DevelopLineExists: localDevelopCode == 0 || publishedDevelopTip is not null,
+            CandidateIsPublishedDevelopTip: publishedDevelopTip is not null
+                && string.Equals(candidateTip.Trim(), publishedDevelopTip, StringComparison.OrdinalIgnoreCase),
+            Error: null);
+    }
+
+    private GitPushResult? ValidateDirectMainAdvance(
+        string repoRoot,
+        string sha,
+        string targetBranch,
+        CancellationToken ct)
+    {
+        if (!string.Equals(targetBranch, "main", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var probe = ProbeDevelopLine(repoRoot, sha, ct);
+        if (probe.WasCancelled)
+            return new GitPushResult(false, sha, "cancelled", "Push cancelled.");
+        if (!probe.Ok)
+            return new GitPushResult(false, sha, "lineage-check-failed", probe.Error);
+
         var decision = ImmediateIntegrationLineagePolicy.DecideDirectMainAdvance(
             targetBranch,
-            developAvailable: localDevelopAvailable || publishedDevelopTip is not null,
-            candidateIsPublishedDevelopTip: publishedDevelopTip is not null
-                && string.Equals(candidateTip.Trim(), publishedDevelopTip, StringComparison.OrdinalIgnoreCase));
+            developAvailable: probe.DevelopLineExists,
+            candidateIsPublishedDevelopTip: probe.CandidateIsPublishedDevelopTip);
         return decision.Mode == ImmediateMainAdvanceMode.Allowed
             ? null
             : new GitPushResult(false, sha, "lineage-blocked", decision.Reason);
@@ -3564,7 +3605,7 @@ public class GitService
             : "origin/" + candidate;
     }
 
-    private bool RemoteBranchExists(string repoRoot, string branch)
+    internal bool RemoteBranchExists(string repoRoot, string branch)
     {
         if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
         if (!IsLikelyBranchName(branch)) return false;
@@ -4096,6 +4137,69 @@ public class GitService
     }
 
     /// <summary>
+    /// Converges a diverged integration branch onto origin's lineage by merging
+    /// <c>origin/&lt;branch&gt;</c> into the local branch. Neither tip is
+    /// rewritten and nothing is force-pushed: the merge commit simply gives the
+    /// local branch origin's tip as an ancestor, which is exactly what the
+    /// subsequent non-force push needs in order to fast-forward.
+    ///
+    /// <para>A conflicting divergence is aborted and reported as
+    /// <see cref="IntegrationBranchSyncOutcome.Diverged"/> so it alarms. It must
+    /// not be retried blindly - the same merge would conflict every time.</para>
+    /// </summary>
+    private IntegrationBranchSyncResult ReconcileDivergedIntegrationBranch(
+        string repoRoot,
+        string integrationBranch,
+        IntegrationBranchSyncResult diverged)
+    {
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+
+        if (DirtyTreeRefusal(
+                repoRoot,
+                "Integration working tree has uncommitted changes; refusing to reconcile it with origin.") is { } dirtyRefusal)
+            return new(IntegrationBranchSyncOutcome.Error, dirtyRefusal);
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, integrationBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(repoRoot, "checkout", integrationBranch);
+            if (checkoutCode != 0)
+                return new(
+                    IntegrationBranchSyncOutcome.Error,
+                    $"Could not check out '{integrationBranch}' to reconcile it with origin: {checkoutError.Trim()}");
+        }
+
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot,
+            "-c",
+            "rerere.enabled=false",
+            "merge",
+            "--no-ff",
+            "--no-edit",
+            remoteIntegrationRef);
+        if (mergeCode == 0)
+        {
+            _logger.LogInformation(
+                "Integration branch {Integration} at {Path} was diverged and has been reconciled with origin",
+                integrationBranch,
+                repoRoot);
+            return new(IntegrationBranchSyncOutcome.Reconciled);
+        }
+
+        RunGitArgs(repoRoot, "merge", "--abort");
+        _logger.LogWarning(
+            "Integration branch {Integration} at {Path} diverged and could not be reconciled with origin: {Error}",
+            integrationBranch,
+            repoRoot,
+            mergeError.Trim());
+        return new(
+            IntegrationBranchSyncOutcome.Diverged,
+            $"Integration branch '{integrationBranch}' diverged from origin and the reconciling merge conflicts. "
+            + $"Resolve it manually before accepting further deliveries: {mergeError.Trim()}");
+    }
+
+    /// <summary>
     /// Fetches <c>origin/&lt;integrationBranch&gt;</c> and compares it with the
     /// local integration branch without moving either branch. The transactional
     /// accept path uses the refreshed remote-tracking ref as its ancestry truth,
@@ -4156,6 +4260,16 @@ public class GitService
         CancellationToken cancellationToken = default)
     {
         var refreshed = RefreshIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
+
+        // Divergence is the state that used to strand deliveries: the local
+        // branch kept absorbing merges that could never be pushed, because a
+        // diverged branch has no fast-forward path to origin. Merging origin in
+        // converges the two writers onto one lineage without rewriting either
+        // side, so the following push fast-forwards. A conflicting divergence
+        // still fails visibly - it needs a human, not a silent retry.
+        if (refreshed.Outcome == IntegrationBranchSyncOutcome.Diverged)
+            return ReconcileDivergedIntegrationBranch(repoRoot, integrationBranch, refreshed);
+
         if (!refreshed.Success
             || refreshed.Outcome != IntegrationBranchSyncOutcome.RemoteAhead)
             return refreshed;

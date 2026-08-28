@@ -1734,22 +1734,77 @@ public sealed class TaskTransitionService
         return new AutoCommitPlan(AutoCommitScope.Scoped, scoped);
     }
 
+    /// <summary>
+    /// Chooses the ref that carries a runner-owned commit to origin. A raw task
+    /// commit may not advance a shared release line in a repository that has a
+    /// develop line, so it is published on the card's own task ref instead.
+    /// Falling back to <c>main</c> there would be refused by the lineage guard
+    /// on every attempt, leaving the commit unpublished while the completed-push
+    /// backstop retried the identical doomed push every sweep.
+    /// </summary>
+    private RunnerCommitDurabilityDecision ResolveCommitDurabilityTarget(
+        string sha,
+        string watchPath,
+        string jobId,
+        CancellationToken ct)
+    {
+        const string configuredTarget = "main";
+        var repoRoot = _git.ResolveRepoRootForWatchPath(watchPath);
+        if (string.IsNullOrWhiteSpace(repoRoot))
+            return new(RunnerCommitDurabilityMode.SharedLine, configuredTarget, null);
+
+        var probe = _git.ProbeDevelopLine(repoRoot, sha, ct);
+        if (!probe.Ok)
+        {
+            // Cannot read the lineage; let the push path itself report the
+            // failure rather than guessing a target here.
+            return new(RunnerCommitDurabilityMode.SharedLine, configuredTarget, null);
+        }
+
+        return RunnerCommitDurabilityPolicy.Decide(
+            configuredTarget,
+            probe.DevelopLineExists,
+            probe.CandidateIsPublishedDevelopTip,
+            WorktreeTaskLifecycle.BranchFor(jobId));
+    }
+
     private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)
     {
+        var target = new RunnerCommitDurabilityDecision(RunnerCommitDurabilityMode.SharedLine, "main", null);
         try
         {
-            var result = await _git.PushShaAsync(sha, watchPath, ct);
+            target = ResolveCommitDurabilityTarget(sha, watchPath, jobId, ct);
+            if (target.Mode == RunnerCommitDurabilityMode.Blocked)
+            {
+                _logger.LogWarning(
+                    "Auto-push blocked for {JobId} at {Sha} ({Reason}): {Detail}",
+                    jobId, sha, reason, target.Reason);
+                if (_bus != null)
+                    await _bus.EmitManagedRepoPushFailureAsync(
+                        project, jobId, watchPath, target.TargetRef, "integration-push-blocked", target.Reason, 1, ct);
+                return false;
+            }
+
+            if (target.Mode == RunnerCommitDurabilityMode.TaskRef)
+            {
+                _logger.LogInformation(
+                    "Auto-push for {JobId} at {Sha} ({Reason}) targets {Ref}: {Detail}",
+                    jobId, sha, reason, target.TargetRef, target.Reason);
+            }
+
+            var result = await _git.PushShaAsync(sha, watchPath, ct, target.TargetRef);
             if (result.Success)
             {
-                _logger.LogInformation("Auto-push {Status} for {JobId} at {Sha} ({Reason})", result.Status, jobId, sha, reason);
+                _logger.LogInformation("Auto-push {Status} for {JobId} at {Sha} ({Reason}) on {Ref}",
+                    result.Status, jobId, sha, reason, target.TargetRef);
                 return result.Status == "pushed";
             }
 
-            _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
-                jobId, sha, reason, result.Status, result.Error);
+            _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}) on {Ref}: {Status} {Error}",
+                jobId, sha, reason, target.TargetRef, result.Status, result.Error);
             if (_bus != null)
                 await _bus.EmitManagedRepoPushFailureAsync(
-                    project, jobId, watchPath, "main", result.Status, result.Error, 1, ct);
+                    project, jobId, watchPath, target.TargetRef, result.Status, result.Error, 1, ct);
             return false;
         }
         catch (Exception ex)
@@ -1757,7 +1812,7 @@ public sealed class TaskTransitionService
             _logger.LogWarning(ex, "Auto-push threw for {JobId} at {Sha} ({Reason})", jobId, sha, reason);
             if (_bus != null)
                 await _bus.EmitManagedRepoPushFailureAsync(
-                    project, jobId, watchPath, "main", "error", ex.Message, 1, ct);
+                    project, jobId, watchPath, target.TargetRef, "error", ex.Message, 1, ct);
             return false;
         }
     }

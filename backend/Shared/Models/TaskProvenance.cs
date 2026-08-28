@@ -310,7 +310,18 @@ public static class IntegrationStatuses
     /// <summary>The card has no delivery ref and no attributed commit - nothing to integrate.</summary>
     public const string NoBranch = "no-branch";
 
-    public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch];
+    /// <summary>
+    /// The work was merged into the LOCAL integration branch, but publishing it
+    /// to <c>origin</c> was refused, so nobody else can see it. This is
+    /// deliberately not <see cref="Pending"/>: pending reads as "still in
+    /// flight" and invites the acceptance rail to keep waiting while the runner
+    /// keeps re-delivering, which is exactly the silent loop this status exists
+    /// to break. It is a terminal, operator-visible alarm.
+    /// </summary>
+    public const string PushBlocked = "integration-push-blocked";
+
+    public static readonly string[] All =
+        [Integrated, Partial, Pending, ConflictSkipped, NoBranch, PushBlocked];
 
     /// <summary>
     /// Persisted recovery marker stamped while transactional acceptance is
@@ -331,11 +342,12 @@ public static class IntegrationStatuses
         => string.Equals(tag, PendingTag, StringComparison.OrdinalIgnoreCase)
            || string.Equals(tag, "integration:pending", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>True when the card carries integrable work that is not (fully) in develop (partial, pending or conflict).</summary>
+    /// <summary>True when the card carries integrable work that is not (fully) in develop (partial, pending, conflict or push-blocked).</summary>
     public static bool IsNotIntegrated(string? status)
         => string.Equals(status, Partial, StringComparison.Ordinal)
            || string.Equals(status, Pending, StringComparison.Ordinal)
-           || string.Equals(status, ConflictSkipped, StringComparison.Ordinal);
+           || string.Equals(status, ConflictSkipped, StringComparison.Ordinal)
+           || string.Equals(status, PushBlocked, StringComparison.Ordinal);
 
     public static string Normalize(string? value)
     {

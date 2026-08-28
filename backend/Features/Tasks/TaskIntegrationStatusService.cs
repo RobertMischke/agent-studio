@@ -270,8 +270,10 @@ public sealed class TaskIntegrationStatusService
             && !string.IsNullOrWhiteSpace(reviewedResultSha)
             && AncestorSetContains(reach.DevelopAncestors, reviewedResultSha))
         {
-            return Integrated(
-                Short(reviewedResultSha),
+            return IntegratedUnlessPushBlocked(
+                job,
+                reach,
+                reviewedResultSha,
                 branchName,
                 deliveryRef,
                 "reviewed-result-ancestor");
@@ -294,7 +296,7 @@ public sealed class TaskIntegrationStatusService
         // ALL attributed commits landed. Attempt history and recorded merge
         // provenance are deliberately irrelevant to this result.
         if (missing.Count == 0)
-            return Integrated(Short(newest), branchName, deliveryRef, "anchor-ancestor");
+            return IntegratedUnlessPushBlocked(job, reach, newest, branchName, deliveryRef, "anchor-ancestor");
 
         // SOME landed, some did not → partial, naming the missing short-SHAs so the
         // tooltip says exactly which attributed commits are not in develop yet.
@@ -377,6 +379,83 @@ public sealed class TaskIntegrationStatusService
         IntegrationBranch = branchName,
         Detail = detail,
     };
+
+    /// <summary>
+    /// Reports <see cref="IntegrationStatuses.Integrated"/> unless the commit is
+    /// reachable only from the LOCAL integration branch while the publish step
+    /// recorded a failure. In that case the merge happened but never reached
+    /// <c>origin</c>, so calling it "integrated" would be a false green: the
+    /// acceptance rail would accept a delivery nobody else can see.
+    ///
+    /// <para>
+    /// The downgrade is deliberately conditional on a recorded push failure. A
+    /// merge whose push simply has not run yet is a normal in-flight window and
+    /// must not alarm; only a push that actually came back refused is terminal.
+    /// </para>
+    /// </summary>
+    private TaskIntegrationStatus IntegratedUnlessPushBlocked(
+        TaskInfo job,
+        RepoIntegration reach,
+        string sha,
+        string branchName,
+        string? deliveryRef,
+        string detail)
+    {
+        var integrated = Integrated(Short(sha), branchName, deliveryRef, detail);
+
+        // No origin branch at all: a local-only project cannot be push-blocked.
+        if (!reach.HasOriginBranch) return integrated;
+        if (AncestorSetContains(reach.OriginAncestors, sha)) return integrated;
+
+        var push = ReadLatestPushStep(job);
+        if (push is null || !IsFailedStep(push.Status)) return integrated;
+
+        var reason = FirstNonBlank(push.VerdictSummary, push.Reason)
+            ?? $"Publishing '{branchName}' to origin was refused.";
+        return new TaskIntegrationStatus
+        {
+            Status = IntegrationStatuses.PushBlocked,
+            Sha = Short(sha),
+            DeliveryRef = deliveryRef,
+            IntegrationBranch = branchName,
+            Detail = $"Merged into the local '{branchName}' but not published to "
+                     + $"origin/{branchName}. {reason}",
+            Failure = new TaskIntegrationFailure
+            {
+                Code = IntegrationStatuses.PushBlocked,
+                Label = "Integration push blocked",
+                Reason = reason,
+                RebaseRecoveryAvailable = false,
+            },
+        };
+    }
+
+    private static bool IsFailedStep(PipelineStepStatus status)
+        => status == PipelineStepStatus.Failed;
+
+    private static string? FirstNonBlank(params string?[] values)
+        => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
+    internal PipelineStepExecution? ReadLatestPushStep(TaskInfo job)
+    {
+        try
+        {
+            return _pipelineLog.Read(job.FolderPath)?.Steps.LastOrDefault(step =>
+                string.Equals(
+                    step.StepId,
+                    PipelineCatalogue.MergeIntoDevelopPushStepId,
+                    StringComparison.Ordinal));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "integration-status push step read failed for project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
+            return null;
+        }
+    }
 
     /// <summary>
     /// Projects the same delivery-ref resolution used by acceptance onto the
@@ -588,7 +667,23 @@ public sealed class TaskIntegrationStatusService
                 [integrationBranch, "origin/" + integrationBranch],
                 out var ancestors);
 
-            return new RepoIntegration(integrationBranch, ancestors, succeeded);
+            // The union above answers "did this land in the integration graph at
+            // all?". It cannot distinguish a delivery that reached origin from
+            // one that only ever merged into the local branch, so it is not
+            // sufficient on its own: a merge whose push was refused would read
+            // as fully integrated while nobody else can see the work. The
+            // origin-only set below is what makes that case detectable.
+            var hasOriginBranch = _git.RemoteBranchExists(root, integrationBranch);
+            var originAncestors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (hasOriginBranch)
+                _git.TryGetAncestorShaSet(root, ["origin/" + integrationBranch], out originAncestors);
+
+            return new RepoIntegration(
+                integrationBranch,
+                ancestors,
+                succeeded,
+                originAncestors,
+                hasOriginBranch);
         });
     }
 
@@ -605,7 +700,9 @@ public sealed class TaskIntegrationStatusService
     private sealed record RepoIntegration(
         string IntegrationBranch,
         HashSet<string> DevelopAncestors,
-        bool Succeeded);
+        bool Succeeded,
+        HashSet<string> OriginAncestors,
+        bool HasOriginBranch);
 
     private sealed record RepoBranchKey(string Root, string Branch);
 }
