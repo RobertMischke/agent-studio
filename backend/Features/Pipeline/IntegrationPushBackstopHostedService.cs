@@ -52,6 +52,17 @@ public sealed class IntegrationPushBackstopHostedService : BackgroundService
             var previousPush = record?.Steps.LastOrDefault(
                 step => step.StepId == PipelineCatalogue.MergeIntoDevelopPushStepId);
             if (previousPush?.Status is PipelineStepStatus.Passed or PipelineStepStatus.Skipped) continue;
+            // AGT-2688: a structurally refused push (the branch topology forbids
+            // this advance) is decided, not merely unfinished. Re-driving it every
+            // 15 minutes changed nothing, produced an identical failure per sweep,
+            // and buried the one alarm that mattered. Leave it for the operator.
+            if (string.Equals(
+                    previousPush?.Verdict,
+                    MergeIntoDevelopRunner.PushBlockedVerdict,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
 
             var settings = PipelineTypeSettings.ForTask(_settings.Get(job.ProjectName), job)!;
             if (!PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.MergeIntoDevelopPushStepId))

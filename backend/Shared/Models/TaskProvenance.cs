@@ -310,7 +310,18 @@ public static class IntegrationStatuses
     /// <summary>The card has no delivery ref and no attributed commit - nothing to integrate.</summary>
     public const string NoBranch = "no-branch";
 
-    public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch];
+    /// <summary>
+    /// The work was produced and committed, but publishing it to origin was
+    /// refused for a structural reason that retrying cannot clear (AGT-2688) -
+    /// most often a raw commit offered directly to a release line that must be
+    /// reached through <c>develop</c>. Distinct from <see cref="Pending"/> on
+    /// purpose: "pending" means "not there yet, keep going", which is exactly the
+    /// wrong reading. This one means "it will never get there without an
+    /// operator", so it must alarm rather than be swept again.
+    /// </summary>
+    public const string PushBlocked = "integration-push-blocked";
+
+    public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch, PushBlocked];
 
     /// <summary>
     /// Persisted recovery marker stamped while transactional acceptance is
@@ -330,6 +341,20 @@ public static class IntegrationStatuses
     public static bool IsPendingTag(string? tag)
         => string.Equals(tag, PendingTag, StringComparison.OrdinalIgnoreCase)
            || string.Equals(tag, "integration:pending", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Durable marker for <see cref="PushBlocked"/>. Tag ids allow only
+    /// <c>[a-z0-9-]</c>, so the persisted spelling drops the separators the way
+    /// <see cref="PendingTag"/> does. Its presence is what stops the periodic
+    /// completed-push backstop from re-attempting a publication the repository
+    /// topology has already refused (AGT-2688).
+    /// </summary>
+    public const string PushBlockedTag = "integrationpushblocked";
+
+    public static bool IsPushBlockedTag(string? tag)
+        => string.Equals(tag, PushBlockedTag, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(tag, "integration-push-blocked", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(tag, "integration:push-blocked", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>True when the card carries integrable work that is not (fully) in develop (partial, pending or conflict).</summary>
     public static bool IsNotIntegrated(string? status)

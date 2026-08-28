@@ -354,6 +354,33 @@ public sealed class TaskIntegrationStatusService
                 Detail = "No delivery ref or attributed commit to integrate.",
             };
 
+        // AGT-2688: "pending" reads as "not there yet, keep going" - the wrong
+        // instruction when the publication was refused for a structural reason
+        // that no amount of waiting or re-delivering can clear. Such a card must
+        // say so distinctly and alarm, instead of looking like ordinary work in
+        // flight while the runner re-claims and re-delivers it forever.
+        if (ReadBlockedPushStep(job) is { } blockedPush)
+        {
+            var reason = FirstNonBlank(
+                blockedPush.Reason,
+                blockedPush.VerdictSummary,
+                $"Publishing the integration branch '{branchName}' to origin was refused.");
+            return new TaskIntegrationStatus
+            {
+                Status = IntegrationStatuses.PushBlocked,
+                DeliveryRef = deliveryRef,
+                IntegrationBranch = branchName,
+                Detail = reason,
+                Failure = new TaskIntegrationFailure
+                {
+                    Code = AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+                    Label = "Integration push blocked",
+                    Reason = reason,
+                    RebaseRecoveryAvailable = false,
+                },
+            };
+        }
+
         return new TaskIntegrationStatus
         {
             Status = IntegrationStatuses.Pending,
@@ -363,6 +390,43 @@ public sealed class TaskIntegrationStatusService
                 ? $"Accepted work is not yet in {branchName}."
                 : $"Delivery ref '{deliveryRef}' is not yet integrated into {branchName}.",
         };
+    }
+
+    private static string FirstNonBlank(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
+           ?? "Integration push blocked.";
+
+    /// <summary>
+    /// The card's last integration-branch push step when it recorded a structural
+    /// refusal (<see cref="MergeIntoDevelopRunner.PushBlockedVerdict"/>), else
+    /// null. Local file read only, best-effort - the same contract as
+    /// <see cref="ReadLatestMergeStep"/>.
+    /// </summary>
+    private PipelineStepExecution? ReadBlockedPushStep(TaskInfo job)
+    {
+        try
+        {
+            var step = _pipelineLog.Read(job.FolderPath)?.Steps.LastOrDefault(step =>
+                string.Equals(
+                    step.StepId,
+                    PipelineCatalogue.MergeIntoDevelopPushStepId,
+                    StringComparison.Ordinal));
+            return string.Equals(
+                step?.Verdict,
+                MergeIntoDevelopRunner.PushBlockedVerdict,
+                StringComparison.OrdinalIgnoreCase)
+                ? step
+                : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "integration-status push-step read failed for project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
+            return null;
+        }
     }
 
     private static TaskIntegrationStatus Integrated(

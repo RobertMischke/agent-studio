@@ -1118,6 +1118,7 @@ public sealed class MergeIntoDevelopRunner
         CancellationToken ct = default,
         string? approvedSha = null)
     {
+        var blockedAt = DateTime.UtcNow;
         await _pushGate.WaitAsync(ct);
         try
         {
@@ -1133,11 +1134,29 @@ public sealed class MergeIntoDevelopRunner
                     mainIsAncestorOfDevelop: _git.IsAncestor(repoRoot, integrationBranch, "develop"));
                 if (decision.Mode == ImmediateIntegrationLineageMode.Blocked)
                 {
-                    return new GitPushResult(
+                    var blocked = new GitPushResult(
                         false,
                         approvedSha ?? string.Empty,
-                        "lineage-blocked",
+                        GitPushOutcomePolicy.LineageBlockedStatus,
                         decision.Reason);
+                    // AGT-2688: this refusal used to return here without recording
+                    // anything. The 15-minute IntegrationPushBackstop skips a card
+                    // only once a push step exists, so with no step it re-attempted
+                    // the identical, structurally impossible push forever - and the
+                    // card had no evidence at all explaining why it stayed pending.
+                    // Record it so the refusal is both durable and terminal.
+                    try
+                    {
+                        RecordPushStep(jobFolderPath, project, jobId, blocked, blockedAt, 0);
+                    }
+                    catch (Exception ex)
+                    {
+                        SilentCatch.Note(ex, "MergeIntoDevelopRunner: blocked push-step recording is best-effort");
+                    }
+                    _logger.LogWarning(
+                        "merge-into-develop-push BLOCKED project={Project} job={JobId} branch={Branch}: {Reason}",
+                        project, jobId, integrationBranch, decision.Reason);
+                    return blocked;
                 }
 
                 var developPush = await PushIntegrationBranchSerializedAsync(
@@ -1239,6 +1258,13 @@ public sealed class MergeIntoDevelopRunner
     }
 
     /// <summary>
+    /// Verdict recorded on <see cref="PipelineCatalogue.MergeIntoDevelopPushStepId"/>
+    /// when the push was refused structurally. The push backstop treats a step
+    /// carrying it as decided and stops re-driving the card (AGT-2688).
+    /// </summary>
+    public const string PushBlockedVerdict = "push-blocked";
+
+    /// <summary>
     /// Maps a failed push status to the AGT-1944 issue kind that drives the
     /// retry / escalation decision. A generic push failure is treated as a
     /// transient environmental fault (network / remote availability) that retries;
@@ -1294,6 +1320,20 @@ public sealed class MergeIntoDevelopRunner
                 "no-remote" => (PipelineStepStatus.Skipped, "no-remote", "No origin remote configured; nothing to push.", null),
                 _ => (PipelineStepStatus.Passed, result.Status, "Integration branch push completed.", null),
             };
+        }
+
+        // AGT-2688: a structural refusal (the branch topology forbids this exact
+        // advance) can never clear by being attempted again. It gets its own
+        // terminal verdict so the push backstop stops re-driving it and the card
+        // can report "integration-push-blocked" instead of an eternal "pending".
+        if (GitPushOutcomePolicy.IsStructurallyBlocked(result))
+        {
+            return (
+                PipelineStepStatus.Failed,
+                PushBlockedVerdict,
+                $"Push of the integration branch to origin is structurally blocked ({result.Status}); "
+                + "retrying cannot clear it and an operator must reconcile the branch topology.",
+                result.Error);
         }
 
         var issue = ClassifyPushFailure(result.Status);

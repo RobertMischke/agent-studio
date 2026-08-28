@@ -1059,8 +1059,12 @@ public sealed class TaskTransitionService
     private void ClearAcceptanceIntegrationMarkers(TaskInfo accepted)
     {
         _mutations.SetJobPhase(accepted.FolderPath, null);
+        // The publication-blocked marker is cleared here too: acceptance after an
+        // operator reconciled the branch topology is exactly the moment the card
+        // becomes publishable again, so the next sweep may retry it (AGT-2688).
         var tags = (accepted.Tags ?? [])
-            .Where(tag => !IntegrationStatuses.IsPendingTag(tag))
+            .Where(tag => !IntegrationStatuses.IsPendingTag(tag)
+                          && !IntegrationStatuses.IsPushBlockedTag(tag))
             .ToList();
         if (tags.Count != (accepted.Tags?.Count ?? 0))
             _mutations.SetJobTags(accepted.Id, tags, accepted.WatchPath);
@@ -1635,6 +1639,14 @@ public sealed class TaskTransitionService
         if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return 0;
         if (requireCompletedState && job.State != TaskStates.Completed) return 0;
 
+        // AGT-2688: a publication the repository topology has already refused
+        // never becomes pushable by being attempted again. Without this gate the
+        // 15-minute completed-push backstop re-swept every completed card and
+        // re-attempted every commit forever - the source of the 570+ identical
+        // "Auto-push skipped ... lineage-blocked" warnings and one operator-feed
+        // event per sweep, which drowned the alarm it was supposed to raise.
+        if ((job.Tags ?? []).Any(IntegrationStatuses.IsPushBlockedTag)) return 0;
+
         var commits = job.Commits.Count > 0
             ? job.Commits
             : job.Commit is null ? [] : [job.Commit];
@@ -1643,10 +1655,52 @@ public sealed class TaskTransitionService
         var reason = requireCompletedState ? "completed" : "auto-commit";
         foreach (var commit in commits.Where(c => !string.IsNullOrWhiteSpace(c.Sha)).OrderBy(c => c.At))
         {
-            if (await TryPushCommitAsync(commit.Sha, job.WatchPath, job.ProjectName, job.Id, reason, ct))
+            var result = await TryPushCommitAsync(
+                commit.Sha, job.WatchPath, job.ProjectName, job.Id, reason, ct);
+            if (result is null) continue;
+            if (result.Status == "pushed")
+            {
                 pushed++;
+                continue;
+            }
+            if (GitPushOutcomePolicy.IsStructurallyBlocked(result))
+            {
+                // The remaining commits of this card are raw task commits too, so
+                // they hit the identical wall. Stop, and make the refusal a
+                // durable, visible fact instead of a log line repeated forever.
+                MarkPublicationBlocked(job, commit.Sha, result);
+                break;
+            }
         }
         return pushed;
+    }
+
+    /// <summary>
+    /// Stamps the card with the durable <see cref="IntegrationStatuses.PushBlockedTag"/>
+    /// so the completed-push backstop stops re-attempting a structurally refused
+    /// publication and the card reports <c>integration-push-blocked</c> rather
+    /// than an eternal <c>pending</c>. The tag is cleared again by
+    /// <see cref="ClearAcceptanceIntegrationMarkers"/> when the card is accepted
+    /// after an operator reconciled the topology.
+    /// </summary>
+    private void MarkPublicationBlocked(TaskInfo job, string sha, GitPushResult result)
+    {
+        _logger.LogWarning(
+            "Auto-push BLOCKED for {JobId} at {Sha}: {Status} {Error}. "
+            + "Marking the card '{Marker}'; it will not be re-attempted until an operator reconciles the branch topology.",
+            job.Id, sha, result.Status, result.Error, IntegrationStatuses.PushBlocked);
+
+        try
+        {
+            var tags = (job.Tags ?? []).ToList();
+            if (tags.Any(IntegrationStatuses.IsPushBlockedTag)) return;
+            tags.Add(IntegrationStatuses.PushBlockedTag);
+            _mutations.SetJobTags(job.Id, tags, job.WatchPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not mark {JobId} as publication-blocked", job.Id);
+        }
     }
 
     private enum AutoCommitScope
@@ -1734,7 +1788,14 @@ public sealed class TaskTransitionService
         return new AutoCommitPlan(AutoCommitScope.Scoped, scoped);
     }
 
-    private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)
+    /// <summary>
+    /// Attempts one commit publication. Returns the raw
+    /// <see cref="GitPushResult"/> so the caller can tell a landed push from a
+    /// benign "already-remote" and, crucially, from a structural refusal that
+    /// must not be retried (<see cref="GitPushOutcomePolicy"/>). Returns null
+    /// only when the attempt threw.
+    /// </summary>
+    private async Task<GitPushResult?> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)
     {
         try
         {
@@ -1742,15 +1803,22 @@ public sealed class TaskTransitionService
             if (result.Success)
             {
                 _logger.LogInformation("Auto-push {Status} for {JobId} at {Sha} ({Reason})", result.Status, jobId, sha, reason);
-                return result.Status == "pushed";
+                return result;
             }
 
-            _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
-                jobId, sha, reason, result.Status, result.Error);
+            // A structural refusal is logged and alarmed once by
+            // MarkPublicationBlocked, which also stops the sweep. Only genuinely
+            // retryable faults are reported here, so the warning stream stays
+            // proportional to what an operator can still act on.
+            if (!GitPushOutcomePolicy.IsStructurallyBlocked(result))
+            {
+                _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
+                    jobId, sha, reason, result.Status, result.Error);
+            }
             if (_bus != null)
                 await _bus.EmitManagedRepoPushFailureAsync(
                     project, jobId, watchPath, "main", result.Status, result.Error, 1, ct);
-            return false;
+            return result;
         }
         catch (Exception ex)
         {
@@ -1758,7 +1826,7 @@ public sealed class TaskTransitionService
             if (_bus != null)
                 await _bus.EmitManagedRepoPushFailureAsync(
                     project, jobId, watchPath, "main", "error", ex.Message, 1, ct);
-            return false;
+            return null;
         }
     }
 }

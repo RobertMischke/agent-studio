@@ -16,6 +16,15 @@ public static class AcceptedIntegrationFailureCodes
     public const string ReviewSubjectTaskKeyUnavailable = "review-subject-task-key-unavailable";
     public const string ReviewSubjectInvalid = "review-subject-invalid";
     public const string NoTaskBranch = "no-task-branch";
+
+    /// <summary>
+    /// The delivery merged, but publishing the integration branch to origin was
+    /// structurally refused and retrying cannot clear it (AGT-2688). Distinct
+    /// from every merge-side failure: the change itself is fine, the branch
+    /// topology is not.
+    /// </summary>
+    public const string IntegrationPushBlocked = "integration-push-blocked";
+
     public const string IntegrationError = "integration-error";
 }
 

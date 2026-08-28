@@ -252,6 +252,77 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
     }
 
+    // AGT-2688 regression. In a repository that also has a develop line the
+    // lineage guard refuses every raw task commit offered to main. That refusal is
+    // permanent, but the 15-minute backstop re-swept every completed card and
+    // re-attempted every commit, producing hundreds of identical
+    // "Auto-push skipped ... lineage-blocked" warnings and a bus event per sweep
+    // while nothing anywhere changed. The first sweep must now record the refusal
+    // on the card, and every later sweep must leave that card alone.
+    [Fact]
+    public async Task Backstop_WithDevelopLine_MarksBlockedCardAndStopsRetrying()
+    {
+        var remoteBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main");
+        RunGit(_repoRoot, "branch", "develop");
+        RunGit(_repoRoot, "push", "-q", "-u", "origin", "develop");
+        var sha = CommitLocalChange("raw work that must reach main through develop");
+        WriteJob(TaskStates.Completed, "blocked-task", sha);
+        var deps = BuildDeps();
+        var backstop = new CompletedPushBackstopHostedService(
+            deps.Scanner, deps.Settings, deps.Transitions, deps.Config,
+            NullLogger<CompletedPushBackstopHostedService>.Instance);
+
+        var firstSweep = await backstop.RunOnceAsync();
+
+        Assert.Equal(0, firstSweep);
+        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+        var marked = deps.Scanner.FindJob("blocked-task", _watchPath);
+        Assert.NotNull(marked);
+        Assert.Contains(marked!.Tags ?? [], IntegrationStatuses.IsPushBlockedTag);
+
+        // Remove the develop line so the very same push would now be allowed. A
+        // second sweep that still leaves main untouched proves the card was
+        // skipped outright rather than re-attempted and refused again.
+        RunGit(_repoRoot, "branch", "-D", "develop");
+        RunGit(_repoRoot, "push", "-q", "origin", "--delete", "develop");
+
+        var secondSweep = await backstop.RunOnceAsync();
+
+        Assert.Equal(0, secondSweep);
+        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+    }
+
+    // The companion guarantee: marking a card blocked must not become a way to
+    // strand ordinary work. A transient fault keeps its retry, so the backstop
+    // still recovers the push on a later sweep.
+    [Fact]
+    public async Task Backstop_AfterTransientFailure_StillRetriesOnNextSweep()
+    {
+        var sha = CommitLocalChange("transiently unpushable change");
+        WriteJob(TaskStates.Completed, "transient-task", sha);
+        var deps = BuildDeps();
+        var backstop = new CompletedPushBackstopHostedService(
+            deps.Scanner, deps.Settings, deps.Transitions, deps.Config,
+            NullLogger<CompletedPushBackstopHostedService>.Instance);
+
+        // A rejecting pre-push hook simulates the remote being unavailable.
+        var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");
+        Directory.CreateDirectory(hooksDir);
+        var hook = Path.Combine(hooksDir, "pre-push");
+        File.WriteAllText(hook, "#!/bin/sh\nexit 1\n");
+        File.SetUnixFileMode(hook,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+        Assert.Equal(0, await backstop.RunOnceAsync());
+        var afterFailure = deps.Scanner.FindJob("transient-task", _watchPath);
+        Assert.DoesNotContain(afterFailure!.Tags ?? [], IntegrationStatuses.IsPushBlockedTag);
+
+        File.Delete(hook);
+
+        Assert.Equal(1, await backstop.RunOnceAsync());
+        Assert.Equal(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+    }
+
     [Fact]
     public async Task MoveToCompleted_DoesNotForcePushDivergedRemote()
     {

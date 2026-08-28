@@ -1609,6 +1609,42 @@ public class ProjectRunner
                     return BuildBranchCommitRange(run, branchHeadAfterRun);
                 }
 
+                // AGT-2688: converge on ONE integration lineage before folding the
+                // task branch in. The acceptance path already fetches and
+                // fast-forwards the integration branch from origin
+                // (GitService.SynchronizeIntegrationBranch, called from
+                // MergeBranchIntoIntegration); this parallel-worktree path did not,
+                // so it merged onto whatever the local tip happened to be. Every
+                // such merge advanced local develop on a base origin/develop never
+                // carried, which is exactly how the two integration writers drift
+                // apart - and once they have, the local branch can only ever be
+                // offered to origin as a non-fast-forward, so the delivery never
+                // lands and acceptance reads it as pending forever.
+                //
+                // Refuse honestly instead: a diverged or unfetchable integration
+                // branch is an operator-visible integration failure, not a merge we
+                // quietly perform onto a stale tip.
+                var synchronized = _git.SynchronizeIntegrationBranch(repositoryRoot, workBranch);
+                if (!synchronized.Success)
+                {
+                    var syncDetail = synchronized.Error
+                        ?? $"Integration branch '{workBranch}' could not be synchronized with origin.";
+                    _logger.LogWarning(
+                        "[taskboard] parallel run {Job} refused to integrate into {Branch}: {Error}",
+                        run.JobId, workBranch, syncDetail);
+                    RecordIntegrationStep(info, PipelineStepStatus.Failed, "integration-branch-unsynchronized",
+                        $"Refused to merge `{run.Branch}` into `{workBranch}`: {syncDetail}",
+                        integrateStarted);
+                    AppendWorktreeIntegrationIssue(
+                        info,
+                        OrchestratorMessageKind.IntegrationError,
+                        "Worktree branch integration was refused because the integration branch is not synchronized with origin.",
+                        run,
+                        workBranch,
+                        new IntegrationResult(IntegrationOutcome.Error, null, syncDetail));
+                    return BuildBranchCommitRange(run, branchHeadAfterRun);
+                }
+
                 var res = Worktree.Integrate(
                     repositoryRoot,
                     run.WorktreePath!,
