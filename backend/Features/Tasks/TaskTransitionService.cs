@@ -1734,30 +1734,60 @@ public sealed class TaskTransitionService
         return new AutoCommitPlan(AutoCommitScope.Scoped, scoped);
     }
 
-    private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)
+    /// <summary>
+    /// The branch a platform-owned task commit is published to. Auto-push used
+    /// to hard-code <c>main</c>. Once a project nominates a work line
+    /// (<see cref="ProjectSettings.IntegrationBranch"/>, e.g. <c>develop</c>),
+    /// publishing a raw task commit at <c>main</c> is refused by the lineage
+    /// guard (<c>ImmediateIntegrationLineagePolicy.DecideDirectMainAdvance</c>)
+    /// because the commit is not the published develop tip - so every auto-push
+    /// returned <c>lineage-blocked</c> and the commit never reached origin at
+    /// all. Resolving the configured integration branch keeps the durability
+    /// push on the line the work was actually committed on. A project without a
+    /// configured branch still resolves to the repository default branch, which
+    /// preserves the historical single-line behaviour.
+    /// </summary>
+    private string ResolveAutoPushBranch(string project, string? watchPath)
     {
         try
         {
-            var result = await _git.PushShaAsync(sha, watchPath, ct);
+            var root = _git.ResolveRepoRootForWatchPath(watchPath);
+            if (string.IsNullOrWhiteSpace(root)) return "main";
+            var resolved = _git.ResolveIntegrationBranch(root, _settings.Get(project).IntegrationBranch);
+            return string.IsNullOrWhiteSpace(resolved) ? "main" : resolved;
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "TaskTransitionService: auto-push branch resolution falls back to main");
+            return "main";
+        }
+    }
+
+    private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)
+    {
+        var branch = ResolveAutoPushBranch(project, watchPath);
+        try
+        {
+            var result = await _git.PushShaAsync(sha, watchPath, ct, branch);
             if (result.Success)
             {
-                _logger.LogInformation("Auto-push {Status} for {JobId} at {Sha} ({Reason})", result.Status, jobId, sha, reason);
+                _logger.LogInformation("Auto-push {Status} for {JobId} at {Sha} to {Branch} ({Reason})", result.Status, jobId, sha, branch, reason);
                 return result.Status == "pushed";
             }
 
-            _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
-                jobId, sha, reason, result.Status, result.Error);
+            _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} to {Branch} ({Reason}): {Status} {Error}",
+                jobId, sha, branch, reason, result.Status, result.Error);
             if (_bus != null)
                 await _bus.EmitManagedRepoPushFailureAsync(
-                    project, jobId, watchPath, "main", result.Status, result.Error, 1, ct);
+                    project, jobId, watchPath, branch, result.Status, result.Error, 1, ct);
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Auto-push threw for {JobId} at {Sha} ({Reason})", jobId, sha, reason);
+            _logger.LogWarning(ex, "Auto-push threw for {JobId} at {Sha} to {Branch} ({Reason})", jobId, sha, branch, reason);
             if (_bus != null)
                 await _bus.EmitManagedRepoPushFailureAsync(
-                    project, jobId, watchPath, "main", "error", ex.Message, 1, ct);
+                    project, jobId, watchPath, branch, "error", ex.Message, 1, ct);
             return false;
         }
     }
