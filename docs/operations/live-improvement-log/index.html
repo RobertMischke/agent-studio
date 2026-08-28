@@ -196,6 +196,12 @@ against in-flight cards and existing dossiers before it may become new work. Ver
   <td class="v action">operator-action (done) + card</td>
   <td>Broke the loop now: appended a one-slice scope steer to 8 looping QS cards (partial delivery of one slice = success). Systemic card AGT-2685: requirement-fit must not demand more than the card's deliverable scope; same-aspect-block across N rounds escalates (ties to AGT-2683 bounded retry); "implement all recommendations" must be cut one-card-per-slice. Card-cutting guidance to be updated.</td>
 </tr>
+<tr>
+  <td class="meta">08-28 morning</td>
+  <td><strong>Overnight 705 claims / 0 acceptances root-caused &mdash; a real architecture bug, not a stall.</strong> integrate-on-delivery merges each delivery into the LOCAL develop but the push to origin/develop is SKIPPED as 'lineage-blocked' (570+ warnings; the backend's local develop has diverged from origin). So commits never reach origin/develop &rarr; acceptance (which reads origin/develop) sees integration=pending forever &rarr; accept-loop can't accept &rarr; runner re-claims/re-delivers &rarr; same skip &rarr; infinite loop burning the Claude window. Also: train 40 blocked by one frontend test (remote-hosts-panel spec, null-click after the hosts-table rework).</td>
+  <td class="v candidate">new-candidates &rarr; 2 cards + cap</td>
+  <td>AGT-2688 (fix the lineage-blocked integration push + reconcile the backlog + report 'integration-push-blocked' instead of looping) &mdash; opus-5, xhigh, queue front. Frontend-test fix agent running (unblocks the train). Token protection: added a bounded-retry cap to the tick (>=6 steer rounds &rarr; stop requeuing, leave for operator/AGT-2683) so the carousel can't burn the window again.</td>
+</tr>
 </table>
 
 <footer>Maintained by the session orchestrator during supervised hours. Source dossier key: AGT-W39. Dedup discipline per operator order 2026-08-18.</footer>
