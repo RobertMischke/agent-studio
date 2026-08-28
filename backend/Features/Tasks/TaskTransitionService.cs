@@ -1745,6 +1745,22 @@ public sealed class TaskTransitionService
                 return result.Status == "pushed";
             }
 
+            // A lineage refusal is a deterministic policy outcome, not a failed
+            // attempt: in a repository that carries a develop line, a raw task
+            // commit is never eligible to advance main, and no number of retries
+            // changes that. The completed-push backstop re-drives every completed
+            // card on each sweep, so alarming here republished the same
+            // non-actionable failure for every card, forever (AGT-2688). The work
+            // still reaches origin through its task branch and the develop
+            // integration path; record the decision once and stay quiet.
+            if (string.Equals(result.Status, "lineage-blocked", StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "Auto-push not applicable for {JobId} at {Sha} ({Reason}): {Error}",
+                    jobId, sha, reason, result.Error);
+                return false;
+            }
+
             _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
                 jobId, sha, reason, result.Status, result.Error);
             if (_bus != null)

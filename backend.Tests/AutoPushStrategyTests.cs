@@ -178,6 +178,67 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
     }
 
+    /// <summary>
+    /// The completed-push backstop re-drives every completed card on each sweep,
+    /// so a deterministic lineage refusal must not be reported as a failed push:
+    /// it is not retryable and not actionable, and warning on it once per card
+    /// per sweep is what filled the stable log with hundreds of identical
+    /// "Auto-push skipped ... lineage-blocked" lines (AGT-2688). It is still
+    /// recorded, at Information, and main is still not advanced.
+    /// </summary>
+    [Fact]
+    public async Task AlwaysImmediate_LineageRefusal_IsRecordedWithoutAlarmingAsAFailedPush()
+    {
+        var remoteBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main");
+        RunGit(_repoRoot, "checkout", "-q", "-b", "develop");
+        RunGit(_repoRoot, "push", "-q", "-u", "origin", "develop");
+        RunGit(_repoRoot, "checkout", "-q", "main");
+        WriteJobWithoutCommit(TaskStates.Progress, "lineage-quiet-task");
+        var sessionLogs = Path.Combine(_watchPath, TaskStates.Progress, "lineage-quiet-task", "logs");
+        Directory.CreateDirectory(sessionLogs);
+        File.WriteAllText(Path.Combine(sessionLogs, "session-events.jsonl"),
+            System.Text.Json.JsonSerializer.Serialize(new SessionEvent
+            {
+                Ts = DateTime.UtcNow.AddSeconds(-1), Kind = "start", Cli = "codex"
+            }) + Environment.NewLine);
+        File.WriteAllText(Path.Combine(_repoRoot, "lineage.txt"), "must integrate through develop\n");
+        var queue = new CompletedPushQueue();
+        var capture = new CapturingTransitionLogger();
+        var deps = BuildDeps(queue, capture);
+
+        var outcome = await deps.Transitions.MoveAsync(
+            "lineage-quiet-task", TaskStates.AutoReview, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.True(queue.Reader.TryRead(out var queued));
+
+        var worker = new CompletedPushWorker(queue, deps.Transitions, NullLogger<CompletedPushWorker>.Instance);
+        await worker.ProcessAsync(queued!, CancellationToken.None);
+
+        // The guard still holds: nothing advanced main.
+        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+        // ... and the refusal did not masquerade as a push failure.
+        Assert.DoesNotContain(capture.Warnings, w => w.Contains("Auto-push skipped"));
+        Assert.Contains(capture.Infos, i => i.Contains("Auto-push not applicable"));
+    }
+
+    private sealed class CapturingTransitionLogger : ILogger<TaskTransitionService>
+    {
+        public List<string> Warnings { get; } = [];
+        public List<string> Infos { get; } = [];
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullDisposable.Instance;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning) Warnings.Add(formatter(state, exception));
+            if (logLevel == LogLevel.Information) Infos.Add(formatter(state, exception));
+        }
+        private sealed class NullDisposable : IDisposable
+        {
+            public static readonly NullDisposable Instance = new();
+            public void Dispose() { }
+        }
+    }
+
     private void InstallSlowPushHook(int seconds)
     {
         var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");
@@ -270,7 +331,9 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(remoteSha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
     }
 
-    private Deps BuildDeps(CompletedPushQueue? pushQueue = null)
+    private Deps BuildDeps(
+        CompletedPushQueue? pushQueue = null,
+        ILogger<TaskTransitionService>? transitionLogger = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -290,7 +353,7 @@ public sealed class AutoPushStrategyTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance, sessions: sessions, pushQueue: pushQueue);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, transitionLogger ?? NullLogger<TaskTransitionService>.Instance, sessions: sessions, pushQueue: pushQueue);
         return new Deps(config, scanner, settings, transitions);
     }
 
