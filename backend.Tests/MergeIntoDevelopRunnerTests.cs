@@ -990,6 +990,65 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.NotEqual(candidate, RemoteSha(remote, "develop"));
     }
 
+    /// <summary>
+    /// AGT-2688: a blocked <c>main</c> advance must not swallow the <c>develop</c>
+    /// publication. When main has diverged (a release-line commit that develop does
+    /// not contain), the develop-then-main policy correctly refuses to advance main
+    /// - but the delivery merged into local develop is still perfectly publishable
+    /// and its push to origin/develop still fast-forwards. Returning early left the
+    /// delivery integrated locally and absent from origin, which is the state that
+    /// makes a card look delivered while nothing reached the shared line.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task PushIntegrationBranch_MainAdvanceBlocked_StillPublishesDevelop()
+    {
+        var (repo, remote) = SeedRepoWithOrigin("push-main-blocked-develop");
+        RunGit(repo, "branch develop main");
+        RunGit(repo, "push -q origin develop");
+        var publishedDevelopBase = RemoteSha(remote, "develop");
+
+        // The delivery lands on local develop and is ready to publish.
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "delivery.txt"), "delivered work");
+        Commit(repo, "feat: delivered work");
+        var candidate = RunGit(repo, "rev-parse refs/heads/develop").Out.Trim();
+        Assert.NotEqual(publishedDevelopBase, candidate);
+
+        // main diverges: a release-line commit develop does not contain, so
+        // main is no longer an ancestor of develop and the advance is blocked.
+        RunGit(repo, "checkout -q main");
+        File.WriteAllText(Path.Combine(repo, "hotfix.txt"), "release-line hotfix");
+        Commit(repo, "fix: release-line hotfix");
+        RunGit(repo, "push -q origin main");
+        var divergedMain = RemoteSha(remote, "main");
+
+        var (git, log) = Build(repo);
+        Assert.False(git.IsAncestor(repo, "main", "develop"));
+        var jobFolder = BeginRun(log, repo, jobId: "push-main-blocked-develop");
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            environmentalBackoff: _ => TimeSpan.Zero);
+
+        var result = await runner.PushIntegrationBranchAsync(
+            "Fixture",
+            "push-main-blocked-develop",
+            jobFolder,
+            repo,
+            "main",
+            approvedSha: candidate);
+
+        // The delivery reaches the shared work line even though main stays put.
+        Assert.Equal(candidate, RemoteSha(remote, "develop"));
+        Assert.Equal(divergedMain, RemoteSha(remote, "main"));
+
+        // ... and the blocked release advance is still reported, not silently dropped.
+        Assert.False(result.Success);
+        Assert.Equal("lineage-blocked", result.Status);
+    }
+
     [Fact]
     public async Task PushIntegrationBranch_ApprovedShaOutsideTheBranch_FailsClosed()
     {

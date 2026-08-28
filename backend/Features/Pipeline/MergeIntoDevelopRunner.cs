@@ -1131,15 +1131,15 @@ public sealed class MergeIntoDevelopRunner
                     integrationBranch,
                     developAvailable: true,
                     mainIsAncestorOfDevelop: _git.IsAncestor(repoRoot, integrationBranch, "develop"));
-                if (decision.Mode == ImmediateIntegrationLineageMode.Blocked)
-                {
-                    return new GitPushResult(
-                        false,
-                        approvedSha ?? string.Empty,
-                        "lineage-blocked",
-                        decision.Reason);
-                }
+                var releaseAdvanceBlocked =
+                    decision.Mode == ImmediateIntegrationLineageMode.Blocked;
 
+                // AGT-2688: publish the work line first, and publish it even when the
+                // release advance is blocked. The delivery already sits on local
+                // develop and its push fast-forwards; withholding it because main
+                // diverged is what left deliveries integrated locally and absent from
+                // origin, with no ref on the shared line to show for the run.
+                var startedAt = DateTime.UtcNow;
                 var developPush = await PushIntegrationBranchSerializedAsync(
                     project,
                     jobId,
@@ -1151,6 +1151,31 @@ public sealed class MergeIntoDevelopRunner
                     recordSuccessfulStep: false);
                 if (!developPush.Success)
                     return developPush;
+
+                if (releaseAdvanceBlocked)
+                {
+                    // The work is durable on origin/develop; only the release advance
+                    // is refused. Record it so the card carries the blocked advance
+                    // instead of an unexplained gap in its pipeline history.
+                    var blocked = new GitPushResult(
+                        false,
+                        developPush.Sha,
+                        "lineage-blocked",
+                        decision.Reason);
+                    try
+                    {
+                        RecordPushStep(jobFolderPath, project, jobId, blocked, startedAt, 0);
+                    }
+                    catch (Exception ex)
+                    {
+                        SilentCatch.Note(ex, "MergeIntoDevelopRunner: push-step recording is best-effort");
+                    }
+                    _logger.LogWarning(
+                        "merge-into-develop-push project={Project} job={JobId} published develop at {Sha} "
+                        + "but the main advance stays blocked: {Reason}",
+                        project, jobId, Short(developPush.Sha), decision.Reason);
+                    return blocked;
+                }
             }
 
             return await PushIntegrationBranchSerializedAsync(
@@ -1294,6 +1319,18 @@ public sealed class MergeIntoDevelopRunner
                 "no-remote" => (PipelineStepStatus.Skipped, "no-remote", "No origin remote configured; nothing to push.", null),
                 _ => (PipelineStepStatus.Passed, result.Status, "Integration branch push completed.", null),
             };
+        }
+
+        // AGT-2688: a blocked release advance is not a failed push. The delivery is
+        // already durable on develop; main waits for an operator to converge the
+        // release line. Naming it keeps it out of the undifferentiated error bucket.
+        if (string.Equals(result.Status, "lineage-blocked", StringComparison.Ordinal))
+        {
+            return (
+                PipelineStepStatus.Failed,
+                "lineage-blocked",
+                "The delivery is published on develop; advancing main is blocked until the release line is converged.",
+                result.Error);
         }
 
         var issue = ClassifyPushFailure(result.Status);

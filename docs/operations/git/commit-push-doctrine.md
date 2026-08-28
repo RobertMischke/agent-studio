@@ -45,6 +45,15 @@ The commit and push flow today lives in `TaskTransitionService.MoveAsync` ([back
 
 The commit-message template is editable in [prompts/runtime/commit-message.md](../../../prompts/runtime/commit-message.md) and is the single source of voice for every commit the platform produces, regardless of which CLI did the work.
 
+## Who may advance which line (AGT-2688)
+
+There is exactly one writer to `origin/develop`: `GitService.PushIntegrationBranchAsync`, reached only from `MergeIntoDevelopRunner.PushIntegrationBranchAsync` via the background `IntegrationPushQueue` (and its restart backstop). The remote runner never pushes an integration line at all; it publishes card-scoped `runner/<slug>/...` refs and the backend integrates them. Understanding that asymmetry matters, because the two failure classes below look identical in the log and are not:
+
+- **The completed-job auto-push to `main` is refused by design in a dual-line repository.** `TaskTransitionService` pushes stamped commits with the default target `main`; `ValidateDirectMainAdvance` blocks that whenever a `develop` line exists and the candidate is not the published develop tip. Every completed card hits this, so it is a routing outcome, not a fault. It is logged at Information and must not raise `managed-repo-push-failed`. Alarming on it once produced 570+ identical warnings in a single night and masked the real failures the topic exists to surface.
+- **A blocked release advance must never withhold the develop publication.** When the configured integration branch is `main` and `main` is not an ancestor of `develop`, the develop-then-main policy correctly refuses to advance `main`. It does not follow that the delivery should stay unpublished: the merge already sits on local `develop` and its push fast-forwards. The push therefore publishes `develop` first and only then reports the blocked advance, recording a `lineage-blocked` verdict on the `post-merge-into-develop-push` step. Returning before the develop push was what left deliveries integrated locally and absent from `origin`, with no ref on the shared line to show for the run.
+
+For the on-host topology check after such an incident, use [scripts/integration-lineage-report.sh](../../../scripts/integration-lineage-report.sh). It is read-only (no fetch, checkout or push) and prints the four ref tips, the ahead/behind shape of local `develop` against `origin/develop`, the commits and delivery merges waiting to be published, and whether the release lineage currently permits a `main` advance.
+
 ## Branch boundary
 
 Coding tasks use an isolated, task-owned worktree on `task/<id>` even in the primary sequential slot. The platform commits there, pushes the task branch with retry, then serializes integration into the configured work branch. A failed task-branch push is visible as the Warn `task-branch-unpushed` outcome issue; branch cleanup runs only after integration.

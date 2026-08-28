@@ -176,6 +176,48 @@ public sealed class AutoPushStrategyTests : IDisposable
 
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
+
+        // AGT-2688: refusing this direct main advance is the designed routing for a
+        // dual-line repository, not a push failure. Every completed card hits it, so
+        // alarming on it drowned the operator feed in identical warnings (570+ in one
+        // night) and hid the genuine failures the topic exists to surface.
+        var alarms = deps.BusStore.Recent(_watchPath, ProjectName, 100)
+            .Where(message => message.Topic == "managed-repo-push-failed")
+            .ToList();
+        Assert.Empty(alarms);
+    }
+
+    [Fact]
+    public async Task AlwaysImmediate_GenuinePushFailure_StillAlarms()
+    {
+        // Guard for the silencing above: a real failure must keep its operator
+        // alarm. Removing the remote makes the push fail for a non-lineage reason.
+        RunGit(_repoRoot, "remote", "remove", "origin");
+        RunGit(_repoRoot, "remote", "add", "origin", Path.Combine(_tempDir, "does-not-exist.git"));
+        WriteJobWithoutCommit(TaskStates.Progress, "broken-remote-task");
+        var sessionLogs = Path.Combine(_watchPath, TaskStates.Progress, "broken-remote-task", "logs");
+        Directory.CreateDirectory(sessionLogs);
+        File.WriteAllText(Path.Combine(sessionLogs, "session-events.jsonl"),
+            System.Text.Json.JsonSerializer.Serialize(new SessionEvent
+            {
+                Ts = DateTime.UtcNow.AddSeconds(-1), Kind = "start", Cli = "codex"
+            }) + Environment.NewLine);
+        File.WriteAllText(Path.Combine(_repoRoot, "broken.txt"), "remote is gone\n");
+        var queue = new CompletedPushQueue();
+        var deps = BuildDeps(queue);
+
+        var outcome = await deps.Transitions.MoveAsync(
+            "broken-remote-task", TaskStates.AutoReview, _watchPath);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.True(queue.Reader.TryRead(out var queued));
+        var worker = new CompletedPushWorker(queue, deps.Transitions, NullLogger<CompletedPushWorker>.Instance);
+        await worker.ProcessAsync(queued!, CancellationToken.None);
+
+        var alarms = deps.BusStore.Recent(_watchPath, ProjectName, 100)
+            .Where(message => message.Topic == "managed-repo-push-failed")
+            .ToList();
+        Assert.NotEmpty(alarms);
     }
 
     private void InstallSlowPushHook(int seconds)
@@ -290,8 +332,10 @@ public sealed class AutoPushStrategyTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance, sessions: sessions, pushQueue: pushQueue);
-        return new Deps(config, scanner, settings, transitions);
+        var busStore = new AgentMessageBusStore();
+        var bus = new AgentMessageBusBridge(busStore, config, NullLogger<AgentMessageBusBridge>.Instance);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance, sessions: sessions, pushQueue: pushQueue, bus: bus);
+        return new Deps(config, scanner, settings, transitions, busStore);
     }
 
     private string CommitLocalChange(string content)
@@ -398,5 +442,6 @@ public sealed class AutoPushStrategyTests : IDisposable
         IConfiguration Config,
         TaskScannerService Scanner,
         ProjectSettingsService Settings,
-        TaskTransitionService Transitions);
+        TaskTransitionService Transitions,
+        AgentMessageBusStore BusStore);
 }

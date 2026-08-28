@@ -1745,6 +1745,20 @@ public sealed class TaskTransitionService
                 return result.Status == "pushed";
             }
 
+            // AGT-2688: in a repository with both a work and a release line this
+            // direct main advance is REFUSED BY DESIGN for every raw delivery SHA -
+            // the develop-then-main integration path owns that advance. Reporting
+            // the expected routing outcome as a push failure produced hundreds of
+            // identical operator alarms per night and buried the real ones.
+            if (string.Equals(result.Status, "lineage-blocked", StringComparison.Ordinal))
+            {
+                _logger.LogInformation(
+                    "Auto-push not applicable for {JobId} at {Sha} ({Reason}): the dual-line repository "
+                    + "integrates through develop, so main is advanced by the integration path, not this push.",
+                    jobId, sha, reason);
+                return false;
+            }
+
             _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
                 jobId, sha, reason, result.Status, result.Error);
             if (_bus != null)
