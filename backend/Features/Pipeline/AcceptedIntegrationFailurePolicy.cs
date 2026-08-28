@@ -17,6 +17,13 @@ public static class AcceptedIntegrationFailureCodes
     public const string ReviewSubjectInvalid = "review-subject-invalid";
     public const string NoTaskBranch = "no-task-branch";
     public const string IntegrationError = "integration-error";
+    /// <summary>
+    /// The merge into develop succeeded locally but the push to origin did not
+    /// (main/develop lineage blocked, or the remote genuinely diverged). Distinct
+    /// from every other code above: those describe the merge step, this one
+    /// describes the push step (AGT-2688).
+    /// </summary>
+    public const string IntegrationPushBlocked = "integration-push-blocked";
 }
 
 /// <summary>
@@ -108,6 +115,14 @@ public static class AcceptedIntegrationFailurePolicy
                     verdictSummary,
                     "The accepted coding card had no delivery branch to integrate."),
                 RebaseRecoveryAvailable: false),
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked => new(
+                code,
+                "Integration push blocked",
+                FirstNonBlank(
+                    reason,
+                    verdictSummary,
+                    "The delivery merged into the integration branch locally but the push to origin is blocked."),
+                RebaseRecoveryAvailable: false),
             _ => new(
                 AcceptedIntegrationFailureCodes.IntegrationError,
                 "Integration failed",
@@ -128,6 +143,11 @@ public static class AcceptedIntegrationFailurePolicy
             return AcceptedIntegrationFailureCodes.NoTaskBranch;
         if (string.Equals(verdict, "agent-round-required", StringComparison.OrdinalIgnoreCase))
             return AcceptedIntegrationFailureCodes.DeliveryAttributionAmbiguous;
+        if (string.Equals(verdict, "lineage-blocked", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(verdict, "push-blocked", StringComparison.OrdinalIgnoreCase))
+        {
+            return AcceptedIntegrationFailureCodes.IntegrationPushBlocked;
+        }
 
         var detail = reason ?? string.Empty;
         if (detail.Contains(
@@ -161,6 +181,7 @@ public static class AcceptedIntegrationFailurePolicy
             AcceptedIntegrationFailureCodes.ReviewSubjectInvalid => AcceptedIntegrationFailureCodes.ReviewSubjectInvalid,
             AcceptedIntegrationFailureCodes.NoTaskBranch => AcceptedIntegrationFailureCodes.NoTaskBranch,
             AcceptedIntegrationFailureCodes.IntegrationError => AcceptedIntegrationFailureCodes.IntegrationError,
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked => AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
             _ => null,
         };
     }

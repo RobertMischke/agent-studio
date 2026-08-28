@@ -60,6 +60,18 @@ public sealed class AcceptedIntegrationFailurePolicyTests
             AcceptedIntegrationFailureCodes.NoTaskBranch,
             false
         },
+        {
+            "lineage-blocked",
+            "Integration push blocked: main is not an ancestor of develop yet.",
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            false
+        },
+        {
+            "push-blocked",
+            "Push of the integration branch to origin was rejected (remote-rejected); the remote has diverged and needs reconciliation.",
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            false
+        },
     };
 
     [Theory]

@@ -648,6 +648,59 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_MergePassedButPushBlocked_IsConflictSkippedNotPending()
+    {
+        // AGT-2688: the merge into develop succeeded (Passed), but the deferred
+        // push recorded a lineage block. The attributed commit is therefore not
+        // yet reachable from this reader's develop ancestry either. That must
+        // surface as a distinct, typed integration-push-blocked failure - never
+        // as plain "pending", which is what let the accepted-integration
+        // backstop loop forever reading a merged-but-unpublished card as still
+        // in flight.
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/push-blocked");
+        File.WriteAllText(Path.Combine(repo, "push-blocked.txt"), "wip");
+        Commit(repo, "feat: push blocked wip");
+        var anchor = RunGit(repo, "rev-parse task/push-blocked").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("push-blocked", "AGT-3010", project, repo, log, commits: new[] { Commit(anchor) },
+            prov: Prov(branch: "task/push-blocked"));
+
+        log.EnsureRun(job.FolderPath, PipelineCatalogue.Standard, project, job.Id);
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Passed,
+            Verdict = "merged",
+        });
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopPushStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "lineage-blocked",
+            Reason = "Integration push blocked: main is not an ancestor of develop yet.",
+            FailureCode = AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+        });
+
+        var status = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.ConflictSkipped, status.Status);
+        Assert.Equal(AcceptedIntegrationFailureCodes.IntegrationPushBlocked, status.Failure?.Code);
+        Assert.False(status.Failure?.RebaseRecoveryAvailable);
+
+        // The accepted-integration backstop must not replay the merge for this
+        // card: the merge already succeeded, only the push is blocked, and that
+        // is the push backstop's job, not a full re-claim.
+        var recovery = svc.ResolveAcceptedIntegrationRecovery(job, status);
+        Assert.Equal(AcceptedIntegrationRecoveryAction.Ignore, recovery.Action);
+    }
+
+    [Fact]
     public void BuildLookup_NoCommitAndNoBranch_IsNoBranch()
     {
         var repo = SeedDevelopMainRepo();
