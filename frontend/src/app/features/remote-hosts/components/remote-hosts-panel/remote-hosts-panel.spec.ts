@@ -58,8 +58,15 @@ describe('RemoteHostsPanelComponent', () => {
     const summary = el.querySelector('[data-testid="remote-hosts-summary"]')?.textContent ?? '';
     expect(summary).toContain(String(cards.length));
 
+    // The setup control now lives inside the disclosed "Connection" detail
+    // section: the reworked grouped table (AGT-2653/2681) opens a machine row to
+    // its compact section summaries (AGT-2629), then the connection section
+    // reveals the per-host actions. Expand the row, open its connection section,
+    // then reach the setup control.
     const remote = el.querySelector('[data-host="agent-runner-01"]') as HTMLElement;
     (remote.querySelector('[data-testid="remote-host-disclosure"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (remote.querySelector('[data-testid="remote-host-detail-toggle-connection"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     const setupButton = remote.querySelector('[data-testid="remote-host-action-setup"]') as HTMLButtonElement;
     setupButton.click();
