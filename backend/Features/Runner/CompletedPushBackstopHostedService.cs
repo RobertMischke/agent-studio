@@ -29,6 +29,16 @@ public sealed class CompletedPushBackstopHostedService : BackgroundService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Attempts already refused on lineage or policy grounds, keyed by
+    /// job + SHA + branch. Every input in that key is immutable, so a repeat
+    /// sweep would receive the identical refusal; skipping it is what keeps a
+    /// blocked card from re-emitting the same alarm every 15 minutes forever
+    /// (AGT-2688). A restart deliberately clears the memory so the refusal is
+    /// re-checked and re-surfaced exactly once per process.
+    /// </summary>
+    private readonly HashSet<string> _blocked = new(StringComparer.Ordinal);
+
     public async Task<int> RunOnceAsync(CancellationToken ct = default)
     {
         var pushed = 0;
@@ -38,18 +48,59 @@ public sealed class CompletedPushBackstopHostedService : BackgroundService
             .ThenBy(j => j.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var skipped = 0;
         foreach (var job in completed)
         {
             ct.ThrowIfCancellationRequested();
             var strategy = AutoPushStrategies.Normalize(_settings.Get(job.ProjectName).AutoPushStrategy);
             if (strategy == AutoPushStrategies.Never) continue;
-            pushed += await _transitions.PushCompletedJobCommitsAsync(job, strategy, ct);
+            if (IsFullyBlocked(job))
+            {
+                skipped++;
+                continue;
+            }
+
+            var outcome = await _transitions.PushCompletedJobCommitsAsync(job, strategy, ct);
+            pushed += outcome.Pushed;
+            foreach (var refusal in outcome.Refusals)
+                _blocked.Add(BlockedKey(job.Id, refusal.Sha, refusal.TargetBranch));
         }
 
         if (pushed > 0)
             _logger.LogInformation("Completed auto-push backstop pushed {Count} commit(s)", pushed);
+        if (skipped > 0)
+            _logger.LogInformation(
+                "Completed auto-push backstop skipped {Count} job(s) whose push is integration-push-blocked; "
+                + "they need re-integration, not another push attempt",
+                skipped);
         return pushed;
     }
+
+    /// <summary>
+    /// True when every commit this job would publish has already been refused
+    /// for good. A job with even one still-pushable commit is retried in full.
+    /// </summary>
+    private bool IsFullyBlocked(TaskInfo job)
+    {
+        if (_blocked.Count == 0) return false;
+
+        var commits = job.Commits.Count > 0
+            ? job.Commits
+            : job.Commit is null ? [] : [job.Commit];
+        var shas = commits
+            .Select(c => c.Sha)
+            .Where(sha => !string.IsNullOrWhiteSpace(sha))
+            .ToList();
+        if (shas.Count == 0) return false;
+
+        return shas.All(sha => _blocked.Any(key =>
+            key.StartsWith(BlockedShaPrefix(job.Id, sha), StringComparison.Ordinal)));
+    }
+
+    private static string BlockedShaPrefix(string jobId, string sha) => $"{jobId}\0{sha}\0";
+
+    private static string BlockedKey(string jobId, string sha, string branch)
+        => BlockedShaPrefix(jobId, sha) + branch;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

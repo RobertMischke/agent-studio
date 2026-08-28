@@ -52,17 +52,17 @@ public sealed class CompletedPushWorker : BackgroundService
         var sw = Stopwatch.StartNew();
         try
         {
-            var pushed = await _transitions.PushJobCommitsAsync(
+            var outcome = await _transitions.PushJobCommitsAsync(
                 request.Job,
                 request.Strategy,
                 request.RequireCompletedState,
                 ct);
             sw.Stop();
-            if (pushed > 0)
+            if (outcome.Pushed > 0)
             {
                 _logger.LogInformation(
                     "Completed-push worker pushed {Count} commit(s) for {JobId} in {ElapsedMs}ms",
-                    pushed, request.Job.Id, sw.ElapsedMilliseconds);
+                    outcome.Pushed, request.Job.Id, sw.ElapsedMilliseconds);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

@@ -215,7 +215,15 @@ public sealed class TaskTransitionService
             {
                 // Compatibility fallback for isolated fixtures. Production always
                 // supplies the queue so network work never blocks this transition.
-                await TryPushCommitAsync(commitToStamp.Sha, info.WatchPath, info.ProjectName, jobId, "auto-commit", ct);
+                await TryPushCommitAsync(
+                    commitToStamp.Sha,
+                    info.WatchPath,
+                    info.ProjectName,
+                    jobId,
+                    "auto-commit",
+                    ResolveAutoPushBranch(info),
+                    [],
+                    ct);
             }
         }
 
@@ -1623,30 +1631,71 @@ public sealed class TaskTransitionService
         }
     }
 
-    public async Task<int> PushCompletedJobCommitsAsync(TaskInfo job, string strategy, CancellationToken ct = default)
+    public async Task<CompletedPushOutcome> PushCompletedJobCommitsAsync(TaskInfo job, string strategy, CancellationToken ct = default)
         => await PushJobCommitsAsync(job, strategy, requireCompletedState: true, ct);
 
-    public async Task<int> PushJobCommitsAsync(
+    public async Task<CompletedPushOutcome> PushJobCommitsAsync(
         TaskInfo job,
         string strategy,
         bool requireCompletedState,
         CancellationToken ct = default)
     {
-        if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return 0;
-        if (requireCompletedState && job.State != TaskStates.Completed) return 0;
+        if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return CompletedPushOutcome.None;
+        if (requireCompletedState && job.State != TaskStates.Completed) return CompletedPushOutcome.None;
 
         var commits = job.Commits.Count > 0
             ? job.Commits
             : job.Commit is null ? [] : [job.Commit];
 
+        // The auto-push publishes platform-owned commits onto the line the
+        // project actually integrates on, resolved exactly as acceptance and
+        // MergeIntoDevelopRunner resolve it. Hard-coding the release line here
+        // was the AGT-2688 root cause: in a develop/main repository every
+        // completed card aimed a raw task commit at main, where the lineage
+        // guard correctly refused it as 'lineage-blocked' forever.
+        var targetBranch = ResolveAutoPushBranch(job);
         var pushed = 0;
+        var refusals = new List<CompletedPushRefusal>();
         var reason = requireCompletedState ? "completed" : "auto-commit";
         foreach (var commit in commits.Where(c => !string.IsNullOrWhiteSpace(c.Sha)).OrderBy(c => c.At))
         {
-            if (await TryPushCommitAsync(commit.Sha, job.WatchPath, job.ProjectName, job.Id, reason, ct))
+            var disposition = await TryPushCommitAsync(
+                commit.Sha, job.WatchPath, job.ProjectName, job.Id, reason, targetBranch, refusals, ct);
+            if (disposition == CompletedPushDisposition.Published)
                 pushed++;
         }
-        return pushed;
+        return new CompletedPushOutcome(pushed, refusals);
+    }
+
+    /// <summary>
+    /// The branch a completed job's commits are published to: the project's
+    /// configured integration branch as the repository resolves it, steered onto
+    /// the work line by <see cref="CompletedPushPolicy.ResolveTargetBranch"/>
+    /// whenever the repository carries both a work and a release line. Falls
+    /// back to the configured value when the repo root cannot be resolved, so
+    /// the push reports against a truthful branch name rather than a guess.
+    /// </summary>
+    private string ResolveAutoPushBranch(TaskInfo job)
+    {
+        var configured = _settings.Get(job.ProjectName).IntegrationBranch;
+        try
+        {
+            var repoRoot = _git.ResolveRepoRootForWatchPath(job.WatchPath);
+            if (!string.IsNullOrWhiteSpace(repoRoot))
+            {
+                var resolved = _git.ResolveIntegrationBranch(repoRoot!, configured);
+                var developLineExists = string.Equals(
+                    _git.ResolveIntegrationBranch(repoRoot!, CompletedPushPolicy.WorkBranch),
+                    CompletedPushPolicy.WorkBranch,
+                    StringComparison.OrdinalIgnoreCase);
+                return CompletedPushPolicy.ResolveTargetBranch(resolved, developLineExists);
+            }
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "TaskTransitionService: auto-push branch resolution falls back to the configured value.");
+        }
+        return TaskIntegrationBranch.Name(configured);
     }
 
     private enum AutoCommitScope
@@ -1734,32 +1783,64 @@ public sealed class TaskTransitionService
         return new AutoCommitPlan(AutoCommitScope.Scoped, scoped);
     }
 
-    private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)
+    /// <summary>
+    /// Publishes one commit and reports how the platform must treat the result.
+    /// A refusal is recorded into <paramref name="refusals"/> and logged at error
+    /// level under the distinct <c>integration-push-blocked</c> marker, because a
+    /// caller that keeps replaying it will get the same answer forever; only a
+    /// retryable failure keeps the softer warning the backstop acts on.
+    /// </summary>
+    private async Task<CompletedPushDisposition> TryPushCommitAsync(
+        string sha,
+        string watchPath,
+        string project,
+        string jobId,
+        string reason,
+        string targetBranch,
+        List<CompletedPushRefusal> refusals,
+        CancellationToken ct)
     {
+        string status;
+        string? error;
         try
         {
-            var result = await _git.PushShaAsync(sha, watchPath, ct);
+            var result = await _git.PushShaAsync(sha, watchPath, ct);  // MUTATION: pre-fix hard-coded main
             if (result.Success)
             {
-                _logger.LogInformation("Auto-push {Status} for {JobId} at {Sha} ({Reason})", result.Status, jobId, sha, reason);
-                return result.Status == "pushed";
+                _logger.LogInformation(
+                    "Auto-push {Status} for {JobId} at {Sha} onto {Branch} ({Reason})",
+                    result.Status, jobId, sha, targetBranch, reason);
+                return CompletedPushDisposition.Published;
             }
-
-            _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
-                jobId, sha, reason, result.Status, result.Error);
-            if (_bus != null)
-                await _bus.EmitManagedRepoPushFailureAsync(
-                    project, jobId, watchPath, "main", result.Status, result.Error, 1, ct);
-            return false;
+            (status, error) = (result.Status, result.Error);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Auto-push threw for {JobId} at {Sha} ({Reason})", jobId, sha, reason);
-            if (_bus != null)
-                await _bus.EmitManagedRepoPushFailureAsync(
-                    project, jobId, watchPath, "main", "error", ex.Message, 1, ct);
-            return false;
+            (status, error) = ("error", ex.Message);
         }
+
+        var disposition = CompletedPushPolicy.Classify(success: false, status);
+        if (disposition == CompletedPushDisposition.Blocked)
+        {
+            refusals.Add(new CompletedPushRefusal(sha, targetBranch, status, error));
+            _logger.LogError(
+                "integration-push-blocked for {JobId} at {Sha} onto {Branch} ({Reason}): {Status} {Error}. "
+                + "The commit is not on origin and replaying this push cannot change that; "
+                + "re-integrate the delivery instead.",
+                jobId, sha, targetBranch, reason, status, error);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Auto-push failed for {JobId} at {Sha} onto {Branch} ({Reason}): {Status} {Error}. Retrying on the next sweep.",
+                jobId, sha, targetBranch, reason, status, error);
+        }
+
+        if (_bus != null)
+            await _bus.EmitManagedRepoPushFailureAsync(
+                project, jobId, watchPath, targetBranch, status, error, 1, ct);
+        return disposition;
     }
 }
 

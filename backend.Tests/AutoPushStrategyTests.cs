@@ -144,13 +144,15 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(localHead, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
     }
 
+    // AGT-2688: with a develop line present the raw platform commit must never
+    // be aimed at main (the lineage guard refuses it by construction, and the
+    // old code then replayed that refusal forever). It belongs on the work line,
+    // where it is a plain fast-forward, and main stays untouched.
     [Fact]
-    public async Task AlwaysImmediate_WithDevelopLine_DoesNotAdvanceMainWithRawCommit()
+    public async Task AlwaysImmediate_WithDevelopLine_PublishesToDevelopAndLeavesMainUntouched()
     {
         var remoteBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main");
-        RunGit(_repoRoot, "checkout", "-q", "-b", "develop");
-        RunGit(_repoRoot, "push", "-q", "-u", "origin", "develop");
-        RunGit(_repoRoot, "checkout", "-q", "main");
+        SeedDevelopLine();
         WriteJobWithoutCommit(TaskStates.Progress, "lineage-task");
         var sessionLogs = Path.Combine(_watchPath, TaskStates.Progress, "lineage-task", "logs");
         Directory.CreateDirectory(sessionLogs);
@@ -174,9 +176,142 @@ public sealed class AutoPushStrategyTests : IDisposable
         var worker = new CompletedPushWorker(queue, deps.Transitions, NullLogger<CompletedPushWorker>.Instance);
         await worker.ProcessAsync(queued!, CancellationToken.None);
 
+        Assert.Equal(rawCommit, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
-        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
     }
+
+    // The scenario the fleet actually ran into: origin/develop moved ahead while
+    // the card was in review, so the backend's local develop is behind. The push
+    // must still land as a fast-forward once the local line is caught up, and it
+    // must land on develop rather than being refused against main.
+    [Fact]
+    public async Task Backstop_DivergedDevelop_PublishesFastForwardOntoDevelop()
+    {
+        SeedDevelopLine();
+        var remoteAdvance = AdvanceOriginDevelopFromSecondClone("operator change while the card was in review");
+        // Local develop is now behind origin/develop; catching it up is what the
+        // integration path does before every merge.
+        RunGit(_repoRoot, "fetch", "-q", "origin", "develop");
+        RunGit(_repoRoot, "merge", "-q", "--ff-only", "origin/develop");
+        var sha = CommitLocalChange("delivery on the caught-up develop line");
+        WriteJob(TaskStates.Completed, "diverged-develop-task", sha);
+        var deps = BuildDeps();
+        var backstop = BuildBackstop(deps);
+
+        var pushed = await backstop.RunOnceAsync();
+
+        Assert.Equal(1, pushed);
+        Assert.Equal(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
+        // Fast-forward, not a force: the operator's commit is still an ancestor.
+        Assert.Equal(0, RunGitRaw(_repoRoot, "merge-base", "--is-ancestor", remoteAdvance, sha).Code);
+    }
+
+    // A genuinely non-fast-forward push is a decision about immutable inputs, so
+    // replaying it can only ever produce the same refusal. The backstop must
+    // report it once and then stop attempting it, instead of re-emitting the
+    // same line on every sweep forever (AGT-2688: 570+ identical warnings).
+    [Fact]
+    public async Task Backstop_NonFastForwardPush_IsBlockedOnceAndNotRetried()
+    {
+        SeedDevelopLine();
+        var sha = CommitLocalChange("local delivery that will lose the race");
+        AdvanceOriginDevelopFromSecondClone("conflicting operator change");
+        WriteJob(TaskStates.Completed, "non-ff-task", sha);
+        var deps = BuildDeps();
+        var backstop = BuildBackstop(deps);
+        var remoteBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop");
+
+        var first = await backstop.RunOnceAsync();
+
+        Assert.Equal(0, first);
+        // The guard never force-pushes: origin keeps the operator's commit.
+        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
+
+        // Second sweep: the refusal is remembered, so no further push is issued.
+        var pushProbe = InstallPushCounter();
+        var second = await backstop.RunOnceAsync();
+
+        Assert.Equal(0, second);
+        Assert.False(File.Exists(pushProbe), "the backstop re-attempted a push that is already blocked for good");
+    }
+
+    /// <summary>
+    /// Reproduces the fleet's real topology: a work line and a release line,
+    /// with <c>origin/HEAD</c> pointing at the release line the way a clone
+    /// leaves it. That last detail is what made production resolve the auto-push
+    /// target to <c>main</c> and hit the lineage guard on every completed card.
+    /// </summary>
+    // The exact shape of the managed repository that produced the overnight log
+    // flood: HEAD on main, a local develop branch that was never published, and
+    // no origin/develop at all. The lineage guard reads "this repo has a develop
+    // line" from the local branch alone, so every raw completed commit aimed at
+    // main was refused - and the target was hard-coded to main, so every card
+    // was aimed there. The commit must instead publish the work line, which also
+    // creates origin/develop the first time.
+    [Fact]
+    public async Task Backstop_LocalDevelopNeverPublished_PublishesWorkLineInsteadOfBeingLineageBlocked()
+    {
+        RunGit(_repoRoot, "branch", "develop");
+        var mainBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main");
+        Assert.NotEqual(0, RunGitRaw(_repoRoot, "rev-parse", "--verify", "refs/remotes/origin/develop").Code);
+
+        var sha = CommitLocalChange("completed work that used to be lineage-blocked");
+        WriteJob(TaskStates.Completed, "unpublished-develop-task", sha);
+        var deps = BuildDeps();
+        deps.Settings.SetIntegrationBranch(ProjectName, "develop");
+        var backstop = BuildBackstop(deps);
+
+        var pushed = await backstop.RunOnceAsync();
+
+        Assert.Equal(1, pushed);
+        Assert.Equal(sha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
+        Assert.Equal(mainBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+    }
+
+    private void SeedDevelopLine()
+    {
+        RunGit(_repoRoot, "checkout", "-q", "-b", "develop");
+        RunGit(_repoRoot, "push", "-q", "-u", "origin", "develop");
+        RunGit(_repoRoot, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+    }
+
+    /// <summary>
+    /// Records that a push happened at all. The blocked-path assertion is about
+    /// the absence of a retry, which a return value of 0 alone cannot prove.
+    /// </summary>
+    private string InstallPushCounter()
+    {
+        var marker = Path.Combine(_tempDir, "push-attempted.marker");
+        var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");
+        Directory.CreateDirectory(hooksDir);
+        var hook = Path.Combine(hooksDir, "pre-push");
+        File.WriteAllText(hook, $"#!/bin/sh\ntouch \"{marker}\"\nexit 0\n");
+        File.SetUnixFileMode(
+            hook,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return marker;
+    }
+
+    private string AdvanceOriginDevelopFromSecondClone(string content)
+    {
+        var clone = Path.Combine(_tempDir, "advance-clone-" + Guid.NewGuid().ToString("N")[..8]);
+        RunGit(_tempDir, "clone", "-q", "-b", "develop", _remoteRoot, clone);
+        RunGit(clone, "config", "user.email", "remote@example.com");
+        RunGit(clone, "config", "user.name", "remote");
+        File.WriteAllText(Path.Combine(clone, "operator.txt"), content);
+        RunGit(clone, "add", "-A");
+        RunGit(clone, "commit", "-q", "-m", $"chore: {content}");
+        RunGit(clone, "push", "-q", "origin", "develop");
+        return RunGitCapture(clone, "rev-parse", "HEAD");
+    }
+
+    private CompletedPushBackstopHostedService BuildBackstop(Deps deps)
+        => new(
+            deps.Scanner,
+            deps.Settings,
+            deps.Transitions,
+            deps.Config,
+            NullLogger<CompletedPushBackstopHostedService>.Instance);
 
     private void InstallSlowPushHook(int seconds)
     {
