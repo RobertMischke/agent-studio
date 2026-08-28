@@ -307,10 +307,19 @@ public static class IntegrationStatuses
     /// <summary>The deferred merge-into-develop step recorded a conflict / error; the work was NOT merged.</summary>
     public const string ConflictSkipped = "conflict-skipped";
 
+    /// <summary>
+    /// Every attributed commit landed on the LOCAL integration branch, but the
+    /// deferred push that publishes it to <c>origin</c> recorded a terminal
+    /// failure (AGT-2688: a locally-merged-but-unpushed delivery must never
+    /// read as <see cref="Integrated"/> - origin never saw the work - nor as
+    /// silent <see cref="Pending"/>, which the acceptance rail ignores forever).
+    /// </summary>
+    public const string PushBlocked = "integration-push-blocked";
+
     /// <summary>The card has no delivery ref and no attributed commit - nothing to integrate.</summary>
     public const string NoBranch = "no-branch";
 
-    public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch];
+    public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, PushBlocked, NoBranch];
 
     /// <summary>
     /// Persisted recovery marker stamped while transactional acceptance is
@@ -335,7 +344,8 @@ public static class IntegrationStatuses
     public static bool IsNotIntegrated(string? status)
         => string.Equals(status, Partial, StringComparison.Ordinal)
            || string.Equals(status, Pending, StringComparison.Ordinal)
-           || string.Equals(status, ConflictSkipped, StringComparison.Ordinal);
+           || string.Equals(status, ConflictSkipped, StringComparison.Ordinal)
+           || string.Equals(status, PushBlocked, StringComparison.Ordinal);
 
     public static string Normalize(string? value)
     {

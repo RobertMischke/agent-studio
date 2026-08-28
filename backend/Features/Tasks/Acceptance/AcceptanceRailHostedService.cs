@@ -107,7 +107,7 @@ public sealed class AcceptanceRailHostedService : BackgroundService
                     case AcceptanceRailAction.Escalate:
                         if (job.State == TaskStates.Escalated && HasExhaustionReceipt(job))
                             break;
-                        if (await EscalateAsync(job, used, options.MaxRequeues, ct)) escalated++;
+                        if (await EscalateAsync(job, decision.Reason, used, options.MaxRequeues, ct)) escalated++;
                         else failed++;
                         break;
                 }
@@ -242,16 +242,22 @@ public sealed class AcceptanceRailHostedService : BackgroundService
 
     private async Task<bool> EscalateAsync(
         TaskInfo job,
+        string decisionReason,
         int used,
         int maximum,
         CancellationToken ct)
     {
-        var reason = $"Integration recovery stopped after {used}/{maximum} conflict requeues. The card requires an operator decision instead of another automatic loop.";
+        var (category, reason) = decisionReason == "integration-push-blocked"
+            ? (HumanReviewEscalationCategories.IntegrationPushBlocked,
+                "The delivery merged into the integration branch locally, but the push to origin failed. "
+                + "This will not resolve itself; it needs an operator decision instead of another automatic loop.")
+            : (HumanReviewEscalationCategories.IntegrationRecoveryExhausted,
+                $"Integration recovery stopped after {used}/{maximum} conflict requeues. The card requires an operator decision instead of another automatic loop.");
         var outcome = await _humanReviewEscalation.EscalateAsync(
             job.Id,
             job.WatchPath,
             job.ProjectName,
-            HumanReviewEscalationCategories.IntegrationRecoveryExhausted,
+            category,
             reason,
             ct);
         if (outcome.Status != MoveJobStatus.Success) return false;

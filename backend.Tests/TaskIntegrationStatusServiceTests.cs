@@ -595,6 +595,84 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.True(status.Failure?.RebaseRecoveryAvailable);
     }
 
+    [Fact]
+    public void BuildLookup_MergedLocallyButPushTerminallyFailed_IsPushBlockedNotIntegrated()
+    {
+        // AGT-2688: the merge into develop succeeded LOCALLY (recorded on the
+        // merge step), but a competing writer got its own push to origin/develop
+        // in first, so our deferred push is a genuine, terminal non-fast-forward
+        // rejection (recorded Failed on the separate push step). The card must
+        // NOT read as "integrated" (origin never got the work) - that used to
+        // happen because the ancestor set was a union of local + origin/develop.
+        var (repo, _) = SeedDevelopMainRepoWithOrigin();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/push-blocked");
+        File.WriteAllText(Path.Combine(repo, "work.txt"), "task work");
+        Commit(repo, "feat: task work");
+        var anchor = RunGit(repo, "rev-parse task/push-blocked").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/push-blocked");
+
+        // origin/develop never received this merge - simulate a competing
+        // writer's push landing first by never re-pushing; the pre-existing
+        // remote-tracking ref (from SeedDevelopMainRepoWithOrigin's initial
+        // push) still points at the pre-merge tip.
+        Assert.False(RunGit(repo, "merge-base --is-ancestor " + anchor + " refs/remotes/origin/develop").Code == 0);
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("push-blocked", "AGT-2688", project, repo, log, commits: new[] { Commit(anchor) },
+            prov: Prov(branch: "task/push-blocked"));
+        log.EnsureRun(job.FolderPath, PipelineCatalogue.Standard, project, job.Id);
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Passed,
+            Verdict = "merged",
+        });
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopPushStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "error",
+            Reason = "Push of the integration branch to origin failed (remote-rejected).",
+        });
+
+        var status = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.PushBlocked, status.Status);
+        Assert.Equal(anchor[..7], status.Sha);
+        Assert.Contains("push to origin failed", status.Detail);
+        Assert.Equal(AcceptedIntegrationFailureCodes.IntegrationPushBlocked, status.Failure?.Code);
+        Assert.False(status.Failure?.RebaseRecoveryAvailable);
+    }
+
+    [Fact]
+    public void BuildLookup_MergedLocallyWithPushNotYetAttempted_StaysIntegrated()
+    {
+        // The ordinary async lag between the local merge landing and the
+        // deferred push queue draining must never flicker the badge to a
+        // failure state: only a recorded TERMINAL push failure downgrades the
+        // verdict away from Integrated.
+        var (repo, _) = SeedDevelopMainRepoWithOrigin();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/push-pending");
+        File.WriteAllText(Path.Combine(repo, "work.txt"), "task work");
+        Commit(repo, "feat: task work");
+        var anchor = RunGit(repo, "rev-parse task/push-pending").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/push-pending");
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("push-pending", "AGT-2689", project, repo, log, commits: new[] { Commit(anchor) },
+            prov: Prov(branch: "task/push-pending"));
+
+        var status = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+    }
+
     [Theory]
     [InlineData(
         "Release source 'origin/result' must be rebased onto 'main' before the full-suite gate.",
@@ -725,6 +803,23 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         RunGit(repo, "checkout -q -b develop");
         RunGit(repo, "checkout -q main");
         return repo;
+    }
+
+    /// <summary>
+    /// Same seed as <see cref="SeedDevelopMainRepo"/>, plus a bare "origin"
+    /// remote with both branches pushed, so <c>refs/remotes/origin/develop</c>
+    /// exists and can be left behind a later LOCAL-only merge (AGT-2688:
+    /// distinguishing "landed on the local branch" from "reached origin").
+    /// </summary>
+    private (string Repo, string Remote) SeedDevelopMainRepoWithOrigin()
+    {
+        var repo = SeedDevelopMainRepo();
+        var remote = Path.Combine(_tempDir, "origin-" + Guid.NewGuid().ToString("N")[..8] + ".git");
+        RunGit(_tempDir, $"init --bare -q --initial-branch=main \"{remote}\"");
+        RunGit(repo, $"remote add origin \"{remote}\"");
+        RunGit(repo, "push -q -u origin main");
+        RunGit(repo, "push -q -u origin develop");
+        return (repo, remote);
     }
 
     private static TaskProvenance Prov(string branch, string? merge = null, string? tip = null)

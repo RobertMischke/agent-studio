@@ -92,6 +92,19 @@ public static class AcceptanceRailPolicy
                 "git-derived-integrated");
         }
 
+        // AGT-2688: a delivery that merged locally but whose push to origin was
+        // blocked can never become "recoverable" by waiting - the rejection is
+        // durable, not a transient conflict a rebase can fix. Escalate it
+        // immediately instead of leaving it to fall through to the silent,
+        // indefinite "not-recoverable" ignore below, which is how such a card
+        // used to sit unresolved in Human Review with no alarm.
+        if (string.Equals(integration?.Status, IntegrationStatuses.PushBlocked, StringComparison.Ordinal))
+        {
+            return new AcceptanceRailDecision(
+                AcceptanceRailAction.Escalate,
+                "integration-push-blocked");
+        }
+
         var recoverableConflict = string.Equals(
                 integration?.Status,
                 IntegrationStatuses.ConflictSkipped,

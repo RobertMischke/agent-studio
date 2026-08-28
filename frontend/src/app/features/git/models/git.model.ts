@@ -485,6 +485,7 @@ export type IntegrationStatusValue =
   | 'partial'
   | 'pending'
   | 'conflict-skipped'
+  | 'integration-push-blocked'
   | 'no-branch';
 
 /**
@@ -499,7 +500,7 @@ export type IntegrationStatusValue =
  * not in an accepted lane.
  */
 export interface TaskIntegrationStatus {
-  /** integrated | pending | conflict-skipped | no-branch. */
+  /** integrated | pending | conflict-skipped | integration-push-blocked | no-branch. */
   status: IntegrationStatusValue;
   /** Actual delivery ref from card truth; null only when no ref is evidenced. */
   deliveryRef: string | null;

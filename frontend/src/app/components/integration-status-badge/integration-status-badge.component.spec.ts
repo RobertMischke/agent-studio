@@ -177,6 +177,25 @@ describe('IntegrationStatusBadgeComponent', () => {
     http.verify();
   });
 
+  it('renders integration-push-blocked as a hard red badge distinct from a merge conflict', () => {
+    const fixture = render(integration('integration-push-blocked', {
+      detail: 'Merged into develop locally, but the push to origin failed: remote-rejected.',
+      failure: {
+        code: 'integration-push-blocked',
+        label: 'Integration push blocked',
+        reason: 'Push of the integration branch to origin failed (remote-rejected).',
+        rebaseRecoveryAvailable: false,
+      },
+    }));
+    const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
+    expect(badge.textContent).toContain('Integration push blocked');
+    expect(badge.dataset['kind']).toBe('conflict');
+    expect(badge.classList.contains('integration-badge--acute')).toBe(true);
+    expect(fixture.componentInstance.tooltip()).toContain('Push of the integration branch to origin failed');
+    // Never offers the rebase-recovery action: a rejected push cannot be fixed by rebasing.
+    expect(fixture.nativeElement.querySelector('[data-testid="task-card-integration-recovery"]')).toBeNull();
+  });
+
   it('renders no-branch as grey "kein Branch"', () => {
     const fixture = render(integration('no-branch'));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;

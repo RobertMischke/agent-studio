@@ -1577,6 +1577,62 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.Equal("error", step.Verdict);
     }
 
+    [Fact]
+    public async Task Run_LocalDeliveryBehindOrigin_SyncsThenMergesThenPushesFastForward()
+    {
+        // AGT-2688: local develop is merely STALE (behind origin, no local-only
+        // commits of its own) - a competing writer landed a commit on
+        // origin/develop that this checkout has not fetched yet. This is not a
+        // real divergence: SynchronizeIntegrationBranch must fast-forward local
+        // develop to origin's tip before folding in the task branch, so the
+        // later deferred push is a clean fast-forward instead of a rejected,
+        // "lineage-blocked"-looking non-fast-forward.
+        var (repo, remote) = SeedRepoWithOrigin("develop-behind");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "push -q -u origin develop");
+
+        // A competing writer (another instance / process) pushes to
+        // origin/develop from a separate clone; our checkout never fetched it.
+        var competing = Path.Combine(_tempDir, "develop-behind-competing");
+        RunGit(_tempDir, $"clone -q \"{remote}\" \"{competing}\"");
+        RunGit(competing, "config user.email test@example.com");
+        RunGit(competing, "config user.name test");
+        RunGit(competing, "checkout -q -b develop origin/develop");
+        File.WriteAllText(Path.Combine(competing, "upstream.txt"), "upstream advanced develop");
+        Commit(competing, "chore: upstream advanced develop");
+        RunGit(competing, "push -q origin develop");
+        var upstreamTip = RunGit(competing, "rev-parse develop").Out.Trim();
+
+        // Our checkout is still on the pre-advance local develop tip.
+        Assert.NotEqual(upstreamTip, RunGit(repo, "rev-parse develop").Out.Trim());
+
+        RunGit(repo, "checkout -q -b task/65");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "65");
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+
+        var outcome = runner.Run("Fixture", "65", jobFolder, repo, "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        // Local develop absorbed the upstream advance (fast-forward) before the
+        // task branch merged on top of it.
+        Assert.Equal(0, RunGit(repo, $"merge-base --is-ancestor {upstreamTip} develop").Code);
+
+        var pushResult = await runner.PushIntegrationBranchAsync("Fixture", "65", jobFolder, repo, "develop");
+
+        Assert.True(pushResult.Success);
+        Assert.Equal("pushed", pushResult.Status);
+        Assert.Equal(RunGit(repo, "rev-parse develop").Out.Trim(), RemoteSha(remote, "develop"));
+
+        var pushStep = ReadPushStep(log, jobFolder);
+        Assert.NotNull(pushStep);
+        Assert.Equal(PipelineStepStatus.Passed, pushStep!.Status);
+        Assert.Equal("pushed", pushStep.Verdict);
+    }
+
     /// <summary>
     /// A verify command that leaves a durable, checkable trace and exits zero on
     /// every platform: it tags the commit the gate actually checked out. Git tags

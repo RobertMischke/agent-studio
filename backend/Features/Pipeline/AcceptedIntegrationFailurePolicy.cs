@@ -17,6 +17,13 @@ public static class AcceptedIntegrationFailureCodes
     public const string ReviewSubjectInvalid = "review-subject-invalid";
     public const string NoTaskBranch = "no-task-branch";
     public const string IntegrationError = "integration-error";
+
+    /// <summary>
+    /// The merge landed on the local integration branch but the deferred push
+    /// to origin recorded a terminal failure (AGT-2688). Distinct from
+    /// <see cref="MergeConflict"/>: nothing here can be fixed with a rebase.
+    /// </summary>
+    public const string IntegrationPushBlocked = "integration-push-blocked";
 }
 
 /// <summary>
@@ -116,6 +123,23 @@ public static class AcceptedIntegrationFailurePolicy
         };
     }
 
+    /// <summary>
+    /// Classifies a terminal <see cref="PipelineCatalogue.MergeIntoDevelopPushStepId"/>
+    /// failure. Unlike <see cref="Classify"/> (the merge-step vocabulary), the
+    /// push step's verdict is always <c>environmental</c> or <c>error</c>
+    /// (<see cref="AgentStudio.Pipeline.MergeIntoDevelopRunner"/>) - there is no
+    /// rebase that fixes a rejected push, so this is always non-recoverable.
+    /// </summary>
+    public static AcceptedIntegrationFailure ClassifyPushBlocked(string? reason, string? verdictSummary)
+        => new(
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            "Integration push blocked",
+            FirstNonBlank(
+                reason,
+                verdictSummary,
+                "The integration branch merged locally, but the push to origin failed."),
+            RebaseRecoveryAvailable: false);
+
     private static string InferCode(string? verdict, string? reason)
     {
         if (string.Equals(verdict, "conflict", StringComparison.OrdinalIgnoreCase))
@@ -161,6 +185,7 @@ public static class AcceptedIntegrationFailurePolicy
             AcceptedIntegrationFailureCodes.ReviewSubjectInvalid => AcceptedIntegrationFailureCodes.ReviewSubjectInvalid,
             AcceptedIntegrationFailureCodes.NoTaskBranch => AcceptedIntegrationFailureCodes.NoTaskBranch,
             AcceptedIntegrationFailureCodes.IntegrationError => AcceptedIntegrationFailureCodes.IntegrationError,
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked => AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
             _ => null,
         };
     }

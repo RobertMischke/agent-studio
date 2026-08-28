@@ -48,6 +48,10 @@ export class IntegrationStatusBadgeComponent {
       case 'partial': return 'partial';
       case 'pending': return 'pending';
       case 'conflict-skipped': return 'conflict';
+      // Reuses the "conflict" (red, needs-a-human) styling: like a merge
+      // conflict, this is accepted work that is NOT (fully) on origin and
+      // cannot resolve itself, but a rebase never fixes a rejected push.
+      case 'integration-push-blocked': return 'conflict';
       default: return 'no-branch';
     }
   });
@@ -55,7 +59,7 @@ export class IntegrationStatusBadgeComponent {
   /** True for the states that mean "accepted, but the code is NOT (fully) in develop". */
   readonly acute = computed(() => {
     const s = this.integration()?.status;
-    return s === 'partial' || s === 'pending' || s === 'conflict-skipped';
+    return s === 'partial' || s === 'pending' || s === 'conflict-skipped' || s === 'integration-push-blocked';
   });
 
   readonly recoveryAvailable = computed(() => {
@@ -75,6 +79,7 @@ export class IntegrationStatusBadgeComponent {
       case 'partial': return 'teilweise integriert';
       case 'pending': return 'NICHT integriert';
       case 'conflict-skipped': return value.failure?.label ?? 'Integration failed';
+      case 'integration-push-blocked': return value.failure?.label ?? 'Integration push blocked';
       default: return 'kein Branch';
     }
   });
@@ -107,6 +112,8 @@ export class IntegrationStatusBadgeComponent {
           return value.failure?.label
             ? `${value.failure.label}; the work is NOT integrated into ${branch}`
             : `Integration into ${branch} failed; the work is NOT integrated`;
+        case 'integration-push-blocked':
+          return `Merged into ${branch} locally, but the push to origin failed; origin does NOT have this work`;
         default:
           return 'No task branch or commit to integrate';
       }
@@ -123,6 +130,7 @@ export class IntegrationStatusBadgeComponent {
       case 'partial': return `Partially integrated into ${branch}`;
       case 'pending': return `Not integrated into ${branch}`;
       case 'conflict-skipped': return `${value.failure?.label ?? 'Integration failed'}; not integrated into ${branch}`;
+      case 'integration-push-blocked': return `Merged locally into ${branch}, but not pushed to origin`;
       default: return 'No branch to integrate';
     }
   });

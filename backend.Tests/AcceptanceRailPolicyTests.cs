@@ -126,11 +126,37 @@ public sealed class AcceptanceRailPolicyTests
         Assert.Equal("no-code-acceptance", decision.Reason);
     }
 
+    [Fact]
+    public void PushBlockedCard_IsEscalatedNotSilentlyIgnored()
+    {
+        // AGT-2688: a delivery that merged into develop locally but whose push
+        // to origin was terminally blocked must alarm (escalate) instead of
+        // sitting in Human Review forever under the generic "not-recoverable"
+        // ignore - it can never become recoverable by waiting, unlike a
+        // rebase-fixable merge conflict.
+        var decision = AcceptanceRailPolicy.Decide(
+            Card(),
+            Status(IntegrationStatuses.PushBlocked) with
+            {
+                Failure = new TaskIntegrationFailure
+                {
+                    Code = AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+                    RebaseRecoveryAvailable = false,
+                },
+            },
+            conflictRequeues: 0,
+            Options);
+
+        Assert.Equal(AcceptanceRailAction.Escalate, decision.Action);
+        Assert.Equal("integration-push-blocked", decision.Reason);
+    }
+
     [Theory]
     [InlineData(IntegrationStatuses.Pending)]
     [InlineData(IntegrationStatuses.Partial)]
     [InlineData(IntegrationStatuses.NoBranch)]
     [InlineData(IntegrationStatuses.ConflictSkipped)]
+    [InlineData(IntegrationStatuses.PushBlocked)]
     public void NonIntegratedCard_IsNeverAccepted(string integrationStatus)
     {
         var status = integrationStatus == IntegrationStatuses.ConflictSkipped

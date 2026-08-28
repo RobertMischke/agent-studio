@@ -270,9 +270,10 @@ public sealed class TaskIntegrationStatusService
             && !string.IsNullOrWhiteSpace(reviewedResultSha)
             && AncestorSetContains(reach.DevelopAncestors, reviewedResultSha))
         {
-            return Integrated(
-                Short(reviewedResultSha),
-                branchName,
+            return IntegratedOrPushBlocked(
+                job,
+                reach,
+                reviewedResultSha!,
                 deliveryRef,
                 "reviewed-result-ancestor");
         }
@@ -294,7 +295,7 @@ public sealed class TaskIntegrationStatusService
         // ALL attributed commits landed. Attempt history and recorded merge
         // provenance are deliberately irrelevant to this result.
         if (missing.Count == 0)
-            return Integrated(Short(newest), branchName, deliveryRef, "anchor-ancestor");
+            return IntegratedOrPushBlocked(job, reach, newest, deliveryRef, "anchor-ancestor");
 
         // SOME landed, some did not → partial, naming the missing short-SHAs so the
         // tooltip says exactly which attributed commits are not in develop yet.
@@ -377,6 +378,47 @@ public sealed class TaskIntegrationStatusService
         IntegrationBranch = branchName,
         Detail = detail,
     };
+
+    /// <summary>
+    /// AGT-2688: an anchor that is an ancestor of the LOCAL integration branch
+    /// is only honestly <see cref="IntegrationStatuses.Integrated"/> once origin
+    /// has it too. <see cref="RepoIntegration.DevelopAncestors"/> is a union of
+    /// local and <c>origin/&lt;branch&gt;</c> so a momentary lag before the
+    /// deferred push runs never flickers the badge; this only downgrades the
+    /// verdict once the push step recorded a TERMINAL failure (never for a
+    /// push that has not run yet, or that is skipped on a local-only repo).
+    /// </summary>
+    private TaskIntegrationStatus IntegratedOrPushBlocked(
+        TaskInfo job,
+        RepoIntegration reach,
+        string sha,
+        string? deliveryRef,
+        string detail)
+    {
+        if (reach.OriginAncestors is null || AncestorSetContains(reach.OriginAncestors, sha))
+            return Integrated(Short(sha), reach.IntegrationBranch, deliveryRef, detail);
+
+        var pushStep = ReadLatestPushStep(job);
+        if (pushStep?.Status != PipelineStepStatus.Failed)
+            return Integrated(Short(sha), reach.IntegrationBranch, deliveryRef, detail);
+
+        var failure = AcceptedIntegrationFailurePolicy.ClassifyPushBlocked(pushStep.Reason, pushStep.VerdictSummary);
+        return new TaskIntegrationStatus
+        {
+            Status = IntegrationStatuses.PushBlocked,
+            Sha = Short(sha),
+            DeliveryRef = deliveryRef,
+            IntegrationBranch = reach.IntegrationBranch,
+            Detail = $"Merged into {reach.IntegrationBranch} locally, but the push to origin failed: {failure.Reason}",
+            Failure = new TaskIntegrationFailure
+            {
+                Code = failure.Code,
+                Label = failure.Label,
+                Reason = failure.Reason,
+                RebaseRecoveryAvailable = failure.RebaseRecoveryAvailable,
+            },
+        };
+    }
 
     /// <summary>
     /// Projects the same delivery-ref resolution used by acceptance onto the
@@ -462,6 +504,34 @@ public sealed class TaskIntegrationStatusService
             _logger.LogWarning(
                 ex,
                 "integration-status pipeline read failed for project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The deferred origin-push step, read separately from
+    /// <see cref="ReadLatestMergeStep"/> (a different step id) so a push that
+    /// fails AFTER a successful local merge is not invisible to the card
+    /// (AGT-2688: it used to be, letting a locally-merged-but-unpushed
+    /// delivery masquerade as fully integrated).
+    /// </summary>
+    private PipelineStepExecution? ReadLatestPushStep(TaskInfo job)
+    {
+        try
+        {
+            return _pipelineLog.Read(job.FolderPath)?.Steps.LastOrDefault(step =>
+                string.Equals(
+                    step.StepId,
+                    PipelineCatalogue.MergeIntoDevelopPushStepId,
+                    StringComparison.Ordinal));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "integration-status push-step read failed for project={Project} job={JobId}",
                 job.ProjectName,
                 job.Id);
             return null;
@@ -572,6 +642,11 @@ public sealed class TaskIntegrationStatusService
     /// <summary>
     /// The target-branch ancestor SHA set for one repository, cached per target
     /// HEAD fingerprint and computed under the read-only concurrency limiter.
+    /// Also resolves the <c>origin/&lt;branch&gt;</c>-only ancestor set (AGT-2688)
+    /// so a commit that only reached the LOCAL branch can be told apart from one
+    /// that actually reached origin; null when no origin mirror exists at all
+    /// (a local-only repository, where local ancestry is the only truth there
+    /// is).
     /// </summary>
     private RepoIntegration ComputeRepoIntegration(string root, string configuredBranch)
     {
@@ -588,7 +663,16 @@ public sealed class TaskIntegrationStatusService
                 [integrationBranch, "origin/" + integrationBranch],
                 out var ancestors);
 
-            return new RepoIntegration(integrationBranch, ancestors, succeeded);
+            // Failure (not "no origin configured", which --ignore-missing tolerates
+            // as an empty result) leaves this null so IntegratedOrPushBlocked falls
+            // back to the pre-AGT-2688 conservative reading instead of downgrading
+            // a verdict on unreliable data.
+            var originAncestors = _git.TryGetAncestorShaSet(
+                root, ["origin/" + integrationBranch], out var originOnly)
+                ? originOnly
+                : null;
+
+            return new RepoIntegration(integrationBranch, ancestors, succeeded, originAncestors);
         });
     }
 
@@ -605,7 +689,8 @@ public sealed class TaskIntegrationStatusService
     private sealed record RepoIntegration(
         string IntegrationBranch,
         HashSet<string> DevelopAncestors,
-        bool Succeeded);
+        bool Succeeded,
+        HashSet<string>? OriginAncestors);
 
     private sealed record RepoBranchKey(string Root, string Branch);
 }

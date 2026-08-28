@@ -137,6 +137,11 @@ public static class HumanReviewEscalationCategories
     /// configured conflict-requeue budget.</summary>
     public const string IntegrationRecoveryExhausted = "integration-recovery-exhausted";
 
+    /// <summary>AGT-2688: the delivery merged into the local integration branch
+    /// but the deferred push to origin recorded a terminal failure. No rebase
+    /// or requeue fixes this - it needs an operator decision.</summary>
+    public const string IntegrationPushBlocked = "integration-push-blocked";
+
     /// <summary>An unanswered steer / NeedsInput question timed out (Run-Liveness
     /// Slice B, concept Rule 2) and the answer was not derivable from the task
     /// context. Routed to 5e-escalated with a clear reason instead of waiting
