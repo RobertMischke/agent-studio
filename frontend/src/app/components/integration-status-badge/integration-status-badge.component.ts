@@ -12,6 +12,7 @@ import { TaskService } from '../../services/task.service';
  *   - green  "merged @sha"          — every attributed commit is provably in develop,
  *   - orange "teilweise integriert" — some attributed commits are in develop, some are not,
  *   - amber  "NICHT integriert"     — accepted work is still not in develop,
+ *   - red    "Push blocked"         - merged locally, but publishing to origin was refused,
  *   - red    "Integration failed"   — the integration step reached a failed outcome,
  *   - grey   "kein Branch"          — nothing to integrate (read-only / no code).
  *
@@ -42,11 +43,14 @@ export class IntegrationStatusBadgeComponent {
   readonly visible = computed(() => !!this.integration());
 
   /** Coarse visual kind for colour theming. */
-  readonly kind = computed<'integrated' | 'partial' | 'pending' | 'conflict' | 'no-branch'>(() => {
+  readonly kind = computed<
+    'integrated' | 'partial' | 'pending' | 'push-blocked' | 'conflict' | 'no-branch'
+  >(() => {
     switch (this.integration()?.status) {
       case 'integrated': return 'integrated';
       case 'partial': return 'partial';
       case 'pending': return 'pending';
+      case 'integration-push-blocked': return 'push-blocked';
       case 'conflict-skipped': return 'conflict';
       default: return 'no-branch';
     }
@@ -55,11 +59,16 @@ export class IntegrationStatusBadgeComponent {
   /** True for the states that mean "accepted, but the code is NOT (fully) in develop". */
   readonly acute = computed(() => {
     const s = this.integration()?.status;
-    return s === 'partial' || s === 'pending' || s === 'conflict-skipped';
+    return s === 'partial'
+      || s === 'pending'
+      || s === 'integration-push-blocked'
+      || s === 'conflict-skipped';
   });
 
   readonly recoveryAvailable = computed(() => {
     const value = this.integration();
+    // A blocked publish is not a source-state problem, so rebasing the delivery
+    // cannot resolve it. Only an operator converging the branch can.
     if (value?.status !== 'conflict-skipped') return false;
     // Legacy payloads did not carry a classification and represented only
     // merge conflicts. Preserve their recovery action while new payloads use
@@ -74,6 +83,7 @@ export class IntegrationStatusBadgeComponent {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
       case 'partial': return 'teilweise integriert';
       case 'pending': return 'NICHT integriert';
+      case 'integration-push-blocked': return 'Push blocked';
       case 'conflict-skipped': return value.failure?.label ?? 'Integration failed';
       default: return 'kein Branch';
     }
@@ -83,6 +93,7 @@ export class IntegrationStatusBadgeComponent {
     switch (this.kind()) {
       case 'integrated': return '✓'; // check
       case 'partial': return '◐';    // half-filled circle
+      case 'push-blocked': return '⇧'; // upward push, refused
       case 'conflict': return '⚠';   // warning
       case 'pending': return '○';    // hollow circle
       default: return '–';           // en dash
@@ -103,6 +114,9 @@ export class IntegrationStatusBadgeComponent {
           return `Partially integrated into ${branch} — some attributed commits are NOT in ${branch}`;
         case 'pending':
           return `Accepted, but NOT integrated into ${branch}`;
+        case 'integration-push-blocked':
+          return `Merged into the local ${branch}, but publishing it to origin was blocked; `
+            + `the work is NOT on the ${branch} acceptance reads. An operator has to converge the branch.`;
         case 'conflict-skipped':
           return value.failure?.label
             ? `${value.failure.label}; the work is NOT integrated into ${branch}`
@@ -122,6 +136,8 @@ export class IntegrationStatusBadgeComponent {
       case 'integrated': return `Integrated into ${branch}`;
       case 'partial': return `Partially integrated into ${branch}`;
       case 'pending': return `Not integrated into ${branch}`;
+      case 'integration-push-blocked':
+        return `Integration push blocked; the work is not on the published ${branch}`;
       case 'conflict-skipped': return `${value.failure?.label ?? 'Integration failed'}; not integrated into ${branch}`;
       default: return 'No branch to integrate';
     }

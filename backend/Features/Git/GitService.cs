@@ -32,6 +32,13 @@ public enum IntegrationBranchSyncOutcome
     RemoteAhead,
     LocalAhead,
     NoRemote,
+
+    /// <summary>
+    /// The local integration branch was diverged from origin and has been
+    /// converged by merging <c>origin/&lt;branch&gt;</c> back into it, so the
+    /// next publish of this branch fast-forwards.
+    /// </summary>
+    Reconciled,
     Diverged,
     Error,
 }
@@ -4113,24 +4120,40 @@ public class GitService
             return fetched;
 
         var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
-        if (!BranchExists(repoRoot, integrationBranch))
-            return new(IntegrationBranchSyncOutcome.RemoteAhead);
-
-        var localTip = GetBranchTip(repoRoot, integrationBranch);
+        var localBranchExists = BranchExists(repoRoot, integrationBranch);
+        var localTip = localBranchExists ? GetBranchTip(repoRoot, integrationBranch) : null;
         var remoteTip = GetBranchTip(repoRoot, remoteIntegrationRef);
-        if (string.IsNullOrWhiteSpace(localTip) || string.IsNullOrWhiteSpace(remoteTip))
+        if (localBranchExists && (string.IsNullOrWhiteSpace(localTip) || string.IsNullOrWhiteSpace(remoteTip)))
             return new(
                 IntegrationBranchSyncOutcome.Error,
                 $"Could not resolve local and origin tips for integration branch '{integrationBranch}'.");
-        if (string.Equals(localTip, remoteTip, StringComparison.OrdinalIgnoreCase))
-            return new(IntegrationBranchSyncOutcome.UpToDate);
-        if (IsAncestor(repoRoot, remoteIntegrationRef, integrationBranch))
-            return new(IntegrationBranchSyncOutcome.LocalAhead);
-        if (IsAncestor(repoRoot, integrationBranch, remoteIntegrationRef))
-            return new(IntegrationBranchSyncOutcome.RemoteAhead);
 
+        var decision = IntegrationBranchReconciliationPolicy.Decide(
+            hasRemote: true,
+            localBranchExists: localBranchExists,
+            tipsEqual: localBranchExists
+                && string.Equals(localTip, remoteTip, StringComparison.OrdinalIgnoreCase),
+            remoteIsAncestorOfLocal: localBranchExists
+                && IsAncestor(repoRoot, remoteIntegrationRef, integrationBranch),
+            localIsAncestorOfRemote: localBranchExists
+                && IsAncestor(repoRoot, integrationBranch, remoteIntegrationRef));
+
+        switch (decision.Mode)
+        {
+            case IntegrationBranchReconciliationMode.AlreadyCurrent:
+                return new(IntegrationBranchSyncOutcome.UpToDate);
+            case IntegrationBranchReconciliationMode.PublishLocal:
+                return new(IntegrationBranchSyncOutcome.LocalAhead);
+            case IntegrationBranchReconciliationMode.CreateFromRemote:
+            case IntegrationBranchReconciliationMode.FastForwardFromRemote:
+                return new(IntegrationBranchSyncOutcome.RemoteAhead);
+        }
+
+        // Read-only truth for the transactional accept path: divergence is
+        // reported, never healed here. SynchronizeIntegrationBranch owns the
+        // convergence merge because it is the only caller allowed to move refs.
         var detail =
-            $"Integration branch '{integrationBranch}' diverged from origin - heal or recreate it via project settings before accepting deliveries.";
+            $"Integration branch '{integrationBranch}' diverged from origin - it must be converged with origin/{integrationBranch} before deliveries can be published.";
         _logger.LogWarning(
             "Integration branch {Integration} at {Path} diverged from origin; refusing to overwrite either tip",
             integrationBranch,
@@ -4147,8 +4170,14 @@ public class GitService
     /// remote-delivery path synchronized - so a locally diverged integration
     /// branch silently absorbed delivery after delivery on a stale tip, and every
     /// later merge attempt reported success while origin never saw the work. The
-    /// synchronization is now symmetric; genuine divergence is surfaced by
-    /// <see cref="MergeRefIntoIntegration"/> as an explicit error instead.</para>
+    /// synchronization is now symmetric.</para>
+    ///
+    /// <para>A branch that has genuinely diverged (an unpublished local merge on
+    /// one side, an advanced origin on the other) is converged by merging
+    /// <c>origin/&lt;branch&gt;</c> back into the local branch, so the publish
+    /// that follows fast-forwards instead of being rejected forever. Only a
+    /// conflicting convergence stays <see cref="IntegrationBranchSyncOutcome.Diverged"/>
+    /// and needs an operator.</para>
     /// </summary>
     public IntegrationBranchSyncResult SynchronizeIntegrationBranch(
         string repoRoot,
@@ -4156,6 +4185,8 @@ public class GitService
         CancellationToken cancellationToken = default)
     {
         var refreshed = RefreshIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
+        if (refreshed.Outcome == IntegrationBranchSyncOutcome.Diverged)
+            return ReconcileDivergedIntegrationBranch(repoRoot, integrationBranch, refreshed);
         if (!refreshed.Success
             || refreshed.Outcome != IntegrationBranchSyncOutcome.RemoteAhead)
             return refreshed;
@@ -4213,6 +4244,68 @@ public class GitService
             AbbreviateSha(localTip),
             AbbreviateSha(remoteTip));
         return new(IntegrationBranchSyncOutcome.FastForwarded);
+    }
+
+    /// <summary>
+    /// Converges a diverged local integration branch on origin by merging
+    /// <c>origin/&lt;branch&gt;</c> into it. Neither side is rewritten or
+    /// discarded, so an unpublished local delivery merge survives and the
+    /// publish that follows is a fast-forward. A conflicting convergence is
+    /// aborted and reported as still diverged.
+    /// </summary>
+    private IntegrationBranchSyncResult ReconcileDivergedIntegrationBranch(
+        string repoRoot,
+        string integrationBranch,
+        IntegrationBranchSyncResult diverged)
+    {
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        if (DirtyTreeRefusal(
+                repoRoot,
+                "Integration working tree has uncommitted changes; refusing to converge it with origin.") is { } dirtyRefusal)
+            return new(IntegrationBranchSyncOutcome.Error, dirtyRefusal);
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, integrationBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(repoRoot, "checkout", integrationBranch);
+            if (checkoutCode != 0)
+                return new(
+                    IntegrationBranchSyncOutcome.Error,
+                    $"Could not check out '{integrationBranch}' to converge it with origin: {checkoutError.Trim()}");
+        }
+
+        var before = GetBranchTip(repoRoot, integrationBranch) ?? "";
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot,
+            "-c",
+            "rerere.enabled=false",
+            "merge",
+            "--no-edit",
+            "-m",
+            $"chore(integration): converge {integrationBranch} with origin/{integrationBranch}",
+            remoteIntegrationRef);
+        if (mergeCode != 0)
+        {
+            RunGitArgs(repoRoot, "merge", "--abort");
+            _logger.LogWarning(
+                "Integration branch {Integration} at {Path} could not be converged with origin: {Error}",
+                integrationBranch,
+                repoRoot,
+                mergeError.Trim());
+            return diverged with
+            {
+                Error = $"{diverged.Error} Converging it with origin/{integrationBranch} conflicts: {mergeError.Trim()}",
+            };
+        }
+
+        _logger.LogInformation(
+            "Integration branch {Integration} at {Path} converged with origin from {Before} to {After}",
+            integrationBranch,
+            repoRoot,
+            AbbreviateSha(before),
+            AbbreviateSha(GetBranchTip(repoRoot, integrationBranch) ?? ""));
+        return new(IntegrationBranchSyncOutcome.Reconciled);
     }
 
     private IntegrationBranchSyncResult FetchIntegrationBranch(

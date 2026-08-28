@@ -92,6 +92,22 @@ public static class AcceptanceRailPolicy
                 "git-derived-integrated");
         }
 
+        // A delivery that is merged locally but was refused publication never
+        // becomes integrated on its own, and re-delivering it would only repeat
+        // the refused push. Escalate once so an operator converges the branch,
+        // instead of leaving the card on the rail to be re-scanned forever.
+        if (string.Equals(
+                integration?.Status,
+                IntegrationStatuses.PushBlocked,
+                StringComparison.Ordinal))
+        {
+            return task.State == TaskStates.Escalated
+                ? Ignore("integration-push-blocked-already-escalated")
+                : new AcceptanceRailDecision(
+                    AcceptanceRailAction.Escalate,
+                    "integration-push-blocked");
+        }
+
         var recoverableConflict = string.Equals(
                 integration?.Status,
                 IntegrationStatuses.ConflictSkipped,

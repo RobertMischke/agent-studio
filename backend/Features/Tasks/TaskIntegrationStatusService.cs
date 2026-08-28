@@ -268,7 +268,7 @@ public sealed class TaskIntegrationStatusService
         var reviewedResultSha = ReviewSubjectStore.Read(job.FolderPath)?.ResultSha;
         if (attributed.Count == 0
             && !string.IsNullOrWhiteSpace(reviewedResultSha)
-            && AncestorSetContains(reach.DevelopAncestors, reviewedResultSha))
+            && AncestorSetContains(reach.AcceptanceAncestors, reviewedResultSha))
         {
             return Integrated(
                 Short(reviewedResultSha),
@@ -278,11 +278,25 @@ public sealed class TaskIntegrationStatusService
         }
 
         if (attributed.Count == 0)
-            return ClassifyNotIntegrated(job, branchName, deliveryRef);
+        {
+            return reviewedResultSha is not null
+                   && AncestorSetContains(reach.DevelopAncestors, reviewedResultSha)
+                ? ClassifyUnpublished(job, branchName, deliveryRef, [reviewedResultSha])
+                : ClassifyNotIntegrated(job, branchName, deliveryRef);
+        }
 
         var missing = new List<string>();
         foreach (var sha in attributed)
-            if (!AncestorSetContains(reach.DevelopAncestors, sha)) missing.Add(sha);
+            if (!AncestorSetContains(reach.AcceptanceAncestors, sha)) missing.Add(sha);
+
+        // Merged into the local integration branch but not published. This is
+        // never "pending forever": either the publish is still queued, or it was
+        // refused and the card has to leave the acceptance rail.
+        var unpublished = missing
+            .Where(sha => AncestorSetContains(reach.DevelopAncestors, sha))
+            .ToList();
+        if (unpublished.Count == missing.Count && missing.Count > 0)
+            return ClassifyUnpublished(job, branchName, deliveryRef, unpublished);
 
         // NONE of the attributed commits landed → conflict-skipped / pending
         // (no-branch is impossible here: there IS attributed work).
@@ -307,6 +321,54 @@ public sealed class TaskIntegrationStatusService
             IntegrationBranch = branchName,
             Detail = $"{integratedCount}/{attributed.Count} attributed commits integrated; "
                      + $"missing: {missingShort}",
+        };
+    }
+
+    /// <summary>
+    /// Classifies work that is merged into the local integration branch but is
+    /// not on <c>origin</c>. A recorded publish failure makes this terminal:
+    /// nothing in the system will make those commits appear on the branch
+    /// acceptance reads, so the card reports
+    /// <see cref="IntegrationStatuses.PushBlocked"/> and leaves the acceptance
+    /// rail. Without a recorded failure the publish is simply still in flight
+    /// and the card stays pending until the queued push lands.
+    /// </summary>
+    private TaskIntegrationStatus ClassifyUnpublished(
+        TaskInfo job,
+        string branchName,
+        string? deliveryRef,
+        IReadOnlyList<string> unpublished)
+    {
+        var shas = string.Join(", ", unpublished.Select(Short));
+        var pushFailure = ReadPushFailure(job);
+        if (pushFailure is null)
+        {
+            return new TaskIntegrationStatus
+            {
+                Status = IntegrationStatuses.Pending,
+                DeliveryRef = deliveryRef,
+                IntegrationBranch = branchName,
+                Detail = $"Merged into the local {branchName}; publishing {shas} to origin/{branchName} is still in flight.",
+            };
+        }
+
+        var reason = $"Merged into the local {branchName}, but publishing {shas} to "
+                     + $"origin/{branchName} was refused: {pushFailure.Reason} "
+                     + $"The work is not on the branch acceptance reads; converge {branchName} "
+                     + "with origin and re-run the integration push.";
+        return new TaskIntegrationStatus
+        {
+            Status = IntegrationStatuses.PushBlocked,
+            DeliveryRef = deliveryRef,
+            IntegrationBranch = branchName,
+            Detail = reason,
+            Failure = new TaskIntegrationFailure
+            {
+                Code = AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+                Label = "Integration push blocked",
+                Reason = reason,
+                RebaseRecoveryAvailable = false,
+            },
         };
     }
 
@@ -447,14 +509,44 @@ public sealed class TaskIntegrationStatusService
                + "resolve the conflicts, and deliver the updated branch.";
     }
 
+    /// <summary>
+    /// Reads the durable integration-push step and classifies a recorded
+    /// failure. This is what separates "publish still queued" from "publish
+    /// refused", so a locally merged delivery is never reported as pending
+    /// forever.
+    /// </summary>
+    private AcceptedIntegrationFailure? ReadPushFailure(TaskInfo job)
+    {
+        var step = ReadLatestStep(job, PipelineCatalogue.MergeIntoDevelopPushStepId);
+        if (step is null || step.Status != PipelineStepStatus.Failed) return null;
+        return AcceptedIntegrationFailurePolicy.Classify(
+                   step.Status,
+                   step.Verdict,
+                   step.Reason,
+                   step.VerdictSummary,
+                   step.FailureCode)
+               ?? new AcceptedIntegrationFailure(
+                   AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+                   "Integration push blocked",
+                   FirstNonBlank(step.VerdictSummary, step.Reason, "The integration push was refused."),
+                   false);
+    }
+
+    private static string FirstNonBlank(params string?[] candidates)
+        => candidates.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c))?.Trim()
+           ?? string.Empty;
+
     internal PipelineStepExecution? ReadLatestMergeStep(TaskInfo job)
+        => ReadLatestStep(job, PipelineCatalogue.MergeIntoDevelopStepId);
+
+    private PipelineStepExecution? ReadLatestStep(TaskInfo job, string stepId)
     {
         try
         {
             return _pipelineLog.Read(job.FolderPath)?.Steps.LastOrDefault(step =>
                 string.Equals(
                     step.StepId,
-                    PipelineCatalogue.MergeIntoDevelopStepId,
+                    stepId,
                     StringComparison.Ordinal));
         }
         catch (Exception ex)
@@ -583,12 +675,26 @@ public sealed class TaskIntegrationStatusService
                 ? integrationRef["origin/".Length..]
                 : integrationRef;
 
+            var publishedRef = "origin/" + integrationBranch;
             var succeeded = _git.TryGetAncestorShaSet(
                 root,
-                [integrationBranch, "origin/" + integrationBranch],
+                [integrationBranch, publishedRef],
                 out var ancestors);
 
-            return new RepoIntegration(integrationBranch, ancestors, succeeded);
+            // Acceptance truth is the published line alone: a delivery merged
+            // into the local branch whose publish was refused is NOT on the
+            // branch the next claim, the next merge, and every other checkout
+            // will see. A repository without a published line keeps the local
+            // branch as its only truth.
+            var hasPublishedLine = _git.TryGetAncestorShaSet(root, [publishedRef], out var published)
+                                   && published.Count > 0;
+
+            return new RepoIntegration(
+                integrationBranch,
+                ancestors,
+                published,
+                hasPublishedLine,
+                succeeded);
         });
     }
 
@@ -602,10 +708,30 @@ public sealed class TaskIntegrationStatusService
 
     private static string Short(string sha) => sha.Length > 7 ? sha[..7] : sha;
 
+    /// <param name="DevelopAncestors">
+    /// Union of the local and published integration line. Used only to rescue
+    /// marker-shaped commits during attribution, never as acceptance truth.
+    /// </param>
+    /// <param name="PublishedAncestors">
+    /// Reachable from <c>origin/&lt;branch&gt;</c> alone. This is what
+    /// acceptance reads, so a merge that never reached origin cannot pass as
+    /// integrated.
+    /// </param>
+    /// <param name="HasPublishedLine">
+    /// False for a repository without an <c>origin/&lt;branch&gt;</c> ref, where
+    /// the local branch is the only line that exists and therefore is the truth.
+    /// </param>
     private sealed record RepoIntegration(
         string IntegrationBranch,
         HashSet<string> DevelopAncestors,
-        bool Succeeded);
+        HashSet<string> PublishedAncestors,
+        bool HasPublishedLine,
+        bool Succeeded)
+    {
+        /// <summary>The ancestor set acceptance is allowed to trust.</summary>
+        public HashSet<string> AcceptanceAncestors
+            => HasPublishedLine ? PublishedAncestors : DevelopAncestors;
+    }
 
     private sealed record RepoBranchKey(string Root, string Branch);
 }

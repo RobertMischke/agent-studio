@@ -53,6 +53,23 @@ public sealed class IntegrationPushBackstopHostedService : BackgroundService
                 step => step.StepId == PipelineCatalogue.MergeIntoDevelopPushStepId);
             if (previousPush?.Status is PipelineStepStatus.Passed or PipelineStepStatus.Skipped) continue;
 
+            // A refused push (diverged origin, lineage guard) cannot be cleared
+            // by re-driving the same push. Re-driving it every sweep is what
+            // turned one blocked delivery into an endless stream of identical
+            // failures; the card carries integration-push-blocked instead and
+            // waits for an operator to converge the branch.
+            if (string.Equals(
+                    previousPush?.FailureCode,
+                    AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+                    StringComparison.Ordinal))
+            {
+                _logger.LogDebug(
+                    "integration-push-backstop skipping {JobId}: the previous push was refused ({Reason})",
+                    job.Id,
+                    previousPush!.Reason);
+                continue;
+            }
+
             var settings = PipelineTypeSettings.ForTask(_settings.Get(job.ProjectName), job)!;
             if (!PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.MergeIntoDevelopPushStepId))
                 continue;

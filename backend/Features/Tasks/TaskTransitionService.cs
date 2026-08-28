@@ -1634,6 +1634,7 @@ public sealed class TaskTransitionService
     {
         if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return 0;
         if (requireCompletedState && job.State != TaskStates.Completed) return 0;
+        if (IsPublishedThroughIntegrationLine(job)) return 0;
 
         var commits = job.Commits.Count > 0
             ? job.Commits
@@ -1647,6 +1648,45 @@ public sealed class TaskTransitionService
                 pushed++;
         }
         return pushed;
+    }
+
+    /// <summary>
+    /// True when the project owns a release line and a work line, so raw task
+    /// commits are published by integrating them into the integration branch,
+    /// never by advancing <c>main</c> directly.
+    ///
+    /// <para>Auto-push used to attempt the direct <c>main</c> advance anyway.
+    /// <see cref="GitService.PushShaAsync"/> refused it every time (the lineage
+    /// guard is right), but the attempt was reported as a push FAILURE: a
+    /// warning plus a managed-repo-push-failed operator alarm per commit, on the
+    /// move to Completed and again on every backstop sweep, forever. Deciding it
+    /// here turns a structurally impossible push into a no-op that neither
+    /// alarms nor loops, while genuine push failures still surface.</para>
+    /// </summary>
+    private bool IsPublishedThroughIntegrationLine(TaskInfo job)
+    {
+        const string autoPushTarget = "main";
+        var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
+        if (string.IsNullOrWhiteSpace(root)) return false;
+
+        var integrationBranch = _git.ResolveIntegrationBranch(
+            root!,
+            _settings.Get(job.ProjectName).IntegrationBranch);
+        var decision = ImmediateIntegrationLineagePolicy.DecideDirectMainAdvance(
+            autoPushTarget,
+            developAvailable: !string.IsNullOrWhiteSpace(integrationBranch)
+                && !string.Equals(integrationBranch, autoPushTarget, StringComparison.OrdinalIgnoreCase),
+            candidateIsPublishedDevelopTip: false);
+        if (decision.Mode != ImmediateMainAdvanceMode.Blocked) return false;
+
+        _logger.LogDebug(
+            "Auto-push for {JobId} is a no-op: {Project} publishes through '{IntegrationBranch}', "
+            + "so raw task commits never advance '{Target}'.",
+            job.Id,
+            job.ProjectName,
+            integrationBranch,
+            autoPushTarget);
+        return true;
     }
 
     private enum AutoCommitScope

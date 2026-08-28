@@ -304,13 +304,24 @@ public static class IntegrationStatuses
     /// <summary>The task has integrable work that is not (yet) in develop.</summary>
     public const string Pending = "pending";
 
+    /// <summary>
+    /// The work is merged into the LOCAL integration branch but publishing it to
+    /// <c>origin</c> was refused, so it is not on the line acceptance reads.
+    /// Deliberately distinct from <see cref="Pending"/>: pending resolves itself
+    /// once the queued publish lands, whereas this state never resolves on its
+    /// own. It must alarm and take the card off the acceptance rail instead of
+    /// being re-checked forever.
+    /// </summary>
+    public const string PushBlocked = "integration-push-blocked";
+
     /// <summary>The deferred merge-into-develop step recorded a conflict / error; the work was NOT merged.</summary>
     public const string ConflictSkipped = "conflict-skipped";
 
     /// <summary>The card has no delivery ref and no attributed commit - nothing to integrate.</summary>
     public const string NoBranch = "no-branch";
 
-    public static readonly string[] All = [Integrated, Partial, Pending, ConflictSkipped, NoBranch];
+    public static readonly string[] All =
+        [Integrated, Partial, Pending, PushBlocked, ConflictSkipped, NoBranch];
 
     /// <summary>
     /// Persisted recovery marker stamped while transactional acceptance is
@@ -331,10 +342,11 @@ public static class IntegrationStatuses
         => string.Equals(tag, PendingTag, StringComparison.OrdinalIgnoreCase)
            || string.Equals(tag, "integration:pending", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>True when the card carries integrable work that is not (fully) in develop (partial, pending or conflict).</summary>
+    /// <summary>True when the card carries integrable work that is not (fully) in develop (partial, pending, push-blocked or conflict).</summary>
     public static bool IsNotIntegrated(string? status)
         => string.Equals(status, Partial, StringComparison.Ordinal)
            || string.Equals(status, Pending, StringComparison.Ordinal)
+           || string.Equals(status, PushBlocked, StringComparison.Ordinal)
            || string.Equals(status, ConflictSkipped, StringComparison.Ordinal);
 
     public static string Normalize(string? value)

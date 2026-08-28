@@ -1253,6 +1253,16 @@ public sealed class MergeIntoDevelopRunner
         _ => RunIssueKind.None,
     };
 
+    /// <summary>
+    /// Push outcomes that no amount of re-driving the same push can clear: the
+    /// remote refused the ref (diverged origin) or a lineage guard refused to
+    /// advance the target. The merge is on the local branch and nowhere else, so
+    /// the card must report <c>integration-push-blocked</c> and the backstop must
+    /// stop re-driving it.
+    /// </summary>
+    internal static bool IsPushBlocked(string? status)
+        => status is "remote-rejected" or "lineage-blocked" or "lineage-check-failed";
+
     private void RecordPushStep(
         string jobFolderPath,
         string project,
@@ -1279,6 +1289,9 @@ public sealed class MergeIntoDevelopRunner
             Verdict = verdict,
             VerdictSummary = summary,
             Reason = reason,
+            FailureCode = !result.Success && IsPushBlocked(result.Status)
+                ? AcceptedIntegrationFailureCodes.IntegrationPushBlocked
+                : null,
         });
     }
 

@@ -69,6 +69,36 @@ describe('IntegrationStatusBadgeComponent', () => {
     expect(fixture.componentInstance.tooltip()).toContain('beef123');
   });
 
+  it('renders integration-push-blocked as an acute badge without the rebase action', () => {
+    const fixture = TestBed.createComponent(IntegrationStatusBadgeComponent);
+    fixture.componentRef.setInput('integration', integration('integration-push-blocked', {
+      deliveryRef: 'runner/agent-runner-01/AGT-2688',
+      detail: 'Origin rejected the develop publish: lineage guard.',
+      failure: {
+        code: 'integration-push-blocked',
+        label: 'Integration push blocked',
+        reason: 'Publishing develop to origin was refused; an operator must converge the branch.',
+        rebaseRecoveryAvailable: false,
+      },
+    }));
+    fixture.componentRef.setInput('jobId', 'task-1');
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
+    expect(badge.textContent).toContain('Push blocked');
+    expect(badge.dataset['kind']).toBe('push-blocked');
+    expect(badge.dataset['integrationStatus']).toBe('integration-push-blocked');
+    expect(badge.dataset['integrationFailureCode']).toBe('integration-push-blocked');
+    expect(badge.classList.contains('integration-badge--acute')).toBe(true);
+    expect(fixture.componentInstance.recoveryAvailable()).toBe(false);
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="task-card-integration-recovery"]',
+    )).toBeNull();
+    expect(fixture.componentInstance.tooltip()).toContain('publishing it to origin was blocked');
+    expect(fixture.componentInstance.tooltip()).toContain('an operator must converge the branch');
+    expect(fixture.componentInstance.ariaLabel()).toContain('Integration push blocked');
+  });
+
   it('renders conflict-skipped as a hard red integration-failed badge', () => {
     const fixture = render(integration('conflict-skipped', {
       detail: 'No reviewed delivery branch exists.',

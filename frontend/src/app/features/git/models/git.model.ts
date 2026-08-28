@@ -479,11 +479,25 @@ export interface TaskMergeSignal {
   releaseSha: string | null;
 }
 
-/** One of the discrete integration verdicts (AGT-2202; `partial` added AGT-2171 fix). */
+/**
+ * One of the discrete integration verdicts (AGT-2202; `partial` added AGT-2171 fix,
+ * `integration-push-blocked` added AGT-2688). Mirrors backend `IntegrationStatuses`.
+ *
+ * - `integrated` - every attributed commit is provably in the integration branch.
+ * - `partial` - some attributed commits are in the integration branch, some are not.
+ * - `pending` - integrable work that is not (yet) in the integration branch.
+ * - `integration-push-blocked` - merged into the LOCAL integration branch, but
+ *   publishing that branch to origin was refused (diverged origin or a lineage
+ *   guard), so the work is NOT on the branch acceptance reads. Unlike `pending`
+ *   this never resolves on its own; an operator must converge the branch.
+ * - `conflict-skipped` - the merge step recorded a conflict / error; nothing merged.
+ * - `no-branch` - no delivery ref and no attributed commit; nothing to integrate.
+ */
 export type IntegrationStatusValue =
   | 'integrated'
   | 'partial'
   | 'pending'
+  | 'integration-push-blocked'
   | 'conflict-skipped'
   | 'no-branch';
 
@@ -499,7 +513,7 @@ export type IntegrationStatusValue =
  * not in an accepted lane.
  */
 export interface TaskIntegrationStatus {
-  /** integrated | pending | conflict-skipped | no-branch. */
+  /** integrated | partial | pending | integration-push-blocked | conflict-skipped | no-branch. */
   status: IntegrationStatusValue;
   /** Actual delivery ref from card truth; null only when no ref is evidenced. */
   deliveryRef: string | null;

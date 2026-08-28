@@ -16,6 +16,14 @@ public static class AcceptedIntegrationFailureCodes
     public const string ReviewSubjectTaskKeyUnavailable = "review-subject-task-key-unavailable";
     public const string ReviewSubjectInvalid = "review-subject-invalid";
     public const string NoTaskBranch = "no-task-branch";
+
+    /// <summary>
+    /// The merge landed on the local integration branch but publishing it to
+    /// <c>origin</c> was refused (diverged remote or a lineage guard). Terminal:
+    /// retrying the same push cannot succeed, so it must alarm instead of being
+    /// re-driven forever.
+    /// </summary>
+    public const string IntegrationPushBlocked = "integration-push-blocked";
     public const string IntegrationError = "integration-error";
 }
 
@@ -100,6 +108,14 @@ public static class AcceptedIntegrationFailurePolicy
                 "Review subject invalid",
                 "The reviewed delivery no longer matches the task's current authoritative run.",
                 RebaseRecoveryAvailable: false),
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked => new(
+                code,
+                "Integration push blocked",
+                FirstNonBlank(
+                    reason,
+                    verdictSummary,
+                    "The merge landed locally but publishing the integration branch to origin was refused."),
+                RebaseRecoveryAvailable: false),
             AcceptedIntegrationFailureCodes.NoTaskBranch => new(
                 code,
                 "No task branch",
@@ -160,6 +176,7 @@ public static class AcceptedIntegrationFailurePolicy
             AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable => AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable,
             AcceptedIntegrationFailureCodes.ReviewSubjectInvalid => AcceptedIntegrationFailureCodes.ReviewSubjectInvalid,
             AcceptedIntegrationFailureCodes.NoTaskBranch => AcceptedIntegrationFailureCodes.NoTaskBranch,
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked => AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
             AcceptedIntegrationFailureCodes.IntegrationError => AcceptedIntegrationFailureCodes.IntegrationError,
             _ => null,
         };
