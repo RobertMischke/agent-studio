@@ -34,6 +34,13 @@ public enum IntegrationBranchSyncOutcome
     NoRemote,
     Diverged,
     Error,
+    /// <summary>
+    /// The local integration branch had diverged from origin (two independent
+    /// writers advanced it), and an automatic <c>merge --no-ff origin/&lt;branch&gt;</c>
+    /// reconciled the two histories without conflicts. The local branch is now a
+    /// descendant of the fetched origin tip, so the next push is a fast-forward.
+    /// </summary>
+    Reconciled,
 }
 
 public record IntegrationBranchSyncResult(
@@ -43,6 +50,16 @@ public record IntegrationBranchSyncResult(
     public bool Success => Outcome is not (
         IntegrationBranchSyncOutcome.Diverged
         or IntegrationBranchSyncOutcome.Error);
+
+    /// <summary>
+    /// True when this sync mutated the local branch to converge with origin
+    /// (a plain fast-forward or an automatic reconciling merge). Both leave the
+    /// branch ready to fast-forward-push; callers that only care about "did the
+    /// branch move" can use this instead of enumerating both outcomes.
+    /// </summary>
+    public bool Converged => Outcome is
+        IntegrationBranchSyncOutcome.FastForwarded
+        or IntegrationBranchSyncOutcome.Reconciled;
 }
 
 /// <summary>
@@ -106,6 +123,15 @@ public enum MergeIntoIntegrationOutcome
     /// leaving this as a terminal integration refusal.
     /// </summary>
     AgentRoundRequired,
+    /// <summary>
+    /// The local integration branch and origin have diverged (two independent
+    /// writers), and the automatic reconciling merge itself hit a content
+    /// conflict, so nothing was merged or pushed. This is a topology/operator
+    /// problem, not something a coding agent's rebase can fix: no delivery ref
+    /// was touched. Distinct from <see cref="Error"/> so the card reads
+    /// "integration-push-blocked", not a generic, retry-forever "pending".
+    /// </summary>
+    IntegrationBranchDiverged,
 }
 
 public static class MergeIntoIntegrationOutcomePolicy
@@ -3494,6 +3520,21 @@ public class GitService
     }
 
     /// <summary>
+    /// True when the repository has a distinct <c>develop</c> line (local or
+    /// remote) alongside <c>main</c> - the develop-then-promote model
+    /// (<c>docs/operations/develop-main-promotion.md</c>). Callers that mutate
+    /// <c>main</c> directly (a legacy, per-commit push path that predates the
+    /// unified integration pipeline) must check this first: in that model, only
+    /// the promotion train and the develop-then-main advance may move
+    /// <c>main</c>, so a raw commit push can never legitimately land there.
+    /// </summary>
+    public bool HasDevelopLine(string repoRoot)
+        => string.Equals(
+            ResolveIntegrationBranch(repoRoot, "develop"),
+            "develop",
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Resolves the branch that task worktrees should branch from and merge back
     /// into. The configured project branch wins when it exists; otherwise the
     /// repository's default branch is used so main-only repositories do not fail
@@ -4156,6 +4197,8 @@ public class GitService
         CancellationToken cancellationToken = default)
     {
         var refreshed = RefreshIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
+        if (refreshed.Outcome == IntegrationBranchSyncOutcome.Diverged)
+            return ReconcileDivergedIntegrationBranch(repoRoot, integrationBranch, refreshed);
         if (!refreshed.Success
             || refreshed.Outcome != IntegrationBranchSyncOutcome.RemoteAhead)
             return refreshed;
@@ -4213,6 +4256,86 @@ public class GitService
             AbbreviateSha(localTip),
             AbbreviateSha(remoteTip));
         return new(IntegrationBranchSyncOutcome.FastForwarded);
+    }
+
+    /// <summary>
+    /// AGT-2688: two independent writers can each advance a develop-line
+    /// integration branch without coordinating (e.g. this backend and another
+    /// live process both merging deliveries into the same branch), which the
+    /// fetch above reports as a genuine divergence. Refusing outright would
+    /// strand every later delivery behind the same stuck branch forever - the
+    /// exact "integrates locally, push perpetually skipped" failure mode. So
+    /// this attempts exactly one automatic reconciling merge of the fetched
+    /// origin tip into the local branch first: a clean <c>merge --no-ff</c>
+    /// rewrites nothing (unlike a rebase, every existing local commit SHA is
+    /// preserved) and leaves the local branch a descendant of origin, so the
+    /// very next push is a plain fast-forward. A merge that hits a real content
+    /// conflict is aborted immediately (clean tree restored) and reported as
+    /// <see cref="IntegrationBranchSyncOutcome.Diverged"/> - now honestly a
+    /// content-level problem that needs a human on the integration branch
+    /// itself, not something a delivery's own rebase could ever fix.
+    /// </summary>
+    private IntegrationBranchSyncResult ReconcileDivergedIntegrationBranch(
+        string repoRoot,
+        string integrationBranch,
+        IntegrationBranchSyncResult diverged)
+    {
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        if (DirtyTreeRefusal(
+                repoRoot,
+                "Integration working tree has uncommitted changes; refusing to auto-reconcile it with origin.") is { } dirtyRefusal)
+            return new(IntegrationBranchSyncOutcome.Error, dirtyRefusal);
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, integrationBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(repoRoot, "checkout", integrationBranch);
+            if (checkoutCode != 0)
+                return new(
+                    IntegrationBranchSyncOutcome.Error,
+                    $"Could not check out '{integrationBranch}' to auto-reconcile with origin: {checkoutError.Trim()}");
+        }
+
+        var localTipBeforeMerge = GetBranchTip(repoRoot, integrationBranch);
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot,
+            "merge",
+            "--no-ff",
+            "-m",
+            $"chore: auto-reconcile {integrationBranch} with origin/{integrationBranch} (AGT-2688)",
+            remoteIntegrationRef);
+        if (mergeCode == 0)
+        {
+            _logger.LogInformation(
+                "Integration branch {Integration} at {Path} auto-reconciled with origin (local tip was {LocalTip})",
+                integrationBranch,
+                repoRoot,
+                AbbreviateSha(localTipBeforeMerge));
+            return new(IntegrationBranchSyncOutcome.Reconciled);
+        }
+
+        var (_, abortError, abortCode) = RunGitArgs(repoRoot, "merge", "--abort");
+        if (abortCode != 0)
+        {
+            _logger.LogError(
+                "Integration branch {Integration} at {Path} auto-reconcile merge failed and could not be aborted: {Error}",
+                integrationBranch,
+                repoRoot,
+                abortError.Trim());
+            return new(
+                IntegrationBranchSyncOutcome.Error,
+                $"Auto-reconcile of '{integrationBranch}' with origin failed and left the working tree mid-merge: {abortError.Trim()}");
+        }
+
+        _logger.LogWarning(
+            "Integration branch {Integration} at {Path} diverged from origin; automatic reconciliation hit a content conflict, refusing to overwrite either tip: {Error}",
+            integrationBranch,
+            repoRoot,
+            mergeError.Trim());
+        return new(
+            IntegrationBranchSyncOutcome.Diverged,
+            $"{diverged.Error} Automatic reconciliation was attempted and hit a content conflict; a human must resolve it directly on '{integrationBranch}'.");
     }
 
     private IntegrationBranchSyncResult FetchIntegrationBranch(

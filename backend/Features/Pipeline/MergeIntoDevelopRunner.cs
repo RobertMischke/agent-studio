@@ -222,7 +222,7 @@ public sealed class MergeIntoDevelopRunner
             MergeIntoIntegrationResult result;
             ImmediateIntegrationLineageDecision? lineage = null;
             IntegrationBranchSyncResult synchronized;
-            if (!isPullRequest && IsReleaseBranch(branch) && HasDevelopLine(repoRoot))
+            if (!isPullRequest && IsReleaseBranch(branch) && _git.HasDevelopLine(repoRoot))
             {
                 synchronized = _git.SynchronizeIntegrationBranch(repoRoot, "develop", ct);
                 if (synchronized.Success)
@@ -245,7 +245,20 @@ public sealed class MergeIntoDevelopRunner
                     mainIsAncestorOfDevelop: false);
             }
 
-            if (!synchronized.Success)
+            if (synchronized.Outcome == IntegrationBranchSyncOutcome.Diverged)
+            {
+                // AGT-2688: origin and the local integration branch diverged and
+                // automatic reconciliation (GitService.SynchronizeIntegrationBranch)
+                // already tried and failed on a real content conflict. This is a
+                // topology/operator problem on the integration branch itself, not
+                // something a bounded steer round on THIS delivery's own branch can
+                // fix, so it gets its own outcome instead of the generic Error the
+                // recovery policy would otherwise read as "revalidate and retry".
+                result = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.IntegrationBranchDiverged,
+                    error: synchronized.Error);
+            }
+            else if (!synchronized.Success)
             {
                 result = MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
@@ -1024,12 +1037,6 @@ public sealed class MergeIntoDevelopRunner
     private static bool IsReleaseBranch(string branch)
         => string.Equals(branch, "main", StringComparison.OrdinalIgnoreCase);
 
-    private bool HasDevelopLine(string repoRoot)
-        => string.Equals(
-            _git.ResolveIntegrationBranch(repoRoot, "develop"),
-            "develop",
-            StringComparison.OrdinalIgnoreCase);
-
     private sealed record LineageAdvanceResult(
         MergeIntoIntegrationResult Merge,
         BuildTestGateResult? PreMainGate,
@@ -1125,7 +1132,7 @@ public sealed class MergeIntoDevelopRunner
                 ?? (string.IsNullOrWhiteSpace(watchPath) ? null : watchPath);
             if (!string.IsNullOrWhiteSpace(repoRoot)
                 && IsReleaseBranch(integrationBranch)
-                && HasDevelopLine(repoRoot))
+                && _git.HasDevelopLine(repoRoot))
             {
                 var decision = ImmediateIntegrationLineagePolicy.Decide(
                     integrationBranch,
@@ -1279,6 +1286,9 @@ public sealed class MergeIntoDevelopRunner
             Verdict = verdict,
             VerdictSummary = summary,
             Reason = reason,
+            FailureCode = string.Equals(verdict, AcceptedIntegrationFailureCodes.IntegrationPushBlocked, StringComparison.Ordinal)
+                ? AcceptedIntegrationFailureCodes.IntegrationPushBlocked
+                : null,
         });
     }
 
@@ -1297,11 +1307,25 @@ public sealed class MergeIntoDevelopRunner
         }
 
         var issue = ClassifyPushFailure(result.Status);
+        if (issue == RunIssueKind.EnvironmentBlocker)
+        {
+            // AGT-2688: a non-fast-forward rejection means origin advanced past
+            // what this push carries - a genuine divergence, not an infra blip.
+            // The old "environmental" label made a reviewer read "diverged
+            // remote" the same as a transient network glitch that clears on its
+            // own; it never does on its own, so the card just looped. This is
+            // its own honest, non-retryable code instead.
+            return (
+                PipelineStepStatus.Failed,
+                AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+                $"Push of the integration branch to origin was rejected ({result.Status}): origin diverged from the pushed commit's parent.",
+                result.Error);
+        }
         if (PostProcessingOutcomeTaxonomy.IsEnvironmental(issue))
         {
             // AGT-1944: flag the failure environmental so a reviewer does not read
-            // an infra blip / diverged remote as a failed change. Retryable
-            // transients reach here only after their retry budget is spent.
+            // an infra blip as a failed change. Retryable transients reach here
+            // only after their retry budget is spent.
             var retried = environmentalRetries > 0
                 ? $" after {environmentalRetries} retr{(environmentalRetries == 1 ? "y" : "ies")}"
                 : string.Empty;
@@ -1558,6 +1582,13 @@ public sealed class MergeIntoDevelopRunner
                     "agent-round-required",
                     result.Error ?? "Automatic merge and cardinality-preserving rebase paths could not retain unambiguous delivery SHA attribution.",
                     $"A bounded automatic steer round is required. Conflicted files: {ambiguousFiles}.");
+            case MergeIntoIntegrationOutcome.IntegrationBranchDiverged:
+                return (
+                    PipelineStepStatus.Failed,
+                    AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+                    result.Error ?? $"{integrationBranch} diverged from origin and automatic reconciliation failed.",
+                    "No delivery ref was touched. This needs an operator to resolve the integration branch directly against origin, "
+                    + "not a steer round on this delivery: rebasing the delivery cannot fast-forward a branch the platform itself cannot push.");
             default:
                 return (PipelineStepStatus.Failed, "error", result.Error ?? "Merge failed.", null);
         }

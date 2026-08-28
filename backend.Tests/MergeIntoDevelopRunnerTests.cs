@@ -808,6 +808,133 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.Contains("shared.txt", step.VerdictSummary);
     }
 
+    // ---- AGT-2688: diverged develop / origin two-writer reconciliation -----
+
+    /// <summary>
+    /// Two writers (this backend and another live process/host) each advance
+    /// develop without coordinating, so this checkout's local develop and
+    /// origin/develop have genuinely diverged before this delivery's own merge
+    /// even starts. The two prior deliveries touch different files, so the
+    /// automatic reconciliation inside <c>SynchronizeIntegrationBranch</c>
+    /// converges them cleanly, and THIS delivery still merges and pushes as a
+    /// plain fast-forward - the exact "diverged-develop scenario integrates and
+    /// pushes fast-forward" contract.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_DevelopDivergedButCleanlyMergeable_MergesAndPushFastForwards()
+    {
+        var (repo, remote) = SeedRepoWithOrigin("runner-reconcile");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "push -q -u origin develop");
+
+        var writerB = Path.Combine(_tempDir, "runner-reconcile-writer-b");
+        RunGit(_tempDir, $"clone -q \"{remote}\" \"{writerB}\"");
+        RunGit(writerB, "config user.email test@example.com");
+        RunGit(writerB, "config user.name test");
+        RunGit(writerB, "checkout -q develop");
+        File.WriteAllText(Path.Combine(writerB, "from-writer-b.txt"), "writer B's delivery");
+        Commit(writerB, "feat: writer B delivery");
+        RunGit(writerB, "push -q origin develop");
+
+        // This checkout already merged its own delivery locally, before ever
+        // fetching writer B's push.
+        File.WriteAllText(Path.Combine(repo, "from-writer-a.txt"), "writer A's earlier delivery");
+        Commit(repo, "feat: writer A's earlier delivery");
+
+        // Now a fresh delivery arrives for THIS run.
+        RunGit(repo, "checkout -q -b task/60");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        RunGit(repo, "checkout -q develop");
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "60");
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+
+        var outcome = await runner.RunAsync("Fixture", "60", jobFolder, repo, "develop", CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        var mergeStep = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Passed, mergeStep!.Status);
+        Assert.Equal("merged", mergeStep.Verdict);
+        Assert.True(File.Exists(Path.Combine(repo, "from-writer-a.txt")));
+        Assert.True(File.Exists(Path.Combine(repo, "from-writer-b.txt")));
+        Assert.True(File.Exists(Path.Combine(repo, "task.txt")));
+
+        var pushResult = await runner.PushIntegrationBranchAsync("Fixture", "60", jobFolder, repo, "develop");
+
+        Assert.True(pushResult.Success, pushResult.Error);
+        Assert.Equal("pushed", pushResult.Status);
+        Assert.Equal(RunGit(repo, "rev-parse develop").Out.Trim(), RemoteSha(remote, "develop"));
+    }
+
+    /// <summary>
+    /// The two writers' deliveries genuinely conflict, so automatic
+    /// reconciliation cannot converge them. This must not read as ordinary,
+    /// still-converging "pending" (which would let an external accept-loop
+    /// requeue a fresh coding round on THIS delivery forever, even though
+    /// rebasing this delivery's own branch can never fix a conflict on
+    /// develop itself); it must be the honest, decided
+    /// <c>integration-push-blocked</c> code, not eligible for rebase recovery,
+    /// with no delivery ref touched.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_DevelopDivergedWithRealConflict_ReportsIntegrationPushBlockedNotPending()
+    {
+        var (repo, remote) = SeedRepoWithOrigin("runner-conflict");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "base\n");
+        Commit(repo, "feat: shared baseline");
+        RunGit(repo, "push -q -u origin develop");
+
+        var writerB = Path.Combine(_tempDir, "runner-conflict-writer-b");
+        RunGit(_tempDir, $"clone -q \"{remote}\" \"{writerB}\"");
+        RunGit(writerB, "config user.email test@example.com");
+        RunGit(writerB, "config user.name test");
+        RunGit(writerB, "checkout -q develop");
+        File.WriteAllText(Path.Combine(writerB, "shared.txt"), "writer B's line\n");
+        Commit(writerB, "feat: writer B edits the shared line");
+        RunGit(writerB, "push -q origin develop");
+        var writerBTip = RunGit(writerB, "rev-parse develop").Out.Trim();
+
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "writer A's line\n");
+        Commit(repo, "feat: writer A edits the same shared line");
+        var developBeforeAttempt = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        RunGit(repo, "checkout -q -b task/61");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        RunGit(repo, "checkout -q develop");
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "61");
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+
+        var outcome = await runner.RunAsync("Fixture", "61", jobFolder, repo, "develop", CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.IntegrationBranchDiverged, outcome.Outcome);
+        var mergeStep = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(mergeStep);
+        Assert.Equal(PipelineStepStatus.Failed, mergeStep!.Status);
+        Assert.Equal(AcceptedIntegrationFailureCodes.IntegrationPushBlocked, mergeStep.Verdict);
+        Assert.Equal(AcceptedIntegrationFailureCodes.IntegrationPushBlocked, mergeStep.FailureCode);
+
+        // Not eligible for the rebase-recovery action: rebasing task/61 cannot
+        // fast-forward a develop that the platform itself cannot push.
+        var failure = AcceptedIntegrationFailurePolicy.Classify(
+            mergeStep.Status, mergeStep.Verdict, mergeStep.Reason, mergeStep.VerdictSummary, mergeStep.FailureCode);
+        Assert.NotNull(failure);
+        Assert.False(failure!.RebaseRecoveryAvailable);
+
+        // Nothing was touched: develop is exactly where it was, the task
+        // branch was never merged in, and origin is untouched (still writer
+        // B's tip - this attempt never pushed anything).
+        Assert.Equal(developBeforeAttempt, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.Equal(1, RunGit(repo, "merge-base --is-ancestor task/61 develop").Code);
+        Assert.Equal(writerBTip, RemoteSha(remote, "develop"));
+    }
+
     // ---- AGT-1999: integration-branch push to origin -----------------------
 
     [Fact]
@@ -1535,11 +1662,16 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Run_LocalDelivery_DivergedIntegrationBranch_ReportsHealingErrorInsteadOfMergingStale()
+    public void Run_LocalDelivery_DivergedIntegrationBranch_AutoReconcilesThenMerges()
     {
         // Local develop and origin/develop both moved on from main: a real
-        // divergence. The local task-branch path used to merge onto the stale
-        // local tip and report success; it must now say so and merge nothing.
+        // divergence, e.g. two writers each advancing develop without
+        // coordinating (AGT-2688). The old behaviour refused every later
+        // delivery forever ("heal or recreate it via project settings" was the
+        // only remedy, and nothing in the system ever did). Since the two
+        // sides touch different files, the automatic reconciling merge inside
+        // SynchronizeIntegrationBranch converges them cleanly, and this
+        // delivery still lands normally.
         var (repo, _) = SeedRepoWithOrigin("develop-diverged");
         RunGit(repo, "checkout -q -b develop");
         File.WriteAllText(Path.Combine(repo, "local.txt"), "local develop work");
@@ -1557,7 +1689,6 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
         Commit(repo, "feat: task work");
         RunGit(repo, "checkout -q develop");
-        var developBefore = RunGit(repo, "rev-parse develop").Out.Trim();
 
         var (git, log) = Build(repo);
         var jobFolder = BeginRun(log, repo, jobId: "64");
@@ -1565,16 +1696,18 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
 
         var outcome = runner.Run("Fixture", "64", jobFolder, repo, "develop");
 
-        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
-        Assert.Contains(
-            "Integration branch 'develop' diverged from origin - heal or recreate it via project settings before accepting deliveries.",
-            outcome.Error);
-        Assert.Equal(developBefore, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+        Assert.True(File.Exists(Path.Combine(repo, "local.txt")));
+        Assert.True(File.Exists(Path.Combine(repo, "remote.txt")));
+        Assert.True(File.Exists(Path.Combine(repo, "task.txt")));
+        // The local-only commit's original SHA survived: reconciliation merges,
+        // it never rebases (which would have rewritten it).
+        Assert.Equal(0, RunGit(repo, "merge-base --is-ancestor origin/develop develop").Code);
 
         var step = ReadMergeStep(log, jobFolder);
         Assert.NotNull(step);
-        Assert.Equal(PipelineStepStatus.Failed, step!.Status);
-        Assert.Equal("error", step.Verdict);
+        Assert.Equal(PipelineStepStatus.Passed, step!.Status);
+        Assert.Equal("merged", step.Verdict);
     }
 
     /// <summary>

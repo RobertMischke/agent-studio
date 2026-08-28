@@ -60,6 +60,18 @@ public sealed class AcceptedIntegrationFailurePolicyTests
             AcceptedIntegrationFailureCodes.NoTaskBranch,
             false
         },
+        {
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            "develop diverged from origin and automatic reconciliation failed.",
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            false
+        },
+        {
+            "lineage-blocked",
+            "Push of the integration branch to origin was rejected (remote-rejected).",
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            false
+        },
     };
 
     [Theory]
@@ -91,5 +103,30 @@ public sealed class AcceptedIntegrationFailurePolicyTests
             "already-merged",
             "No merge needed.",
             verdictSummary: null));
+    }
+
+    /// <summary>
+    /// AGT-2688: an integration-branch divergence must read as its own honest,
+    /// non-recoverable-by-rebase state - never the generic "Integration
+    /// failed" bucket a diverged-develop error used to fall into, and never
+    /// eligible for the operator rebase-recovery action (rebasing THIS
+    /// delivery's own branch cannot fast-forward a branch the platform itself
+    /// cannot push).
+    /// </summary>
+    [Fact]
+    public void Classify_IntegrationPushBlocked_IsDistinctFromGenericIntegrationError()
+    {
+        var pushBlocked = AcceptedIntegrationFailurePolicy.Classify(
+            PipelineStepStatus.Failed,
+            AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            "develop diverged from origin - heal or recreate it via project settings before accepting deliveries. "
+                + "Automatic reconciliation was attempted and hit a content conflict; a human must resolve it directly on 'develop'.",
+            verdictSummary: null);
+
+        Assert.NotNull(pushBlocked);
+        Assert.Equal(AcceptedIntegrationFailureCodes.IntegrationPushBlocked, pushBlocked!.Code);
+        Assert.NotEqual(AcceptedIntegrationFailureCodes.IntegrationError, pushBlocked.Code);
+        Assert.False(pushBlocked.RebaseRecoveryAvailable);
+        Assert.Contains("develop diverged", pushBlocked.Reason, StringComparison.OrdinalIgnoreCase);
     }
 }

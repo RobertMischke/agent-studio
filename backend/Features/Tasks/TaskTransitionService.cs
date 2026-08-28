@@ -1635,6 +1635,20 @@ public sealed class TaskTransitionService
         if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return 0;
         if (requireCompletedState && job.State != TaskStates.Completed) return 0;
 
+        // AGT-2688: this legacy path pushes a raw commit SHA straight to "main"
+        // (GitService.PushShaAsync's hardcoded default target), predating the
+        // unified develop-then-main integration pipeline. In a repository with a
+        // develop line, a per-commit task SHA is essentially never the exact
+        // published develop tip, so GitService's lineage guard (correctly)
+        // refuses it every single time - a guaranteed-permanent "lineage-blocked"
+        // rejection, repeated for every completed job on every backstop sweep.
+        // The develop/main promotion train and the accept-time integration push
+        // already own advancing both branches for such a project; this
+        // second, uncoordinated writer must not attempt to race them.
+        var repoRootForAutoPush = _git.ResolveRepoRootForWatchPath(job.WatchPath);
+        if (!string.IsNullOrWhiteSpace(repoRootForAutoPush) && _git.HasDevelopLine(repoRootForAutoPush))
+            return 0;
+
         var commits = job.Commits.Count > 0
             ? job.Commits
             : job.Commit is null ? [] : [job.Commit];

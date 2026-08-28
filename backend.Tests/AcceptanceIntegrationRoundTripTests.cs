@@ -1137,6 +1137,69 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
         Assert.Equal(localDevelop, remoteAfter);
     }
 
+    /// <summary>
+    /// AGT-2688: a prior push attempt already recorded the decided, terminal
+    /// <c>integration-push-blocked</c> verdict (origin diverged from what this
+    /// card's approved SHA could fast-forward). The old backstop retried any
+    /// non-Passed/non-Skipped push forever - the exact 15-minute "570+
+    /// lineage-blocked" burn loop. It must now recognize the decided verdict
+    /// and skip: retrying the identical push against a still-diverged origin
+    /// cannot ever succeed, and a fresh accept-time merge (which re-runs
+    /// SynchronizeIntegrationBranch's own reconciliation) is the real recovery
+    /// path, not a blind push retry.
+    /// </summary>
+    [Fact]
+    public async Task IntegrationPushBackstop_DecidedPushBlockedVerdict_DoesNotRetry()
+    {
+        var deliverySha = PublishDelivery("push-blocked.txt", "already decided\n");
+        var deps = Build(deliverySha);
+        var immediate = await deps.Merge.RunAsync(
+            Project,
+            Slug,
+            deps.Scanner.FindJob(Slug, _watchPath)!.FolderPath,
+            _watchPath,
+            "develop",
+            CancellationToken.None,
+            IntegrationStrategies.DirectMerge,
+            PipelineTypes.Task);
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, immediate.Outcome);
+        var accepted = await deps.Transitions.MoveAsync(Slug, TaskStates.Completed, _watchPath);
+        Assert.Equal(MoveJobStatus.Success, accepted.Status);
+
+        var jobFolder = deps.Scanner.FindJob(Slug, _watchPath)!.FolderPath;
+        var remoteBefore = Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim();
+        var localDevelop = Git(_repo, "rev-parse", "develop").Out.Trim();
+        Assert.NotEqual(localDevelop, remoteBefore);
+
+        // A prior backstop tick already tried and got a decided, non-fast-forward
+        // rejection - exactly what MergeIntoDevelopRunner.ProjectPush now records
+        // for a "remote-rejected" push instead of the old, misleading "environmental".
+        deps.Pipeline.RecordStep(jobFolder, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopPushStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            StartedAt = DateTime.UtcNow,
+            CompletedAt = DateTime.UtcNow,
+            Verdict = AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            VerdictSummary = "Push of the integration branch to origin was rejected (remote-rejected): origin diverged.",
+            Reason = "simulated prior decided rejection",
+            FailureCode = AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+        });
+
+        var pushBackstop = new IntegrationPushBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Pipeline,
+            deps.Merge,
+            deps.Configuration,
+            NullLogger<IntegrationPushBackstopHostedService>.Instance);
+        var recovered = await pushBackstop.RunOnceAsync();
+
+        Assert.Equal(0, recovered);
+        Assert.Equal(remoteBefore, Git(_origin, "-c", "safe.bareRepository=all", "rev-parse", "develop").Out.Trim());
+    }
+
     [Fact]
     public void AcceptanceMerge_InterruptedByRestart_IsRecoveredFromCompletedLane()
     {

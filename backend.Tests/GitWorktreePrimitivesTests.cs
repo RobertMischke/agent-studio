@@ -495,6 +495,119 @@ public sealed class GitWorktreePrimitivesTests : IDisposable
         Assert.Contains("untracked-notes.txt", result.Error);
     }
 
+    // ---- AGT-2688: diverged develop / origin two-writer reconciliation -----
+
+    /// <summary>
+    /// Two independent writers each advance the same integration branch (this
+    /// checkout, unaware of another writer's commit already on origin). A plain
+    /// fast-forward is impossible, but the two histories touch different files,
+    /// so the auto-reconcile merge is clean: the branch converges instead of
+    /// refusing every later delivery forever.
+    /// </summary>
+    [Fact]
+    public void SynchronizeIntegrationBranch_DivergedButCleanlyMergeable_AutoReconciles()
+    {
+        var (repo, remote) = SeedRepoWithOrigin("sync-reconcile");
+        RunGit(repo, "checkout -q -b develop");
+        RunGit(repo, "push -q -u origin develop");
+
+        // Writer B: an independent clone advances origin/develop.
+        var writerB = Path.Combine(_tempDir, "sync-reconcile-writer-b");
+        RunGit(_tempDir, $"clone -q \"{remote}\" \"{writerB}\"");
+        RunGit(writerB, "config user.email test@example.com");
+        RunGit(writerB, "config user.name test");
+        RunGit(writerB, "checkout -q develop");
+        File.WriteAllText(Path.Combine(writerB, "from-writer-b.txt"), "writer B's delivery");
+        Commit(writerB, "feat: writer B delivery");
+        RunGit(writerB, "push -q origin develop");
+        var writerBTip = RunGit(writerB, "rev-parse develop").Out.Trim();
+
+        // This checkout (writer A) merged its own delivery locally before ever
+        // fetching writer B's push - a genuine divergence once it fetches.
+        File.WriteAllText(Path.Combine(repo, "from-writer-a.txt"), "writer A's delivery");
+        Commit(repo, "feat: writer A delivery");
+        var writerATip = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var git = BuildGitService(("Fixture", repo));
+        var result = git.SynchronizeIntegrationBranch(repo, "develop");
+
+        Assert.Equal(IntegrationBranchSyncOutcome.Reconciled, result.Outcome);
+        Assert.True(result.Success);
+        Assert.True(result.Converged);
+        // Both deliveries survived, under their original SHAs (a merge, not a
+        // rebase, rewrites nothing).
+        Assert.True(File.Exists(Path.Combine(repo, "from-writer-a.txt")));
+        Assert.True(File.Exists(Path.Combine(repo, "from-writer-b.txt")));
+        Assert.Equal(0, RunGit(repo, $"cat-file -e {writerATip}").Code);
+        Assert.Equal(0, RunGit(repo, $"cat-file -e {writerBTip}").Code);
+        // The local branch is now a descendant of origin - the next push is a
+        // plain fast-forward.
+        Assert.Equal(0, RunGit(repo, "merge-base --is-ancestor origin/develop develop").Code);
+        Assert.True(RunGit(repo, "status --porcelain").Out.Trim().Length == 0);
+    }
+
+    /// <summary>
+    /// When the two writers' deliveries genuinely conflict, automatic
+    /// reconciliation must not paper over it: the merge is aborted, the tree is
+    /// left clean, and the branch is reported diverged so a human resolves it
+    /// directly on the integration branch. No delivery ref is touched, and
+    /// nothing is silently reported as pending.
+    /// </summary>
+    [Fact]
+    public void SynchronizeIntegrationBranch_DivergedWithRealConflict_AbortsAndReportsDiverged()
+    {
+        var (repo, remote) = SeedRepoWithOrigin("sync-conflict");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "base\n");
+        Commit(repo, "feat: shared baseline");
+        RunGit(repo, "push -q -u origin develop");
+
+        var writerB = Path.Combine(_tempDir, "sync-conflict-writer-b");
+        RunGit(_tempDir, $"clone -q \"{remote}\" \"{writerB}\"");
+        RunGit(writerB, "config user.email test@example.com");
+        RunGit(writerB, "config user.name test");
+        RunGit(writerB, "checkout -q develop");
+        File.WriteAllText(Path.Combine(writerB, "shared.txt"), "writer B's line\n");
+        Commit(writerB, "feat: writer B edits the shared line");
+        RunGit(writerB, "push -q origin develop");
+
+        File.WriteAllText(Path.Combine(repo, "shared.txt"), "writer A's line\n");
+        Commit(repo, "feat: writer A edits the same shared line");
+        var localTipBeforeSync = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var git = BuildGitService(("Fixture", repo));
+        var result = git.SynchronizeIntegrationBranch(repo, "develop");
+
+        Assert.Equal(IntegrationBranchSyncOutcome.Diverged, result.Outcome);
+        Assert.False(result.Success);
+        Assert.False(result.Converged);
+        Assert.NotNull(result.Error);
+        Assert.Contains("diverged from origin", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("content conflict", result.Error, StringComparison.OrdinalIgnoreCase);
+        // Nothing was rewritten or half-merged: local develop is exactly where
+        // it was, and the working tree is clean (no stuck MERGE_HEAD).
+        Assert.Equal(localTipBeforeSync, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.True(RunGit(repo, "status --porcelain").Out.Trim().Length == 0);
+        Assert.False(File.Exists(Path.Combine(repo, ".git", "MERGE_HEAD")));
+    }
+
+    private (string Repo, string Remote) SeedRepoWithOrigin(string name)
+    {
+        var repo = Path.Combine(_tempDir, name);
+        var remote = Path.Combine(_tempDir, name + "-origin.git");
+        Directory.CreateDirectory(repo);
+        RunGit(_tempDir, $"init --bare -q --initial-branch=main \"{remote}\"");
+        RunGit(repo, "init -q -b main");
+        RunGit(repo, "config user.email test@example.com");
+        RunGit(repo, "config user.name test");
+        File.WriteAllText(Path.Combine(repo, "README.md"), "seed");
+        RunGit(repo, "add -A");
+        RunGit(repo, "commit -q -m seed");
+        RunGit(repo, $"remote add origin \"{remote}\"");
+        RunGit(repo, "push -q -u origin main");
+        return (repo, remote);
+    }
+
     private string SeedRepo(string name)
     {
         var repo = Path.Combine(_tempDir, name);

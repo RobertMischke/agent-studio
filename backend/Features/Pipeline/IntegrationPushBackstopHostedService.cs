@@ -52,6 +52,19 @@ public sealed class IntegrationPushBackstopHostedService : BackgroundService
             var previousPush = record?.Steps.LastOrDefault(
                 step => step.StepId == PipelineCatalogue.MergeIntoDevelopPushStepId);
             if (previousPush?.Status is PipelineStepStatus.Passed or PipelineStepStatus.Skipped) continue;
+            // AGT-2688: a decided, non-fast-forward rejection means origin
+            // diverged from the object this backstop would push again - a raw
+            // retry of the exact same push fails identically forever. Blindly
+            // looping here is exactly the "570+ lineage-blocked" burn pattern;
+            // this needs an operator (or a fresh accept-time merge, which
+            // re-synchronizes and auto-reconciles) instead of a silent retry.
+            if (string.Equals(
+                    previousPush?.Verdict,
+                    AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
 
             var settings = PipelineTypeSettings.ForTask(_settings.Get(job.ProjectName), job)!;
             if (!PipelineStepConfigResolver.IsEnabled(settings, PipelineCatalogue.MergeIntoDevelopPushStepId))

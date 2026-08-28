@@ -414,22 +414,50 @@ public sealed class TaskIntegrationStatusService
     /// the card's local <c>pipeline-execution.json</c>. Local file read only (no
     /// git spawn); best-effort. Legacy steps without a persisted failure code
     /// are classified from their stable verdict and reason vocabulary.
+    ///
+    /// <para>
+    /// AGT-2688: the merge can succeed locally while the deferred push to
+    /// origin is the piece that is honestly blocked (a later race advanced
+    /// origin past what this card's approved SHA can fast-forward). That
+    /// failure lives on the separate push step, not the merge step, so a
+    /// Passed-or-absent merge step falls through to it instead of reporting no
+    /// failure at all - the card must not read as plain, still-converging
+    /// "pending" when the reason it is not on origin is a decided, terminal
+    /// push rejection.
+    /// </para>
     /// </summary>
     private AcceptedIntegrationFailure? ReadIntegrationFailure(TaskInfo job)
     {
+        if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(job)) return null;
+
         var step = ReadLatestMergeStep(job);
-        if (step is null) return null;
-        if (string.Equals(step.Verdict, "operator-override", StringComparison.OrdinalIgnoreCase)
-            || !AcceptanceIntegrationPolicy.IsIntegrationRequired(job))
+        if (step is not null && !string.Equals(step.Verdict, "operator-override", StringComparison.OrdinalIgnoreCase))
+        {
+            var mergeFailure = AcceptedIntegrationFailurePolicy.Classify(
+                step.Status,
+                step.Verdict,
+                step.Reason,
+                step.VerdictSummary,
+                step.FailureCode);
+            if (mergeFailure is not null) return mergeFailure;
+        }
+
+        // Only the decided, non-retryable push rejection is surfaced here. An
+        // "environmental" push failure is still within the push backstop's own
+        // retry window (Integration:PushBackstopIntervalMinutes) and must keep
+        // reading as ordinary "pending" convergence, not a terminal failure.
+        var pushStep = ReadLatestPushStep(job);
+        if (pushStep is null
+            || !string.Equals(pushStep.Verdict, AcceptedIntegrationFailureCodes.IntegrationPushBlocked, StringComparison.Ordinal))
         {
             return null;
         }
         return AcceptedIntegrationFailurePolicy.Classify(
-            step.Status,
-            step.Verdict,
-            step.Reason,
-            step.VerdictSummary,
-            step.FailureCode);
+            pushStep.Status,
+            pushStep.Verdict,
+            pushStep.Reason,
+            pushStep.VerdictSummary,
+            pushStep.FailureCode);
     }
 
     private static string VisibleFailureReason(
@@ -468,6 +496,27 @@ public sealed class TaskIntegrationStatusService
         }
     }
 
+    private PipelineStepExecution? ReadLatestPushStep(TaskInfo job)
+    {
+        try
+        {
+            return _pipelineLog.Read(job.FolderPath)?.Steps.LastOrDefault(step =>
+                string.Equals(
+                    step.StepId,
+                    PipelineCatalogue.MergeIntoDevelopPushStepId,
+                    StringComparison.Ordinal));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "integration-status push-step read failed for project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
+            return null;
+        }
+    }
+
     private static bool IsDecidedIntegrationAttempt(PipelineStepExecution? step)
     {
         if (step is null) return false;
@@ -475,7 +524,13 @@ public sealed class TaskIntegrationStatusService
             || string.Equals(step.Verdict, "pushed-for-review", StringComparison.OrdinalIgnoreCase)
             || string.Equals(step.Verdict, "gate-failed", StringComparison.OrdinalIgnoreCase)
             || string.Equals(step.Verdict, "error", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(step.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(step.Verdict, "no-branch", StringComparison.OrdinalIgnoreCase)
+            // AGT-2688: the integration branch itself diverged from origin and
+            // automatic reconciliation could not clear it (a real content
+            // conflict on develop/main, not on this delivery). Blindly retrying
+            // would replay the exact same failure forever; this needs an
+            // operator to resolve the integration branch directly.
+            || string.Equals(step.Verdict, AcceptedIntegrationFailureCodes.IntegrationPushBlocked, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

@@ -178,6 +178,33 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
     }
 
+    /// <summary>
+    /// AGT-2688: for a develop-line project this legacy per-commit push is a
+    /// second, uncoordinated writer racing the develop/main promotion pipeline
+    /// - and since a raw completed-job commit is essentially never the exact
+    /// published develop tip, GitService's lineage guard would refuse it every
+    /// single time. That produced the "570+ Auto-push skipped ... (completed):
+    /// lineage-blocked" log volume for every completed job on every backstop
+    /// sweep. The push must now be skipped up front - a quiet no-op, not a
+    /// doomed git call - so this second writer never fires at all once a
+    /// develop line exists.
+    /// </summary>
+    [Fact]
+    public async Task PushJobCommitsAsync_WithDevelopLine_SkipsWithoutAttemptingGit()
+    {
+        RunGit(_repoRoot, "checkout", "-q", "-b", "develop");
+        RunGit(_repoRoot, "push", "-q", "-u", "origin", "develop");
+        RunGit(_repoRoot, "checkout", "-q", "main");
+        var sha = CommitLocalChange("develop-line completed change");
+        WriteJob(TaskStates.Completed, "develop-line-task", sha);
+        var deps = BuildDeps();
+        var job = deps.Scanner.FindJob("develop-line-task", _watchPath)!;
+
+        var pushed = await deps.Transitions.PushCompletedJobCommitsAsync(job, AutoPushStrategies.AlwaysImmediate);
+
+        Assert.Equal(0, pushed);
+    }
+
     private void InstallSlowPushHook(int seconds)
     {
         var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");
