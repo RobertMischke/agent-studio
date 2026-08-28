@@ -304,7 +304,13 @@ public static class IntegrationStatuses
     /// <summary>The task has integrable work that is not (yet) in develop.</summary>
     public const string Pending = "pending";
 
-    /// <summary>The deferred merge-into-develop step recorded a conflict / error; the work was NOT merged.</summary>
+    /// <summary>
+    /// The deferred merge-into-develop step recorded a conflict / error (the
+    /// work was NOT merged), or the merge succeeded locally but the deferred
+    /// push to origin did not (<see cref="AgentStudio.Pipeline.AcceptedIntegrationFailureCodes.IntegrationPushBlocked"/>,
+    /// AGT-2688) - either way the attributed commits are not reachable from
+    /// origin/develop yet and this must not be read as plain <see cref="Pending"/>.
+    /// </summary>
     public const string ConflictSkipped = "conflict-skipped";
 
     /// <summary>The card has no delivery ref and no attributed commit - nothing to integrate.</summary>

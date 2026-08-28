@@ -988,6 +988,73 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         Assert.Equal("remote-rejected", result.Status);
         Assert.Equal(originalMain, RemoteSha(remote, "main"));
         Assert.NotEqual(candidate, RemoteSha(remote, "develop"));
+
+        // AGT-2688: a genuinely diverged remote must report a distinct,
+        // actionable "integration-push-blocked" terminal state - not the
+        // generic "environmental" bucket a plain infra blip gets, and never
+        // silent-pending that would let the accepted-integration backstop spin.
+        var step = ReadPushStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Failed, step!.Status);
+        Assert.Equal("push-blocked", step.Verdict);
+        Assert.Equal(AcceptedIntegrationFailureCodes.IntegrationPushBlocked, step.FailureCode);
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task PushIntegrationBranch_MainLineageBlocked_StillPublishesDevelopToOrigin()
+    {
+        // AGT-2688 root cause: main not being an ancestor of develop (a purely
+        // local divergence with no bearing on develop's own remote reachability)
+        // must never starve origin/develop of a delivery that is perfectly safe
+        // to fast-forward. Before the fix, PushIntegrationBranchAsync checked
+        // the main/develop lineage BEFORE attempting the develop push and
+        // returned "lineage-blocked" without ever touching origin - exactly the
+        // overnight 705-claims/0-accepts failure mode.
+        var (repo, remote) = SeedRepoWithOrigin("push-lineage-blocked-develop-ok");
+
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "dev.txt"), "dev work");
+        Commit(repo, "feat: dev work");
+        var developSha = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        // Advance local main with a commit develop never carries, so main is
+        // NOT an ancestor of develop - the lineage guard blocks the main leg.
+        RunGit(repo, "checkout -q main");
+        File.WriteAllText(Path.Combine(repo, "main-only.txt"), "main-only change");
+        Commit(repo, "feat: main-only change");
+        RunGit(repo, "checkout -q develop");
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "push-lineage-blocked-develop-ok");
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            environmentalBackoff: _ => TimeSpan.Zero);
+
+        var result = await runner.PushIntegrationBranchAsync(
+            "Fixture",
+            "push-lineage-blocked-develop-ok",
+            jobFolder,
+            repo,
+            "main",
+            approvedSha: developSha);
+
+        Assert.False(result.Success);
+        Assert.Equal("lineage-blocked", result.Status);
+
+        // The load-bearing assertion: develop reached origin despite main
+        // being blocked. Acceptance reads origin/develop, so the delivery is
+        // no longer starved.
+        Assert.Equal(developSha, RemoteSha(remote, "develop"));
+        Assert.NotEqual(developSha, RemoteSha(remote, "main"));
+
+        var step = ReadPushStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Failed, step!.Status);
+        Assert.Equal("lineage-blocked", step.Verdict);
+        Assert.Equal(AcceptedIntegrationFailureCodes.IntegrationPushBlocked, step.FailureCode);
     }
 
     [Fact]

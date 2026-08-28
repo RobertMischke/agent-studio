@@ -1127,19 +1127,12 @@ public sealed class MergeIntoDevelopRunner
                 && IsReleaseBranch(integrationBranch)
                 && HasDevelopLine(repoRoot))
             {
-                var decision = ImmediateIntegrationLineagePolicy.Decide(
-                    integrationBranch,
-                    developAvailable: true,
-                    mainIsAncestorOfDevelop: _git.IsAncestor(repoRoot, integrationBranch, "develop"));
-                if (decision.Mode == ImmediateIntegrationLineageMode.Blocked)
-                {
-                    return new GitPushResult(
-                        false,
-                        approvedSha ?? string.Empty,
-                        "lineage-blocked",
-                        decision.Reason);
-                }
-
+                // AGT-2688: publish develop first and unconditionally. The
+                // lineage guard below only ever decides whether MAIN may
+                // follow; it must never gate develop's own push, or origin/develop
+                // starves on an unrelated main/develop divergence while the
+                // delivery sits merged-but-invisible and acceptance loops
+                // forever reading it as still pending.
                 var developPush = await PushIntegrationBranchSerializedAsync(
                     project,
                     jobId,
@@ -1151,6 +1144,24 @@ public sealed class MergeIntoDevelopRunner
                     recordSuccessfulStep: false);
                 if (!developPush.Success)
                     return developPush;
+
+                var decision = ImmediateIntegrationLineagePolicy.Decide(
+                    integrationBranch,
+                    developAvailable: true,
+                    mainIsAncestorOfDevelop: _git.IsAncestor(repoRoot, integrationBranch, "develop"));
+                if (decision.Mode == ImmediateIntegrationLineageMode.Blocked)
+                {
+                    var blocked = new GitPushResult(
+                        false,
+                        approvedSha ?? developPush.Sha,
+                        "lineage-blocked",
+                        decision.Reason);
+                    RecordPushStep(jobFolderPath, project, jobId, blocked, DateTime.UtcNow, environmentalRetries: 0);
+                    _logger.LogWarning(
+                        "merge-into-develop push: develop published to origin but {Branch} is blocked project={Project} job={JobId}; {Reason}",
+                        integrationBranch, project, jobId, decision.Reason);
+                    return blocked;
+                }
             }
 
             return await PushIntegrationBranchSerializedAsync(
@@ -1267,6 +1278,7 @@ public sealed class MergeIntoDevelopRunner
 
         var completedAt = DateTime.UtcNow;
         var (status, verdict, reason, summary) = ProjectPush(result, environmentalRetries);
+        var failure = AcceptedIntegrationFailurePolicy.Classify(status, verdict, reason, summary);
 
         _pipelineLog.RecordStep(jobFolderPath, new PipelineStepExecution
         {
@@ -1279,6 +1291,7 @@ public sealed class MergeIntoDevelopRunner
             Verdict = verdict,
             VerdictSummary = summary,
             Reason = reason,
+            FailureCode = failure?.Code,
         });
     }
 
@@ -1296,12 +1309,39 @@ public sealed class MergeIntoDevelopRunner
             };
         }
 
+        if (string.Equals(result.Status, "lineage-blocked", StringComparison.Ordinal))
+        {
+            // AGT-2688: honest, distinct terminal state. develop already reached
+            // origin by the time this is recorded (see PushIntegrationBranchAsync);
+            // only main is withheld pending real lineage convergence. This must
+            // not be confused with a plain in-flight push (which would read as
+            // "pending" and loop the accepted-integration backstop forever).
+            return (
+                PipelineStepStatus.Failed,
+                "lineage-blocked",
+                $"Integration push blocked: {result.Error ?? "main is not an ancestor of develop yet."}",
+                null);
+        }
+
         var issue = ClassifyPushFailure(result.Status);
+        if (issue == RunIssueKind.EnvironmentBlocker)
+        {
+            // A non-fast-forward rejection is a genuinely diverged remote, not a
+            // transient blip a retry can clear. Distinct verdict from
+            // "environmental" so it surfaces as integration-push-blocked instead
+            // of reading as an ordinary pending push (AGT-2688).
+            return (
+                PipelineStepStatus.Failed,
+                "push-blocked",
+                $"Push of the integration branch to origin was rejected ({result.Status}); the remote has diverged and needs reconciliation.",
+                result.Error);
+        }
+
         if (PostProcessingOutcomeTaxonomy.IsEnvironmental(issue))
         {
             // AGT-1944: flag the failure environmental so a reviewer does not read
-            // an infra blip / diverged remote as a failed change. Retryable
-            // transients reach here only after their retry budget is spent.
+            // an infra blip as a failed change. Retryable transients reach here
+            // only after their retry budget is spent.
             var retried = environmentalRetries > 0
                 ? $" after {environmentalRetries} retr{(environmentalRetries == 1 ? "y" : "ies")}"
                 : string.Empty;

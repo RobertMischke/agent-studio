@@ -225,6 +225,22 @@ public sealed class TaskIntegrationStatusService
                 lastMerge);
         }
 
+        // AGT-2688: the merge itself already succeeded and only the deferred
+        // push is blocked (main/develop lineage, or a diverged remote). That is
+        // not a merge-replay case - re-running the merge cannot fix a push
+        // problem, and doing so on every backstop sweep is exactly the loop
+        // that burned the window overnight. The integration push backstop owns
+        // retrying the push; this recovery path must leave the card alone.
+        if (lastMerge?.Status == PipelineStepStatus.Passed
+            && status?.Status == IntegrationStatuses.ConflictSkipped
+            && status.Failure?.Code == AcceptedIntegrationFailureCodes.IntegrationPushBlocked)
+        {
+            return new AcceptedIntegrationRecoveryDecision(
+                AcceptedIntegrationRecoveryAction.Ignore,
+                "The merge already succeeded; only the deferred push is blocked and is retried by the integration push backstop.",
+                lastMerge);
+        }
+
         // BP-02: a crash can leave the merge commit in local ancestry while the
         // exact-SHA gate verdict is still pending. That state must resume the
         // runner rather than treating ancestry as proof that the gate ran.
@@ -417,19 +433,36 @@ public sealed class TaskIntegrationStatusService
     /// </summary>
     private AcceptedIntegrationFailure? ReadIntegrationFailure(TaskInfo job)
     {
+        if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(job)) return null;
+
         var step = ReadLatestMergeStep(job);
-        if (step is null) return null;
-        if (string.Equals(step.Verdict, "operator-override", StringComparison.OrdinalIgnoreCase)
-            || !AcceptanceIntegrationPolicy.IsIntegrationRequired(job))
-        {
+        if (string.Equals(step?.Verdict, "operator-override", StringComparison.OrdinalIgnoreCase))
             return null;
+
+        if (step is not null)
+        {
+            var mergeFailure = AcceptedIntegrationFailurePolicy.Classify(
+                step.Status,
+                step.Verdict,
+                step.Reason,
+                step.VerdictSummary,
+                step.FailureCode);
+            if (mergeFailure is not null) return mergeFailure;
         }
+
+        // AGT-2688: the merge into the integration branch can succeed locally
+        // while the deferred push to origin does not (main/develop lineage
+        // block, or a genuinely diverged remote). That must not fall through to
+        // plain "pending" - surface the push step's own terminal failure so
+        // acceptance alarms instead of looping.
+        var pushStep = ReadLatestPushStep(job);
+        if (pushStep is null) return null;
         return AcceptedIntegrationFailurePolicy.Classify(
-            step.Status,
-            step.Verdict,
-            step.Reason,
-            step.VerdictSummary,
-            step.FailureCode);
+            pushStep.Status,
+            pushStep.Verdict,
+            pushStep.Reason,
+            pushStep.VerdictSummary,
+            pushStep.FailureCode);
     }
 
     private static string VisibleFailureReason(
@@ -462,6 +495,27 @@ public sealed class TaskIntegrationStatusService
             _logger.LogWarning(
                 ex,
                 "integration-status pipeline read failed for project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
+            return null;
+        }
+    }
+
+    private PipelineStepExecution? ReadLatestPushStep(TaskInfo job)
+    {
+        try
+        {
+            return _pipelineLog.Read(job.FolderPath)?.Steps.LastOrDefault(step =>
+                string.Equals(
+                    step.StepId,
+                    PipelineCatalogue.MergeIntoDevelopPushStepId,
+                    StringComparison.Ordinal));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "integration-status push-step read failed for project={Project} job={JobId}",
                 job.ProjectName,
                 job.Id);
             return null;
