@@ -1739,10 +1739,23 @@ public sealed class TaskTransitionService
         try
         {
             var result = await _git.PushShaAsync(sha, watchPath, ct);
+            var outcome = CompletedPushOutcomePolicy.Classify(result.Success, result.Status);
+            if (outcome == CompletedPushOutcome.TopologySkip)
+            {
+                // Not an incident: this project's topology publishes task commits
+                // through develop integration, so the release line refuses the raw
+                // commit permanently. Alarming here would fire once per completed
+                // card on every backstop sweep and bury the real push faults.
+                _logger.LogInformation(
+                    "Auto-push not applicable for {JobId} at {Sha} ({Reason}): {Status} {Error}",
+                    jobId, sha, reason, result.Status, result.Error);
+                return false;
+            }
+
             if (result.Success)
             {
                 _logger.LogInformation("Auto-push {Status} for {JobId} at {Sha} ({Reason})", result.Status, jobId, sha, reason);
-                return result.Status == "pushed";
+                return outcome == CompletedPushOutcome.Pushed;
             }
 
             _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",

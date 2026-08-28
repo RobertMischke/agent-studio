@@ -178,6 +178,56 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
     }
 
+    // Companion to the lineage guard above. The refusal is permanent and
+    // intended, and the completed-push backstop re-sweeps every completed card
+    // on a fixed interval - so reporting it as a push failure produced one
+    // warning per completed card per sweep for ever (the 570+ "Auto-push
+    // skipped ... lineage-blocked" storm) and buried the real push faults.
+    // It must be recorded at Information as "not applicable", never as skipped.
+    [Fact]
+    public async Task WithDevelopLine_ReportsRawCommitRefusalAsNotApplicableNotFailure()
+    {
+        RunGit(_repoRoot, "checkout", "-q", "-b", "develop");
+        RunGit(_repoRoot, "push", "-q", "-u", "origin", "develop");
+        RunGit(_repoRoot, "checkout", "-q", "main");
+        var sha = CommitLocalChange("raw commit that must not advance main");
+        WriteJob(TaskStates.Completed, "lineage-log-task", sha);
+        var logs = new List<string>();
+        var deps = BuildDeps(logs: logs);
+
+        var pushed = await deps.Transitions.PushCompletedJobCommitsAsync(
+            deps.Scanner.ScanAllAutomationJobs().Single(j => j.Id == "lineage-log-task"),
+            AutoPushStrategies.OnCompleted);
+
+        Assert.Equal(0, pushed);
+        Assert.DoesNotContain(logs, l => l.StartsWith("Warning:", StringComparison.Ordinal));
+        Assert.Contains(logs, l =>
+            l.StartsWith("Information:", StringComparison.Ordinal)
+            && l.Contains("not applicable", StringComparison.Ordinal)
+            && l.Contains("lineage-blocked", StringComparison.Ordinal));
+    }
+
+    // The alarm channel must still fire for a genuine fault, so silencing the
+    // topology refusal does not silence a diverged remote.
+    [Fact]
+    public async Task DivergedRemote_StillReportsPushFailure()
+    {
+        var localSha = CommitLocalChange("local change");
+        CommitFromSecondClone("remote operator change");
+        WriteJob(TaskStates.Completed, "diverged-log-task", localSha);
+        var logs = new List<string>();
+        var deps = BuildDeps(logs: logs);
+
+        var pushed = await deps.Transitions.PushCompletedJobCommitsAsync(
+            deps.Scanner.ScanAllAutomationJobs().Single(j => j.Id == "diverged-log-task"),
+            AutoPushStrategies.OnCompleted);
+
+        Assert.Equal(0, pushed);
+        Assert.Contains(logs, l =>
+            l.StartsWith("Warning:", StringComparison.Ordinal)
+            && l.Contains("Auto-push skipped", StringComparison.Ordinal));
+    }
+
     private void InstallSlowPushHook(int seconds)
     {
         var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");
@@ -270,7 +320,7 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(remoteSha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
     }
 
-    private Deps BuildDeps(CompletedPushQueue? pushQueue = null)
+    private Deps BuildDeps(CompletedPushQueue? pushQueue = null, List<string>? logs = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -290,7 +340,10 @@ public sealed class AutoPushStrategyTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance, sessions: sessions, pushQueue: pushQueue);
+        ILogger<TaskTransitionService> transitionLogger = logs is null
+            ? NullLogger<TaskTransitionService>.Instance
+            : new CollectingLogger<TaskTransitionService>(logs);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, transitionLogger, sessions: sessions, pushQueue: pushQueue);
         return new Deps(config, scanner, settings, transitions);
     }
 
@@ -399,4 +452,17 @@ public sealed class AutoPushStrategyTests : IDisposable
         TaskScannerService Scanner,
         ProjectSettingsService Settings,
         TaskTransitionService Transitions);
+
+    private sealed class CollectingLogger<T>(List<string> entries) : ILogger<T>
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => entries.Add($"{logLevel}: {formatter(state, exception)}");
+    }
 }
