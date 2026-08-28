@@ -270,11 +270,12 @@ public sealed class TaskIntegrationStatusService
             && !string.IsNullOrWhiteSpace(reviewedResultSha)
             && AncestorSetContains(reach.DevelopAncestors, reviewedResultSha))
         {
-            return Integrated(
-                Short(reviewedResultSha),
-                branchName,
-                deliveryRef,
-                "reviewed-result-ancestor");
+            return TryClassifyPushBlocked(job, reach, reviewedResultSha, branchName, deliveryRef)
+                ?? Integrated(
+                    Short(reviewedResultSha),
+                    branchName,
+                    deliveryRef,
+                    "reviewed-result-ancestor");
         }
 
         if (attributed.Count == 0)
@@ -292,9 +293,16 @@ public sealed class TaskIntegrationStatusService
         var newest = attributed[^1];
 
         // ALL attributed commits landed. Attempt history and recorded merge
-        // provenance are deliberately irrelevant to this result.
+        // provenance are deliberately irrelevant to this result - UNLESS the
+        // landing is local-only and the deferred origin push is provably
+        // blocked (AGT-2688): local ancestry alone must never read as fully
+        // "integrated" while origin still lacks the work and nothing is
+        // retrying it.
         if (missing.Count == 0)
-            return Integrated(Short(newest), branchName, deliveryRef, "anchor-ancestor");
+        {
+            return TryClassifyPushBlocked(job, reach, newest, branchName, deliveryRef)
+                ?? Integrated(Short(newest), branchName, deliveryRef, "anchor-ancestor");
+        }
 
         // SOME landed, some did not → partial, naming the missing short-SHAs so the
         // tooltip says exactly which attributed commits are not in develop yet.
@@ -308,6 +316,74 @@ public sealed class TaskIntegrationStatusService
             Detail = $"{integratedCount}/{attributed.Count} attributed commits integrated; "
                      + $"missing: {missingShort}",
         };
+    }
+
+    /// <summary>
+    /// AGT-2688: a commit can be a local-branch ancestor while the deferred push
+    /// of that branch to origin never landed - a fetch-first project checkout
+    /// makes local ancestry alone provide no evidence about origin. Returns a
+    /// distinct <c>integration-push-blocked</c> verdict only when there IS an
+    /// origin remote, the commit is NOT yet an origin ancestor, and the last
+    /// recorded push attempt (<see cref="PipelineCatalogue.MergeIntoDevelopPushStepId"/>)
+    /// terminally failed - never for a push that has not run yet or is still
+    /// mid-retry, which stays honestly "integrated" until proven otherwise.
+    /// </summary>
+    private TaskIntegrationStatus? TryClassifyPushBlocked(
+        TaskInfo job,
+        RepoIntegration reach,
+        string sha,
+        string branchName,
+        string? deliveryRef)
+    {
+        if (!reach.HasOrigin) return null;
+        if (AncestorSetContains(reach.OriginAncestors, sha)) return null;
+
+        var pushStep = ReadLatestPushStep(job);
+        if (pushStep is null || pushStep.Status != PipelineStepStatus.Failed) return null;
+
+        var failure = AcceptedIntegrationFailurePolicy.Classify(
+            pushStep.Status,
+            verdict: null,
+            reason: pushStep.Reason,
+            verdictSummary: pushStep.VerdictSummary,
+            persistedCode: AcceptedIntegrationFailureCodes.PushBlocked);
+        if (failure is null) return null;
+
+        return new TaskIntegrationStatus
+        {
+            Status = IntegrationStatuses.ConflictSkipped,
+            DeliveryRef = deliveryRef,
+            IntegrationBranch = branchName,
+            Detail = failure.Reason,
+            Failure = new TaskIntegrationFailure
+            {
+                Code = failure.Code,
+                Label = failure.Label,
+                Reason = failure.Reason,
+                RebaseRecoveryAvailable = failure.RebaseRecoveryAvailable,
+            },
+        };
+    }
+
+    internal PipelineStepExecution? ReadLatestPushStep(TaskInfo job)
+    {
+        try
+        {
+            return _pipelineLog.Read(job.FolderPath)?.Steps.LastOrDefault(step =>
+                string.Equals(
+                    step.StepId,
+                    PipelineCatalogue.MergeIntoDevelopPushStepId,
+                    StringComparison.Ordinal));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "integration-status push-step read failed for project={Project} job={JobId}",
+                job.ProjectName,
+                job.Id);
+            return null;
+        }
     }
 
     /// <summary>
@@ -588,7 +664,16 @@ public sealed class TaskIntegrationStatusService
                 [integrationBranch, "origin/" + integrationBranch],
                 out var ancestors);
 
-            return new RepoIntegration(integrationBranch, ancestors, succeeded);
+            // AGT-2688: local ancestry alone is not proof that origin has the
+            // work - the deferred integration-branch push can be blocked. Only
+            // ask this question when there is an origin to publish to at all;
+            // a local-only project has nothing to fall behind.
+            var hasOrigin = _git.HasOriginRemote(root);
+            var originAncestors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (hasOrigin)
+                _git.TryGetAncestorShaSet(root, ["origin/" + integrationBranch], out originAncestors);
+
+            return new RepoIntegration(integrationBranch, ancestors, succeeded, hasOrigin, originAncestors);
         });
     }
 
@@ -605,7 +690,9 @@ public sealed class TaskIntegrationStatusService
     private sealed record RepoIntegration(
         string IntegrationBranch,
         HashSet<string> DevelopAncestors,
-        bool Succeeded);
+        bool Succeeded,
+        bool HasOrigin,
+        HashSet<string> OriginAncestors);
 
     private sealed record RepoBranchKey(string Root, string Branch);
 }

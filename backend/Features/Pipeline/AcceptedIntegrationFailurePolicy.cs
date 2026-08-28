@@ -17,6 +17,16 @@ public static class AcceptedIntegrationFailureCodes
     public const string ReviewSubjectInvalid = "review-subject-invalid";
     public const string NoTaskBranch = "no-task-branch";
     public const string IntegrationError = "integration-error";
+
+    /// <summary>
+    /// AGT-2688: the merge into the integration branch landed locally but the
+    /// push of that branch to origin was blocked (diverged remote / lineage
+    /// guard) or exhausted its environmental retry budget. Distinct from
+    /// <see cref="IntegrationError"/> so the card alarms with an honest,
+    /// specific signal instead of silently reading as fully integrated while
+    /// origin never received the work.
+    /// </summary>
+    public const string PushBlocked = "integration-push-blocked";
 }
 
 /// <summary>
@@ -108,6 +118,14 @@ public static class AcceptedIntegrationFailurePolicy
                     verdictSummary,
                     "The accepted coding card had no delivery branch to integrate."),
                 RebaseRecoveryAvailable: false),
+            AcceptedIntegrationFailureCodes.PushBlocked => new(
+                code,
+                "Integration push blocked",
+                FirstNonBlank(
+                    reason,
+                    verdictSummary,
+                    "The integration branch merged locally, but publishing it to origin was blocked."),
+                RebaseRecoveryAvailable: false),
             _ => new(
                 AcceptedIntegrationFailureCodes.IntegrationError,
                 "Integration failed",
@@ -161,6 +179,7 @@ public static class AcceptedIntegrationFailurePolicy
             AcceptedIntegrationFailureCodes.ReviewSubjectInvalid => AcceptedIntegrationFailureCodes.ReviewSubjectInvalid,
             AcceptedIntegrationFailureCodes.NoTaskBranch => AcceptedIntegrationFailureCodes.NoTaskBranch,
             AcceptedIntegrationFailureCodes.IntegrationError => AcceptedIntegrationFailureCodes.IntegrationError,
+            AcceptedIntegrationFailureCodes.PushBlocked => AcceptedIntegrationFailureCodes.PushBlocked,
             _ => null,
         };
     }

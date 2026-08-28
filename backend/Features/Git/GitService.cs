@@ -5589,6 +5589,9 @@ public class GitService
         return true;
     }
 
+    /// <summary>True when <paramref name="repoRoot"/> has an <c>origin</c> remote configured.</summary>
+    public bool HasOriginRemote(string repoRoot) => HasRemote(repoRoot, "origin");
+
     private static bool HasRemote(string repoRoot, string remote)
     {
         var (remotesOut, _, remotesCode) = RunGitArgs(repoRoot, "remote");

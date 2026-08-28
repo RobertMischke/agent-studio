@@ -684,6 +684,120 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.Equal(IntegrationStatuses.Integrated, lookup[completed.TaskKey].Status);
     }
 
+    // --- AGT-2688: local merge landed, origin push blocked -----------------
+
+    [Fact]
+    public void BuildLookup_LocalMergeNotYetPushed_NoRecordedPushAttempt_StaysIntegrated()
+    {
+        // A push that simply has not run yet (queued, in flight, or never
+        // attempted) must never alarm: only a RECORDED, terminal push failure
+        // may downgrade the honest verdict away from "integrated".
+        var repo = SeedDevelopMainRepoWithOrigin(out _);
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/unpushed");
+        File.WriteAllText(Path.Combine(repo, "unpushed.txt"), "task work");
+        Commit(repo, "feat: unpushed work");
+        var anchor = RunGit(repo, "rev-parse task/unpushed").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, $"merge -q --no-ff -m \"merge task/unpushed\" task/unpushed");
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("unpushed", "AGT-4001", project, repo, log, commits: new[] { Commit(anchor) },
+            prov: Prov(branch: "task/unpushed"));
+
+        var status = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+    }
+
+    [Fact]
+    public void BuildLookup_LocalMergeNotPushedToOrigin_RecordedPushFailure_IsPushBlockedNotSilentlyIntegrated()
+    {
+        // AGT-2688: integrate-on-delivery merges into LOCAL develop, but the
+        // deferred push of develop to origin fails (diverged remote / lineage
+        // guard). Local ancestry alone must not read as fully "integrated" -
+        // that reading is exactly what made the accepted-integration backstop
+        // stop retrying the missing push and let the delivery sit off origin
+        // forever while the board and the recovery sweep both believed it was
+        // done.
+        var repo = SeedDevelopMainRepoWithOrigin(out _);
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/blocked");
+        File.WriteAllText(Path.Combine(repo, "blocked.txt"), "task work");
+        Commit(repo, "feat: blocked work");
+        var anchor = RunGit(repo, "rev-parse task/blocked").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge -q --no-ff -m \"merge task/blocked\" task/blocked");
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("blocked", "AGT-4002", project, repo, log, commits: new[] { Commit(anchor) },
+            prov: Prov(branch: "task/blocked"));
+
+        log.EnsureRun(job.FolderPath, PipelineCatalogue.Standard, project, job.Id);
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Passed,
+            Verdict = "merged",
+        });
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopPushStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "environmental",
+            VerdictSummary = "Push of the integration branch to origin failed (remote-rejected); flagged environmental (AGT-1944).",
+            Reason = "! [rejected] develop -> develop (non-fast-forward)",
+        });
+
+        var status = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.ConflictSkipped, status.Status);
+        Assert.Equal(AcceptedIntegrationFailureCodes.PushBlocked, status.Failure?.Code);
+        Assert.False(status.Failure?.RebaseRecoveryAvailable);
+
+        // The backstop must keep retrying the push instead of silently
+        // finalizing a card whose work never reached origin.
+        var recovery = svc.ResolveAcceptedIntegrationRecovery(job, status);
+        Assert.Equal(AcceptedIntegrationRecoveryAction.Retry, recovery.Action);
+    }
+
+    [Fact]
+    public void BuildLookup_LocalMergePushedToOrigin_IsIntegratedEvenAfterAnOlderRecordedFailure()
+    {
+        // A later successful push must not be shadowed by an earlier failed
+        // attempt still sitting in pipeline history.
+        var repo = SeedDevelopMainRepoWithOrigin(out var origin);
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/recovered");
+        File.WriteAllText(Path.Combine(repo, "recovered.txt"), "task work");
+        Commit(repo, "feat: recovered work");
+        var anchor = RunGit(repo, "rev-parse task/recovered").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge -q --no-ff -m \"merge task/recovered\" task/recovered");
+        RunGit(repo, "push -q origin develop");
+        var developTip = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("recovered", "AGT-4003", project, repo, log, commits: new[] { Commit(anchor) },
+            prov: Prov(branch: "task/recovered"));
+        log.EnsureRun(job.FolderPath, PipelineCatalogue.Standard, project, job.Id);
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopPushStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "environmental",
+            Reason = "an earlier attempt failed before the retry succeeded",
+        });
+
+        var status = svc.BuildLookup(new[] { job })[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(developTip, RunGit(origin, "rev-parse refs/heads/develop").Out.Trim());
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private TaskIntegrationStatusService BuildService(string repo, out string projectName, out PipelineExecutionLog log)
@@ -724,6 +838,22 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         RunGit(repo, "commit -q -m seed");
         RunGit(repo, "checkout -q -b develop");
         RunGit(repo, "checkout -q main");
+        return repo;
+    }
+
+    /// <summary>
+    /// Same seed as <see cref="SeedDevelopMainRepo"/>, plus a bare "origin" remote
+    /// with <c>main</c> and <c>develop</c> already published at the seed commit -
+    /// the fixture for AGT-2688's "merged locally, not yet on origin" scenarios.
+    /// </summary>
+    private string SeedDevelopMainRepoWithOrigin(out string originPath)
+    {
+        var repo = SeedDevelopMainRepo();
+        originPath = Path.Combine(_tempDir, "origin-" + Guid.NewGuid().ToString("N")[..8] + ".git");
+        RunGit(_tempDir, $"init -q --bare \"{originPath}\"");
+        RunGit(repo, $"remote add origin \"{originPath}\"");
+        RunGit(repo, "push -q origin main");
+        RunGit(repo, "push -q origin develop");
         return repo;
     }
 

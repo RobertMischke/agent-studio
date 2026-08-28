@@ -178,6 +178,63 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/develop"));
     }
 
+    // AGT-2688: the direct-to-main completed-job push is guaranteed to fail for
+    // every single completed job in a dual-line project (a raw commit is never
+    // the exact published develop tip once it has been folded by a merge - the
+    // guard already blocks it before any `git push` subprocess runs, so a
+    // subprocess-level probe cannot distinguish "attempted and blocked" from
+    // "skipped"). Before the fix, the request path still attempted this push on
+    // every completed job and every 15-minute backstop sweep, spending a
+    // `git fetch` round-trip and logging an alarming Warning each time - 570+
+    // "Auto-push skipped ... lineage-blocked" warnings overnight for zero
+    // possible benefit. The fix recognizes the redundancy up front and logs an
+    // Info skip instead; this test asserts on the actual log record (the only
+    // externally observable difference) rather than on git subprocess behavior.
+    [Fact]
+    public async Task MoveToCompleted_WithDevelopLine_LogsSkipInsteadOfAttemptingRedundantMainPush()
+    {
+        RunGit(_repoRoot, "checkout", "-q", "-b", "develop");
+        RunGit(_repoRoot, "push", "-q", "-u", "origin", "develop");
+        RunGit(_repoRoot, "checkout", "-q", "main");
+        var remoteBefore = RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main");
+        var sha = CommitLocalChange("develop-line completed change");
+        WriteJob(TaskStates.HumanReview, "develop-line-completed-task", sha);
+        var logger = new CapturingLogger();
+        var deps = BuildDeps(logger: logger);
+
+        var outcome = await deps.Transitions.MoveAsync(
+            "develop-line-completed-task",
+            TaskStates.Completed,
+            _watchPath,
+            suppressIntegrationTrigger: true);
+
+        Assert.Equal(MoveJobStatus.Success, outcome.Status);
+        Assert.Equal(remoteBefore, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
+        Assert.DoesNotContain(
+            logger.Entries,
+            e => e.Message.Contains("lineage-blocked", StringComparison.OrdinalIgnoreCase)
+                 || e.Message.Contains("Auto-push skipped for", StringComparison.Ordinal));
+        Assert.Contains(
+            logger.Entries,
+            e => e.Level == LogLevel.Information
+                 && e.Message.Contains("develop line", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class CapturingLogger : ILogger<TaskTransitionService>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception)));
+    }
+
     private void InstallSlowPushHook(int seconds)
     {
         var hooksDir = Path.Combine(_repoRoot, ".git", "hooks");
@@ -270,7 +327,7 @@ public sealed class AutoPushStrategyTests : IDisposable
         Assert.Equal(remoteSha, RunGitCapture(_remoteRoot, "rev-parse", "refs/heads/main"));
     }
 
-    private Deps BuildDeps(CompletedPushQueue? pushQueue = null)
+    private Deps BuildDeps(CompletedPushQueue? pushQueue = null, ILogger<TaskTransitionService>? logger = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -290,7 +347,7 @@ public sealed class AutoPushStrategyTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var sessions = new TaskSessionLog(scanner, NullLogger<TaskSessionLog>.Instance);
-        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, NullLogger<TaskTransitionService>.Instance, sessions: sessions, pushQueue: pushQueue);
+        var transitions = new TaskTransitionService(scanner, states, mutations, git, settings, logger ?? NullLogger<TaskTransitionService>.Instance, sessions: sessions, pushQueue: pushQueue);
         return new Deps(config, scanner, settings, transitions);
     }
 

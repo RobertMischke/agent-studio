@@ -1734,10 +1734,41 @@ public sealed class TaskTransitionService
         return new AutoCommitPlan(AutoCommitScope.Scoped, scoped);
     }
 
+    /// <summary>
+    /// True when this project has a <c>develop</c> line: <see cref="GitService.PushShaAsync"/>
+    /// defaults to <c>main</c>, and <see cref="GitService"/>'s direct-main-advance
+    /// guard (AGT-1999 / <c>DecideDirectMainAdvance</c>) fails closed on every raw
+    /// task/completed-job SHA there, because a raw commit is never the exact
+    /// published <c>develop</c> tip once it has been folded by a merge. That guard
+    /// is correct and must stay; the redundant attempt itself is the bug (AGT-2688):
+    /// the develop-then-main integration path already owns publishing this work, so
+    /// this direct push would always be attempted and always fail, spamming
+    /// <c>lineage-blocked</c> warnings once per completed job per sweep for no
+    /// possible benefit. Skip the attempt entirely rather than let it cry wolf.
+    /// </summary>
+    private bool DirectMainPushIsRedundant(string watchPath)
+    {
+        var repoRoot = _git.ResolveRepoRootForWatchPath(watchPath);
+        if (string.IsNullOrWhiteSpace(repoRoot)) return false;
+        return string.Equals(
+            _git.ResolveIntegrationBranch(repoRoot, "develop"),
+            "develop",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
     private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)
     {
         try
         {
+            if (DirectMainPushIsRedundant(watchPath))
+            {
+                _logger.LogInformation(
+                    "Auto-push to main skipped for {JobId} at {Sha} ({Reason}): project has a develop line; "
+                    + "the develop-then-main integration path already publishes this work.",
+                    jobId, sha, reason);
+                return false;
+            }
+
             var result = await _git.PushShaAsync(sha, watchPath, ct);
             if (result.Success)
             {
