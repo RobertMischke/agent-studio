@@ -385,7 +385,10 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
             "main",
             CancellationToken.None);
 
-        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
+        // AGT-2688: a blocked release lineage is reported as a distinct blocked
+        // publication rather than an anonymous error, so the card alarms instead
+        // of resting in the recovery-less "pending" bucket.
+        Assert.Equal(MergeIntoIntegrationOutcome.PublicationBlocked, outcome.Outcome);
         Assert.Contains("main is not an ancestor of develop", outcome.Error);
         Assert.Equal(mainBefore, RunGit(repo, "rev-parse main").Out.Trim());
         Assert.Equal(developBefore, RunGit(repo, "rev-parse develop").Out.Trim());
@@ -1535,11 +1538,15 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Run_LocalDelivery_DivergedIntegrationBranch_ReportsHealingErrorInsteadOfMergingStale()
+    public void Run_LocalDelivery_DivergedIntegrationBranch_ConvergesThenMergesOntoThePublishedTip()
     {
         // Local develop and origin/develop both moved on from main: a real
-        // divergence. The local task-branch path used to merge onto the stale
-        // local tip and report success; it must now say so and merge nothing.
+        // divergence. This path used to merge onto the stale local tip and
+        // report success while origin never saw the work; it then refused
+        // outright, which stranded the delivery with no recovery action and made
+        // the fleet re-deliver forever (AGT-2688). It must now converge the two
+        // lineages first and merge onto a tip that contains origin, so the
+        // delivery is real and the follow-up push fast-forwards.
         var (repo, _) = SeedRepoWithOrigin("develop-diverged");
         RunGit(repo, "checkout -q -b develop");
         File.WriteAllText(Path.Combine(repo, "local.txt"), "local develop work");
@@ -1557,7 +1564,6 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
         Commit(repo, "feat: task work");
         RunGit(repo, "checkout -q develop");
-        var developBefore = RunGit(repo, "rev-parse develop").Out.Trim();
 
         var (git, log) = Build(repo);
         var jobFolder = BeginRun(log, repo, jobId: "64");
@@ -1565,16 +1571,75 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
 
         var outcome = runner.Run("Fixture", "64", jobFolder, repo, "develop");
 
-        Assert.Equal(MergeIntoIntegrationOutcome.Error, outcome.Outcome);
-        Assert.Contains(
-            "Integration branch 'develop' diverged from origin - heal or recreate it via project settings before accepting deliveries.",
-            outcome.Error);
+        Assert.Equal(MergeIntoIntegrationOutcome.Merged, outcome.Outcome);
+
+        // The merge landed on a converged tip, not a stale one: develop now
+        // contains what origin had published, so the push fast-forwards.
+        Assert.Equal(0, RunGit(repo, "merge-base --is-ancestor origin/develop develop").Code);
+        // Nothing was overwritten - both lineages survive, plus the delivery.
+        Assert.True(File.Exists(Path.Combine(repo, "local.txt")));
+        Assert.True(File.Exists(Path.Combine(repo, "remote.txt")));
+        Assert.True(File.Exists(Path.Combine(repo, "task.txt")));
+        Assert.Equal(0, RunGit(repo, "merge-base --is-ancestor task/64 develop").Code);
+
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal(PipelineStepStatus.Passed, step!.Status);
+        Assert.Equal("merged", step.Verdict);
+    }
+
+    /// <summary>
+    /// AGT-2688: when the divergence cannot be converged (both lineages edited
+    /// the same lines), integration must report a distinct blocked publication
+    /// that alarms - never the undifferentiated "pending" bucket, which has no
+    /// recovery action and therefore loops forever.
+    /// </summary>
+    [Fact]
+    public void Run_LocalDelivery_UnconvergeableDivergence_ReportsPublicationBlockedAndMergesNothing()
+    {
+        var (repo, _) = SeedRepoWithOrigin("develop-unconvergeable");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "contested.txt"), "local develop work");
+        Commit(repo, "chore: local develop work");
+        RunGit(repo, "push -q -u origin develop");
+
+        // Both sides rewrite the SAME file -> convergence conflicts.
+        RunGit(repo, "checkout -q -b origin-side main");
+        File.WriteAllText(Path.Combine(repo, "contested.txt"), "remote develop work");
+        Commit(repo, "chore: remote develop work");
+        RunGit(repo, "push -q -f origin origin-side:develop");
+
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/65");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "task work");
+        Commit(repo, "feat: task work");
+        RunGit(repo, "checkout -q develop");
+        var developBefore = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "65");
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+
+        var outcome = runner.Run("Fixture", "65", jobFolder, repo, "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.PublicationBlocked, outcome.Outcome);
         Assert.Equal(developBefore, RunGit(repo, "rev-parse develop").Out.Trim());
+        Assert.True(
+            string.IsNullOrWhiteSpace(RunGit(repo, "status --porcelain").Out),
+            "the aborted convergence must leave a clean working tree");
 
         var step = ReadMergeStep(log, jobFolder);
         Assert.NotNull(step);
         Assert.Equal(PipelineStepStatus.Failed, step!.Status);
-        Assert.Equal("error", step.Verdict);
+        Assert.Equal("publication-blocked", step.Verdict);
+
+        // The card must carry a distinct, non-recoverable code so it alarms
+        // instead of being requeued into another doomed delivery round.
+        Assert.Equal(AcceptedIntegrationFailureCodes.IntegrationPublicationBlocked, step.FailureCode);
+        var failure = AcceptedIntegrationFailurePolicy.Classify(
+            step.Status, step.Verdict, step.Reason, step.VerdictSummary, step.FailureCode);
+        Assert.NotNull(failure);
+        Assert.False(failure!.RebaseRecoveryAvailable);
     }
 
     /// <summary>

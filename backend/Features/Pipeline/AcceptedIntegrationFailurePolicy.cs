@@ -16,6 +16,15 @@ public static class AcceptedIntegrationFailureCodes
     public const string ReviewSubjectTaskKeyUnavailable = "review-subject-task-key-unavailable";
     public const string ReviewSubjectInvalid = "review-subject-invalid";
     public const string NoTaskBranch = "no-task-branch";
+
+    /// <summary>
+    /// AGT-2688: integration could not reach <c>origin</c> - the local
+    /// integration branch diverged and could not be converged, or the release
+    /// line may not be advanced from the current develop tip. The delivery was
+    /// not merged and no retry can clear it; an operator must heal the lineage.
+    /// </summary>
+    public const string IntegrationPublicationBlocked = "integration-publication-blocked";
+
     public const string IntegrationError = "integration-error";
 }
 
@@ -100,6 +109,15 @@ public static class AcceptedIntegrationFailurePolicy
                 "Review subject invalid",
                 "The reviewed delivery no longer matches the task's current authoritative run.",
                 RebaseRecoveryAvailable: false),
+            AcceptedIntegrationFailureCodes.IntegrationPublicationBlocked => new(
+                code,
+                "Integration publication blocked",
+                FirstNonBlank(
+                    reason,
+                    verdictSummary,
+                    "Integration could not reach origin, so the delivery was not merged. "
+                    + "Heal the integration branch lineage against origin, then retry."),
+                RebaseRecoveryAvailable: false),
             AcceptedIntegrationFailureCodes.NoTaskBranch => new(
                 code,
                 "No task branch",
@@ -128,6 +146,8 @@ public static class AcceptedIntegrationFailurePolicy
             return AcceptedIntegrationFailureCodes.NoTaskBranch;
         if (string.Equals(verdict, "agent-round-required", StringComparison.OrdinalIgnoreCase))
             return AcceptedIntegrationFailureCodes.DeliveryAttributionAmbiguous;
+        if (string.Equals(verdict, "publication-blocked", StringComparison.OrdinalIgnoreCase))
+            return AcceptedIntegrationFailureCodes.IntegrationPublicationBlocked;
 
         var detail = reason ?? string.Empty;
         if (detail.Contains(
@@ -160,6 +180,7 @@ public static class AcceptedIntegrationFailurePolicy
             AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable => AcceptedIntegrationFailureCodes.ReviewSubjectTaskKeyUnavailable,
             AcceptedIntegrationFailureCodes.ReviewSubjectInvalid => AcceptedIntegrationFailureCodes.ReviewSubjectInvalid,
             AcceptedIntegrationFailureCodes.NoTaskBranch => AcceptedIntegrationFailureCodes.NoTaskBranch,
+            AcceptedIntegrationFailureCodes.IntegrationPublicationBlocked => AcceptedIntegrationFailureCodes.IntegrationPublicationBlocked,
             AcceptedIntegrationFailureCodes.IntegrationError => AcceptedIntegrationFailureCodes.IntegrationError,
             _ => null,
         };

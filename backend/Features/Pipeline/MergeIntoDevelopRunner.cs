@@ -247,14 +247,18 @@ public sealed class MergeIntoDevelopRunner
 
             if (!synchronized.Success)
             {
+                // AGT-2688: an unconvergeable integration lineage is a blocked
+                // publication, not an anonymous error. Reporting it distinctly
+                // keeps the card out of the "pending" bucket, which carries no
+                // recovery action and therefore stalls silently forever.
                 result = MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.Error,
+                    MergeIntoIntegrationOutcome.PublicationBlocked,
                     error: synchronized.Error);
             }
             else if (lineage?.Mode == ImmediateIntegrationLineageMode.Blocked)
             {
                 result = MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.Error,
+                    MergeIntoIntegrationOutcome.PublicationBlocked,
                     error: lineage.Reason);
             }
             else if (isPullRequest)
@@ -1532,6 +1536,13 @@ public sealed class MergeIntoDevelopRunner
                     "already-merged",
                     $"Task branch already contained in {integrationBranch}; no merge needed.{exactGate}",
                     preDevelopResult?.Reason);
+            case MergeIntoIntegrationOutcome.PublicationBlocked:
+                return (
+                    PipelineStepStatus.Failed,
+                    "publication-blocked",
+                    result.Error
+                        ?? $"Integration into {integrationBranch} cannot reach origin; the delivery was not merged.",
+                    null);
             case MergeIntoIntegrationOutcome.NoTaskBranch:
                 return (PipelineStepStatus.Skipped, "no-branch", result.Error ?? "No task branch to merge.", null);
             case MergeIntoIntegrationOutcome.PushedForReview:

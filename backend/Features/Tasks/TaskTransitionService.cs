@@ -1641,6 +1641,25 @@ public sealed class TaskTransitionService
 
         var pushed = 0;
         var reason = requireCompletedState ? "completed" : "auto-commit";
+
+        // AGT-2688: the auto-push publishes a raw task commit straight to the
+        // release line (GitService.PushShaAsync defaults to "main"). In a
+        // repository that also carries a develop line that is structurally
+        // invalid - ImmediateIntegrationLineagePolicy.DecideDirectMainAdvance
+        // refuses every such push as "lineage-blocked", because a task commit is
+        // never the published develop tip. Attempting it anyway produced one
+        // warning plus one managed-repo push-failure alarm per completed card
+        // (570+ overnight) for work the integration pipeline publishes correctly
+        // through develop. Skip it instead of alarming on a guaranteed refusal.
+        if (HasDevelopLine(job.WatchPath))
+        {
+            _logger.LogInformation(
+                "Auto-push to main skipped for {JobId} ({Reason}): the repository has a develop line, "
+                + "so integration publishes this work through develop rather than a direct main advance.",
+                job.Id, reason);
+            return 0;
+        }
+
         foreach (var commit in commits.Where(c => !string.IsNullOrWhiteSpace(c.Sha)).OrderBy(c => c.At))
         {
             if (await TryPushCommitAsync(commit.Sha, job.WatchPath, job.ProjectName, job.Id, reason, ct))
@@ -1732,6 +1751,33 @@ public sealed class TaskTransitionService
 
         if (scoped.Count == 0) return new AutoCommitPlan(AutoCommitScope.None, []);
         return new AutoCommitPlan(AutoCommitScope.Scoped, scoped);
+    }
+
+    /// <summary>
+    /// True when the repository behind <paramref name="watchPath"/> carries a
+    /// develop line, i.e. it is a dual-line repository whose release branch may
+    /// only be advanced from the published develop tip. Mirrors the resolution
+    /// <see cref="MergeIntoDevelopRunner"/> uses so both agree on the topology.
+    /// </summary>
+    private bool HasDevelopLine(string? watchPath)
+    {
+        try
+        {
+            var repoRoot = _git.ResolveRepoRootForWatchPath(watchPath)
+                ?? (string.IsNullOrWhiteSpace(watchPath) ? null : watchPath);
+            if (string.IsNullOrWhiteSpace(repoRoot)) return false;
+            return string.Equals(
+                _git.ResolveIntegrationBranch(repoRoot, "develop"),
+                "develop",
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            // Topology probe is best-effort; an unreadable repo keeps the
+            // historical single-line auto-push behaviour.
+            SilentCatch.Note(ex, "TaskTransitionService: develop-line probe is best-effort");
+            return false;
+        }
     }
 
     private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string project, string jobId, string reason, CancellationToken ct)

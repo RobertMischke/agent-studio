@@ -32,6 +32,13 @@ public enum IntegrationBranchSyncOutcome
     RemoteAhead,
     LocalAhead,
     NoRemote,
+    /// <summary>
+    /// AGT-2688: local and origin had diverged and were re-joined by merging
+    /// <c>origin/&lt;branch&gt;</c> into the local branch. Both tips are preserved
+    /// (nothing is rewritten or overwritten) and the local branch now contains
+    /// origin, so the integration push that follows fast-forwards.
+    /// </summary>
+    Converged,
     Diverged,
     Error,
 }
@@ -90,6 +97,15 @@ public enum MergeIntoIntegrationOutcome
     PushedForReview,
     /// <summary>The merge hit a conflict. It was aborted (tree left clean) and the conflicted files are reported, not swallowed.</summary>
     Conflict,
+    /// <summary>
+    /// AGT-2688: the delivery was never merged because the integration lineage
+    /// cannot reach origin - the local integration branch diverged from
+    /// <c>origin</c> and could not be converged, or the release line may not be
+    /// advanced from the current develop tip. Distinct from
+    /// <see cref="Error"/> so the card reports a blocked publication that alarms
+    /// instead of resting in the undifferentiated "pending" bucket forever.
+    /// </summary>
+    PublicationBlocked,
     /// <summary>
     /// The merge itself succeeded but the pre-develop build gate found the MERGE
     /// RESULT red, so the integration branch was rolled back to its exact
@@ -4156,6 +4172,18 @@ public class GitService
         CancellationToken cancellationToken = default)
     {
         var refreshed = RefreshIntegrationBranch(repoRoot, integrationBranch, cancellationToken);
+
+        // AGT-2688: a diverged integration branch used to be a hard dead end.
+        // Integration aborted, the delivery was never merged, and the card sat in
+        // the undifferentiated "pending" bucket that has no recovery action - the
+        // fleet re-delivered against the same wall indefinitely. Converge the two
+        // lineages instead, by merging origin into local. This preserves both
+        // tips (no rewrite, no force) and makes the subsequent push a
+        // fast-forward. A conflicting convergence is aborted and still reported
+        // as Diverged, so the guard against overwriting either tip still holds.
+        if (refreshed.Outcome == IntegrationBranchSyncOutcome.Diverged)
+            return ConvergeIntegrationBranch(repoRoot, integrationBranch, refreshed);
+
         if (!refreshed.Success
             || refreshed.Outcome != IntegrationBranchSyncOutcome.RemoteAhead)
             return refreshed;
@@ -4213,6 +4241,72 @@ public class GitService
             AbbreviateSha(localTip),
             AbbreviateSha(remoteTip));
         return new(IntegrationBranchSyncOutcome.FastForwarded);
+    }
+
+    /// <summary>
+    /// AGT-2688: re-joins a local integration branch that has diverged from
+    /// <c>origin</c> by merging <c>origin/&lt;branch&gt;</c> into it. Convergence is
+    /// additive - neither tip is rewritten, reset, or force-pushed - so the two
+    /// integration writers end up on one lineage and the push that follows the
+    /// delivery merge fast-forwards instead of being rejected non-fast-forward.
+    /// A dirty tree or a conflicting convergence leaves the branch untouched and
+    /// still reports <see cref="IntegrationBranchSyncOutcome.Diverged"/>, which
+    /// the caller surfaces as a blocked publication.
+    /// </summary>
+    private IntegrationBranchSyncResult ConvergeIntegrationBranch(
+        string repoRoot,
+        string integrationBranch,
+        IntegrationBranchSyncResult diverged)
+    {
+        var remoteIntegrationRef = $"refs/remotes/origin/{integrationBranch}";
+        var localTip = GetBranchTip(repoRoot, integrationBranch);
+        var remoteTip = GetBranchTip(repoRoot, remoteIntegrationRef);
+
+        if (DirtyTreeRefusal(
+                repoRoot,
+                "Integration working tree has uncommitted changes; refusing to converge it with origin.") is not null)
+            return diverged;
+
+        var (currentRaw, _, headCode) = RunGit(repoRoot, "rev-parse --abbrev-ref HEAD");
+        var current = headCode == 0 ? currentRaw.Trim() : null;
+        if (!string.Equals(current, integrationBranch, StringComparison.Ordinal))
+        {
+            var (_, checkoutError, checkoutCode) = RunGitArgs(repoRoot, "checkout", integrationBranch);
+            if (checkoutCode != 0)
+            {
+                _logger.LogWarning(
+                    "Integration branch {Integration} at {Path} could not be checked out to converge with origin: {Error}",
+                    integrationBranch, repoRoot, checkoutError.Trim());
+                return diverged;
+            }
+        }
+
+        var (_, mergeError, mergeCode) = RunGitArgs(
+            repoRoot,
+            "merge",
+            "--no-ff",
+            "--no-edit",
+            "-m",
+            $"Converge {integrationBranch} with origin/{integrationBranch}",
+            remoteIntegrationRef);
+        if (mergeCode != 0)
+        {
+            // Leave the tree exactly as it was; a conflicting convergence needs
+            // an operator, and the caller reports it as a blocked publication.
+            RunGitArgs(repoRoot, "merge", "--abort");
+            _logger.LogWarning(
+                "Integration branch {Integration} at {Path} could not converge with origin: {Error}",
+                integrationBranch, repoRoot, mergeError.Trim());
+            return diverged;
+        }
+
+        _logger.LogInformation(
+            "Integration branch {Integration} at {Path} converged local {Local} with origin {Remote}",
+            integrationBranch,
+            repoRoot,
+            AbbreviateSha(localTip ?? string.Empty),
+            AbbreviateSha(remoteTip ?? string.Empty));
+        return new(IntegrationBranchSyncOutcome.Converged);
     }
 
     private IntegrationBranchSyncResult FetchIntegrationBranch(
