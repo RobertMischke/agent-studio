@@ -199,12 +199,12 @@ describe('buildResultDocument', () => {
     expect(grade?.tone).toBe('ok');
   });
 
-  it('adds duration + tokens + commits chips when the data is present', () => {
+  it('adds compact duration + tokens + commits metrics when the data is present', () => {
     const doc = buildResultDocument(
       detail({ totalTokens: 1_500_000, commits: 2 }),
       verdict({ duration: '4 min' }),
     );
-    expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4 min');
+    expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4m');
     const tokens = doc.metrics.find((x) => x.id === 'tokens');
     expect(tokens?.value).toBe('1.50M');
     expect(tokens?.tooltip).toContain('Estimated cost: $1.25');
@@ -212,12 +212,12 @@ describe('buildResultDocument', () => {
     expect(doc.metrics.find((x) => x.id === 'commits')?.value).toBe('2 commits');
   });
 
-  it('adds files + tests chips from the # Status header lines', () => {
+  it('adds compact files + tests metrics from the # Status header lines', () => {
     const md = `# Status\n\n- Result: Success\n- Files: 3\n- Tests: 11/12 passed\n\n## What Was Done\n- Did work.\n`;
     const doc = buildResultDocument(detail({ statusMarkdown: md }), verdict());
     expect(doc.metrics.find((x) => x.id === 'files')?.value).toBe('3 files');
     const tests = doc.metrics.find((x) => x.id === 'tests');
-    expect(tests?.value).toBe('11/12');
+    expect(tests?.value).toBe('11/12 ✓');
     expect(tests?.tone).toBe('warn');
   });
 
