@@ -387,7 +387,9 @@ never be promoted into that missing standard bucket.
 serves the cache immediately and schedules a coalesced, bounded background
 probe. A failed probe does not replace the last good plan or windows. The
 snapshot retains their original `fetchedAt` and adds `probeFailedAt`,
-`cliVersion`, and a normalized `error`. The UI marks those values stale and
+`cliVersion`, and a normalized `error`. The response also projects explicit
+`capturedAt`, `stale`, `ageSeconds`, and `staleSince` fields from the durable
+`cli-quota-last-good.json` cache. The UI marks those values stale and
 puts the probe error in the marker tooltip. Startup and periodic version checks
 compare Claude and Codex against the disk-cached baseline and log
 `CLI version changed` with the previous version, current version, and source.

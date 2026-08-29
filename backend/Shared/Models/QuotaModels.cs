@@ -41,6 +41,18 @@ public record QuotaSnapshot
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
     /// <summary>
+    /// Public last-good timestamp. This is an additive, explicit alias for
+    /// <see cref="FetchedAt"/> so clients do not have to infer whether an
+    /// error snapshot's timestamp describes data or a failed attempt.
+    /// </summary>
+    public DateTime? CapturedAt { get; init; }
+    /// <summary>True when the response is serving an expired or failed last-good reading.</summary>
+    public bool Stale { get; init; }
+    /// <summary>Whole seconds since <see cref="CapturedAt"/> when a last-good reading exists.</summary>
+    public long? AgeSeconds { get; init; }
+    /// <summary>UTC instant from which the response has been stale.</summary>
+    public DateTime? StaleSince { get; init; }
+    /// <summary>
     /// Version reported by the CLI's <c>--version</c> command for this probe.
     /// Keeping it on the quota snapshot makes parser drift attributable without
     /// requiring a second operator-side reproduction.

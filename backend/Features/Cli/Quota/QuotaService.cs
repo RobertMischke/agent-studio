@@ -66,12 +66,34 @@ public sealed class QuotaService
 
     public QuotaReport GetCached()
     {
+        var now = DateTime.UtcNow;
         return new QuotaReport
         {
+            At = now,
             TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
-                .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
+                .Select(k => _cache.TryGetValue(k, out var snapshot)
+                    ? BuildResponseSnapshot(snapshot, now)
+                    : BuildResponseSnapshot(new QuotaSnapshot { CliType = k }, now))
                 .ToList()
+        };
+    }
+
+    private QuotaSnapshot BuildResponseSnapshot(QuotaSnapshot snapshot, DateTime now)
+    {
+        var hasLastGood = HasLastGood(snapshot);
+        var age = hasLastGood ? now - snapshot.FetchedAt : (TimeSpan?)null;
+        if (age < TimeSpan.Zero) age = TimeSpan.Zero;
+        var stale = !hasLastGood || snapshot.ProbeFailedAt.HasValue || age > _ttl;
+        var staleSince = snapshot.ProbeFailedAt
+            ?? (age > _ttl ? snapshot.FetchedAt + _ttl : (DateTime?)null);
+
+        return snapshot with
+        {
+            CapturedAt = hasLastGood ? snapshot.FetchedAt : null,
+            Stale = stale,
+            AgeSeconds = age.HasValue ? Math.Max(0, (long)age.Value.TotalSeconds) : null,
+            StaleSince = staleSince
         };
     }
 
@@ -185,8 +207,7 @@ public sealed class QuotaService
     {
         var error = NormalizeProbeError(failed.Error);
         var failedAt = failed.ProbeFailedAt ?? failed.FetchedAt;
-        var hasLastGood = previous != null
-            && (previous.Windows.Count > 0 || !string.IsNullOrWhiteSpace(previous.Plan));
+        var hasLastGood = previous != null && HasLastGood(previous);
 
         if (!hasLastGood)
         {
@@ -217,6 +238,9 @@ public sealed class QuotaService
             ? "Quota probe timed out before the CLI panel rendered."
             : error;
     }
+
+    private static bool HasLastGood(QuotaSnapshot snapshot)
+        => snapshot.Windows.Count > 0 || !string.IsNullOrWhiteSpace(snapshot.Plan);
 
     /// <summary>
     /// AGT-2064 plausibility gate. A single probe that shows a window jumping
@@ -291,7 +315,7 @@ public sealed class QuotaService
     /// </summary>
     private void PersistCache()
     {
-        try { _store.Write(_cache.Values); }
+        try { _store.Write(_cache.Values.Where(HasLastGood)); }
         catch (Exception ex) { _logger.LogDebug(ex, "Quota cache persist failed"); }
     }
 }

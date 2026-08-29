@@ -26,6 +26,14 @@ export interface QuotaWindow {
 export interface QuotaSnapshot {
   cliType: CliType;
   fetchedAt: string;
+  /** Explicit API timestamp for the last-good reading. */
+  capturedAt?: string | null;
+  /** Backend-computed freshness state at response time. */
+  stale?: boolean;
+  /** Whole seconds between capturedAt and the response time. */
+  ageSeconds?: number | null;
+  /** Time at which TTL expiry or the latest failed probe made the reading stale. */
+  staleSince?: string | null;
   /** CLI `--version` output recorded alongside this probe. */
   cliVersion?: string | null;
   /** Most recent failed attempt; fetchedAt remains the last-good data time. */
