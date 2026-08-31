@@ -148,12 +148,12 @@ Each entry uses the same fields:
 
 - **Kind:** Tick
 - **Where:** [`backend/Features/Cli/Quota/CliVersionMonitorHostedService.cs`](../../../backend/Features/Cli/Quota/CliVersionMonitorHostedService.cs) and [`backend/Features/Cli/Repair/LocalCliRepairService.cs`](../../../backend/Features/Cli/Repair/LocalCliRepairService.cs)
-- **Re-entry trigger:** The startup or periodic local Claude/Codex version probe cannot resolve the configured global command, while the matching package remains under the Windows npm global `node_modules` tree and every expected command shim is absent.
-- **Budget:** `LocalCliRepairService.AttemptWindow` (exactly one `npm install --global` attempt per CLI per hour, reconstructed from the durable JSONL journal after restart).
+- **Re-entry trigger:** The startup or periodic local Claude/Codex version probe cannot resolve the configured global command, and inspection finds either that the matching package is absent from the Windows npm global `node_modules` tree or that the package is present while its `.cmd` command shim is absent.
+- **Budget:** `LocalCliRepairService.AttemptWindow` (exactly one npm repair attempt per CLI per hour, reconstructed from the durable JSONL journal after restart). A missing package uses `npm install --global <package>`; a missing shim with its package present uses `npm install --global <package> --force`.
 - **Action when budget exhausted:** Keep the CLI unavailable and skip the repair until the hour expires. A successful prior repair remains a quiet host note; only a failed attempted repair raises an operator alarm.
 - **Breaker test:** [`backend.Tests/Architecture/LocalCliRepairBreakerTest.cs`](../../../backend.Tests/Architecture/LocalCliRepairBreakerTest.cs), plus the portable detection and journal suite in [`backend.Tests/LocalCliRepairServiceTests.cs`](../../../backend.Tests/LocalCliRepairServiceTests.cs).
 - **Last fired:** 2026-08-13 and 2026-08-18 were manually repaired before this loop existed. Both incidents had the Claude npm package present with all global shims absent; the second repair moved the observed version from 2.1.231 to 2.1.234.
-- **Notes:** The journal is `<TaskRepository>/logs/cli-self-heal.jsonl` (or `runtime/cli-self-heal.jsonl` without a task repository). Each attempt captures the last observed/package version, the post-repair CLI version, npm exit and redacted output, package metadata, and nearby npm debug-log activity. Truly uninstalled packages, custom executable paths, and present-but-broken shims are outside this automatic reinstall policy.
+- **Notes:** The journal is `<TaskRepository>/logs/cli-self-heal.jsonl` (or `runtime/cli-self-heal.jsonl` without a task repository). Each attempt captures the package/shim state, selected install or force-relink action, last observed/package version, post-repair CLI version, npm exit and redacted output, package metadata, and nearby npm debug-log activity. Success requires both a restored `.cmd` shim and a successful `--version` probe. Custom executable paths and present-but-broken command shims are outside this automatic repair policy.
 
 ## Candidates (LLM-proposed, human-reviewed)
 

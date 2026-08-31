@@ -19,13 +19,19 @@ public sealed record NpmCliInstallInspection(
     string PackageDirectory,
     string? PackageVersion,
     DateTimeOffset? PackageModifiedAt,
+    string RequiredCommandShim,
     IReadOnlyList<string> ExpectedShims);
 
+internal sealed record NpmCliRepairPlan(
+    NpmGlobalInstallMode InstallMode,
+    string Detection,
+    string PackageState,
+    string RepairAction);
+
 /// <summary>
-/// Detects and repairs the Windows global-npm failure where a package remains
-/// installed but all command shims disappear. The repair is deliberately
-/// narrower than a general CLI installer: a truly absent package, a custom CLI
-/// path, or a present-but-broken shim is never reinstalled here.
+/// Detects and repairs Windows global-npm failures where the configured package
+/// is absent or its required command shim disappears. Custom CLI paths and
+/// present-but-broken command shims remain outside this bounded repair.
 /// </summary>
 public sealed class LocalCliRepairService
 {
@@ -98,9 +104,9 @@ public sealed class LocalCliRepairService
     }
 
     /// <summary>
-    /// Runs the ordinary availability probe and, only for the exact
-    /// missing-shim/package-present state, performs one bounded global npm
-    /// reinstall. The returned probe is always the final observed state.
+    /// Runs the ordinary availability probe and performs one bounded global
+    /// npm install or relink for a recognized package/shim state. The returned
+    /// probe is always the final observed state.
     /// </summary>
     public async Task<(bool Available, string? Version, string Path)> ProbeAndRepairAsync(
         string cliType,
@@ -115,7 +121,8 @@ public sealed class LocalCliRepairService
         if (string.IsNullOrWhiteSpace(appData)) return before;
         var npmBin = Path.Combine(appData, "npm");
         var inspection = Inspect(cliType, before.Path, npmBin);
-        if (inspection.State != NpmCliInstallState.MissingShimWithPackagePresent)
+        var repairPlan = SelectRepairPlan(inspection.State);
+        if (repairPlan is null)
         {
             _logger.LogDebug(
                 "Local CLI probe unavailable cli={Cli} installState={InstallState}; no automatic repair",
@@ -123,6 +130,7 @@ public sealed class LocalCliRepairService
                 inspection.State);
             return before;
         }
+        var shimStateBefore = File.Exists(inspection.RequiredCommandShim) ? "present" : "absent";
 
         var detectedAt = _clock();
         if (!TryBeginAttempt(cliType, detectedAt)) return before;
@@ -135,7 +143,7 @@ public sealed class LocalCliRepairService
                 detectedAt,
                 cliType,
                 "attempting",
-                "missing-shim-with-package-present",
+                repairPlan.Detection,
                 inspection.PackageName,
                 inspection.PackageDirectory,
                 inspection.PackageModifiedAt,
@@ -144,28 +152,48 @@ public sealed class LocalCliRepairService
                 beforeVersion,
                 null,
                 null,
-                $"Starting bounded {cliType} CLI npm-shim repair.",
+                $"Starting bounded {cliType} CLI repair: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction}.",
                 "",
                 "",
                 evidence));
             _logger.LogInformation(
-                "Local CLI shim missing with npm package present cli={Cli} package={Package} packageVersion={Version}; starting bounded repair",
+                "Starting bounded local CLI repair cli={Cli} package={Package} packageVersion={Version} packageState={PackageState} shimStateBefore={ShimStateBefore} repairAction={RepairAction}",
                 cliType,
                 inspection.PackageName,
-                inspection.PackageVersion ?? lastObservedVersion ?? "unknown");
+                inspection.PackageVersion ?? lastObservedVersion ?? "unknown",
+                repairPlan.PackageState,
+                shimStateBefore,
+                repairPlan.RepairAction);
 
-            var install = await _installer.InstallAsync(inspection.PackageName, ct);
+            var install = await _installer.InstallAsync(
+                inspection.PackageName,
+                repairPlan.InstallMode,
+                ct);
             var after = probe();
-            var succeeded = install.Succeeded && after.Available;
+            var afterInspection = Inspect(cliType, before.Path, npmBin);
+            var packagePresentAfter = Directory.Exists(inspection.PackageDirectory);
+            var commandShimRestored = File.Exists(inspection.RequiredCommandShim);
+            var succeeded = install.Succeeded
+                            && packagePresentAfter
+                            && commandShimRestored
+                            && after.Available;
             var occurredAt = _clock();
             var detail = succeeded
-                ? $"{cliType} CLI npm shim restored; version {beforeVersion ?? "unknown"} -> {after.Version ?? "unknown"}."
-                : BuildFailureDetail(cliType, install, after);
+                ? $"{cliType} CLI repaired: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} restored '{inspection.RequiredCommandShim}'; version {beforeVersion ?? "unknown"} -> {after.Version ?? "unknown"}."
+                : BuildFailureDetail(
+                    cliType,
+                    install,
+                    after,
+                    inspection.RequiredCommandShim,
+                    packagePresentAfter,
+                    commandShimRestored,
+                    repairPlan,
+                    shimStateBefore);
             var entry = new LocalCliRepairJournalEntry(
                 occurredAt,
                 cliType,
                 succeeded ? "repaired" : "failed",
-                "missing-shim-with-package-present",
+                repairPlan.Detection,
                 inspection.PackageName,
                 inspection.PackageDirectory,
                 inspection.PackageModifiedAt,
@@ -185,8 +213,11 @@ public sealed class LocalCliRepairService
             if (succeeded)
             {
                 _logger.LogInformation(
-                    "Local CLI repaired cli={Cli} repairedAt={RepairedAt:o} previousVersion={PreviousVersion} currentVersion={CurrentVersion}",
+                    "Local CLI repaired cli={Cli} packageStateBefore={PackageStateBefore} packageStateAfter=present shimStateBefore={ShimStateBefore} shimStateAfter=present repairAction={RepairAction} repairedAt={RepairedAt:o} previousVersion={PreviousVersion} currentVersion={CurrentVersion}",
                     cliType,
+                    repairPlan.PackageState,
+                    shimStateBefore,
+                    repairPlan.RepairAction,
                     occurredAt,
                     beforeVersion ?? "unknown",
                     after.Version ?? "unknown");
@@ -194,8 +225,14 @@ public sealed class LocalCliRepairService
             else
             {
                 _logger.LogError(
-                    "Local CLI repair failed cli={Cli} attemptedAt={AttemptedAt:o} npmExitCode={ExitCode} detail={Detail}",
+                    "Local CLI repair failed cli={Cli} packageStateBefore={PackageStateBefore} packageStateAfter={PackageStateAfter} shimStateBefore={ShimStateBefore} shimStateAfter={ShimStateAfter} repairAction={RepairAction} postInstallState={PostInstallState} attemptedAt={AttemptedAt:o} npmExitCode={ExitCode} detail={Detail}",
                     cliType,
+                    repairPlan.PackageState,
+                    packagePresentAfter ? "present" : "absent",
+                    shimStateBefore,
+                    commandShimRestored ? "present" : "absent",
+                    repairPlan.RepairAction,
+                    afterInspection.State,
                     occurredAt,
                     install.ExitCode,
                     detail);
@@ -223,6 +260,7 @@ public sealed class LocalCliRepairService
                 "",
                 null,
                 null,
+                "",
                 []);
         }
 
@@ -239,8 +277,9 @@ public sealed class LocalCliRepairService
             Path.Combine(npmBin, cliType + ".ps1"),
             Path.Combine(npmBin, cliType + ".exe"),
         };
+        var requiredCommandShim = Path.Combine(npmBin, cliType + ".cmd");
         var packagePresent = Directory.Exists(packageDirectory);
-        var shimPresent = expectedShims.Any(File.Exists);
+        var shimPresent = File.Exists(requiredCommandShim);
         var state = !packagePresent
             ? NpmCliInstallState.TrulyUninstalled
             : shimPresent
@@ -254,6 +293,7 @@ public sealed class LocalCliRepairService
             packageDirectory,
             ReadPackageVersion(packageJson),
             File.Exists(packageJson) ? SafeLastWrite(packageJson) : null,
+            requiredCommandShim,
             expectedShims);
     }
 
@@ -262,6 +302,22 @@ public sealed class LocalCliRepairService
         DateTimeOffset? previousAttempt,
         TimeSpan? window = null)
         => previousAttempt is null || now - previousAttempt.Value >= (window ?? AttemptWindow);
+
+    internal static NpmCliRepairPlan? SelectRepairPlan(NpmCliInstallState state)
+        => state switch
+        {
+            NpmCliInstallState.TrulyUninstalled => new NpmCliRepairPlan(
+                NpmGlobalInstallMode.Install,
+                "package-missing",
+                "absent",
+                "install"),
+            NpmCliInstallState.MissingShimWithPackagePresent => new NpmCliRepairPlan(
+                NpmGlobalInstallMode.ForceRelink,
+                "missing-shim-with-package-present",
+                "present",
+                "force-relink"),
+            _ => null,
+        };
 
     private bool TryBeginAttempt(string cliType, DateTimeOffset now)
     {
@@ -389,11 +445,20 @@ public sealed class LocalCliRepairService
     private static string BuildFailureDetail(
         string cliType,
         NpmGlobalInstallResult install,
-        (bool Available, string? Version, string Path) after)
+        (bool Available, string? Version, string Path) after,
+        string requiredCommandShim,
+        bool packagePresentAfter,
+        bool commandShimRestored,
+        NpmCliRepairPlan repairPlan,
+        string shimStateBefore)
     {
         if (!install.Succeeded)
-            return $"{cliType} CLI shim repair failed: npm install exited {install.ExitCode?.ToString() ?? "without an exit code"}.";
-        return $"{cliType} CLI shim repair failed: npm install succeeded but --version still failed at '{after.Path}'.";
+            return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} attempted, but npm exited {install.ExitCode?.ToString() ?? "without an exit code"}.";
+        if (!packagePresentAfter)
+            return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} attempted, but the package is still absent.";
+        if (!commandShimRestored)
+            return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} attempted, but required shim '{requiredCommandShim}' is still absent.";
+        return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, npm action {repairPlan.RepairAction} restored the command shim, but --version still failed at '{after.Path}'.";
     }
 
     private static LocalCliRepairStatus ToStatus(LocalCliRepairJournalEntry entry)

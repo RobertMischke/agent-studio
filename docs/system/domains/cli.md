@@ -34,9 +34,10 @@ CLI execution tests.
 - `backend/Services/Quota/*QuotaProbe.cs`: per-CLI quota probes.
 - `backend/Services/Quota/QuotaService.cs`: aggregate quota surface.
 - `backend/Features/Cli/Repair/LocalCliRepairService.cs`: Windows local-host
-  detection and bounded repair for the specific global npm state where a
-  Claude or Codex package remains installed but all command shims disappeared.
-  It persists repair and nearby npm-activity evidence to
+  detection and bounded repair when a configured Claude or Codex global npm
+  package is absent or its required `.cmd` command shim disappeared. It selects
+  a plain install or forced relink from that state and persists repair and
+  nearby npm-activity evidence to
   `<TaskRepository>/logs/cli-self-heal.jsonl`.
 - `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
   endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
@@ -74,10 +75,14 @@ CLI execution tests.
 - Claude and Codex version changes are checked after startup and periodically.
   Keep the structured `CLI version changed` log line when editing version or
   self-heal behavior.
-- Local missing-shim repair is not a general installer. It may run only when
-  the matching global npm package is present, never for a truly absent package
-  or custom executable path, and is limited to one persisted attempt per CLI
-  per hour. Successful repair is informational; failure is the alarm boundary.
+- Local CLI repair handles two recognized global npm states: a truly absent
+  configured package receives a plain install, while a present package with an
+  absent Windows `.cmd` command shim receives a forced relink so an unchanged
+  package version still regenerates bin shims. Custom executable paths and
+  present-but-broken command shims remain outside this policy. Repair verifies
+  both the `.cmd` shim and `--version`, and is limited to one persisted attempt
+  per CLI per hour. Successful repair is informational; failure is the alarm
+  boundary and names the observed package/shim state and attempted action.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

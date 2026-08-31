@@ -3,8 +3,8 @@ using System.Diagnostics;
 namespace AgentStudio.Cli;
 
 /// <summary>
-/// Bounded process boundary for repairing one already-installed global npm
-/// package. Package selection and repair policy live in
+/// Bounded process boundary for installing or relinking one global npm package.
+/// Package selection and repair policy live in
 /// <see cref="LocalCliRepairService"/>; this class only executes npm.
 /// </summary>
 public class NpmGlobalInstaller
@@ -13,6 +13,7 @@ public class NpmGlobalInstaller
 
     public virtual async Task<NpmGlobalInstallResult> InstallAsync(
         string packageName,
+        NpmGlobalInstallMode mode,
         CancellationToken ct)
     {
         try
@@ -28,9 +29,8 @@ public class NpmGlobalInstaller
                     CreateNoWindow = true,
                 },
             };
-            process.StartInfo.ArgumentList.Add("install");
-            process.StartInfo.ArgumentList.Add("--global");
-            process.StartInfo.ArgumentList.Add(packageName);
+            foreach (var argument in BuildArguments(packageName, mode))
+                process.StartInfo.ArgumentList.Add(argument);
 
             if (!process.Start())
                 return new NpmGlobalInstallResult(false, null, "", "npm did not start");
@@ -68,6 +68,15 @@ public class NpmGlobalInstaller
         }
     }
 
+    internal static IReadOnlyList<string> BuildArguments(
+        string packageName,
+        NpmGlobalInstallMode mode)
+    {
+        var arguments = new List<string> { "install", "--global", packageName };
+        if (mode == NpmGlobalInstallMode.ForceRelink) arguments.Add("--force");
+        return arguments;
+    }
+
     private static async Task<string> SafeOutputAsync(Task<string> output)
     {
         try { return await output; }
@@ -85,6 +94,12 @@ public class NpmGlobalInstaller
         }
         return "npm.cmd";
     }
+}
+
+public enum NpmGlobalInstallMode
+{
+    Install,
+    ForceRelink,
 }
 
 public sealed record NpmGlobalInstallResult(
