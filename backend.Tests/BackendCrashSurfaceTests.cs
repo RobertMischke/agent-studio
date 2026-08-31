@@ -117,9 +117,24 @@ public class BackendCrashSurfaceTests
         Assert.Contains("REDACTED", persisted);
     }
 
-    [Fact]
+    // MachineBound: this test deliberately drives a fire-and-forget faulted Task
+    // to the GC finalizer (GC.WaitForPendingFinalizers below) to verify crash
+    // surfacing end-to-end through the wired handler. Under
+    // DOTNET_ThrowUnobservedTaskExceptions=1 - which the card gate sets to
+    // surface fire-and-forget bugs - that finalizer rethrow is a fatal,
+    // uncatchable host death that aborts the ENTIRE run, not just this test. So
+    // it is excluded from the gate (filter Category!=MachineBound) and additionally
+    // skips itself under that flag. The product guarantee - that an unobserved
+    // task exception never kills the backend - lives in ProcessGlobalTaskSafety
+    // and is asserted non-fatally elsewhere; this test only adds the
+    // deliberately-fatal end-to-end path and must run in isolation.
+    [Trait("Category", "MachineBound")]
+    [Xunit.SkippableFact]
     public async Task UnobservedTaskException_FromHostedService_SurfacesViaDiagnosticsEndpoint()
     {
+        Skip.If(ThrowUnobservedTaskExceptionsEnabled(),
+            "Deliberately drives an unobserved task exception to the finalizer, which is a fatal "
+            + "host crash under ThrowUnobservedTaskExceptions. Runs only when that flag is off.");
         using var temp = new TempDir();
         // The marker file is keyed on the resolved log directory at
         // process startup, so we point the WebApplicationFactory at the
@@ -314,10 +329,20 @@ public class BackendCrashSurfaceTests
     /// with no subscriber. The permanent <see cref="ProcessGlobalTaskSafety"/>
     /// net must mark every such exception observed regardless, so the finalizer
     /// never rethrows and the process survives.
+    ///
+    /// MachineBound + skips under DOTNET_ThrowUnobservedTaskExceptions=1: like the
+    /// end-to-end test above it forces a fire-and-forget faulted Task to the
+    /// finalizer, so if the safety net ever regressed this would abort the whole
+    /// run under that flag. It is excluded from the card gate and runs with the
+    /// flag off (the mode that still proves the net calls SetObserved).
     /// </summary>
-    [Fact]
+    [Trait("Category", "MachineBound")]
+    [Xunit.SkippableFact]
     public void UnobservedTaskException_IsMarkedObserved_ByTheProcessGlobalSafetyNet()
     {
+        Skip.If(ThrowUnobservedTaskExceptionsEnabled(),
+            "Forces an unobserved task exception to the finalizer; only the non-fatal (flag-off) "
+            + "mode is safe to run in-process.");
         ProcessGlobalTaskSafety.EnsureUnobservedTaskExceptionsAreObserved();
 
         // The safety net is registered before this probe, so by the time the
@@ -360,6 +385,20 @@ public class BackendCrashSurfaceTests
     private static void FaultAndAbandonATask()
     {
         _ = Task.Run(() => throw new InvalidOperationException("synthetic-unobserved-safety-net-probe"));
+    }
+
+    /// <summary>
+    /// True when the runtime rethrows unobserved task exceptions on the finalizer
+    /// thread (env <c>DOTNET_ThrowUnobservedTaskExceptions=1</c> or the equivalent
+    /// runtimeconfig switch). The two tests that deliberately drive a fire-and-forget
+    /// task to the finalizer skip themselves in that mode so they can never abort
+    /// the shared test host.
+    /// </summary>
+    private static bool ThrowUnobservedTaskExceptionsEnabled()
+    {
+        var env = Environment.GetEnvironmentVariable("DOTNET_ThrowUnobservedTaskExceptions");
+        if (env == "1" || string.Equals(env, "true", StringComparison.OrdinalIgnoreCase)) return true;
+        return AppContext.TryGetSwitch("System.Threading.Tasks.ThrowUnobservedTaskExceptions", out var on) && on;
     }
 
     private static Exception? TryThrow(Action action)
