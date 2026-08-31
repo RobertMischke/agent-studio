@@ -121,6 +121,11 @@ the current shell destination. The shared tab key is the target identity:
 
 - Tasks use the canonical task key, regardless of whether the entry point was a
   board card, search result, task reference, feed item, or public route.
+  The tab separately retains the project scope of the surface that opened it.
+  A task opened from the workspace Board therefore keeps `All projects` in the
+  titlebar and sidebar, while a task opened from a project surface keeps that
+  project context. The task's owning project handle remains request-local data
+  used to load its detail and never replaces this navigation scope.
 - Dossiers use project identity plus Dossier id.
 - Wiki destinations use project identity plus target kind and exact repository
   path. The Wiki overview is its own target.
@@ -133,9 +138,9 @@ therefore not a shell tab strip and does not participate in shell close or MRU
 behavior. External HTTP links retain normal browser behavior.
 
 Each shell tab strip keeps a session-only activation history. Closing the
-active tab with either its close button or a middle click returns to the most
-recently active tab that is still open. If no history entry survives, the
-previous last-tab fallback applies.
+active tab with its close button, a middle click, or the task detail Back action
+returns to the most recently active tab that is still open. If no history entry
+survives, the previous last-tab fallback applies.
 
 ## Pinned tabs
 
@@ -226,3 +231,7 @@ review screenshots under the managed task's `results/` directory.
 - **2026-08-18:** Added shell tab pinning (leftmost block, compact label,
   protection from casual closing, persisted with the tab session) and made the
   close glyph a hover affordance on unpinned tabs. Neither is route state.
+- **2026-08-29:** Separated a task detail's owning-project data handle from its
+  shell navigation scope. Task tabs now retain their opening surface's project
+  context, including the workspace-wide All-projects Board, and the detail Back
+  action follows normal tab close and MRU return behavior.

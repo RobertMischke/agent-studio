@@ -572,8 +572,8 @@ export class StudioShellComponent {
   /**
    * The project the user is contextually "in" — drives the active titlebar
    * pill and the default project for sidebar CTAs. Board/Deck tabs name a
-   * project directly; Task/Activity tabs resolve through the job index;
-   * Diff/Welcome fall back to the last-known board project.
+   * project directly; Task tabs preserve the scope of the surface that opened
+   * them, while legacy Task/Activity tabs resolve through the job index.
    */
   readonly currentProjectName = computed<string | null>(() => {
     const tab = this.activeTab();
@@ -583,7 +583,12 @@ export class StudioShellComponent {
     if (tab.kind === 'workbenches') return tab.projectName;
     if (tab.kind === 'hub') return tab.projectName;
     if (tab.kind === 'workbench') return tab.projectName;
-    if (tab.kind === 'task' || tab.kind === 'activity') {
+    if (tab.kind === 'task') {
+      if (tab.projectScope !== undefined) return tab.projectScope;
+      const job = this.findJob(tab.taskKey);
+      return job?.projectName ?? null;
+    }
+    if (tab.kind === 'activity') {
       const job = this.findJob(tab.taskKey);
       return job?.projectName ?? null;
     }

@@ -29,8 +29,20 @@ export interface EpicsTab { kind: 'epics'; projectName: string | null; }
 /** Epic detail tab - one per opened epic; key `epic:<epicKey>`. */
 export interface EpicTab { kind: 'epic'; epicKey: string; viewTaskKey?: string; }
 
-/** Task-detail tab — one per opened job; key `task:<taskKey>`. */
-export interface TaskTab { kind: 'task'; taskKey: string; }
+/**
+ * Task-detail tab - one per opened job; key `task:<taskKey>`.
+ *
+ * `projectScope` records the navigation context that opened the detail. It is
+ * deliberately separate from the task's owning project: `null` means the
+ * detail belongs to the workspace-wide All-projects context, while a name
+ * keeps a project-scoped origin. The task service still resolves detail data
+ * through the owning project's registry handle.
+ */
+export interface TaskTab {
+  kind: 'task';
+  taskKey: string;
+  projectScope?: string | null;
+}
 
 /**
  * Stable target inside a project's Wiki. The document or folder path belongs

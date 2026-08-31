@@ -83,7 +83,7 @@ export class StudioTabStateService {
    * Wiki) would silently drop the section and "do nothing".
    */
   open(tab: StudioTab): void {
-    const normalized = this.normalizeTab(tab);
+    const normalized = this.normalizeTab(this.withInheritedTaskScope(tab, this.activeTab()));
     const emptyProjectEntry = this._tabs().length === 0
       && ((normalized.kind === 'board' && normalized.projectName !== ALL_PROJECTS)
         || normalized.kind === 'hub');
@@ -114,10 +114,11 @@ export class StudioTabStateService {
    * the source, and focus the target instead of duplicating.
    */
   retarget(sourceKey: string, tab: StudioTab): void {
-    const normalized = this.normalizeTab(tab);
-    const targetKey = studioTabKey(normalized);
     const list = this._tabs();
     const sourceIdx = list.findIndex(t => studioTabKey(t) === sourceKey);
+    const source = sourceIdx >= 0 ? list[sourceIdx] : this.activeTab();
+    const normalized = this.normalizeTab(this.withInheritedTaskScope(tab, source));
+    const targetKey = studioTabKey(normalized);
     if (sourceIdx < 0) {
       this.open(normalized);
       return;
@@ -365,7 +366,9 @@ export class StudioTabStateService {
           viewTaskKey: tab.viewTaskKey || undefined,
         };
       case 'task':
-        return { kind: 'task', taskKey: tab.taskKey };
+        return tab.projectScope === undefined
+          ? { kind: 'task', taskKey: tab.taskKey }
+          : { kind: 'task', taskKey: tab.taskKey, projectScope: tab.projectScope };
       case 'hub':
         return {
           kind: 'hub',
@@ -396,6 +399,43 @@ export class StudioTabStateService {
         return { kind: 'workspace-settings' };
       case 'welcome':
         return { kind: 'welcome' };
+    }
+  }
+
+  /**
+   * A task inherits the scope of the surface that opened it. This keeps the
+   * shell context stable while the detail loader independently uses the
+   * task's owning project handle for its API request.
+   */
+  private withInheritedTaskScope(tab: StudioTab, origin: StudioTab | null): StudioTab {
+    if (tab.kind !== 'task' || tab.projectScope !== undefined) return tab;
+    const projectScope = this.projectScopeForTab(origin);
+    return projectScope === undefined ? tab : { ...tab, projectScope };
+  }
+
+  private projectScopeForTab(tab: StudioTab | null): string | null | undefined {
+    if (!tab) return null;
+    switch (tab.kind) {
+      case 'board':
+        return tab.projectName === ALL_PROJECTS ? null : tab.projectName;
+      case 'feed':
+      case 'chat-history':
+      case 'workspace-settings':
+      case 'welcome':
+        return null;
+      case 'epics':
+      case 'workbenches':
+        return tab.projectName;
+      case 'hub':
+      case 'workbench':
+      case 'url-preview':
+        return tab.projectName;
+      case 'task':
+        return tab.projectScope;
+      case 'epic':
+      case 'diff':
+      case 'activity':
+        return undefined;
     }
   }
 

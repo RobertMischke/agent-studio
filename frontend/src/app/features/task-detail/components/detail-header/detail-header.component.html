@@ -1,6 +1,7 @@
 <header class="detail__header">
   <div class="detail__header-main">
-    <button class="detail__back" (click)="back.emit()">←</button>
+    <button class="detail__back" type="button" data-testid="detail-back"
+            aria-label="Back to board" (click)="back.emit()">←</button>
     <div class="detail__headline">
       @if (editingTitle()) {
         <div class="detail__title-edit">

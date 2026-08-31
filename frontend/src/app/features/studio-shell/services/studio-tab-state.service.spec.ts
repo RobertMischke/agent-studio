@@ -67,6 +67,41 @@ describe('StudioTabStateService', () => {
     expect(svc.activeTab()).toEqual(tab);
   });
 
+  it('keeps a task opened from All projects in the workspace-wide scope', () => {
+    svc.open({ kind: 'task', taskKey: 'all-context-task' });
+
+    expect(svc.activeTab()).toEqual({
+      kind: 'task',
+      taskKey: 'all-context-task',
+      projectScope: null,
+    });
+
+    svc.close('task:all-context-task');
+    expect(svc.activeKey()).toBe(ALL_BOARD_KEY);
+  });
+
+  it('keeps a task opened from a project board in that project scope', () => {
+    svc.open({ kind: 'board', projectName: 'Alpha' });
+    svc.open({ kind: 'task', taskKey: 'alpha-task' });
+
+    expect(svc.activeTab()).toEqual({
+      kind: 'task',
+      taskKey: 'alpha-task',
+      projectScope: 'Alpha',
+    });
+  });
+
+  it('preserves the task origin scope when the pager retargets its tab', () => {
+    svc.open({ kind: 'task', taskKey: 'first-task' });
+    svc.retarget('task:first-task', { kind: 'task', taskKey: 'next-task' });
+
+    expect(svc.activeTab()).toEqual({
+      kind: 'task',
+      taskKey: 'next-task',
+      projectScope: null,
+    });
+  });
+
   it('signals the S5 entry only for a project surface opened from an empty editor', () => {
     svc.closeAll();
     svc.open({ kind: 'task', taskKey: 'task-a' });

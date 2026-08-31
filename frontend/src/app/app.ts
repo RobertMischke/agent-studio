@@ -1004,6 +1004,10 @@ export class App implements OnInit, OnDestroy {
           project = tab.projectName;
           break;
         case 'task':
+          project = tab.projectScope !== undefined
+            ? tab.projectScope
+            : this.jobService.jobs().find(j => j.taskKey === tab.taskKey)?.projectName ?? undefined;
+          break;
         case 'activity':
           project = this.jobService.jobs().find(j => j.taskKey === tab.taskKey)?.projectName ?? undefined;
           break;
@@ -1351,6 +1355,10 @@ export class App implements OnInit, OnDestroy {
     this.jobSelection.openDetailAfterPaint(job);
   }
   closeDetail() {
+    const activeTab = this.studioTabState.activeTab();
+    if (this.featureFlags.vsCodeLayout() && activeTab?.kind === 'task') {
+      this.studioTabState.close(studioTabKey(activeTab));
+    }
     this.jobSelection.closeDetail();
   }
   retryDetailLoad() {
