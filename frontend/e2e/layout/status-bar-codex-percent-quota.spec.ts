@@ -28,7 +28,11 @@ function codexPercentQuotaReport() {
     snapshots: [
       {
         cliType: 'codex',
+        capturedAt: new Date().toISOString(),
         fetchedAt: new Date().toISOString(),
+        ageSeconds: 0,
+        stale: false,
+        probeFailed: false,
         cliVersion: 'codex-cli 0.149.0',
         probeFailedAt: null,
         plan: 'Pro',
@@ -64,7 +68,7 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await page.waitForLoadState('domcontentloaded');
   });
 
-  test('Codex card renders every %-only window in both themes and never drops out', async ({ page }) => {
+  test('Codex card renders every %-only window in both themes and never drops out', async ({ page, devBackend: _devBackend }) => {
     const card = page.getByTestId('hquota-card-codex');
     await expect(card).toBeVisible();
 
@@ -84,7 +88,7 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     }
   });
 
-  test('Codex modal shows the implied 100% cap in both themes, not "n/a"', async ({ page }) => {
+  test('Codex modal shows percentage-window headroom in both themes, not "n/a"', async ({ page, devBackend: _devBackend }) => {
     // The backend-less worktree dev server can pop a startup "Failed to
     // load …" error dialog; let it settle and dismiss it so it does not
     // intercept the card click. (Against a live backend none of this fires.)
@@ -102,9 +106,9 @@ test.describe('Status bar quota: Codex %-only payload', () => {
 
     const windowsList = page.getByTestId('cli-usage-modal-windows');
     await expect(windowsList).toBeVisible();
-    // Each window card reads its implied 100% cap ("of 100%") for a
-    // %-window instead of a bare "n/a".
-    await expect(page.getByTestId('cli-usage-window').first()).toContainText('100%');
+    // Percentage windows derive readable headroom from the implied 100% cap
+    // instead of falling back to a bare "n/a".
+    await expect(page.getByTestId('cli-usage-window').first()).toContainText('34% left');
     // And no window falls back to the empty "n/a" placeholder.
     await expect(windowsList).not.toContainText('n/a');
 
@@ -125,7 +129,11 @@ test.describe('Status bar quota: Codex %-only payload', () => {
       ttlSeconds: 600,
       snapshots: [{
         cliType: 'codex',
+        capturedAt: null,
         fetchedAt: failedAt,
+        ageSeconds: null,
+        stale: true,
+        probeFailed: true,
         cliVersion: 'codex-cli 0.149.0',
         probeFailedAt: null,
         plan: null,
@@ -143,7 +151,8 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await expect(beforeCard).toHaveAttribute('data-state', 'error');
     await beforeCard.click();
     let modal = page.getByTestId('cli-usage-modal-codex');
-    await expect(modal).toContainText('A task was canceled.');
+    await expect(modal).toContainText('Quota probe timed out before the CLI panel rendered.');
+    await expect(modal).not.toContainText('A task was canceled.');
     await expect(modal.getByTestId('cli-usage-modal-windows')).toHaveCount(0);
     await modal.screenshot({ path: `${SHOT_DIR}/quota-probe-before--mocked.png` });
 
@@ -153,7 +162,11 @@ test.describe('Status bar quota: Codex %-only payload', () => {
       ttlSeconds: 600,
       snapshots: [{
         cliType: 'codex',
+        capturedAt: lastGoodAt,
         fetchedAt: lastGoodAt,
+        ageSeconds: 720,
+        stale: true,
+        probeFailed: true,
         cliVersion: 'codex-cli 0.149.0',
         probeFailedAt: failedAt,
         plan: 'Pro',
@@ -176,6 +189,7 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await card.click();
     modal = page.getByTestId('cli-usage-modal-codex');
     const stale = modal.getByTestId('cli-usage-probe-stale');
+    await expect(stale).toContainText('stale since');
     await expect(stale).toContainText('probe failed');
     await expect(stale).toContainText('codex 0.149.0');
     await expect(stale).toContainText('showing last-good quota values');

@@ -35,7 +35,7 @@
         </div>
 
         @if (snap.error && snap.windows.length === 0) {
-          <div class="qcard__error" [cacTooltip]="snap.error">No quota data available.</div>
+          <div class="qcard__error" [cacTooltip]="safeProbeError(snap.error)">No quota data available. Probe failed.</div>
         } @else if (snap.windows.length === 0) {
           <div class="qcard__hint">Loading…</div>
         } @else {
@@ -62,6 +62,11 @@
               </div>
             </div>
           }
+        }
+        @if (probeFailureLabel(snap); as failure) {
+          <div class="qcard__stale" [cacTooltip]="safeProbeError(snap.error)">
+            {{ failure }} · showing last-good quota values
+          </div>
         }
       </article>
     }

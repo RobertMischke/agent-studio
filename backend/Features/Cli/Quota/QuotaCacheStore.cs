@@ -5,14 +5,14 @@ namespace AgentStudio.Cli;
 
 /// <summary>
 /// File-backed snapshot store for <see cref="QuotaService"/>'s in-memory
-/// cache. Lives at <c>&lt;TaskRepository&gt;/.runtime/quota-cache.json</c>
+/// cache. Lives at <c>&lt;TaskRepository&gt;/.runtime/cli-quota-last-good.json</c>
 /// (or under <c>AppContext.BaseDirectory/runtime/</c> when no
 /// TaskRepository is configured) so that a backend restart does not
 /// leave the header empty until the first probe completes - which can
 /// take 30+ seconds per CLI.
 ///
 /// <para>
-/// Stored format: a flat list of <see cref="QuotaSnapshot"/> records, one
+/// Stored format: a versioned map of <see cref="QuotaSnapshot"/> records, one
 /// per CLI. Cheap to read on startup, cheap to overwrite after each
 /// successful probe. Tolerant to corruption: a malformed file is logged
 /// and ignored, the in-memory cache simply starts empty.
@@ -22,6 +22,7 @@ public sealed class QuotaCacheStore
 {
     private readonly ILogger<QuotaCacheStore> _logger;
     private readonly string _path;
+    private readonly string _legacyPath;
     private readonly object _writeLock = new();
 
     private static readonly JsonSerializerOptions WriteOpts = new()
@@ -44,7 +45,8 @@ public sealed class QuotaCacheStore
             ? Path.Combine(taskRepo, ".runtime")
             : Path.Combine(AppContext.BaseDirectory, "runtime");
         try { Directory.CreateDirectory(baseDir); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaCacheStore: best-effort"); /* best-effort */ }
-        _path = Path.Combine(baseDir, "quota-cache.json");
+        _path = Path.Combine(baseDir, "cli-quota-last-good.json");
+        _legacyPath = Path.Combine(baseDir, "quota-cache.json");
     }
 
     /// <summary>
@@ -53,12 +55,12 @@ public sealed class QuotaCacheStore
     /// </summary>
     public List<QuotaSnapshot> Read()
     {
-        if (!File.Exists(_path)) return new List<QuotaSnapshot>();
+        if (!File.Exists(_path)) return ReadLegacy();
         try
         {
             var raw = File.ReadAllText(_path);
-            return JsonSerializer.Deserialize<List<QuotaSnapshot>>(raw, ReadOpts)
-                   ?? new List<QuotaSnapshot>();
+            var file = JsonSerializer.Deserialize<LastGoodQuotaFile>(raw, ReadOpts);
+            return file?.Clis.Values.ToList() ?? [];
         }
         catch (Exception ex)
         {
@@ -75,7 +77,10 @@ public sealed class QuotaCacheStore
     {
         try
         {
-            var json = JsonSerializer.Serialize(snapshots.ToList(), WriteOpts);
+            var clis = snapshots
+                .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.CliType))
+                .ToDictionary(snapshot => snapshot.CliType, StringComparer.OrdinalIgnoreCase);
+            var json = JsonSerializer.Serialize(new LastGoodQuotaFile { Clis = clis }, WriteOpts);
             lock (_writeLock)
             {
                 var tmp = _path + ".tmp";
@@ -87,5 +92,30 @@ public sealed class QuotaCacheStore
         {
             _logger.LogWarning(ex, "Failed to persist quota cache to {Path}", _path);
         }
+    }
+
+    private List<QuotaSnapshot> ReadLegacy()
+    {
+        if (!File.Exists(_legacyPath)) return [];
+        try
+        {
+            var snapshots = JsonSerializer.Deserialize<List<QuotaSnapshot>>(
+                File.ReadAllText(_legacyPath),
+                ReadOpts) ?? [];
+            if (snapshots.Count > 0) Write(snapshots);
+            return snapshots;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read legacy quota cache at {Path}", _legacyPath);
+            return [];
+        }
+    }
+
+    private sealed record LastGoodQuotaFile
+    {
+        public int Version { get; init; } = 1;
+        public Dictionary<string, QuotaSnapshot> Clis { get; init; } =
+            new(StringComparer.OrdinalIgnoreCase);
     }
 }

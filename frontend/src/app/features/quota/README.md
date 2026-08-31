@@ -16,5 +16,8 @@ Imports via `from './features/quota'`. See [`index.ts`](./index.ts).
 ## Notable
 
 - `usedPct` above 100 means the user has overshot the included allotment.
+- `GET /api/cli/quota` is cache-only. Each snapshot carries `capturedAt`,
+  `ageSeconds`, `stale`, and probe-failure metadata; a failed probe keeps and
+  labels the last-good percentages instead of clearing the UI.
 - The "↻" buttons force a synchronous re-probe; calls take several seconds because they spawn a fresh PTY.
 - Strip vs donut is a deliberate split: the strip is for density when the user wants the full picture; the donut header is for at-a-glance "do I have headroom" in the status bar.

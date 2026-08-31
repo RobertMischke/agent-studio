@@ -134,6 +134,23 @@ describe('CliUsageModalComponent', () => {
     expect(view.tone).toBe('unknown');
   });
 
+  it('shows an explicit last-good stale note after a failed probe', async () => {
+    const fixture = await build({
+      ...codexRow,
+      stale: true,
+      probeFailedAt: '2026-08-27T19:07:00Z',
+      probeFailureLabel: 'stale since 18:55, probe failed 19:07 · codex 0.149.0',
+      showingLastGood: true,
+      error: 'Quota probe timed out before the CLI panel rendered.',
+    }, 'codex');
+    fixture.detectChanges();
+
+    const note = document.body.querySelector('[data-testid="cli-usage-probe-stale"]');
+    expect(note?.textContent ?? '').toContain('stale since 18:55, probe failed 19:07');
+    expect(note?.textContent ?? '').toContain('showing last-good quota values');
+    expect(document.body.textContent ?? '').not.toContain('A task was canceled');
+  });
+
   it('does not double-count Codex cached input and hides zero-token ad-hoc rows', async () => {
     const tokens: TokenSummaryAggregate = {
       projects: 11,

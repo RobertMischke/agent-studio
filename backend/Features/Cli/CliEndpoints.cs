@@ -167,12 +167,14 @@ public static class CliEndpoints
         // ── Quota: per-CLI subscription quota for the right-hand sidesheet ──
         cliGroup.MapGet("/quota", (QuotaService quota, CancellationToken ct) =>
         {
-            return Results.Ok(quota.GetWithBackgroundRefresh(ct));
+            var report = quota.GetWithBackgroundRefresh(ct);
+            return Results.Ok(QuotaReportResponse.From(report, DateTime.UtcNow));
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         cliGroup.MapPost("/quota/refresh", async (QuotaService quota, CancellationToken ct) =>
         {
-            return Results.Ok(await quota.RefreshAllAsync(ct));
+            var report = await quota.RefreshAllAsync(ct);
+            return Results.Ok(QuotaReportResponse.From(report, DateTime.UtcNow));
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         cliGroup.MapPost("/quota/refresh/{cliType}", async (string cliType, QuotaService quota, CancellationToken ct) =>
@@ -180,7 +182,9 @@ public static class CliEndpoints
             if (!CliTypes.IsValid(cliType))
                 return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
             var snap = await quota.RefreshAsync(cliType, ct);
-            return snap == null ? Results.NotFound() : Results.Ok(snap);
+            return snap == null
+                ? Results.NotFound()
+                : Results.Ok(QuotaReportResponse.FromSnapshot(snap, quota.Ttl, DateTime.UtcNow));
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
 
         // ── Quota caps: per-CLI per-window usage ceilings ──

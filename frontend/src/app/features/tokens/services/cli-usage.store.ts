@@ -4,7 +4,7 @@ import type { CliType } from '../../../models/task.model';
 import { cliTypeIcon } from '../../../services/format.util';
 import { JobsHubClient } from '../../../services/jobs-hub-client.service';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../quota';
-import { QuotaApiService, quotaProbeFailureLabel, quotaSnapshotIsStale } from '../../quota';
+import { QuotaApiService, quotaProbeFailureLabel, quotaSafeProbeError, quotaSnapshotIsStale } from '../../quota';
 import { TokensApiService } from './tokens-api.service';
 import type {
   AdHocUsageAggregate,
@@ -257,10 +257,11 @@ export class CliUsageStore {
   // ---- Derivation ----
 
   private buildRow(s: QuotaSnapshot, ttlMs: number, now: number): CliUsageQuotaRow {
-    const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
+    const capturedAt = s.capturedAt ?? s.fetchedAt;
+    const fetchedMs = capturedAt ? Date.parse(capturedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
     const stale = quotaSnapshotIsStale(s, ttlMs, now);
-    const freshness = !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
+    const freshness = !capturedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
     const primary = s.windows.length > 0
       ? [...s.windows].sort((a, b) => (b.usedPct ?? -1) - (a.usedPct ?? -1))[0]
       : null;
@@ -270,15 +271,15 @@ export class CliUsageStore {
       icon: cliTypeIcon(s.cliType as CliType),
       label: this.cliLabel(s.cliType),
       plan: s.plan,
-      fetchedAt: s.fetchedAt,
+      fetchedAt: capturedAt,
       stale,
       cliVersion: s.cliVersion ?? null,
       probeFailedAt: s.probeFailedAt ?? null,
       probeFailureLabel: quotaProbeFailureLabel(s),
-      showingLastGood: !!s.probeFailedAt && (s.windows.length > 0 || !!s.plan),
+      showingLastGood: (s.probeFailed === true || !!s.probeFailedAt) && (s.windows.length > 0 || !!s.plan),
       freshness,
       source: s.source,
-      error: s.error,
+      error: quotaSafeProbeError(s.error),
       windows: s.windows,
       primary,
       primaryPct,

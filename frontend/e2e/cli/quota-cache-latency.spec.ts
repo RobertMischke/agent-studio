@@ -10,7 +10,23 @@ test.describe('Quota cache endpoint latency', () => {
       });
       samples.push(performance.now() - started);
       expect(response.status).toBe(200);
-      await response.json();
+      const report = await response.json() as {
+        snapshots: Array<{
+          capturedAt: string | null;
+          ageSeconds: number | null;
+          stale: boolean;
+          probeFailed: boolean;
+          cliVersion: string | null;
+        }>;
+      };
+      expect(report.snapshots.length).toBeGreaterThan(0);
+      for (const snapshot of report.snapshots) {
+        expect(typeof snapshot.stale).toBe('boolean');
+        expect(typeof snapshot.probeFailed).toBe('boolean');
+        expect(snapshot.capturedAt === null || typeof snapshot.capturedAt === 'string').toBe(true);
+        expect(snapshot.ageSeconds === null || typeof snapshot.ageSeconds === 'number').toBe(true);
+        expect(snapshot.cliVersion === null || typeof snapshot.cliVersion === 'string').toBe(true);
+      }
     }
 
     const evidence = {

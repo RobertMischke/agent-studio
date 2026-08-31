@@ -22,6 +22,7 @@ public sealed class QuotaService
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
     private readonly ConcurrentDictionary<string, byte> _backgroundRefreshes = new();
     private readonly TimeSpan _ttl;
+    private readonly TimeSpan _probeTimeout;
     private readonly QuotaCacheStore _store;
     private readonly CliVersionTracker? _versionTracker;
 
@@ -36,6 +37,11 @@ public sealed class QuotaService
         _probes = probes.ToDictionary(p => p.CliType, StringComparer.OrdinalIgnoreCase);
         var ttlSec = int.TryParse(configuration["Quota:TtlSeconds"], out var t) ? t : 600;
         _ttl = TimeSpan.FromSeconds(ttlSec);
+        var timeoutSec = Math.Clamp(
+            configuration.GetValue<int?>("Quota:ProbeTimeoutSeconds") ?? 45,
+            5,
+            120);
+        _probeTimeout = TimeSpan.FromSeconds(timeoutSec);
         _store = store;
         _versionTracker = versionTracker;
 
@@ -48,7 +54,7 @@ public sealed class QuotaService
             foreach (var snap in _store.Read())
             {
                 if (string.IsNullOrWhiteSpace(snap.CliType)) continue;
-                _cache[snap.CliType] = snap;
+                _cache[snap.CliType] = snap with { Error = NormalizeProbeError(snap.Error) };
                 _versionTracker?.Seed(snap.CliType, snap.CliVersion);
             }
             _logger.LogInformation("Hydrated quota cache from disk ({Count} snapshots).", _cache.Count);
@@ -174,10 +180,10 @@ public sealed class QuotaService
         finally { sem.Release(); }
     }
 
-    private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
+    private async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(45));
+        cts.CancelAfter(_probeTimeout);
         return await probe.ProbeAsync(cts.Token);
     }
 
@@ -208,9 +214,9 @@ public sealed class QuotaService
         };
     }
 
-    private static string NormalizeProbeError(string? error)
+    internal static string? NormalizeProbeError(string? error)
     {
-        if (string.IsNullOrWhiteSpace(error)) return "Quota probe failed.";
+        if (string.IsNullOrWhiteSpace(error)) return null;
         return error.Contains("task was canceled", StringComparison.OrdinalIgnoreCase)
             || error.Contains("operation was canceled", StringComparison.OrdinalIgnoreCase)
             || error.Contains("operation was cancelled", StringComparison.OrdinalIgnoreCase)

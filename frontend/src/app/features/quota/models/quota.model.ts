@@ -25,7 +25,16 @@ export interface QuotaWindow {
 
 export interface QuotaSnapshot {
   cliType: CliType;
+  /** Last known-good capture time from the cached HTTP contract. */
+  capturedAt?: string | null;
+  /** Compatibility alias retained by the backend for older clients. */
   fetchedAt: string;
+  /** Age of capturedAt when the backend built this response. */
+  ageSeconds?: number | null;
+  /** Explicit backend freshness verdict. */
+  stale?: boolean;
+  /** True when the latest refresh attempt failed. */
+  probeFailed?: boolean;
   /** CLI `--version` output recorded alongside this probe. */
   cliVersion?: string | null;
   /** Most recent failed attempt; fetchedAt remains the last-good data time. */

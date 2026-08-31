@@ -4,6 +4,7 @@ import type { CliType } from '../../../../models/task.model';
 import { QuotaApiService } from '../../services/quota-api.service';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota.model';
 import { cliTypeIcon } from '../../../../services/format.util';
+import { quotaProbeFailureLabel, quotaSafeProbeError } from '../../quota-freshness.util';
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 /**
@@ -147,6 +148,14 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
     if (pct >= 90) return 'crit';
     if (pct >= 70) return 'warn';
     return 'ok';
+  }
+
+  probeFailureLabel(snapshot: QuotaSnapshot): string | null {
+    return quotaProbeFailureLabel(snapshot);
+  }
+
+  safeProbeError(error: string | null): string | null {
+    return quotaSafeProbeError(error);
   }
 
   /**
