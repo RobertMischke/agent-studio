@@ -16,7 +16,7 @@ import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../services/quota-api.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
-import { quotaProbeFailureLabel, quotaSnapshotIsStale } from '../../quota-freshness.util';
+import { quotaProbeFailureDetail, quotaProbeFailureLabel, quotaSnapshotIsStale } from '../../quota-freshness.util';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -78,6 +78,7 @@ interface QuotaCardModel {
   windows: QuotaWindow[];
   error: string | null;
   probeFailureLabel: string | null;
+  probeFailureDetail: string | null;
   source: string | null;
 }
 
@@ -204,6 +205,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       windows: s.windows,
       error: s.error,
       probeFailureLabel,
+      probeFailureDetail: quotaProbeFailureDetail(s),
       source: s.source
     };
   }
@@ -224,6 +226,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       windows: [],
       error: null,
       probeFailureLabel: null,
+      probeFailureDetail: null,
       source: null
     };
   }

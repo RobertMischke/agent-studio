@@ -126,7 +126,7 @@
         @if (row.showingLastGood && row.probeFailureLabel) {
           <div class="cud__stale"
                data-testid="cli-usage-detail-probe-stale"
-               [cacTooltip]="row.error ?? row.probeFailureLabel">
+               [cacTooltip]="row.probeFailureDetail ?? row.probeFailureLabel">
             {{ row.probeFailureLabel }} · showing last-good quota values
           </div>
         } @else if (row.error) {

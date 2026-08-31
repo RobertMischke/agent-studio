@@ -4,7 +4,7 @@ import type { CliType } from '../../../models/task.model';
 import { cliTypeIcon } from '../../../services/format.util';
 import { JobsHubClient } from '../../../services/jobs-hub-client.service';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../quota';
-import { QuotaApiService, quotaProbeFailureLabel, quotaSnapshotIsStale } from '../../quota';
+import { QuotaApiService, quotaProbeFailureDetail, quotaProbeFailureLabel, quotaSnapshotIsStale } from '../../quota';
 import { TokensApiService } from './tokens-api.service';
 import type {
   AdHocUsageAggregate,
@@ -29,6 +29,7 @@ export interface CliUsageQuotaRow {
   cliVersion?: string | null;
   probeFailedAt?: string | null;
   probeFailureLabel?: string | null;
+  probeFailureDetail?: string | null;
   showingLastGood?: boolean;
   source: string | null;
   error: string | null;
@@ -275,6 +276,7 @@ export class CliUsageStore {
       cliVersion: s.cliVersion ?? null,
       probeFailedAt: s.probeFailedAt ?? null,
       probeFailureLabel: quotaProbeFailureLabel(s),
+      probeFailureDetail: quotaProbeFailureDetail(s),
       showingLastGood: !!s.probeFailedAt && (s.windows.length > 0 || !!s.plan),
       freshness,
       source: s.source,

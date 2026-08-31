@@ -29,6 +29,9 @@ function codexPercentQuotaReport() {
       {
         cliType: 'codex',
         fetchedAt: new Date().toISOString(),
+        capturedAt: new Date().toISOString(),
+        ageSeconds: 0,
+        isStale: false,
         cliVersion: 'codex-cli 0.149.0',
         probeFailedAt: null,
         plan: 'Pro',
@@ -126,6 +129,9 @@ test.describe('Status bar quota: Codex %-only payload', () => {
       snapshots: [{
         cliType: 'codex',
         fetchedAt: failedAt,
+        capturedAt: failedAt,
+        ageSeconds: 0,
+        isStale: true,
         cliVersion: 'codex-cli 0.149.0',
         probeFailedAt: null,
         plan: null,
@@ -154,7 +160,11 @@ test.describe('Status bar quota: Codex %-only payload', () => {
       snapshots: [{
         cliType: 'codex',
         fetchedAt: lastGoodAt,
-        cliVersion: 'codex-cli 0.149.0',
+        capturedAt: lastGoodAt,
+        ageSeconds: 720,
+        isStale: true,
+        cliVersion: 'codex-cli 0.144.1',
+        failedProbeCliVersion: 'codex-cli 0.149.0',
         probeFailedAt: failedAt,
         plan: 'Pro',
         windows: [
@@ -176,12 +186,14 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await card.click();
     modal = page.getByTestId('cli-usage-modal-codex');
     const stale = modal.getByTestId('cli-usage-probe-stale');
+    await expect(stale).toContainText('Stale since');
     await expect(stale).toContainText('probe failed');
-    await expect(stale).toContainText('codex 0.149.0');
+    await expect(stale).toContainText('Codex 0.149.0');
     await expect(stale).toContainText('showing last-good quota values');
     await expect(modal.getByText('61% used')).toBeVisible();
+    await expect(modal).not.toContainText('A task was canceled');
     await stale.hover();
-    await expect(page.getByText('Quota probe timed out before the CLI panel rendered.')).toBeVisible();
+    await expect(page.getByText('The latest quota probe did not complete. Showing the last-good local reading.')).toBeVisible();
     await modal.screenshot({ path: `${SHOT_DIR}/quota-probe-after--mocked.png` });
     await setTheme(page, 'dark');
     await modal.screenshot({ path: `${SHOT_DIR}/quota-probe-after-dark--mocked.png` });

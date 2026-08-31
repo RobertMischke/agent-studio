@@ -22,6 +22,7 @@ public sealed class QuotaService
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
     private readonly ConcurrentDictionary<string, byte> _backgroundRefreshes = new();
     private readonly TimeSpan _ttl;
+    private readonly TimeSpan _probeTimeout;
     private readonly QuotaCacheStore _store;
     private readonly CliVersionTracker? _versionTracker;
 
@@ -36,6 +37,8 @@ public sealed class QuotaService
         _probes = probes.ToDictionary(p => p.CliType, StringComparer.OrdinalIgnoreCase);
         var ttlSec = int.TryParse(configuration["Quota:TtlSeconds"], out var t) ? t : 600;
         _ttl = TimeSpan.FromSeconds(ttlSec);
+        var timeoutSec = Math.Clamp(configuration.GetValue<int?>("Quota:ProbeTimeoutSeconds") ?? 45, 5, 120);
+        _probeTimeout = TimeSpan.FromSeconds(timeoutSec);
         _store = store;
         _versionTracker = versionTracker;
 
@@ -66,12 +69,29 @@ public sealed class QuotaService
 
     public QuotaReport GetCached()
     {
+        var now = DateTime.UtcNow;
         return new QuotaReport
         {
+            At = now,
             TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
-                .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
+                .Select(k => _cache.TryGetValue(k, out var s)
+                    ? ProjectForResponse(s, now)
+                    : new QuotaSnapshot { CliType = k, IsStale = true })
                 .ToList()
+        };
+    }
+
+    private QuotaSnapshot ProjectForResponse(QuotaSnapshot snapshot, DateTime now)
+    {
+        var age = now <= snapshot.FetchedAt
+            ? TimeSpan.Zero
+            : now - snapshot.FetchedAt;
+        var hasLastGood = snapshot.Windows.Count > 0 || !string.IsNullOrWhiteSpace(snapshot.Plan);
+        return snapshot with
+        {
+            AgeSeconds = Math.Max(0, (long)age.TotalSeconds),
+            IsStale = !hasLastGood || snapshot.ProbeFailedAt.HasValue || age > _ttl
         };
     }
 
@@ -174,10 +194,10 @@ public sealed class QuotaService
         finally { sem.Release(); }
     }
 
-    private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
+    private async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(45));
+        cts.CancelAfter(_probeTimeout);
         return await probe.ProbeAsync(cts.Token);
     }
 
@@ -193,13 +213,14 @@ public sealed class QuotaService
             return failed with
             {
                 Error = error,
+                FailedProbeCliVersion = failed.CliVersion ?? failed.FailedProbeCliVersion,
                 ProbeFailedAt = failedAt
             };
         }
 
         return previous! with
         {
-            CliVersion = failed.CliVersion ?? previous.CliVersion,
+            FailedProbeCliVersion = failed.CliVersion ?? failed.FailedProbeCliVersion,
             ProbeFailedAt = failedAt,
             Error = error,
             RawSample = failed.RawSample ?? previous.RawSample,

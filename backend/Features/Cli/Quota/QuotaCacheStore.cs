@@ -75,9 +75,12 @@ public sealed class QuotaCacheStore
     {
         try
         {
-            var json = JsonSerializer.Serialize(snapshots.ToList(), WriteOpts);
             lock (_writeLock)
             {
+                // Snapshot + serialization belong inside the same lock as the
+                // atomic replace. Concurrent Claude/Codex completions must not
+                // let an older serialized view overwrite a newer one.
+                var json = JsonSerializer.Serialize(snapshots.ToList(), WriteOpts);
                 var tmp = _path + ".tmp";
                 File.WriteAllText(tmp, json, Encoding.UTF8);
                 File.Move(tmp, _path, overwrite: true);

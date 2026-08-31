@@ -13,7 +13,7 @@
     @if (failureLabel(); as failure) {
       <div class="cum__stale"
            data-testid="cli-usage-probe-stale"
-           [cacTooltip]="row()?.error ?? failure">
+           [cacTooltip]="row()?.probeFailureDetail ?? failure">
         {{ failure }} · showing last-good quota values
       </div>
     } @else if (row()?.error; as err) {

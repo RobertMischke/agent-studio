@@ -38,7 +38,7 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
             ? new QuotaSnapshot
             {
                 CliType = "codex",
-                CliVersion = "codex-cli 0.149.0",
+                CliVersion = "codex-cli 0.144.1",
                 FetchedAt = fetchedAt,
                 Plan = "Pro",
                 Source = "/status",
@@ -59,9 +59,66 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
         Assert.Equal(fetchedAt, stale.FetchedAt);
         Assert.Equal("Pro", stale.Plan);
         Assert.Equal(61, Assert.Single(stale.Windows).UsedPct);
-        Assert.Equal("codex-cli 0.149.0", stale.CliVersion);
+        Assert.Equal("codex-cli 0.144.1", stale.CliVersion);
+        Assert.Equal("codex-cli 0.149.0", stale.FailedProbeCliVersion);
         Assert.NotNull(stale.ProbeFailedAt);
         Assert.Equal("Quota probe timed out before the CLI panel rendered.", stale.Error);
+
+        var served = Assert.Single(service.GetCached().Snapshots);
+        Assert.True(served.IsStale);
+        Assert.True(served.AgeSeconds >= 119);
+        Assert.Equal(fetchedAt, served.CapturedAt);
+    }
+
+    [Theory]
+    [InlineData("claude", "2.1.202")]
+    [InlineData("codex", "codex-cli 0.149.0")]
+    public async Task RefreshAsync_SuccessPersistsAndColdStartServesFresh(
+        string cliType,
+        string cliVersion)
+    {
+        var capturedAt = DateTime.UtcNow;
+        var first = NewService(new ScriptedProbe(cliType, _ => new QuotaSnapshot
+        {
+            CliType = cliType,
+            CliVersion = cliVersion,
+            FetchedAt = capturedAt,
+            Plan = "Pro",
+            Source = cliType == "codex" ? "/status" : "/usage",
+            Windows =
+            [
+                new QuotaWindow { Label = "Current session (5h)", UsedPct = 27 },
+                new QuotaWindow { Label = "Weekly", UsedPct = 42 }
+            ]
+        }));
+
+        await first.RefreshAsync(cliType);
+
+        var persisted = Assert.Single(
+            new QuotaCacheStore(_configuration, NullLogger<QuotaCacheStore>.Instance).Read());
+        Assert.Equal(cliType, persisted.CliType);
+        Assert.Equal(cliVersion, persisted.CliVersion);
+        Assert.Equal(capturedAt, persisted.FetchedAt);
+
+        using var release = new ManualResetEventSlim();
+        var restarted = NewService(new BlockingProbe(cliType, null, release));
+        try
+        {
+            var report = restarted.GetWithBackgroundRefresh();
+            var served = Assert.Single(report.Snapshots);
+
+            Assert.Equal(cliType, served.CliType);
+            Assert.Equal(capturedAt, served.CapturedAt);
+            Assert.Equal(cliVersion, served.CliVersion);
+            Assert.False(served.IsStale);
+            Assert.InRange(served.AgeSeconds, 0, 1);
+            Assert.Equal(27, served.Windows[0].UsedPct);
+            Assert.Equal(42, served.Windows[1].UsedPct);
+        }
+        finally
+        {
+            release.Set();
+        }
     }
 
     [Fact]
@@ -70,7 +127,7 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
     {
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        var service = NewService(new BlockingProbe(entered, release));
+        var service = NewService(new BlockingProbe("codex", entered, release));
 
         var stopwatch = Stopwatch.StartNew();
         var request = Task.Run(() => service.GetWithBackgroundRefresh());
@@ -117,24 +174,48 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
             store);
     }
 
-    private sealed class ScriptedProbe(Func<int, QuotaSnapshot> script) : IQuotaProbe
+    private sealed class ScriptedProbe : IQuotaProbe
     {
+        private readonly Func<int, QuotaSnapshot> _script;
         private int _calls;
-        public string CliType => "codex";
+
+        public ScriptedProbe(Func<int, QuotaSnapshot> script)
+            : this("codex", script)
+        {
+        }
+
+        public ScriptedProbe(string cliType, Func<int, QuotaSnapshot> script)
+        {
+            CliType = cliType;
+            _script = script;
+        }
+
+        public string CliType { get; }
         public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
-            => Task.FromResult(script(Interlocked.Increment(ref _calls)));
+            => Task.FromResult(_script(Interlocked.Increment(ref _calls)));
     }
 
-    private sealed class BlockingProbe(
-        ManualResetEventSlim entered,
-        ManualResetEventSlim release) : IQuotaProbe
+    private sealed class BlockingProbe : IQuotaProbe
     {
-        public string CliType => "codex";
+        private readonly ManualResetEventSlim? _entered;
+        private readonly ManualResetEventSlim _release;
+
+        public BlockingProbe(
+            string cliType,
+            ManualResetEventSlim? entered,
+            ManualResetEventSlim release)
+        {
+            CliType = cliType;
+            _entered = entered;
+            _release = release;
+        }
+
+        public string CliType { get; }
 
         public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
         {
-            entered.Set();
-            release.Wait(ct);
+            _entered?.Set();
+            _release.Wait(ct);
             return Task.FromResult(new QuotaSnapshot { CliType = CliType });
         }
     }

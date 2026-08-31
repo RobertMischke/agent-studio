@@ -26,8 +26,16 @@ export interface QuotaWindow {
 export interface QuotaSnapshot {
   cliType: CliType;
   fetchedAt: string;
+  /** Explicit response alias for the last-good reading time. */
+  capturedAt?: string;
+  /** Age of the last-good reading when the backend assembled the response. */
+  ageSeconds?: number;
+  /** Backend freshness verdict. Older backends omit this field. */
+  isStale?: boolean;
   /** CLI `--version` output recorded alongside this probe. */
   cliVersion?: string | null;
+  /** CLI version observed by the failed probe, if it differs from last-good. */
+  failedProbeCliVersion?: string | null;
   /** Most recent failed attempt; fetchedAt remains the last-good data time. */
   probeFailedAt?: string | null;
   plan: string | null;
