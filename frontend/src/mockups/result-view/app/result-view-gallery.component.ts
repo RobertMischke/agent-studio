@@ -5,7 +5,7 @@ import type { TaskDetail } from '../../../app/models/task.model';
 /**
  * Isolated render of the REAL {@link ResultViewComponent} across the case
  * families that pick distinct overview layouts, plus the two new quality-head
- * metric chips (files changed, tests passed). Backend-free: each card is built
+ * inline metrics (files changed, tests passed). Backend-free: each card is built
  * from a canned `status.md` + task metadata, exactly as the live protocol pane
  * builds it, so the Playwright spec can screenshot both themes without a running
  * dev backend.
@@ -13,6 +13,7 @@ import type { TaskDetail } from '../../../app/models/task.model';
 function verdict(overrides: Partial<ProtocolVerdict> = {}): ProtocolVerdict {
   return {
     kind: 'ok',
+    status: 'succeeded',
     emoji: '🟢',
     label: 'Success',
     detail: 'Last run completed successfully.',
@@ -41,6 +42,7 @@ function detail(statusMarkdown: string, overrides: Record<string, unknown> = {})
 }
 
 interface GalleryCard {
+  id: string;
   heading: string;
   detail: TaskDetail;
   verdict: ProtocolVerdict;
@@ -48,7 +50,29 @@ interface GalleryCard {
 
 const CARDS: GalleryCard[] = [
   {
-    heading: 'bugfix - sequence layout, files + tests chips',
+    id: 'operator-sighting',
+    heading: 'operator sighting - pipeline failure with the full summary row',
+    detail: detail(
+      `# Status\n\n- Result: Partial\n- Duration: 20 min\n- Files: 40\n- Tests: 81 passed\n\n## Overview\n- Problem: The pipeline stopped after the implementation run.\n- Solution: Review the failed pipeline evidence before delivery.\n`,
+      {
+        taskType: 'bug',
+        tags: [],
+        tokenSummary: { totalTokens: 72_910 },
+        commits: [],
+        codeActivityDetected: undefined,
+      },
+    ),
+    verdict: verdict({
+      kind: 'problem',
+      status: 'failed',
+      label: 'Pipeline failure',
+      emoji: '🔴',
+      duration: '20 min',
+    }),
+  },
+  {
+    id: 'bugfix',
+    heading: 'bugfix - sequence layout, files + tests stats',
     detail: detail(
       `# Status\n\n- Result: Success\n- Duration: 4 min\n- Files: 3\n- Tests: 24 passed\n\n## Overview\n- Problem: The verdict banner was unreadable on the light theme.\n- Solution: Re-toned it to a neutral surface with a semantic accent stripe.\n`,
       { taskType: 'bug' },
@@ -56,6 +80,7 @@ const CARDS: GalleryCard[] = [
     verdict: verdict(),
   },
   {
+    id: 'ui-cleanup',
     heading: 'ui-cleanup - before/after two-column layout',
     detail: detail(
       `# Status\n\n- Result: Success\n- Case: ui-cleanup\n- Duration: 6 min\n- Files: 2\n- Tests: 12/12 passed\n\n## Overview\n- Problem: Cards crowded the lane rail with uneven spacing.\n- Solution: Rebuilt the rhythm on the spacing token scale.\n`,
@@ -63,6 +88,7 @@ const CARDS: GalleryCard[] = [
     verdict: verdict({ duration: '6 min' }),
   },
   {
+    id: 'blocked',
     heading: 'blocked - warn callout layout',
     detail: detail(
       `# Status\n\n- Result: Blocked\n- Duration: 9 min\n- Files: 1\n- Tests: 3/8 passed\n\n## Overview\n- Problem: Migrate the runner to the new lease API.\n- Solution: Stopped at the lease-renewal race; needs a design decision.\n`,
@@ -71,6 +97,7 @@ const CARDS: GalleryCard[] = [
     verdict: verdict({ kind: 'problem', label: 'Blocked', emoji: '🔴', duration: '9 min' }),
   },
   {
+    id: 'feature',
     heading: 'feature - standard stacked layout',
     detail: detail(
       `# Status\n\n- Result: Success\n- Case: feature\n- Duration: 11 min\n- Files: 8\n- Tests: 41 passed\n\n## Overview\n- Problem: Operators had no per-project usage caps.\n- Solution: Added the caps settings surface and wired the enforcement path.\n`,

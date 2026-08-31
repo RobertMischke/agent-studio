@@ -23,14 +23,14 @@ import { buildTokenCostTooltip } from '../../../tokens';
 import type { ProtocolVerdict } from './protocol-verdict';
 import { classifyResultCase, type ResultCaseResult } from './result-case';
 
-/** One chip in the metric head. Only chips with real data are emitted. */
+/** One inline stat in the metric head. Only stats with real data are emitted. */
 export interface ResultMetric {
   id: string;
   icon: string;
   label: string;
   value: string;
   tooltip?: string;
-  /** Semantic tone for value-carrying chips (grade, tests). */
+  /** Semantic state retained for tooltips and downstream projections. */
   tone?: 'ok' | 'warn' | 'problem' | 'neutral';
 }
 
@@ -75,7 +75,7 @@ export function parseHeaderMetric(markdown: string | null | undefined, key: stri
 }
 
 /**
- * Turn a raw `- Tests:` value into a chip value + tone. Recognises an `X/Y`
+ * Turn a raw `- Tests:` value into a compact stat value + tone. Recognises an `X/Y`
  * tally (some failed -> warn), a bare "N passed" (all green -> ok), and any
  * value mentioning a failure (-> problem). Anything else renders neutrally with
  * the text as-is so an unexpected phrasing still surfaces the number.
@@ -88,11 +88,23 @@ export function classifyTestsMetric(raw: string): { value: string; tone: ResultM
     const passed = Number(ratio[1]);
     const total = Number(ratio[2]);
     const tone: ResultMetric['tone'] = passed < total ? 'warn' : 'ok';
-    return { value: `${passed}/${total}`, tone };
+    return { value: passed === total ? `${passed}/${total} ✓` : `${passed}/${total}`, tone };
   }
   if (/\bfail|\bbroke|\berror/.test(lower)) return { value: text, tone: 'problem' };
-  if (/\bpass|\bgreen|\bok\b/.test(lower)) return { value: text, tone: 'ok' };
+  if (/\bpass|\bgreen|\bok\b/.test(lower)) {
+    const count = text.match(/\d+/)?.[0];
+    return { value: count ? `${count} ✓` : text, tone: 'ok' };
+  }
   return { value: text, tone: 'neutral' };
+}
+
+/** Compress common duration words without changing an unknown duration value. */
+export function compactDurationMetric(value: string): string {
+  return value
+    .replace(/\b(?:hours?|hrs?)\b/gi, 'h')
+    .replace(/\b(?:minutes?|mins?)\b/gi, 'm')
+    .replace(/\b(?:seconds?|secs?)\b/gi, 's')
+    .replace(/\s+(?=[hms]\b)/g, '');
 }
 
 const GRADE_META: Record<string, { tone: ResultMetric['tone']; tooltip: string }> = {
@@ -229,12 +241,12 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   }
 
   if (verdict.duration) {
-    metrics.push({ id: 'duration', icon: '⏱', label: 'Duration', value: verdict.duration });
+    metrics.push({ id: 'duration', icon: '⏱', label: 'Duration', value: compactDurationMetric(verdict.duration) });
   }
 
   // Files changed + tests passed: the two quality-head metrics the Result
   // redesign deferred in Teil 1. They ride optional `# Status` header lines the
-  // summarizer emits only when the run log proves a real number, so a chip
+  // summarizer emits only when the run log proves a real number, so a stat
   // appears exactly when there is honest data behind it.
   const filesRaw = parseHeaderMetric(markdown, 'Files');
   if (filesRaw) {
@@ -269,7 +281,7 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
       id: 'tokens',
       icon: '🪙',
       label: 'Tokens',
-      value: formatTokens(totalTokens),
+      value: `${formatTokens(totalTokens)} tokens`,
       tooltip: buildTokenCostTooltip({
         costUsd: tokenSummary.estimatedApiCostUsd,
         priceKnown: tokenSummary.allModelsPriced === true,
@@ -298,8 +310,8 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
 /**
  * Build the {@link ResultDocument} for a finished run from its detail payload
  * and the already-derived head verdict. `verdict` is passed in so the single
- * Result case badge is authoritative; it is deliberately not repeated as a
- * metric chip beside itself.
+ * Result outcome is authoritative; it is deliberately not repeated as a
+ * metric beside itself.
  */
 export function buildResultDocument(detail: TaskDetail, verdict: ProtocolVerdict): ResultDocument {
   const markdown = detail.statusMarkdown ?? '';

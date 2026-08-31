@@ -5,6 +5,7 @@ import {
   buildResultDocument,
   classifyTestsMetric,
   codeReviewGradeFromTags,
+  compactDurationMetric,
   parseCaseHint,
   parseHeaderMetric,
 } from './result-document';
@@ -154,11 +155,19 @@ describe('parseHeaderMetric', () => {
 describe('classifyTestsMetric', () => {
   it('reads an X/Y tally and warns when some failed', () => {
     expect(classifyTestsMetric('11/12 passed')).toEqual({ value: '11/12', tone: 'warn' });
-    expect(classifyTestsMetric('12/12 passed')).toEqual({ value: '12/12', tone: 'ok' });
+    expect(classifyTestsMetric('12/12 passed')).toEqual({ value: '12/12 ✓', tone: 'ok' });
   });
   it('tones a bare pass green and a failure red', () => {
-    expect(classifyTestsMetric('12 passed').tone).toBe('ok');
+    expect(classifyTestsMetric('12 passed')).toEqual({ value: '12 ✓', tone: 'ok' });
     expect(classifyTestsMetric('2 failed').tone).toBe('problem');
+  });
+});
+
+describe('compactDurationMetric', () => {
+  it('uses compact time units and preserves unknown formats', () => {
+    expect(compactDurationMetric('20 min')).toBe('20m');
+    expect(compactDurationMetric('1 hour 12 minutes')).toBe('1h 12m');
+    expect(compactDurationMetric('about one turn')).toBe('about one turn');
   });
 });
 
@@ -204,9 +213,9 @@ describe('buildResultDocument', () => {
       detail({ totalTokens: 1_500_000, commits: 2 }),
       verdict({ duration: '4 min' }),
     );
-    expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4 min');
+    expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4m');
     const tokens = doc.metrics.find((x) => x.id === 'tokens');
-    expect(tokens?.value).toBe('1.50M');
+    expect(tokens?.value).toBe('1.50M tokens');
     expect(tokens?.tooltip).toContain('Estimated cost: $1.25');
     expect(tokens?.tooltip).toContain('historical list prices');
     expect(doc.metrics.find((x) => x.id === 'commits')?.value).toBe('2 commits');

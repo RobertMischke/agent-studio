@@ -7,7 +7,7 @@ import fs from 'node:fs';
 /**
  * Renders the REAL {@link ResultViewComponent} via the `result-view-mockup`
  * standalone app and screenshots the case-based overview layouts + the two new
- * quality-head metric chips (files changed, tests passed) in BOTH themes.
+ * compact quality-head metrics (files changed, tests passed) in BOTH themes.
  *
  * Backend-free by design: the gallery builds each card from a canned `status.md`
  * + task metadata, so this is the frontend verification the Teil 1 slice could
@@ -23,6 +23,7 @@ const DIST_DIR = path.resolve(__dirname, '..', '..', 'dist', 'result-view-mockup
 const RESULTS_DIR =
   process.env.JOB_RESULTS_DIR?.trim() ||
   path.resolve(__dirname, '..', '..', '..', 'docs', 'mockups', 'result-view', 'evidence');
+const SCREENSHOT_PHASE = process.env.RESULT_VIEW_SCREENSHOT_PHASE?.trim() || 'after';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -80,26 +81,81 @@ async function stampTheme(page: import('@playwright/test').Page, theme: 'dark' |
 
 test.describe('@mockup result-view (real component)', () => {
   for (const theme of ['dark', 'light'] as const) {
-    test(`renders the case layouts + metric chips in the ${theme} theme`, async ({ page }) => {
+    test(`renders a compact result-summary row in the ${theme} theme`, async ({ page }) => {
       await page.setViewportSize({ width: 860, height: 1400 });
       await page.goto(baseUrl);
       await stampTheme(page, theme);
 
       const gallery = page.getByTestId('result-view-gallery');
       await expect(gallery).toBeVisible();
-      // All four case cards render.
-      await expect(page.getByTestId('gallery-card')).toHaveCount(4);
-      // The two new quality-head chips are present.
+      // All case cards plus the operator-sighting density fixture render.
+      await expect(page.getByTestId('gallery-card')).toHaveCount(5);
+      // The quality-head metrics remain present after the density change.
       await expect(page.getByTestId('result-metric-files').first()).toBeVisible();
       await expect(page.getByTestId('result-metric-tests').first()).toBeVisible();
       // The per-case divergence: a blocker layout and a before-after layout exist.
-      await expect(page.locator('[data-testid="result-overview"][data-layout="blocker"]')).toHaveCount(1);
+      await expect(page.locator('[data-testid="result-overview"][data-layout="blocker"]')).toHaveCount(2);
       await expect(page.locator('[data-testid="result-overview"][data-layout="before-after"]')).toHaveCount(1);
       await expect(page.locator('[data-testid="result-overview"][data-layout="sequence"]')).toHaveCount(1);
 
+      const operatorCard = page.locator('[data-gallery-card="operator-sighting"]');
+      const summary = operatorCard.getByTestId('result-summary-meta');
+      const outcome = operatorCard.getByTestId('result-case-badge');
+      const duration = operatorCard.getByTestId('result-metric-duration');
+      const files = operatorCard.getByTestId('result-metric-files');
+      const tests = operatorCard.getByTestId('result-metric-tests');
+      const tokens = operatorCard.getByTestId('result-metric-tokens');
+
+      await expect(outcome).toHaveText('Pipeline failure');
+      await expect(duration).toHaveText('20m');
+      await expect(files).toHaveText('40 files');
+      await expect(tests).toHaveText('81 ✓');
+      await expect(tokens).toHaveText('72.9k tokens');
+      await expect(operatorCard.getByTestId('result-outcome-dot')).toBeVisible();
+
+      const density = await summary.evaluate((element) => {
+        const outcomeElement = element.querySelector<HTMLElement>('[data-testid="result-case-badge"]')!;
+        const metricElement = element.querySelector<HTMLElement>('[data-testid="result-metric-tests"]')!;
+        const outcomeStyle = getComputedStyle(outcomeElement);
+        const metricStyle = getComputedStyle(metricElement);
+        return {
+          height: element.getBoundingClientRect().height,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          outcomeBorder: outcomeStyle.borderStyle,
+          outcomeBackground: outcomeStyle.backgroundColor,
+          outcomeColor: outcomeStyle.color,
+          metricBorder: metricStyle.borderStyle,
+          metricBackground: metricStyle.backgroundColor,
+          metricColor: metricStyle.color,
+        };
+      });
+      expect(density.height).toBeLessThanOrEqual(24);
+      expect(density.scrollWidth).toBeLessThanOrEqual(density.clientWidth);
+      expect(density.outcomeBorder).toBe('none');
+      expect(density.outcomeBackground).toBe('rgba(0, 0, 0, 0)');
+      expect(density.metricBorder).toBe('none');
+      expect(density.metricBackground).toBe('rgba(0, 0, 0, 0)');
+      expect(density.outcomeColor).not.toBe(density.metricColor);
+
+      await page.locator('[data-gallery-card="operator-sighting"]').screenshot({
+        path: path.join(RESULTS_DIR, `result-summary-${SCREENSHOT_PHASE}-${theme}--mocked.png`),
+      });
       await page.screenshot({
         path: path.join(RESULTS_DIR, `result-view-${theme}--mocked.png`),
         fullPage: true,
+      });
+
+      await page.setViewportSize({ width: 420, height: 900 });
+      const narrowDensity = await summary.evaluate((element) => ({
+        height: element.getBoundingClientRect().height,
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }));
+      expect(narrowDensity.height).toBeLessThanOrEqual(44);
+      expect(narrowDensity.scrollWidth).toBeLessThanOrEqual(narrowDensity.clientWidth);
+      await operatorCard.screenshot({
+        path: path.join(RESULTS_DIR, `result-summary-after-${theme}-narrow--mocked.png`),
       });
     });
   }

@@ -1,7 +1,9 @@
 <main class="gallery" data-testid="result-view-gallery">
   <h1 class="gallery__title">Result view - case layouts + quality-head metrics</h1>
-  @for (card of cards; track card.heading) {
-    <section class="gallery__card" data-testid="gallery-card">
+  @for (card of cards; track card.id) {
+    <section class="gallery__card"
+             data-testid="gallery-card"
+             [attr.data-gallery-card]="card.id">
       <h2 class="gallery__card-heading">{{ card.heading }}</h2>
       <div class="gallery__frame">
         <app-result-view [detail]="card.detail" [verdict]="card.verdict" />
