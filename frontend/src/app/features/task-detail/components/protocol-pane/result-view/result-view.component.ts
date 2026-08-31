@@ -14,9 +14,9 @@ import { TestEvidenceStatusComponent } from '../../../../test-evidence';
  * Renders a finished run in the layered, shareable shape the operator asked
  * for, top to bottom:
  *
- *   1. **metric head** - the single outcome case badge plus grade / duration /
- *      tokens / commits chips, so "is this fine and how big is it?" answers
- *      at a glance;
+ *   1. **metadata head** - the single emphasized outcome plus quiet grade /
+ *      duration / tokens / commits values, so "is this fine and how big is
+ *      it?" answers at a glance without a row of badges;
  *   2. **overview** - a "problem -> solution" card with case-tuned labels,
  *      the one thing worth sharing;
  *   3. **detail** - the existing rich markdown body (What Was Done / Open
@@ -57,7 +57,7 @@ export class ResultViewComponent {
     const status = this.verdict().status;
     if (status === 'failed') return 'problem';
     if (status === 'needs-decision') return 'warn';
-    if (status === 'succeeded') return 'accent';
+    if (status === 'succeeded') return 'success';
     return 'neutral';
   });
 

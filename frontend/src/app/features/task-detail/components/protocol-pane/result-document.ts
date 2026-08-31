@@ -4,7 +4,7 @@
  * A {@link ResultDocument} is a single, presentation-ready projection of a
  * finished run that the Result view renders in three layers, top to bottom:
  *
- *   1. a **metric head** (code-review grade, duration, tokens, commits)
+ *   1. a **compact metadata head** (code-review grade, duration, tokens, commits)
  *   2. an **overview** ("problem -> solution", the shareable one-liner)
  *   3. the **detail** markdown (What Was Done / Open Items / Notes / Images)
  *
@@ -23,14 +23,13 @@ import { buildTokenCostTooltip } from '../../../tokens';
 import type { ProtocolVerdict } from './protocol-verdict';
 import { classifyResultCase, type ResultCaseResult } from './result-case';
 
-/** One chip in the metric head. Only chips with real data are emitted. */
+/** One value in the metadata head. Only metrics with real data are emitted. */
 export interface ResultMetric {
   id: string;
-  icon: string;
   label: string;
   value: string;
   tooltip?: string;
-  /** Semantic tone for value-carrying chips (grade, tests). */
+  /** Semantic outcome retained for tooltips and future non-visual consumers. */
   tone?: 'ok' | 'warn' | 'problem' | 'neutral';
 }
 
@@ -88,11 +87,23 @@ export function classifyTestsMetric(raw: string): { value: string; tone: ResultM
     const passed = Number(ratio[1]);
     const total = Number(ratio[2]);
     const tone: ResultMetric['tone'] = passed < total ? 'warn' : 'ok';
-    return { value: `${passed}/${total}`, tone };
+    return { value: passed === total ? `${passed}/${total} ✓` : `${passed}/${total}`, tone };
   }
   if (/\bfail|\bbroke|\berror/.test(lower)) return { value: text, tone: 'problem' };
+  const passed = /^(\d+)\s+(?:passed|pass|green|ok)$/i.exec(text);
+  if (passed) return { value: `${passed[1]} ✓`, tone: 'ok' };
   if (/\bpass|\bgreen|\bok\b/.test(lower)) return { value: text, tone: 'ok' };
   return { value: text, tone: 'neutral' };
+}
+
+/** Preserve a reported duration while removing prose-sized unit labels. */
+export function compactDurationMetric(raw: string): string {
+  return raw.trim()
+    .replace(/(\d+(?:\.\d+)?)\s*(?:milliseconds?|msecs?|ms)\b/gi, '$1ms')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|min)\b/gi, '$1m')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|hr)\b/gi, '$1h')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|sec)\b/gi, '$1s')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:days?|day)\b/gi, '$1d');
 }
 
 const GRADE_META: Record<string, { tone: ResultMetric['tone']; tooltip: string }> = {
@@ -225,11 +236,11 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   const grade = codeReviewGradeFromTags(info.tags);
   if (grade) {
     const meta = GRADE_META[grade] ?? { tone: 'neutral' as const, tooltip: `Code review grade ${grade}.` };
-    metrics.push({ id: 'grade', icon: '🎓', label: 'Review', value: `Grade ${grade}`, tone: meta.tone, tooltip: meta.tooltip });
+    metrics.push({ id: 'grade', label: 'Review', value: `Grade ${grade}`, tone: meta.tone, tooltip: meta.tooltip });
   }
 
   if (verdict.duration) {
-    metrics.push({ id: 'duration', icon: '⏱', label: 'Duration', value: verdict.duration });
+    metrics.push({ id: 'duration', label: 'Duration', value: compactDurationMetric(verdict.duration) });
   }
 
   // Files changed + tests passed: the two quality-head metrics the Result
@@ -242,7 +253,6 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const value = Number.isFinite(n) ? `${n} file${n === 1 ? '' : 's'}` : filesRaw;
     metrics.push({
       id: 'files',
-      icon: '📄',
       label: 'Files',
       value,
       tooltip: 'Files changed by this task (from the run diff).',
@@ -254,7 +264,6 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const { value, tone } = classifyTestsMetric(testsRaw);
     metrics.push({
       id: 'tests',
-      icon: '🧪',
       label: 'Tests',
       value,
       tone,
@@ -267,7 +276,6 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const tokenSummary = info.tokenSummary!;
     metrics.push({
       id: 'tokens',
-      icon: '🪙',
       label: 'Tokens',
       value: formatTokens(totalTokens),
       tooltip: buildTokenCostTooltip({
@@ -282,14 +290,13 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   if (commitCount > 0) {
     metrics.push({
       id: 'commits',
-      icon: '⑃',
       label: 'Commits',
       value: `${commitCount} commit${commitCount === 1 ? '' : 's'}`,
     });
   } else if (info.codeActivityDetected === true) {
-    metrics.push({ id: 'commits', icon: '⑃', label: 'Commits', value: 'pending', tooltip: 'Work landed but the attributed commit chain is still resolving.' });
+    metrics.push({ id: 'commits', label: 'Commits', value: 'pending', tooltip: 'Work landed but the attributed commit chain is still resolving.' });
   } else if (info.codeActivityDetected === false) {
-    metrics.push({ id: 'commits', icon: '⑃', label: 'Commits', value: 'no code change', tooltip: 'The run moved no code (analysis / docs / investigation).' });
+    metrics.push({ id: 'commits', label: 'Commits', value: 'no code change', tooltip: 'The run moved no code (analysis / docs / investigation).' });
   }
 
   return metrics;
