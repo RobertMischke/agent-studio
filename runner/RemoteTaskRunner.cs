@@ -773,32 +773,28 @@ public sealed class RemoteTaskRunner
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
-                    if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
+                    var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                   ?? AgentCliProcess.ConfiguredCliType(_options);
+                    var providerBinary = RunnerCapabilityProbe.CodingCliBinaries(_options)
+                                             .FirstOrDefault(item => string.Equals(
+                                                 item.CliType,
+                                                 provider,
+                                                 StringComparison.OrdinalIgnoreCase))
+                                             .Binary
+                                         ?? _options.CliBin;
+                    var providerEvidence = ProviderAuthProbe.Shared.ObserveProcessResult(
+                        providerBinary,
+                        processResult);
+                    if (providerEvidence.Kind != ProviderAuthFailureKind.None)
                     {
-                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
-                                       ?? AgentCliProcess.ConfiguredCliType(_options);
-                        var claimId = outbox?.Authority.RunId;
-                        var diagnostic = result.StdErr
-                            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
-                            .LastOrDefault()
-                            ?? $"{provider} exited {result.ExitCode} with an authentication failure";
-                        // Diagnosis only: the run's own classification and fenced
-                        // completion below must survive a server that rejects or
-                        // does not mount the capability route.
-                        await CapabilityFailureReporter.TryReportAsync(
-                            _client,
-                            _log,
-                            CapabilityProtocol.ProviderAuthentication(provider),
-                            "ProviderUnauthorized",
-                            diagnostic.Length <= 500 ? diagnostic : diagnostic[..500],
-                            $"provider-auth:{claimId ?? slot.Lease.LeaseId}:{slot.Lease.FencingToken}",
-                            "run",
-                            claimId,
-                            slot.Lease.FencingToken,
-                            stopRun);
+                        var operationalState = ProviderAuthProbe.Shared.Current(providerBinary).OperationalState;
+                        _log(
+                            $"runner-provider-auth-result provider={provider} "
+                            + $"classification={providerEvidence.Kind} state={operationalState}");
                         shipper.Add(
                             "system",
-                            $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized");
+                            $"[runner] provider-auth capability={CapabilityProtocol.ProviderAuthentication(provider)} "
+                            + $"state={operationalState} classification={providerEvidence.Kind}");
                     }
                     var classified = result.TimedOut
                         ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)

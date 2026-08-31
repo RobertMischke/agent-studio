@@ -41,13 +41,26 @@ public static class CapabilityHealthStates
     public const string HalfOpen = "half-open";
 }
 
+public static class ProviderAuthOperationalStates
+{
+    public const string Authenticated = "authenticated";
+    public const string TransientError = "transient-auth-error";
+    public const string RateLimited = "rate-limited";
+    public const string SignedOut = "signed-out";
+    public const string CredentialsExpiring = "credentials-expiring";
+    public const string Unverified = "unverified";
+    public const string BinaryMissing = "binary-missing";
+}
+
 public sealed record AdvertisedCapabilityDto(
     string Key,
     string Category,
     string Status = "ready",
     string? Version = null,
     string? Identity = null,
-    string? Detail = null);
+    string? Detail = null,
+    string? OperationalState = null,
+    DateTime? ExpiresAt = null);
 
 public sealed record CapabilityAdvertisementRequest(
     string RunnerId,
@@ -128,7 +141,9 @@ public sealed record CapabilityHealthDto(
     string? Identity,
     string? Detail,
     IReadOnlyList<string> AffectedClaims,
-    IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory);
+    IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory,
+    string? OperationalState = null,
+    DateTime? ExpiresAt = null);
 
 public sealed record RemoteHostAdmissionDto(
     string HostId,

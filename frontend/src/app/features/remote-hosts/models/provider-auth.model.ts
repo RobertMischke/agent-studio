@@ -6,7 +6,14 @@ import type {
   TaskServerRunnerCapabilitySnapshot,
 } from './remote-host.model';
 
-export type ProviderAuthDisplayState = 'ok' | 'unavailable' | 'unknown';
+export type ProviderAuthDisplayState =
+  | 'ok'
+  | 'retrying'
+  | 'limited'
+  | 'signed-out'
+  | 'expiring'
+  | 'unavailable'
+  | 'unknown';
 
 export interface ProviderAuthBadge {
   id: string;
@@ -28,6 +35,7 @@ export interface ProviderAuthBadge {
 
 export interface ProviderAuthWaitReason {
   provider: string;
+  state: 'limited' | 'signed-out' | 'unavailable' | 'unknown';
   label: string;
   tooltip: string;
   hostNames: readonly string[];
@@ -103,25 +111,47 @@ export function providerAuthWaitReason(
     status.provider === provider
     && (!configuredRunner
       || status.aliases.some(alias => alias.toLowerCase() === configuredRunner.toLowerCase())));
-  if (candidates.some(status => status.state === 'ok' && status.reachable)) return null;
+  if (candidates.some(status =>
+    status.reachable
+    && ['ok', 'retrying', 'expiring'].includes(status.state))) return null;
 
   const providerLabel = label(provider);
   const hostNames = [...new Set(candidates.map(status => status.hostName).filter(Boolean))];
   const target = hostNames.length > 0
     ? hostNames.join(', ')
     : configuredRunner ?? 'an execution host';
+  const limited = candidates.filter(status => status.state === 'limited');
+  const signedOut = candidates.filter(status => status.state === 'signed-out');
   const unavailable = candidates.filter(status => status.state === 'unavailable');
-  const detail = unavailable.length > 0
-    ? unavailable.map(status => `${status.hostName}: ${status.detail}`).join('\n')
+  const relevant = limited.length > 0
+    ? limited
+    : signedOut.length > 0
+      ? signedOut
+      : unavailable;
+  const detail = relevant.length > 0
+    ? relevant.map(status => `${status.hostName}: ${status.detail}`).join('\n')
     : candidates.length > 0
       ? candidates.map(status => `${status.hostName}: ${status.detail}`).join('\n')
       : configuredRunner
         ? `No reachable ${configuredRunner} capability snapshot advertises provider-auth:${provider}.`
         : `No reachable runner capability snapshot advertises provider-auth:${provider}.`;
+  const state = limited.length > 0
+    ? 'limited'
+    : signedOut.length > 0
+      ? 'signed-out'
+      : unavailable.length > 0
+        ? 'unavailable'
+        : 'unknown';
+  const waitLabel = state === 'limited'
+    ? `Waiting for ${providerLabel} rate limit on ${target}`
+    : state === 'signed-out'
+      ? `Waiting for ${providerLabel} sign-in on ${target}`
+      : `Waiting for ${providerLabel} capability status on ${target}`;
   return {
     provider,
-    label: `Waiting for ${providerLabel} sign-in on ${target}`,
-    tooltip: `${detail}\nThe task stays Ready until a fresh provider probe reports OK.`,
+    state,
+    label: waitLabel,
+    tooltip: `${detail}\nThe task stays Ready until a fresh provider probe reports usable capability.`,
     hostNames: hostNames.length > 0 ? hostNames : configuredRunner ? [configuredRunner] : [],
   };
 }
@@ -155,17 +185,19 @@ function badgeFromCapability(
     && expiryMs - nowMs <= PROVIDER_AUTH_EXPIRY_WARNING_MS;
   let state: ProviderAuthDisplayState;
   if (!capability || !capability.isFresh || !runnerReachable) state = 'unknown';
-  else if (expired
-    || capability.advertisedStatus !== 'ready'
-    || capability.healthState !== 'healthy') state = 'unavailable';
+  else if (capability.operationalState === 'rate-limited'
+    || capability.advertisedStatus === 'limited') state = 'limited';
+  else if (capability.operationalState === 'signed-out') state = 'signed-out';
+  else if (capability.operationalState === 'transient-auth-error') state = 'retrying';
+  else if (capability.operationalState === 'credentials-expiring' || expiresSoon || expired) state = 'expiring';
+  else if (capability.advertisedStatus === 'unavailable') state = 'unavailable';
+  else if (capability.healthState !== 'healthy') state = 'retrying';
   else state = 'ok';
 
   const detail = capability
     ? !capability.isFresh
       ? `The last provider probe expired at ${capability.freshUntil}. ${capability.detail ?? capability.reason ?? ''}`.trim()
-      : expired
-        ? `The advertised provider credential expired at ${expiresAt}.`
-        : capability.reason || capability.detail || `provider-auth:${provider} is ${capability.advertisedStatus}.`
+      : capability.reason || capability.detail || `provider-auth:${provider} is ${capability.advertisedStatus}.`
     : `No provider-auth:${provider} capability was advertised for this CLI.`;
   return {
     id: `${runnerId}:${provider}`,

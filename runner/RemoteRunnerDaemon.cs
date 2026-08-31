@@ -314,6 +314,7 @@ public sealed class RemoteRunnerDaemon
             TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds),
             _log,
             shutdown);
+        _ = ProviderAuthProbe.Shared.ConsumeChanged();
         if (!gitCapability.CanPush)
         {
             // Diagnosis only: read-only admission is already decided above, so a
@@ -369,7 +370,8 @@ public sealed class RemoteRunnerDaemon
             try
             {
                 await handoffRecovery.RecoverAllAsync(shutdown);
-                if (DateTime.UtcNow >= nextCapabilityAdvertisement)
+                var providerAuthChanged = ProviderAuthProbe.Shared.ConsumeChanged();
+                if (DateTime.UtcNow >= nextCapabilityAdvertisement || providerAuthChanged)
                 {
                     var capabilityTelemetry = TakeTelemetry();
                     var generation = ++capabilityGeneration;

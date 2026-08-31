@@ -124,6 +124,7 @@
       <span class="task-card__provider-auth-wait"
             data-testid="task-card-provider-auth-wait"
             role="status"
+            [attr.data-state]="authWait.state"
             [cacTooltip]="authWait.tooltip">
         <span class="task-card__provider-auth-dot" aria-hidden="true"></span>
         {{ authWait.label }}

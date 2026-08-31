@@ -597,6 +597,14 @@
       border-radius: 50%;
       background: var(--severity-warn);
     }
+    .task-card__provider-auth-wait[data-state='signed-out'] {
+      border-color: var(--notify-error-border);
+      background: var(--notify-error-tint);
+      color: var(--notify-error-icon-fg);
+    }
+    .task-card__provider-auth-wait[data-state='signed-out'] .task-card__provider-auth-dot {
+      background: var(--severity-high);
+    }
     .task-card__waiting-glyph {
       font-size: 11px;
       line-height: 1;

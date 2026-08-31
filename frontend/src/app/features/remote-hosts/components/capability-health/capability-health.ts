@@ -18,6 +18,12 @@ export class CapabilityHealthComponent {
 
   tone(capability: RemoteHostCapabilityHealth): 'ok' | 'warn' | 'error' | 'idle' {
     if (!capability.isFresh) return 'error';
+    if (capability.key.startsWith('provider-auth:')) {
+      if (capability.operationalState === 'signed-out') return 'error';
+      if (capability.operationalState === 'rate-limited'
+        || capability.operationalState === 'credentials-expiring') return 'warn';
+      if (capability.operationalState === 'transient-auth-error') return 'idle';
+    }
     if (capability.advertisedStatus !== 'ready') {
       return capability.advertisedStatus === 'unavailable' ? 'error' : 'warn';
     }
@@ -31,6 +37,9 @@ export class CapabilityHealthComponent {
 
   displayState(capability: RemoteHostCapabilityHealth): string {
     if (!capability.isFresh) return 'stale';
+    if (capability.key.startsWith('provider-auth:') && capability.operationalState) {
+      return capability.operationalState;
+    }
     if (capability.advertisedStatus !== 'ready') return capability.advertisedStatus;
     return capability.healthState;
   }

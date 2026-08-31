@@ -1463,7 +1463,9 @@ public sealed class V1ReviewExecutorRegistry
                     capability.Identity,
                     capability.Detail,
                     [],
-                    []);
+                    [],
+                    capability.OperationalState,
+                    capability.ExpiresAt);
             })
             .GroupBy(capability => capability.Key, StringComparer.Ordinal)
             .Select(group => group.Last())
@@ -1518,20 +1520,28 @@ public sealed class V1ReviewExecutorRegistry
 
             registration = registration with { LastSeenAt = now };
             _registrations[runnerId] = registration;
+            if (_capabilityFailures.TryGetValue(runnerId, out var runnerFailures))
+            {
+                foreach (var capability in capabilities.Where(capability =>
+                             capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal)
+                             && string.Equals(
+                                 capability.AdvertisedStatus,
+                                 "ready",
+                                 StringComparison.Ordinal)))
+                {
+                    runnerFailures.Remove(capability.Key);
+                }
+                if (runnerFailures.Count == 0) _capabilityFailures.Remove(runnerId);
+            }
             _capabilityStates[runnerId] = new CapabilityState(
                 request.InstanceId,
                 request.Generation,
                 capabilities,
                 request.Telemetry);
-            // An advertisement refreshes the capability snapshot; it is NOT a
-            // health verdict. The review daemon re-advertises every 60 seconds, so
-            // clearing the drain here meant the cooldown never drained anything: an
-            // executor with a broken capability became claim-eligible again a
-            // minute later, over and over. A pause therefore lifts only by its own
-            // cooldown expiring or by a full re-registration
-            // (PUT /api/v1/runners/{id} - a daemon restart, a genuinely new
-            // instance declaring its health). While a cooldown is active the
-            // failure counters stay untouched, so the backoff keeps escalating.
+            // Routine advertisements do not clear ordinary capability drains.
+            // Provider authentication is the exception: its active probe already
+            // applied negative confirmation, and a fresh ready verdict is the
+            // recovery proof that must lift the old runtime-report latch.
             if (!HasActiveCapabilityCooldownLocked(runnerId, now))
                 ClearCapabilityFailures(runnerId);
             return new Contract.RunnerCapabilitySnapshotDto(

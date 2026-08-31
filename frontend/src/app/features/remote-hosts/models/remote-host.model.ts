@@ -184,6 +184,8 @@ export interface RemoteHostCapabilityHealth {
   version?: string | null;
   identity?: string | null;
   detail?: string | null;
+  /** Provider-auth state that is more specific than claim readiness. */
+  operationalState?: string | null;
   /** Optional provider-reported credential expiry. Older runners omit it. */
   expiresAt?: string | null;
   affectedClaims: readonly string[];
