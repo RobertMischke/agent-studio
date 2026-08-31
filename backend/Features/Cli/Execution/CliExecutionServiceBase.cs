@@ -1718,27 +1718,51 @@ public partial class GenericCliExecutionService : ICliExecutionService
     /// </summary>
     private bool MatchesRecordedIdentity(Process proc, ActiveJob entry)
     {
-        if (!string.IsNullOrEmpty(entry.ProcessName))
+        var liveName = SafeProcessName(proc);
+        var liveStart = SafeProcessStartTime(proc);
+
+        // Name comparison, when both sides are available. A definite mismatch
+        // means the PID was recycled by an unrelated process - never kill it.
+        var nameConfirmed = false;
+        if (!string.IsNullOrEmpty(entry.ProcessName) && !string.IsNullOrEmpty(liveName))
         {
-            var liveName = SafeProcessName(proc);
-            if (!string.IsNullOrEmpty(liveName) &&
-                !string.Equals(liveName, entry.ProcessName, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(liveName, entry.ProcessName, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogDebug("Skipping reap of PID {Pid}: name '{Live}' != recorded '{Recorded}'",
                     entry.ProcessId, liveName, entry.ProcessName);
                 return false;
             }
+            nameConfirmed = true;
         }
-        if (entry.ProcessStartTimeUtc.HasValue)
+
+        // Start-time comparison (5s tolerance for UTC/clock skew), when both
+        // sides are available. A definite mismatch is again a recycled PID.
+        var startConfirmed = false;
+        if (entry.ProcessStartTimeUtc.HasValue && liveStart.HasValue)
         {
-            var liveStart = SafeProcessStartTime(proc);
-            if (liveStart.HasValue &&
-                Math.Abs((liveStart.Value - entry.ProcessStartTimeUtc.Value).TotalSeconds) > 5)
+            if (Math.Abs((liveStart.Value - entry.ProcessStartTimeUtc.Value).TotalSeconds) > 5)
             {
                 _logger.LogDebug("Skipping reap of PID {Pid}: start time mismatch ({Live} vs {Recorded})",
                     entry.ProcessId, liveStart, entry.ProcessStartTimeUtc);
                 return false;
             }
+            startConfirmed = true;
+        }
+
+        // Never kill a stranger. Require at least one attribute to POSITIVELY
+        // confirm this live process is the one we recorded. When neither the
+        // name nor the start time can be compared - the recorded value was null
+        // (a CLI that exited before its identity could be read leaves exactly
+        // that), or the live process refuses to report it - a recycled PID is
+        // indistinguishable from ours, so we must not Process.Kill it. On Linux
+        // a recycled PID can be any process on the box, including the host that
+        // spawned us; a blind tree-kill there is a silent-death vector.
+        if (!nameConfirmed && !startConfirmed)
+        {
+            _logger.LogDebug(
+                "Skipping reap of PID {Pid}: identity unverifiable (recorded name='{Name}', startUtc={Start}); refusing to kill a possibly-recycled PID",
+                entry.ProcessId, entry.ProcessName, entry.ProcessStartTimeUtc);
+            return false;
         }
         return true;
     }

@@ -237,18 +237,31 @@ AppDomain.CurrentDomain.ProcessExit += onProcessExit;
 // log that ends mid-line. Also arms a fresh startup.json for the next boot.
 // Runs before DI build so it captures the prior run regardless of what boot
 // does next; fully swallowed so diagnostics can never block boot.
-try
+// Skip entirely under a test host. WebApplicationFactory<Program> re-runs this
+// entry point dozens of times in one process, all sharing/reusing a marker
+// directory, and an in-process boot never writes a shutdown marker on dispose
+// (ProcessExit only fires at real process teardown). So the classifier reports
+// a spurious SilentKill for the prior boot and prints "[startup] previous
+// backend run died silently ...". That false line has surfaced as the *reason*
+// in test-host crash reports and misdirected triage toward a phantom backend
+// death. The detector is a production operational feature - naming how the one
+// long-lived backend died between OS-level restarts - and has no meaning across
+// ephemeral in-process test boots.
+if (!underTestHost)
 {
-    var previousRun = crashRecorder.ClassifyPreviousRunAndArm();
-    if (previousRun.Verdict == PreviousRunVerdict.SilentKill)
-        Console.Error.WriteLine(
-            $"[startup] previous backend run died silently (pid={previousRun.PreviousPid}, " +
-            $"started={previousRun.PreviousStartedAt:O}) — see last-silent-kill.json");
-}
-catch (Exception ex)
-{
-    // Boot diagnostics must never block boot; record without rethrowing.
-    Log.ForContext("SourceContext", "Program").Warning(ex, "Boot silent-death detector failed");
+    try
+    {
+        var previousRun = crashRecorder.ClassifyPreviousRunAndArm();
+        if (previousRun.Verdict == PreviousRunVerdict.SilentKill)
+            Console.Error.WriteLine(
+                $"[startup] previous backend run died silently (pid={previousRun.PreviousPid}, " +
+                $"started={previousRun.PreviousStartedAt:O}) — see last-silent-kill.json");
+    }
+    catch (Exception ex)
+    {
+        // Boot diagnostics must never block boot; record without rethrowing.
+        Log.ForContext("SourceContext", "Program").Warning(ex, "Boot silent-death detector failed");
+    }
 }
 
 builder.Services.AddSingleton<ClientIdentityStore>();
@@ -1482,19 +1495,33 @@ cliRouter.OnRunEvent += (cliType, jobId, evt) =>
 // Per-CLI startup hook. Claude / Codex / Gemini reap orphans - see
 // GenericCliExecutionService.ReattachOnStartup. Must run before any new CLI run
 // is started so we never have two processes editing the same repo.
-cliRouter.ReattachAll();
+//
+// Skipped under a test host: a WebApplicationFactory<Program> in-process boot
+// has no "previous backend run" of its own to reap, and the reaper reads a
+// PROCESS-SHARED active-jobs file (GetActiveJobsPath falls back to
+// <bin>/runtime/active-jobs-*.json when TaskRepository is unset) and calls
+// Process.Kill(entireProcessTree) on the recorded PIDs. A stale entry left by
+// an earlier run whose PID has since been recycled - on Linux, potentially to
+// the test host itself - would be blind-killed, taking the whole run down with
+// a "died silently" signature. Boot orphan-reaping belongs to the real,
+// long-lived backend, not to ephemeral test boots.
+if (!underTestHost)
+    cliRouter.ReattachAll();
 // A detached ng/esbuild helper is no longer reachable from its original CLI
 // PID and therefore has no useful active-jobs entry. At boot there are no live
 // runs yet, so reclaim helpers whose command line still points into an
 // ephemeral task worktree before pickup starts.
 var worktreeOrphanLogger = app.Services.GetRequiredService<ILoggerFactory>()
     .CreateLogger("WorktreeOrphanBootSweep");
-if (Environment.GetEnvironmentVariable("ATP_DEV_BACKEND_FROM_FIXTURE") == "1")
+if (underTestHost || Environment.GetEnvironmentVariable("ATP_DEV_BACKEND_FROM_FIXTURE") == "1")
 {
-    // The Playwright node process is the backend's launcher in this mode. A
-    // worktree-path sweep would classify and kill its own test harness.
+    // A worktree-path sweep classifies processes by command line and kills the
+    // matches - it would classify and kill its own harness: the Playwright node
+    // launcher in fixture mode, or the xunit test host under a
+    // WebApplicationFactory<Program> boot. Never sweep in either case.
     worktreeOrphanLogger.LogInformation(
-        "worktree-orphan-boot-sweep-skipped reason=playwright-fixture");
+        "worktree-orphan-boot-sweep-skipped reason={Reason}",
+        underTestHost ? "test-host" : "playwright-fixture");
 }
 else
 {

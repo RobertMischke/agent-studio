@@ -77,6 +77,34 @@ public sealed class CliExecutionStaleOrphanReaperTests : IDisposable
     }
 
     [Fact]
+    public void ReapStaleOrphans_SkipsKillWhenRecordedIdentityIsUnverifiable()
+    {
+        using var proc = SpawnSleeper();
+        // A CLI that exited before its identity could be read leaves an entry
+        // with neither a process name nor a start time. The PID may since have
+        // been recycled by an unrelated process - on Linux, any process on the
+        // box, up to and including the host that spawned the backend - so the
+        // reaper must refuse to blind-kill it rather than take a stranger down.
+        var unverifiable = EntryFor("task-unverifiable", proc) with
+        {
+            ProcessName = null,
+            ProcessStartTimeUtc = null,
+        };
+        WriteActiveJobs(new[] { unverifiable });
+
+        var svc = NewService();
+        svc.ReapStaleOrphans();
+
+        Assert.False(proc.HasExited,
+            "must not kill a PID whose recorded identity is unverifiable (possible recycled PID)");
+        // The entry is still dropped: without a verifiable identity it is not
+        // ours to keep tracking.
+        Assert.Empty(ReadActiveJobs());
+
+        KillQuietly(proc);
+    }
+
+    [Fact]
     public void ReapStaleOrphans_PrunesEntryWhenProcessAlreadyGone()
     {
         var proc = SpawnSleeper();
