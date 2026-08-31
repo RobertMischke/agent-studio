@@ -176,6 +176,7 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await card.click();
     modal = page.getByTestId('cli-usage-modal-codex');
     const stale = modal.getByTestId('cli-usage-probe-stale');
+    await expect(stale).toContainText('stale since');
     await expect(stale).toContainText('probe failed');
     await expect(stale).toContainText('codex 0.149.0');
     await expect(stale).toContainText('showing last-good quota values');

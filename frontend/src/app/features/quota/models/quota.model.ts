@@ -26,6 +26,12 @@ export interface QuotaWindow {
 export interface QuotaSnapshot {
   cliType: CliType;
   fetchedAt: string;
+  /** Explicit API timestamp for the percentages; aliases fetchedAt. */
+  capturedAt?: string | null;
+  /** Backend-computed freshness at response time. */
+  stale?: boolean;
+  /** Whole seconds since capturedAt when the response was built. */
+  ageSeconds?: number | null;
   /** CLI `--version` output recorded alongside this probe. */
   cliVersion?: string | null;
   /** Most recent failed attempt; fetchedAt remains the last-good data time. */
@@ -48,9 +54,8 @@ export interface QuotaSnapshot {
 export interface QuotaReport {
   at: string;
   /**
-   * Cache TTL in seconds. The UI computes the "stale" badge as
-   * `now - snapshot.fetchedAt > ttlSeconds`. When the field is missing
-   * (older backends), treat as 600.
+   * Cache TTL in seconds. The UI continues to advance freshness locally
+   * between responses and falls back to this value for older backends.
    */
   ttlSeconds?: number;
   snapshots: QuotaSnapshot[];

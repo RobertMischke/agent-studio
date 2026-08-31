@@ -66,12 +66,35 @@ public sealed class QuotaService
 
     public QuotaReport GetCached()
     {
+        var now = DateTime.UtcNow;
         return new QuotaReport
         {
+            At = now,
             TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
-                .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
+                .Select(k => _cache.TryGetValue(k, out var s)
+                    ? ForReport(s, now)
+                    : new QuotaSnapshot
+                    {
+                        CliType = k,
+                        CapturedAt = null,
+                        Stale = true,
+                        AgeSeconds = null
+                    })
                 .ToList()
+        };
+    }
+
+    private QuotaSnapshot ForReport(QuotaSnapshot snapshot, DateTime now)
+    {
+        var capturedAt = DateTime.SpecifyKind(snapshot.FetchedAt, DateTimeKind.Utc);
+        var age = now - capturedAt;
+        var ageSeconds = Math.Max(0, (long)age.TotalSeconds);
+        return snapshot with
+        {
+            CapturedAt = capturedAt,
+            AgeSeconds = ageSeconds,
+            Stale = snapshot.ProbeFailedAt != null || age > _ttl
         };
     }
 

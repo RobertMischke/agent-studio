@@ -257,7 +257,8 @@ export class CliUsageStore {
   // ---- Derivation ----
 
   private buildRow(s: QuotaSnapshot, ttlMs: number, now: number): CliUsageQuotaRow {
-    const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
+    const capturedAt = s.capturedAt ?? s.fetchedAt;
+    const fetchedMs = capturedAt ? Date.parse(capturedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
     const stale = quotaSnapshotIsStale(s, ttlMs, now);
     const freshness = !s.fetchedAt ? 'never refreshed' : 'updated ' + this.formatAgo(ageMs);
@@ -270,7 +271,7 @@ export class CliUsageStore {
       icon: cliTypeIcon(s.cliType as CliType),
       label: this.cliLabel(s.cliType),
       plan: s.plan,
-      fetchedAt: s.fetchedAt,
+      fetchedAt: capturedAt,
       stale,
       cliVersion: s.cliVersion ?? null,
       probeFailedAt: s.probeFailedAt ?? null,

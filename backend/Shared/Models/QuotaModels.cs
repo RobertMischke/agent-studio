@@ -41,6 +41,22 @@ public record QuotaSnapshot
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
     /// <summary>
+    /// Explicit wire alias for <see cref="FetchedAt"/>. Populated on API
+    /// reports so clients do not have to infer which timestamp owns the
+    /// displayed percentages. It remains null in the persisted cache.
+    /// </summary>
+    public DateTime? CapturedAt { get; init; }
+    /// <summary>
+    /// Explicit wire freshness state, computed from the cache TTL and the most
+    /// recent probe outcome. Populated on API reports only.
+    /// </summary>
+    public bool? Stale { get; init; }
+    /// <summary>
+    /// Whole seconds since <see cref="CapturedAt"/> when the report was built.
+    /// Populated on API reports only.
+    /// </summary>
+    public long? AgeSeconds { get; init; }
+    /// <summary>
     /// Version reported by the CLI's <c>--version</c> command for this probe.
     /// Keeping it on the quota snapshot makes parser drift attributable without
     /// requiring a second operator-side reproduction.

@@ -19,9 +19,18 @@ describe('quota freshness', () => {
     expect(quotaSnapshotIsStale(snapshot, 600_000, Date.parse('2026-08-27T19:07:01Z'))).toBe(true);
   });
 
+  it('honors the explicit backend stale flag before the local TTL expires', () => {
+    expect(quotaSnapshotIsStale(
+      { ...snapshot, probeFailedAt: null, stale: true },
+      600_000,
+      Date.parse('2026-08-27T18:00:01Z'),
+    )).toBe(true);
+  });
+
   it('attributes the failed attempt to the exact CLI version', () => {
     const label = quotaProbeFailureLabel(snapshot);
-    expect(label).toContain('probe failed');
+    expect(label).toContain('stale since');
+    expect(label).toContain('probe failed at');
     expect(label).toContain('codex 0.149.0');
   });
 });

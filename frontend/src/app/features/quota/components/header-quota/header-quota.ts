@@ -173,7 +173,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   }
 
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
-    const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
+    const capturedAt = s.capturedAt ?? s.fetchedAt;
+    const fetchedMs = capturedAt ? Date.parse(capturedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
     const stale = quotaSnapshotIsStale(s, ttlMs, now);
     const freshness = !s.fetchedAt
@@ -198,7 +199,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       chips,
       tone,
       state,
-      fetchedAt: s.fetchedAt,
+      fetchedAt: capturedAt,
       stale,
       freshness,
       windows: s.windows,

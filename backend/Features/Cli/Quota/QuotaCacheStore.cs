@@ -13,8 +13,10 @@ namespace AgentStudio.Cli;
 ///
 /// <para>
 /// Stored format: a flat list of <see cref="QuotaSnapshot"/> records, one
-/// per CLI. Cheap to read on startup, cheap to overwrite after each
-/// successful probe. Tolerant to corruption: a malformed file is logged
+/// per CLI. Cheap to read on startup, cheap to overwrite after each cache
+/// update. A failed probe retains the last-good values before this store is
+/// called, so the durable copy remains useful across restarts. Tolerant to
+/// corruption: a malformed file is logged
 /// and ignored, the in-memory cache simply starts empty.
 /// </para>
 /// </summary>
