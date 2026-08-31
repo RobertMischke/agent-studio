@@ -26,6 +26,12 @@ export interface QuotaWindow {
 export interface QuotaSnapshot {
   cliType: CliType;
   fetchedAt: string;
+  /** Preferred wire-contract name for when the last-good values were captured. */
+  capturedAt?: string;
+  /** Server freshness projection. Older backends omit this field. */
+  isStale?: boolean;
+  /** Whole seconds between capturedAt and the report assembly time. */
+  ageSeconds?: number;
   /** CLI `--version` output recorded alongside this probe. */
   cliVersion?: string | null;
   /** Most recent failed attempt; fetchedAt remains the last-good data time. */
