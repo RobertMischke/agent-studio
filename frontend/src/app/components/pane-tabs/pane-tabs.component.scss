@@ -38,6 +38,7 @@
  * `inline-flex` (not `flex`) keeps the host hugging its content width so
  * the pill variant is unaffected. */
 app-pane-tabs {
+  position: relative;
   display: inline-flex;
   align-items: stretch;
   min-width: 0;
@@ -59,6 +60,30 @@ app-pane-tabs.pane-tabs-host--header {
   width: 100%;
   min-width: 0;
   overflow: hidden;
+}
+
+/* Intrinsic-size probe for every tab. It stays outside layout and interaction,
+ * but uses the same typography, icons, badges, and padding as the live strip.
+ * This lets the controller compare real tab width with the host width left by
+ * trailing pane controls, including after local fonts finish loading. */
+.pane-tabs__measurement {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: max-content;
+  height: 100%;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.pane-tabs__measurement .pane-tab {
+  flex: 0 0 auto;
+  min-width: var(--pane-tab-min-width);
+}
+
+.pane-tabs__measurement .pane-tab__spinner,
+.pane-tabs__measurement .pane-tab__livedot {
+  animation: none;
 }
 
 .pane-tabs--pill {
@@ -232,4 +257,15 @@ app-pane-tabs.pane-tabs-host--header {
 @keyframes pane-tab-livedot-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.5; transform: scale(0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-tab {
+    transition-duration: 0s;
+  }
+
+  .pane-tab__spinner,
+  .pane-tab__livedot {
+    animation: none;
+  }
 }
