@@ -4,8 +4,8 @@ import type { TaskDetail } from '../../../app/models/task.model';
 
 /**
  * Isolated render of the REAL {@link ResultViewComponent} across the case
- * families that pick distinct overview layouts, plus the two new quality-head
- * metric chips (files changed, tests passed). Backend-free: each card is built
+ * families that pick distinct overview layouts, plus the compact quality-head
+ * stats (files changed, tests passed). Backend-free: each card is built
  * from a canned `status.md` + task metadata, exactly as the live protocol pane
  * builds it, so the Playwright spec can screenshot both themes without a running
  * dev backend.
@@ -13,6 +13,8 @@ import type { TaskDetail } from '../../../app/models/task.model';
 function verdict(overrides: Partial<ProtocolVerdict> = {}): ProtocolVerdict {
   return {
     kind: 'ok',
+    status: 'succeeded',
+    signals: [],
     emoji: '🟢',
     label: 'Success',
     detail: 'Last run completed successfully.',
@@ -48,7 +50,7 @@ interface GalleryCard {
 
 const CARDS: GalleryCard[] = [
   {
-    heading: 'bugfix - sequence layout, files + tests chips',
+    heading: 'bugfix - sequence layout, files + tests stats',
     detail: detail(
       `# Status\n\n- Result: Success\n- Duration: 4 min\n- Files: 3\n- Tests: 24 passed\n\n## Overview\n- Problem: The verdict banner was unreadable on the light theme.\n- Solution: Re-toned it to a neutral surface with a semantic accent stripe.\n`,
       { taskType: 'bug' },
@@ -68,7 +70,7 @@ const CARDS: GalleryCard[] = [
       `# Status\n\n- Result: Blocked\n- Duration: 9 min\n- Files: 1\n- Tests: 3/8 passed\n\n## Overview\n- Problem: Migrate the runner to the new lease API.\n- Solution: Stopped at the lease-renewal race; needs a design decision.\n`,
       { taskType: 'feature' },
     ),
-    verdict: verdict({ kind: 'problem', label: 'Blocked', emoji: '🔴', duration: '9 min' }),
+    verdict: verdict({ kind: 'problem', status: 'failed', label: 'Blocked', emoji: '🔴', duration: '9 min' }),
   },
   {
     heading: 'feature - standard stacked layout',

@@ -4,7 +4,7 @@
  * A {@link ResultDocument} is a single, presentation-ready projection of a
  * finished run that the Result view renders in three layers, top to bottom:
  *
- *   1. a **metric head** (code-review grade, duration, tokens, commits)
+ *   1. a **summary head** (code-review grade, duration, tokens, commits)
  *   2. an **overview** ("problem -> solution", the shareable one-liner)
  *   3. the **detail** markdown (What Was Done / Open Items / Notes / Images)
  *
@@ -23,14 +23,13 @@ import { buildTokenCostTooltip } from '../../../tokens';
 import type { ProtocolVerdict } from './protocol-verdict';
 import { classifyResultCase, type ResultCaseResult } from './result-case';
 
-/** One chip in the metric head. Only chips with real data are emitted. */
+/** One stat in the summary head. Only stats with real data are emitted. */
 export interface ResultMetric {
   id: string;
-  icon: string;
   label: string;
   value: string;
   tooltip?: string;
-  /** Semantic tone for value-carrying chips (grade, tests). */
+  /** Semantic state retained for tooltips and downstream projections. */
   tone?: 'ok' | 'warn' | 'problem' | 'neutral';
 }
 
@@ -75,7 +74,7 @@ export function parseHeaderMetric(markdown: string | null | undefined, key: stri
 }
 
 /**
- * Turn a raw `- Tests:` value into a chip value + tone. Recognises an `X/Y`
+ * Turn a raw `- Tests:` value into a compact stat + tone. Recognises an `X/Y`
  * tally (some failed -> warn), a bare "N passed" (all green -> ok), and any
  * value mentioning a failure (-> problem). Anything else renders neutrally with
  * the text as-is so an unexpected phrasing still surfaces the number.
@@ -88,11 +87,23 @@ export function classifyTestsMetric(raw: string): { value: string; tone: ResultM
     const passed = Number(ratio[1]);
     const total = Number(ratio[2]);
     const tone: ResultMetric['tone'] = passed < total ? 'warn' : 'ok';
-    return { value: `${passed}/${total}`, tone };
+    return { value: `${passed}/${total}${passed === total ? ' ✓' : ''}`, tone };
   }
   if (/\bfail|\bbroke|\berror/.test(lower)) return { value: text, tone: 'problem' };
+  const passed = /^(\d+)\s+passed$/i.exec(text);
+  if (passed) return { value: `${passed[1]} ✓`, tone: 'ok' };
   if (/\bpass|\bgreen|\bok\b/.test(lower)) return { value: text, tone: 'ok' };
   return { value: text, tone: 'neutral' };
+}
+
+/** Compact the duration copy supplied by the verdict without changing its value. */
+export function compactDurationMetric(value: string): string {
+  return value
+    .trim()
+    .replace(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)(?=\b)/gi, '$1h')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?)(?=\b)/gi, '$1m')
+    .replace(/(\d+(?:\.\d+)?)\s*(?:seconds?|secs?)(?=\b)/gi, '$1s')
+    .replace(/\s+/g, ' ');
 }
 
 const GRADE_META: Record<string, { tone: ResultMetric['tone']; tooltip: string }> = {
@@ -225,16 +236,16 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   const grade = codeReviewGradeFromTags(info.tags);
   if (grade) {
     const meta = GRADE_META[grade] ?? { tone: 'neutral' as const, tooltip: `Code review grade ${grade}.` };
-    metrics.push({ id: 'grade', icon: '🎓', label: 'Review', value: `Grade ${grade}`, tone: meta.tone, tooltip: meta.tooltip });
+    metrics.push({ id: 'grade', label: 'Review', value: `Grade ${grade}`, tone: meta.tone, tooltip: meta.tooltip });
   }
 
   if (verdict.duration) {
-    metrics.push({ id: 'duration', icon: '⏱', label: 'Duration', value: verdict.duration });
+    metrics.push({ id: 'duration', label: 'Duration', value: compactDurationMetric(verdict.duration) });
   }
 
   // Files changed + tests passed: the two quality-head metrics the Result
   // redesign deferred in Teil 1. They ride optional `# Status` header lines the
-  // summarizer emits only when the run log proves a real number, so a chip
+  // summarizer emits only when the run log proves a real number, so a stat
   // appears exactly when there is honest data behind it.
   const filesRaw = parseHeaderMetric(markdown, 'Files');
   if (filesRaw) {
@@ -242,7 +253,6 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const value = Number.isFinite(n) ? `${n} file${n === 1 ? '' : 's'}` : filesRaw;
     metrics.push({
       id: 'files',
-      icon: '📄',
       label: 'Files',
       value,
       tooltip: 'Files changed by this task (from the run diff).',
@@ -254,7 +264,6 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const { value, tone } = classifyTestsMetric(testsRaw);
     metrics.push({
       id: 'tests',
-      icon: '🧪',
       label: 'Tests',
       value,
       tone,
@@ -267,9 +276,8 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const tokenSummary = info.tokenSummary!;
     metrics.push({
       id: 'tokens',
-      icon: '🪙',
       label: 'Tokens',
-      value: formatTokens(totalTokens),
+      value: `${formatTokens(totalTokens)} tokens`,
       tooltip: buildTokenCostTooltip({
         costUsd: tokenSummary.estimatedApiCostUsd,
         priceKnown: tokenSummary.allModelsPriced === true,
@@ -282,14 +290,13 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   if (commitCount > 0) {
     metrics.push({
       id: 'commits',
-      icon: '⑃',
       label: 'Commits',
       value: `${commitCount} commit${commitCount === 1 ? '' : 's'}`,
     });
   } else if (info.codeActivityDetected === true) {
-    metrics.push({ id: 'commits', icon: '⑃', label: 'Commits', value: 'pending', tooltip: 'Work landed but the attributed commit chain is still resolving.' });
+    metrics.push({ id: 'commits', label: 'Commits', value: 'pending', tooltip: 'Work landed but the attributed commit chain is still resolving.' });
   } else if (info.codeActivityDetected === false) {
-    metrics.push({ id: 'commits', icon: '⑃', label: 'Commits', value: 'no code change', tooltip: 'The run moved no code (analysis / docs / investigation).' });
+    metrics.push({ id: 'commits', label: 'Commits', value: 'no code change', tooltip: 'The run moved no code (analysis / docs / investigation).' });
   }
 
   return metrics;
@@ -299,7 +306,7 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
  * Build the {@link ResultDocument} for a finished run from its detail payload
  * and the already-derived head verdict. `verdict` is passed in so the single
  * Result case badge is authoritative; it is deliberately not repeated as a
- * metric chip beside itself.
+ * metric beside itself.
  */
 export function buildResultDocument(detail: TaskDetail, verdict: ProtocolVerdict): ResultDocument {
   const markdown = detail.statusMarkdown ?? '';

@@ -5,6 +5,7 @@ import {
   buildResultDocument,
   classifyTestsMetric,
   codeReviewGradeFromTags,
+  compactDurationMetric,
   parseCaseHint,
   parseHeaderMetric,
 } from './result-document';
@@ -154,11 +155,19 @@ describe('parseHeaderMetric', () => {
 describe('classifyTestsMetric', () => {
   it('reads an X/Y tally and warns when some failed', () => {
     expect(classifyTestsMetric('11/12 passed')).toEqual({ value: '11/12', tone: 'warn' });
-    expect(classifyTestsMetric('12/12 passed')).toEqual({ value: '12/12', tone: 'ok' });
+    expect(classifyTestsMetric('12/12 passed')).toEqual({ value: '12/12 ✓', tone: 'ok' });
   });
   it('tones a bare pass green and a failure red', () => {
-    expect(classifyTestsMetric('12 passed').tone).toBe('ok');
+    expect(classifyTestsMetric('12 passed')).toEqual({ value: '12 ✓', tone: 'ok' });
     expect(classifyTestsMetric('2 failed').tone).toBe('problem');
+  });
+});
+
+describe('compactDurationMetric', () => {
+  it('compacts common time units while preserving compound values', () => {
+    expect(compactDurationMetric('20 min')).toBe('20m');
+    expect(compactDurationMetric('1 hour 8 minutes')).toBe('1h 8m');
+    expect(compactDurationMetric('45 sec')).toBe('45s');
   });
 });
 
@@ -187,32 +196,32 @@ describe('buildResultDocument', () => {
     expect(doc.detailMarkdown).toContain('## Images');
   });
 
-  it('does not repeat the authoritative case verdict as a metric chip', () => {
+  it('does not repeat the authoritative case verdict as a metric', () => {
     const doc = buildResultDocument(detail(), verdict({ kind: 'problem', label: 'Blocked', emoji: '🔴' }));
     expect(doc.metrics.some((x) => x.id === 'verdict')).toBe(false);
   });
 
-  it('adds a grade chip from the code-review tag', () => {
+  it('adds a grade stat from the code-review tag', () => {
     const doc = buildResultDocument(detail({ tags: ['code-review:grade-a'] }), verdict());
     const grade = doc.metrics.find((x) => x.id === 'grade');
     expect(grade?.value).toBe('Grade A');
     expect(grade?.tone).toBe('ok');
   });
 
-  it('adds duration + tokens + commits chips when the data is present', () => {
+  it('adds compact duration + token + commit stats when the data is present', () => {
     const doc = buildResultDocument(
       detail({ totalTokens: 1_500_000, commits: 2 }),
       verdict({ duration: '4 min' }),
     );
-    expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4 min');
+    expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4m');
     const tokens = doc.metrics.find((x) => x.id === 'tokens');
-    expect(tokens?.value).toBe('1.50M');
+    expect(tokens?.value).toBe('1.50M tokens');
     expect(tokens?.tooltip).toContain('Estimated cost: $1.25');
     expect(tokens?.tooltip).toContain('historical list prices');
     expect(doc.metrics.find((x) => x.id === 'commits')?.value).toBe('2 commits');
   });
 
-  it('adds files + tests chips from the # Status header lines', () => {
+  it('adds files + tests stats from the # Status header lines', () => {
     const md = `# Status\n\n- Result: Success\n- Files: 3\n- Tests: 11/12 passed\n\n## What Was Done\n- Did work.\n`;
     const doc = buildResultDocument(detail({ statusMarkdown: md }), verdict());
     expect(doc.metrics.find((x) => x.id === 'files')?.value).toBe('3 files');
@@ -221,13 +230,13 @@ describe('buildResultDocument', () => {
     expect(tests?.tone).toBe('warn');
   });
 
-  it('omits the files + tests chips when the header carries no metric lines', () => {
+  it('omits the files + tests stats when the header carries no metric lines', () => {
     const doc = buildResultDocument(detail({ statusMarkdown: STATUS_LEGACY }), verdict());
     expect(doc.metrics.find((x) => x.id === 'files')).toBeUndefined();
     expect(doc.metrics.find((x) => x.id === 'tests')).toBeUndefined();
   });
 
-  it('renders a "no code change" commits chip when the scanner saw no activity', () => {
+  it('renders a "no code change" commit stat when the scanner saw no activity', () => {
     const doc = buildResultDocument(detail({ commits: 0, codeActivityDetected: false }), verdict());
     expect(doc.metrics.find((x) => x.id === 'commits')?.value).toBe('no code change');
   });
