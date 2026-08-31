@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -31,6 +32,41 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
     }
 
     [Fact]
+    public async Task RefreshAsync_SuccessPersistsAndServesFreshSnapshotMetadata()
+    {
+        var fetchedAt = DateTime.UtcNow.AddMilliseconds(-100);
+        var service = NewService(new ScriptedProbe(_ => new QuotaSnapshot
+        {
+            CliType = "codex",
+            CliVersion = "codex-cli 0.149.0",
+            FetchedAt = fetchedAt,
+            Plan = "Pro",
+            Source = "/status",
+            Windows =
+            [
+                new QuotaWindow { Label = "5-hour", UsedPct = 32 },
+                new QuotaWindow { Label = "Weekly", UsedPct = 61 }
+            ]
+        }));
+
+        await service.RefreshAsync("codex");
+
+        var served = Assert.Single(service.GetCached().Snapshots);
+        Assert.Equal(fetchedAt, served.CapturedAt);
+        Assert.False(served.IsStale);
+        Assert.InRange(served.AgeSeconds!.Value, 0, 5);
+        Assert.Equal("codex-cli 0.149.0", served.CliVersion);
+
+        var cachePath = Path.Combine(_repoDir, ".runtime", "quota-cache.json");
+        using var persisted = JsonDocument.Parse(File.ReadAllText(cachePath));
+        var codex = Assert.Single(persisted.RootElement.EnumerateArray());
+        Assert.Equal("codex", codex.GetProperty("cliType").GetString());
+        Assert.Equal("codex-cli 0.149.0", codex.GetProperty("cliVersion").GetString());
+        Assert.Equal(fetchedAt, codex.GetProperty("capturedAt").GetDateTime());
+        Assert.Equal(61, codex.GetProperty("windows")[1].GetProperty("usedPct").GetDouble());
+    }
+
+    [Fact]
     public async Task RefreshAsync_FailedProbe_RetainsLastGoodValuesAndAddsFailureMetadata()
     {
         var fetchedAt = DateTime.UtcNow.AddMinutes(-2);
@@ -53,15 +89,53 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
         var service = NewService(probe);
 
         await service.RefreshAsync("codex");
-        var stale = await service.RefreshAsync("codex");
+        await service.RefreshAsync("codex");
+        var stale = Assert.Single(service.GetCached().Snapshots);
 
-        Assert.NotNull(stale);
         Assert.Equal(fetchedAt, stale.FetchedAt);
+        Assert.Equal(fetchedAt, stale.CapturedAt);
+        Assert.True(stale.IsStale);
+        Assert.True(stale.AgeSeconds!.Value >= 120);
         Assert.Equal("Pro", stale.Plan);
         Assert.Equal(61, Assert.Single(stale.Windows).UsedPct);
         Assert.Equal("codex-cli 0.149.0", stale.CliVersion);
         Assert.NotNull(stale.ProbeFailedAt);
         Assert.Equal("Quota probe timed out before the CLI panel rendered.", stale.Error);
+    }
+
+    [Fact]
+    public async Task GetWithBackgroundRefresh_ColdStartServesPersistedSnapshotImmediately()
+    {
+        var fetchedAt = DateTime.UtcNow.AddMinutes(-2);
+        var writer = NewService(new ScriptedProbe(_ => new QuotaSnapshot
+        {
+            CliType = "codex",
+            CliVersion = "codex-cli 0.149.0",
+            FetchedAt = fetchedAt,
+            Plan = "Pro",
+            Source = "/status",
+            Windows = [new QuotaWindow { Label = "Weekly", UsedPct = 61 }]
+        }));
+        await writer.RefreshAsync("codex");
+
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var restarted = NewService(new BlockingProbe(entered, release));
+
+        try
+        {
+            var report = restarted.GetWithBackgroundRefresh();
+
+            var served = Assert.Single(report.Snapshots);
+            Assert.Equal(fetchedAt, served.CapturedAt);
+            Assert.Equal(61, Assert.Single(served.Windows).UsedPct);
+            Assert.True(served.IsStale);
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(1)), "Cold-start background refresh never started.");
+        }
+        finally
+        {
+            release.Set();
+        }
     }
 
     [Fact]

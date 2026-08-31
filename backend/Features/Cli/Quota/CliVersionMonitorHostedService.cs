@@ -4,6 +4,8 @@ namespace AgentStudio.Cli;
 /// Reads Claude and Codex versions after startup and on a bounded periodic
 /// cadence. The tracker compares the live value with the disk-cached quota
 /// baseline, making a version change visible even before the next quota parse.
+/// The same cadence queues stale quota refreshes without putting CLI startup on
+/// an HTTP request path.
 /// </summary>
 public sealed class CliVersionMonitorHostedService : BackgroundService
 {
@@ -12,6 +14,7 @@ public sealed class CliVersionMonitorHostedService : BackgroundService
     private readonly CliRouter _router;
     private readonly CliVersionTracker _tracker;
     private readonly LocalCliRepairService _repair;
+    private readonly QuotaService _quotaService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<CliVersionMonitorHostedService> _logger;
 
@@ -26,15 +29,19 @@ public sealed class CliVersionMonitorHostedService : BackgroundService
         _router = router;
         _tracker = tracker;
         _repair = repair;
+        _quotaService = quotaService;
         _configuration = configuration;
         _logger = logger;
         // Resolving QuotaService hydrates the tracker from the disk cache
         // before the startup comparison reads the live binaries.
-        _ = quotaService;
     }
 
     internal async Task CheckOnceAsync(string source, CancellationToken ct)
     {
+        // Cache reads and queueing are synchronous and bounded. The quota
+        // service owns per-CLI coalescing and the 45-second probe timeout.
+        _quotaService.GetWithBackgroundRefresh(ct);
+
         foreach (var cliType in new[] { CliTypes.Claude, CliTypes.Codex })
         {
             try

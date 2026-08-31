@@ -777,6 +777,8 @@ builder.Services.AddSingleton<CliVersionTracker>();
 builder.Services.AddSingleton<NpmGlobalInstaller>();
 builder.Services.AddSingleton<LocalCliRepairService>();
 builder.Services.AddSingleton<QuotaService>();
+// The version monitor also queues stale quota probes at startup and every
+// bounded interval. GET /api/cli/quota remains a cache-only request path.
 if (!builder.Environment.IsEnvironment("Test") && !underTestHost)
     builder.Services.AddHostedService<CliVersionMonitorHostedService>();
 builder.Services.AddSingleton<CliQuotaCapsService>();

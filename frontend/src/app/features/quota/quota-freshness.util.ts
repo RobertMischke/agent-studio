@@ -5,8 +5,10 @@ export function quotaSnapshotIsStale(
   ttlMs: number,
   now: number,
 ): boolean {
+  if (snapshot.isStale) return true;
   if (snapshot.probeFailedAt) return true;
-  const fetchedMs = snapshot.fetchedAt ? Date.parse(snapshot.fetchedAt) : NaN;
+  const capturedAt = snapshot.capturedAt ?? snapshot.fetchedAt;
+  const fetchedMs = capturedAt ? Date.parse(capturedAt) : NaN;
   return !Number.isFinite(fetchedMs) || Math.max(0, now - fetchedMs) > ttlMs;
 }
 
@@ -18,7 +20,7 @@ export function quotaProbeFailureLabel(snapshot: QuotaSnapshot): string | null {
     : 'unknown time';
   const cli = snapshot.cliType.toLowerCase();
   const version = normalizedVersion(snapshot.cliVersion);
-  return `probe failed ${time}, ${cli}${version ? ` ${version}` : ''}`;
+  return `stale since ${time}, ${cli}${version ? ` ${version}` : ''} probe failed`;
 }
 
 function normalizedVersion(raw: string | null | undefined): string | null {

@@ -26,6 +26,12 @@ export interface QuotaWindow {
 export interface QuotaSnapshot {
   cliType: CliType;
   fetchedAt: string;
+  /** Last-good reading time returned explicitly by the cache response. */
+  capturedAt?: string | null;
+  /** Age of capturedAt when the backend assembled this response. */
+  ageSeconds?: number | null;
+  /** Backend-computed stale state; older backends omit this field. */
+  isStale?: boolean;
   /** CLI `--version` output recorded alongside this probe. */
   cliVersion?: string | null;
   /** Most recent failed attempt; fetchedAt remains the last-good data time. */
@@ -48,9 +54,8 @@ export interface QuotaSnapshot {
 export interface QuotaReport {
   at: string;
   /**
-   * Cache TTL in seconds. The UI computes the "stale" badge as
-   * `now - snapshot.fetchedAt > ttlSeconds`. When the field is missing
-   * (older backends), treat as 600.
+   * Cache TTL in seconds. Used only as a compatibility fallback when an older
+   * backend omits each snapshot's explicit `isStale` field.
    */
   ttlSeconds?: number;
   snapshots: QuotaSnapshot[];

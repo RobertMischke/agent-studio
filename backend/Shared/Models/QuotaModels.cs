@@ -41,6 +41,22 @@ public record QuotaSnapshot
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
     /// <summary>
+    /// UTC time when the displayed quota values were captured. This mirrors
+    /// <see cref="FetchedAt"/> for current snapshots and remains unchanged when
+    /// a failed refresh keeps the last-good values.
+    /// </summary>
+    public DateTime? CapturedAt { get; init; }
+    /// <summary>
+    /// Age of <see cref="CapturedAt"/> when the response was assembled.
+    /// Recomputed for every cache read rather than trusted from disk.
+    /// </summary>
+    public long? AgeSeconds { get; init; }
+    /// <summary>
+    /// True when the last refresh failed or the captured reading exceeded the
+    /// configured cache TTL. Consumers need not infer this from timestamps.
+    /// </summary>
+    public bool IsStale { get; init; }
+    /// <summary>
     /// Version reported by the CLI's <c>--version</c> command for this probe.
     /// Keeping it on the quota snapshot makes parser drift attributable without
     /// requiring a second operator-side reproduction.
@@ -80,7 +96,7 @@ public record QuotaSnapshot
 public record QuotaReport
 {
     public DateTime At { get; init; } = DateTime.UtcNow;
-    /// <summary>Cache TTL (seconds) the backend is using; the UI computes a "stale" badge as <c>now - snapshot.fetchedAt &gt; ttlSeconds</c>.</summary>
+    /// <summary>Cache TTL (seconds) used to compute each snapshot's <c>isStale</c> and <c>ageSeconds</c> response fields.</summary>
     public int TtlSeconds { get; init; }
     public List<QuotaSnapshot> Snapshots { get; init; } = [];
 }

@@ -21,7 +21,19 @@ describe('quota freshness', () => {
 
   it('attributes the failed attempt to the exact CLI version', () => {
     const label = quotaProbeFailureLabel(snapshot);
-    expect(label).toContain('probe failed');
-    expect(label).toContain('codex 0.149.0');
+    expect(label).toMatch(/^stale since .+, codex 0\.149\.0 probe failed$/);
+  });
+
+  it('accepts explicit stale metadata from the cached response', () => {
+    const responseSnapshot = {
+      ...snapshot,
+      probeFailedAt: null,
+      fetchedAt: '2026-08-27T19:07:00Z',
+      capturedAt: '2026-08-27T18:00:00Z',
+      isStale: true,
+      ageSeconds: 4_021,
+    };
+
+    expect(quotaSnapshotIsStale(responseSnapshot, 600_000, Date.parse('2026-08-27T19:07:01Z'))).toBe(true);
   });
 });

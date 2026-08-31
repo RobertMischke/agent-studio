@@ -48,7 +48,7 @@ public sealed class QuotaService
             foreach (var snap in _store.Read())
             {
                 if (string.IsNullOrWhiteSpace(snap.CliType)) continue;
-                _cache[snap.CliType] = snap;
+                _cache[snap.CliType] = NormalizeCapturedAt(snap);
                 _versionTracker?.Seed(snap.CliType, snap.CliVersion);
             }
             _logger.LogInformation("Hydrated quota cache from disk ({Count} snapshots).", _cache.Count);
@@ -66,14 +66,35 @@ public sealed class QuotaService
 
     public QuotaReport GetCached()
     {
+        var now = DateTime.UtcNow;
         return new QuotaReport
         {
+            At = now,
             TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
-                .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
+                .Select(k => _cache.TryGetValue(k, out var s)
+                    ? WithFreshnessMetadata(s, now)
+                    : new QuotaSnapshot { CliType = k, IsStale = true })
                 .ToList()
         };
     }
+
+    private QuotaSnapshot WithFreshnessMetadata(QuotaSnapshot snapshot, DateTime now)
+    {
+        var capturedAt = snapshot.CapturedAt ?? snapshot.FetchedAt;
+        var age = now > capturedAt ? now - capturedAt : TimeSpan.Zero;
+        return snapshot with
+        {
+            CapturedAt = capturedAt,
+            AgeSeconds = (long)Math.Floor(age.TotalSeconds),
+            IsStale = snapshot.ProbeFailedAt.HasValue || age > _ttl
+        };
+    }
+
+    private static QuotaSnapshot NormalizeCapturedAt(QuotaSnapshot snapshot)
+        => snapshot.CapturedAt.HasValue
+            ? snapshot
+            : snapshot with { CapturedAt = snapshot.FetchedAt };
 
     /// <summary>
     /// Returns the in-memory snapshot for one CLI without triggering any
@@ -147,6 +168,12 @@ public sealed class QuotaService
             {
                 snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
                 snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
+                snap = NormalizeCapturedAt(snap) with
+                {
+                    AgeSeconds = null,
+                    IsStale = false,
+                    ProbeFailedAt = null
+                };
             }
             _cache[cliType] = snap;
             PersistCache();
