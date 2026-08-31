@@ -5,20 +5,28 @@ export function quotaSnapshotIsStale(
   ttlMs: number,
   now: number,
 ): boolean {
-  if (snapshot.probeFailedAt) return true;
-  const fetchedMs = snapshot.fetchedAt ? Date.parse(snapshot.fetchedAt) : NaN;
-  return !Number.isFinite(fetchedMs) || Math.max(0, now - fetchedMs) > ttlMs;
+  if (snapshot.stale || snapshot.probeFailedAt) return true;
+  const capturedAt = snapshot.capturedAt ?? snapshot.fetchedAt;
+  const capturedMs = capturedAt ? Date.parse(capturedAt) : NaN;
+  return !Number.isFinite(capturedMs) || Math.max(0, now - capturedMs) > ttlMs;
 }
 
 export function quotaProbeFailureLabel(snapshot: QuotaSnapshot): string | null {
   if (!snapshot.probeFailedAt) return null;
-  const failedMs = Date.parse(snapshot.probeFailedAt);
-  const time = Number.isFinite(failedMs)
-    ? new Date(failedMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-    : 'unknown time';
+  const capturedAt = snapshot.capturedAt ?? snapshot.fetchedAt;
+  const staleSince = formatClock(capturedAt);
+  const failedAt = formatClock(snapshot.probeFailedAt);
   const cli = snapshot.cliType.toLowerCase();
-  const version = normalizedVersion(snapshot.cliVersion);
-  return `probe failed ${time}, ${cli}${version ? ` ${version}` : ''}`;
+  const version = normalizedVersion(snapshot.probeCliVersion ?? snapshot.cliVersion);
+  return `stale since ${staleSince}, probe failed ${failedAt}, ${cli}${version ? ` ${version}` : ''}`;
+}
+
+function formatClock(raw: string | null | undefined): string {
+  if (!raw) return 'unknown time';
+  const milliseconds = Date.parse(raw);
+  return Number.isFinite(milliseconds)
+    ? new Date(milliseconds).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    : 'unknown time';
 }
 
 function normalizedVersion(raw: string | null | undefined): string | null {

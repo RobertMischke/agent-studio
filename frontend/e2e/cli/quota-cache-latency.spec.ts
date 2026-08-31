@@ -3,6 +3,7 @@ import { test, expect } from '../fixtures/dev-backend';
 test.describe('Quota cache endpoint latency', () => {
   test('GET /api/cli/quota serves cached data without waiting for a live probe', async ({ devBackend }, testInfo) => {
     const samples: number[] = [];
+    let lastPayload: { snapshots?: Record<string, unknown>[] } | null = null;
     for (let attempt = 0; attempt < 5; attempt++) {
       const started = performance.now();
       const response = await fetch(`${devBackend.baseUrl}/api/cli/quota`, {
@@ -10,7 +11,17 @@ test.describe('Quota cache endpoint latency', () => {
       });
       samples.push(performance.now() - started);
       expect(response.status).toBe(200);
-      await response.json();
+      const raw = await response.text();
+      expect(raw).not.toContain('A task was canceled');
+      lastPayload = JSON.parse(raw) as { snapshots?: Record<string, unknown>[] };
+    }
+
+    expect(lastPayload?.snapshots?.length).toBeGreaterThan(0);
+    for (const snapshot of lastPayload?.snapshots ?? []) {
+      expect(snapshot).toHaveProperty('capturedAt');
+      expect(snapshot).toHaveProperty('ageSeconds');
+      expect(snapshot).toHaveProperty('stale');
+      expect(typeof snapshot['stale']).toBe('boolean');
     }
 
     const evidence = {

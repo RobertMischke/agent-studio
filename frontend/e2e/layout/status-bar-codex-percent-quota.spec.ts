@@ -47,8 +47,12 @@ function codexPercentQuotaReport() {
 }
 
 test.describe('Status bar quota: Codex %-only payload', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, devBackend }) => {
+    expect(devBackend.port).toBeGreaterThan(0);
     mkdirSync(SHOT_DIR, { recursive: true });
+    await page.route('**/api/auth/status', route => route.fulfill({
+      json: { profile: 'local', bootstrapRequired: false, authenticated: true, user: null },
+    }));
     await page.route('**/api/crash-recovery/pending', route => route.fulfill({ json: { pending: [] } }));
     // Specific quota route first (first-registered route wins here) so the
     // Codex card renders our fixture regardless of the live stack.
@@ -116,11 +120,11 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     }
   });
 
-  test('failed probe keeps last-good values with an attributable stale marker', async ({ page, devBackend: _devBackend }) => {
+  test('failed probe keeps last-good values with an attributable stale marker', async ({ page }) => {
     await page.unroute('**/api/cli/quota');
     const lastGoodAt = '2026-08-27T18:55:00Z';
     const failedAt = '2026-08-27T19:07:00Z';
-    let payload: { at: string; ttlSeconds: number; snapshots: Array<Record<string, unknown>> } = {
+    let payload: { at: string; ttlSeconds: number; snapshots: Record<string, unknown>[] } = {
       at: failedAt,
       ttlSeconds: 600,
       snapshots: [{
@@ -141,6 +145,7 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await page.keyboard.press('Escape');
     const beforeCard = page.getByTestId('hquota-card-codex');
     await expect(beforeCard).toHaveAttribute('data-state', 'error');
+    await page.keyboard.press('Escape');
     await beforeCard.click();
     let modal = page.getByTestId('cli-usage-modal-codex');
     await expect(modal).toContainText('A task was canceled.');
@@ -154,7 +159,11 @@ test.describe('Status bar quota: Codex %-only payload', () => {
       snapshots: [{
         cliType: 'codex',
         fetchedAt: lastGoodAt,
-        cliVersion: 'codex-cli 0.149.0',
+        capturedAt: lastGoodAt,
+        ageSeconds: 720,
+        stale: true,
+        cliVersion: 'codex-cli 0.144.1',
+        probeCliVersion: 'codex-cli 0.149.0',
         probeFailedAt: failedAt,
         plan: 'Pro',
         windows: [
@@ -173,9 +182,11 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     const card = page.getByTestId('hquota-card-codex');
     await expect(card).toHaveAttribute('data-state', 'stale');
     await expect(card.getByTestId('hquota-stale-marker')).toHaveText('stale');
+    await page.keyboard.press('Escape');
     await card.click();
     modal = page.getByTestId('cli-usage-modal-codex');
     const stale = modal.getByTestId('cli-usage-probe-stale');
+    await expect(stale).toContainText('stale since');
     await expect(stale).toContainText('probe failed');
     await expect(stale).toContainText('codex 0.149.0');
     await expect(stale).toContainText('showing last-good quota values');

@@ -26,8 +26,16 @@ export interface QuotaWindow {
 export interface QuotaSnapshot {
   cliType: CliType;
   fetchedAt: string;
+  /** Explicit API timestamp for the last successfully parsed reading. */
+  capturedAt?: string | null;
+  /** Age of capturedAt when the backend created this response. */
+  ageSeconds?: number | null;
+  /** Backend freshness decision; clients still advance TTL age locally. */
+  stale?: boolean;
   /** CLI `--version` output recorded alongside this probe. */
   cliVersion?: string | null;
+  /** Version used by the failed attempt when last-good data came from an older CLI. */
+  probeCliVersion?: string | null;
   /** Most recent failed attempt; fetchedAt remains the last-good data time. */
   probeFailedAt?: string | null;
   plan: string | null;
@@ -48,8 +56,8 @@ export interface QuotaSnapshot {
 export interface QuotaReport {
   at: string;
   /**
-   * Cache TTL in seconds. The UI computes the "stale" badge as
-   * `now - snapshot.fetchedAt > ttlSeconds`. When the field is missing
+   * Cache TTL in seconds. The UI advances `capturedAt` age locally between
+   * responses while honoring the backend's explicit `stale` decision. When the field is missing
    * (older backends), treat as 600.
    */
   ttlSeconds?: number;

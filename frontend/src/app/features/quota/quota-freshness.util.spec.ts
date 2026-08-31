@@ -5,7 +5,11 @@ import { quotaProbeFailureLabel, quotaSnapshotIsStale } from './quota-freshness.
 const snapshot: QuotaSnapshot = {
   cliType: 'codex',
   fetchedAt: '2026-08-27T18:00:00Z',
-  cliVersion: 'codex-cli 0.149.0',
+  capturedAt: '2026-08-27T18:00:00Z',
+  ageSeconds: 4020,
+  stale: true,
+  cliVersion: 'codex-cli 0.144.1',
+  probeCliVersion: 'codex-cli 0.149.0',
   probeFailedAt: '2026-08-27T19:07:00Z',
   plan: 'Pro',
   windows: [],
@@ -21,7 +25,19 @@ describe('quota freshness', () => {
 
   it('attributes the failed attempt to the exact CLI version', () => {
     const label = quotaProbeFailureLabel(snapshot);
+    expect(label).toContain('stale since');
     expect(label).toContain('probe failed');
     expect(label).toContain('codex 0.149.0');
+  });
+
+  it('honors explicit backend staleness before the local TTL elapses', () => {
+    const backendStale = {
+      ...snapshot,
+      probeFailedAt: null,
+      fetchedAt: '2026-08-27T19:07:00Z',
+      capturedAt: '2026-08-27T19:07:00Z',
+    };
+
+    expect(quotaSnapshotIsStale(backendStale, 600_000, Date.parse('2026-08-27T19:07:01Z'))).toBe(true);
   });
 });
