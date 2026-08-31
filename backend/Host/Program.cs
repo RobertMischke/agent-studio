@@ -224,6 +224,13 @@ EventHandler onProcessExit = (_, _) =>
     try { fileLogSink.WriteRaw($"{DateTime.UtcNow:O} INFO  Program ProcessExit fired (pid={Environment.ProcessId})"); }
     catch (Exception ex) { DiagnosticsConsole.Error($"[ProcessExit] shutdown-marker log failed: {ex}"); }
 };
+// Permanent, never-detached safety net: guarantees every unobserved task
+// exception is marked observed so the finalizer thread can never rethrow it
+// (fatal when DOTNET_ThrowUnobservedTaskExceptions=1, which dev/CI hosts set).
+// The per-run handler below still records the exception; it is detached when a
+// test host stops, so this closes the window where no subscriber would call
+// SetObserved and a finalizing faulted task would abort the whole run.
+ProcessGlobalTaskSafety.EnsureUnobservedTaskExceptionsAreObserved();
 TaskScheduler.UnobservedTaskException += onUnobservedTaskException;
 AppDomain.CurrentDomain.UnhandledException += onUnhandledException;
 AppDomain.CurrentDomain.ProcessExit += onProcessExit;

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -301,6 +302,64 @@ public class BackendCrashSurfaceTests
         public override string Message => throw new InvalidOperationException("Message accessor blew up");
         public override string? StackTrace => throw new InvalidOperationException("StackTrace accessor blew up");
         public override string ToString() => throw new InvalidOperationException("ToString blew up");
+    }
+
+    /// <summary>
+    /// Regression for the train-44 host abort: an unobserved task exception
+    /// (the synthetic-hosted-service-crash the crash-surface path deliberately
+    /// produces) was rethrown by the finalizer thread - fatal when the runtime
+    /// throws unobserved task exceptions (dev/CI set
+    /// DOTNET_ThrowUnobservedTaskExceptions=1) - because the per-run handler that
+    /// calls SetObserved is detached when a test host stops, leaving a window
+    /// with no subscriber. The permanent <see cref="ProcessGlobalTaskSafety"/>
+    /// net must mark every such exception observed regardless, so the finalizer
+    /// never rethrows and the process survives.
+    /// </summary>
+    [Fact]
+    public void UnobservedTaskException_IsMarkedObserved_ByTheProcessGlobalSafetyNet()
+    {
+        ProcessGlobalTaskSafety.EnsureUnobservedTaskExceptionsAreObserved();
+
+        // The safety net is registered before this probe, so by the time the
+        // probe runs on the finalizer thread the exception must already be
+        // observed. A TaskCompletionSource captures that across threads.
+        var observed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<UnobservedTaskExceptionEventArgs> probe = (_, e) =>
+        {
+            if (e.Observed) observed.TrySetResult(true);
+        };
+        TaskScheduler.UnobservedTaskException += probe;
+        try
+        {
+            FaultAndAbandonATask();
+            for (var attempt = 0; attempt < 60 && !observed.Task.IsCompleted; attempt++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                if (observed.Task.IsCompleted) break;
+                Thread.Sleep(50);
+            }
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= probe;
+        }
+
+        Assert.True(
+            observed.Task.IsCompletedSuccessfully && observed.Task.Result,
+            "the process-global safety net must mark an unobserved task exception observed so the "
+            + "finalizer never rethrows it (a fatal, uncatchable host death under "
+            + "ThrowUnobservedTaskExceptions). Reaching this assertion proves the finalizer pass "
+            + "did not abort the host.");
+    }
+
+    // Kept out-of-line so the faulted Task has no live stack reference and the GC
+    // can finalize it, raising TaskScheduler.UnobservedTaskException.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void FaultAndAbandonATask()
+    {
+        _ = Task.Run(() => throw new InvalidOperationException("synthetic-unobserved-safety-net-probe"));
     }
 
     private static Exception? TryThrow(Action action)
