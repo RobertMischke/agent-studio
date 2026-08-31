@@ -3,6 +3,9 @@ import { test, expect } from '../fixtures/dev-backend';
 test.describe('Quota cache endpoint latency', () => {
   test('GET /api/cli/quota serves cached data without waiting for a live probe', async ({ devBackend }, testInfo) => {
     const samples: number[] = [];
+    let lastReport: {
+      snapshots?: { capturedAt?: string; isStale?: boolean; ageSeconds?: number }[];
+    } = {};
     for (let attempt = 0; attempt < 5; attempt++) {
       const started = performance.now();
       const response = await fetch(`${devBackend.baseUrl}/api/cli/quota`, {
@@ -10,7 +13,7 @@ test.describe('Quota cache endpoint latency', () => {
       });
       samples.push(performance.now() - started);
       expect(response.status).toBe(200);
-      await response.json();
+      lastReport = await response.json();
     }
 
     const evidence = {
@@ -24,5 +27,11 @@ test.describe('Quota cache endpoint latency', () => {
     });
     console.log(`quota endpoint latency: ${JSON.stringify(evidence)}`);
     expect(evidence.maxMs, 'cached quota GET must not wait for a PTY probe').toBeLessThan(1_500);
+    expect(lastReport.snapshots?.length).toBeGreaterThan(0);
+    for (const snapshot of lastReport.snapshots ?? []) {
+      expect(snapshot.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(typeof snapshot.isStale).toBe('boolean');
+      expect(typeof snapshot.ageSeconds).toBe('number');
+    }
   });
 });

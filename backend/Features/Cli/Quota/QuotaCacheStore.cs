@@ -5,8 +5,8 @@ namespace AgentStudio.Cli;
 
 /// <summary>
 /// File-backed snapshot store for <see cref="QuotaService"/>'s in-memory
-/// cache. Lives at <c>&lt;TaskRepository&gt;/.runtime/quota-cache.json</c>
-/// (or under <c>AppContext.BaseDirectory/runtime/</c> when no
+/// cache. Lives at <c>&lt;TaskRepository&gt;/.runtime/cli-quota-last-good.json</c>
+/// (or under the application's LocalApplicationData directory when no
 /// TaskRepository is configured) so that a backend restart does not
 /// leave the header empty until the first probe completes - which can
 /// take 30+ seconds per CLI.
@@ -22,6 +22,7 @@ public sealed class QuotaCacheStore
 {
     private readonly ILogger<QuotaCacheStore> _logger;
     private readonly string _path;
+    private readonly string _legacyPath;
     private readonly object _writeLock = new();
 
     private static readonly JsonSerializerOptions WriteOpts = new()
@@ -42,9 +43,10 @@ public sealed class QuotaCacheStore
         var taskRepo = config["TaskRepository"];
         var baseDir = !string.IsNullOrWhiteSpace(taskRepo)
             ? Path.Combine(taskRepo, ".runtime")
-            : Path.Combine(AppContext.BaseDirectory, "runtime");
+            : ResolveLocalStateDirectory();
         try { Directory.CreateDirectory(baseDir); } catch (Exception __ex) { SilentCatch.Note(__ex, "QuotaCacheStore: best-effort"); /* best-effort */ }
-        _path = Path.Combine(baseDir, "quota-cache.json");
+        _path = Path.Combine(baseDir, "cli-quota-last-good.json");
+        _legacyPath = Path.Combine(baseDir, "quota-cache.json");
     }
 
     /// <summary>
@@ -53,16 +55,17 @@ public sealed class QuotaCacheStore
     /// </summary>
     public List<QuotaSnapshot> Read()
     {
-        if (!File.Exists(_path)) return new List<QuotaSnapshot>();
+        var readPath = File.Exists(_path) ? _path : _legacyPath;
+        if (!File.Exists(readPath)) return new List<QuotaSnapshot>();
         try
         {
-            var raw = File.ReadAllText(_path);
+            var raw = File.ReadAllText(readPath);
             return JsonSerializer.Deserialize<List<QuotaSnapshot>>(raw, ReadOpts)
                    ?? new List<QuotaSnapshot>();
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to read quota cache at {Path}", _path);
+            _logger.LogWarning(ex, "Failed to read quota cache at {Path}", readPath);
             return new List<QuotaSnapshot>();
         }
     }
@@ -87,5 +90,13 @@ public sealed class QuotaCacheStore
         {
             _logger.LogWarning(ex, "Failed to persist quota cache to {Path}", _path);
         }
+    }
+
+    private static string ResolveLocalStateDirectory()
+    {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        return string.IsNullOrWhiteSpace(local)
+            ? Path.Combine(AppContext.BaseDirectory, "runtime")
+            : Path.Combine(local, "agent-taskboard");
     }
 }
