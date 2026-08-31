@@ -6,6 +6,7 @@ import { test, expect } from '../fixtures/dev-backend';
 const JOB_ID = 'pipeline-step-usage-fixture';
 const WATCH_PATH = 'C:/fixtures/agent-taskboard';
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
+const RESPONSIVE_CAPTURE = process.env.PIPELINE_RESPONSIVE_CAPTURE ?? 'after';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -211,6 +212,84 @@ function pipeline() {
           artifactRef: 'results/post-steps/post-wiki-maintenance-attempt-002.md',
         },
       ],
+    },
+  };
+}
+
+function pipelineWithNarrowAspectRows() {
+  const fixture = pipeline();
+  const aspects = [
+    { id: 'aspect-requirement-fit', displayName: 'Requirement fit across acceptance criteria', status: 'passed', verdict: 'pass', totalTokens: 24_000 },
+    { id: 'aspect-code-quality', displayName: 'Code quality and maintainability review', status: 'failed', verdict: 'block', totalTokens: 23_800 },
+    { id: 'aspect-documentation-impact', displayName: 'Documentation impact and operator guidance', status: 'passed', verdict: 'concerns', totalTokens: 25_000 },
+    { id: 'aspect-tests-and-evidence', displayName: 'Tests, screenshots, and evidence completeness', status: 'passed', verdict: 'pass', totalTokens: 23_000 },
+  ];
+  const analysis = {
+    id: 'analysis-regression-radar', displayName: 'Regression radar analysis', kind: 'analysis',
+    runMode: 'sequential', dependsOn: ['core-agent-run'], idempotent: true, stub: false,
+  };
+  const aspectSteps = aspects.map(item => ({
+    id: item.id,
+    displayName: item.displayName,
+    kind: 'aspect',
+    runMode: 'parallel',
+    dependsOn: ['core-agent-run'],
+    idempotent: true,
+    stub: false,
+  }));
+  const aspectExecutions = aspects.map((item, index) => ({
+    stepId: item.id,
+    kind: 'aspect',
+    model: 'claude-haiku-4-5',
+    status: item.status,
+    startedAt: `2026-06-09T10:0${index + 2}:00Z`,
+    completedAt: `2026-06-09T10:0${index + 2}:09Z`,
+    durationMs: 9_000,
+    inputTokens: item.totalTokens - 2_000,
+    outputTokens: 2_000,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    tokenUsageSource: 'AGENT (CLI FOOTER) / reported',
+    reason: null,
+    verdict: item.verdict,
+    verdictSummary: item.verdict === 'block'
+      ? 'A blocking maintainability concern needs attention.'
+      : item.verdict === 'concerns'
+        ? 'Operator documentation needs one follow-up.'
+        : null,
+  }));
+  const aspectCosts = aspects.map(item =>
+    costStep(item.id, 'aspect', 'claude-haiku-4-5', item.totalTokens, item.totalTokens / 100_000));
+  const analysisExecution = {
+    stepId: analysis.id, kind: analysis.kind, model: 'claude-haiku-4-5', status: 'passed',
+    startedAt: '2026-06-09T10:07:00Z', completedAt: '2026-06-09T10:07:06Z', durationMs: 6_000,
+    inputTokens: 7_000, outputTokens: 1_000, cacheReadTokens: 0, cacheCreationTokens: 0,
+    tokenUsageSource: 'AGENT (CLI FOOTER) / reported', reason: null, verdict: 'clean', verdictSummary: null,
+  };
+
+  return {
+    ...fixture,
+    pipeline: {
+      ...fixture.pipeline,
+      post: [...aspectSteps, analysis, ...fixture.pipeline.post.filter(step => step.kind === 'tool')],
+      allSteps: [fixture.pipeline.core[0], ...aspectSteps, analysis, ...fixture.pipeline.post.filter(step => step.kind === 'tool')],
+    },
+    execution: {
+      ...fixture.execution,
+      steps: [fixture.execution.steps[0], ...aspectExecutions, analysisExecution],
+    },
+    cost: {
+      ...fixture.cost,
+      steps: [fixture.cost.steps[0], ...aspectCosts, costStep(analysis.id, 'analysis', 'claude-haiku-4-5', 8_000, 0.08)],
+    },
+    config: {
+      ...fixture.config,
+      ...Object.fromEntries([...aspectSteps, analysis].map(step => [step.id, {
+        enabled: true,
+        canDisable: true,
+        enabledSource: 'catalogue',
+        activation: { state: 'active', source: 'global', reason: 'Enabled by the global catalogue default.' },
+      }])),
     },
   };
 }
@@ -649,6 +728,136 @@ test('six visible runs show their priced partial total and keep pipeline rows al
     await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
     await savePipelineAndUsageShot(page, `pipeline-after-${theme}.png`);
   }
+});
+
+test('pipeline groups and step rows stay collision-free at narrow side-sheet width in both themes', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 1000 });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('taskboard.panesVisible', JSON.stringify({ prompt: true, protocol: false, git: false }));
+    } catch { /* ignore */ }
+  });
+  await installFixtureRoutes(page);
+  const id = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.route(new RegExp(`/api/tasks/${id}/pipeline(\\?|$)`), route =>
+    route.fulfill(json(pipelineWithNarrowAspectRows())));
+
+  await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+  const pipelineSection = page.getByTestId('overview-pipeline');
+  await expect(pipelineSection).toBeVisible({ timeout: 10_000 });
+  await pipelineSection.evaluate(element => {
+    element.style.width = '360px';
+    element.style.maxWidth = '360px';
+    element.style.alignSelf = 'flex-start';
+  });
+  await expandPipelineSections(page);
+
+  const aspectGroup = page.getByTestId('overview-pipeline-group').filter({
+    has: page.getByTestId('overview-pipeline-phase').filter({ hasText: 'ASPECT' }),
+  });
+  const aspectPhase = aspectGroup.getByTestId('overview-pipeline-phase');
+  await expect(aspectPhase.getByTestId('overview-pipeline-phase-summary'))
+    .toContainText(/ATTENTION4\/4⚠\s*295\.8k/i);
+  await expect(aspectGroup.getByTestId('overview-pipeline-step')).toHaveCount(4);
+
+  for (const theme of ['light', 'dark'] as const) {
+    await page.evaluate(value => { document.documentElement.dataset['studioTheme'] = value; }, theme);
+    await expect(page.locator('html')).toHaveAttribute('data-studio-theme', theme);
+    await savePipelineShot(
+      page,
+      `pipeline-responsive-${RESPONSIVE_CAPTURE}-narrow-${theme}--mocked.png`,
+    );
+  }
+
+  const layout = await aspectGroup.evaluate(group => {
+    const rect = (selector: string, root: ParentNode = group) => {
+      const element = root.querySelector<HTMLElement>(selector);
+      if (!element) throw new Error(`Missing ${selector}`);
+      const box = element.getBoundingClientRect();
+      return {
+        left: box.left,
+        right: box.right,
+        top: box.top,
+        bottom: box.bottom,
+        width: box.width,
+        height: box.height,
+        centerY: box.top + box.height / 2,
+      };
+    };
+    const phase = group.querySelector<HTMLElement>('[data-testid="overview-pipeline-phase"]')!;
+    const summary = rect('[data-testid="overview-pipeline-phase-summary"]');
+    const marker = rect('[data-testid="overview-pipeline-phase-marker"]');
+    const label = rect('.ov-pl-phase__label');
+    const rows = Array.from(group.querySelectorAll<HTMLElement>('[data-testid="overview-pipeline-step"]'))
+      .map(row => {
+        const bounds = row.getBoundingClientRect();
+        const status = rect('[data-testid="overview-pipeline-step-status"]', row);
+        const kind = rect('.ov-pl-step__kind', row);
+        const nameCell = rect('[data-testid="overview-pipeline-step-name-cell"]', row);
+        const details = rect('[data-testid="overview-pipeline-step-details"]', row);
+        const meta = rect('[data-testid="overview-pipeline-step-meta"]', row);
+        const timing = rect('[data-testid="overview-pipeline-step-timing"]', row);
+        const started = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-started"]')!;
+        const duration = rect('[data-testid="overview-pipeline-step-duration"]', row);
+        return {
+          bounds: { left: bounds.left, right: bounds.right },
+          scrollFits: row.scrollWidth <= row.clientWidth,
+          status,
+          kind,
+          nameCell,
+          details,
+          meta,
+          timing,
+          duration,
+          startedDisplay: getComputedStyle(started).display,
+        };
+      });
+    return {
+      phaseScrollFits: phase.scrollWidth <= phase.clientWidth,
+      phase: rect('[data-testid="overview-pipeline-phase"]'),
+      summary,
+      marker,
+      label,
+      rows,
+    };
+  });
+
+  expect(layout.phaseScrollFits).toBe(true);
+  expect(layout.summary.top).toBeGreaterThanOrEqual(layout.label.bottom - 1);
+  expect(layout.summary.left).toBeGreaterThanOrEqual(layout.phase.left);
+  expect(layout.summary.right).toBeLessThanOrEqual(layout.phase.right + 1);
+  expect(layout.marker.right).toBeLessThanOrEqual(layout.summary.left);
+
+  for (const row of layout.rows) {
+    expect(row.scrollFits).toBe(true);
+    expect(row.status.width).toBeLessThanOrEqual(16.5);
+    expect(row.kind.width).toBeCloseTo(22, 0);
+    expect(row.details.width).toBeCloseTo(22, 0);
+    expect(row.nameCell.left).toBeGreaterThanOrEqual(row.kind.right);
+    expect(row.nameCell.right).toBeLessThanOrEqual(row.meta.left + 1);
+    expect(row.meta.right).toBeLessThanOrEqual(row.timing.left + 1);
+    expect(row.timing.right).toBeLessThanOrEqual(row.bounds.right + 1);
+    expect(row.startedDisplay).toBe('none');
+    expect(row.duration.width).toBeGreaterThan(0);
+    expect(Math.max(
+      row.status.centerY,
+      row.kind.centerY,
+      row.nameCell.centerY,
+      row.meta.centerY,
+      row.timing.centerY,
+    ) - Math.min(
+      row.status.centerY,
+      row.kind.centerY,
+      row.nameCell.centerY,
+      row.meta.centerY,
+      row.timing.centerY,
+    )).toBeLessThan(3);
+  }
+
+  const longName = aspectGroup.getByTestId('overview-pipeline-step-name').last();
+  await longName.hover();
+  await expect(page.getByTestId('cac-tooltip'))
+    .toContainText('Tests, screenshots, and evidence completeness');
 });
 
 test('token usage: each pipeline step surfaces its own usage, without the aggregate model block', async ({ page, devBackend }) => {
