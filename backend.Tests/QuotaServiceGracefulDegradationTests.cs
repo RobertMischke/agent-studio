@@ -20,7 +20,7 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["TaskRepository"] = _repoDir,
-                ["Quota:TtlSeconds"] = "1"
+                ["Quota:TtlSeconds"] = "600"
             })
             .Build();
     }
@@ -28,6 +28,41 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_repoDir, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public async Task RefreshAsync_SuccessPersistsAndServesFreshSnapshot()
+    {
+        var capturedAt = DateTime.UtcNow;
+        var service = NewService(new ScriptedProbe(_ => new QuotaSnapshot
+        {
+            CliType = "codex",
+            CliVersion = "codex-cli 0.149.0",
+            FetchedAt = capturedAt,
+            Plan = "Pro",
+            Source = "/status",
+            Windows =
+            [
+                new QuotaWindow { Label = "5-hour", UsedPct = 27 },
+                new QuotaWindow { Label = "Weekly", UsedPct = 61 }
+            ]
+        }));
+
+        await service.RefreshAsync("codex");
+
+        var persistedPath = Path.Combine(_repoDir, ".runtime", "quota-cache.json");
+        Assert.True(File.Exists(persistedPath));
+        var persisted = await File.ReadAllTextAsync(persistedPath);
+        Assert.Contains("\"cliType\": \"codex\"", persisted, StringComparison.Ordinal);
+        Assert.Contains("\"cliVersion\": \"codex-cli 0.149.0\"", persisted, StringComparison.Ordinal);
+        Assert.Contains("\"capturedAt\"", persisted, StringComparison.Ordinal);
+
+        var served = Assert.Single(service.GetCached().Snapshots);
+        Assert.False(served.IsStale);
+        Assert.InRange(served.AgeSeconds, 0, 2);
+        Assert.Equal(served.FetchedAt, served.CapturedAt);
+        Assert.Equal(27, served.Windows.Single(window => window.Label == "5-hour").UsedPct);
+        Assert.Equal(61, served.Windows.Single(window => window.Label == "Weekly").UsedPct);
     }
 
     [Fact]
@@ -62,6 +97,43 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
         Assert.Equal("codex-cli 0.149.0", stale.CliVersion);
         Assert.NotNull(stale.ProbeFailedAt);
         Assert.Equal("Quota probe timed out before the CLI panel rendered.", stale.Error);
+
+        var served = Assert.Single(service.GetCached().Snapshots);
+        Assert.True(served.IsStale);
+        Assert.True(served.AgeSeconds >= 120);
+        Assert.Equal(fetchedAt, served.CapturedAt);
+    }
+
+    [Fact]
+    public void Constructor_ColdStartServesPersistedSnapshotImmediately()
+    {
+        var capturedAt = DateTime.UtcNow.AddMinutes(-3);
+        var store = new QuotaCacheStore(_configuration, NullLogger<QuotaCacheStore>.Instance);
+        store.Write(
+        [
+            new QuotaSnapshot
+            {
+                CliType = "claude",
+                CliVersion = "2.1.202",
+                FetchedAt = capturedAt,
+                Plan = "Max",
+                Source = "/usage",
+                Windows = [new QuotaWindow { Label = "Weekly", UsedPct = 44 }]
+            }
+        ]);
+        var service = new QuotaService(
+            NullLogger<QuotaService>.Instance,
+            [new NamedProbe("claude")],
+            _configuration,
+            store);
+
+        var served = Assert.Single(service.GetCached().Snapshots);
+
+        Assert.Equal("claude", served.CliType);
+        Assert.Equal("2.1.202", served.CliVersion);
+        Assert.Equal("Max", served.Plan);
+        Assert.Equal(capturedAt, served.CapturedAt);
+        Assert.Equal(44, Assert.Single(served.Windows).UsedPct);
     }
 
     [Fact]
@@ -137,6 +209,13 @@ public sealed class QuotaServiceGracefulDegradationTests : IDisposable
             release.Wait(ct);
             return Task.FromResult(new QuotaSnapshot { CliType = CliType });
         }
+    }
+
+    private sealed class NamedProbe(string cliType) : IQuotaProbe
+    {
+        public string CliType { get; } = cliType;
+        public Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
+            => Task.FromResult(new QuotaSnapshot { CliType = CliType });
     }
 
     private sealed class RecordingLogger<T> : ILogger<T>

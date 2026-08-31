@@ -41,6 +41,15 @@ public record QuotaSnapshot
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
     /// <summary>
+    /// Wire-contract name for the time at which the quota values were captured.
+    /// <see cref="FetchedAt"/> remains for compatibility with existing clients.
+    /// </summary>
+    public DateTime CapturedAt => FetchedAt;
+    /// <summary>True when the values are older than the cache TTL or the latest probe failed.</summary>
+    public bool IsStale { get; init; }
+    /// <summary>Whole seconds since <see cref="CapturedAt"/> when the response was assembled.</summary>
+    public long AgeSeconds { get; init; }
+    /// <summary>
     /// Version reported by the CLI's <c>--version</c> command for this probe.
     /// Keeping it on the quota snapshot makes parser drift attributable without
     /// requiring a second operator-side reproduction.

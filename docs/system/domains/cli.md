@@ -70,8 +70,9 @@ CLI execution tests.
   useful error context when editing nearby code.
 - Quota reads are cache-only request paths. `GET /api/cli/quota` must never
   await CLI startup or PTY parsing. Failed refreshes retain the last good
-  values and expose `probeFailedAt`, `cliVersion`, and the probe error so the UI
-  can show an attributable stale marker.
+  values and expose `capturedAt`, `isStale`, `ageSeconds`, `probeFailedAt`,
+  `cliVersion`, and the normalized probe error so the UI can show an
+  attributable stale marker without leaking cancellation implementation text.
 - Claude and Codex version changes are checked after startup and periodically.
   Keep the structured `CLI version changed` log line when editing version or
   self-heal behavior.

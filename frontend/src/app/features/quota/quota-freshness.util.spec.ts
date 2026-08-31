@@ -21,7 +21,16 @@ describe('quota freshness', () => {
 
   it('attributes the failed attempt to the exact CLI version', () => {
     const label = quotaProbeFailureLabel(snapshot);
-    expect(label).toContain('probe failed');
+    expect(label).toContain('Stale since');
+    expect(label).toContain(', probe failed');
     expect(label).toContain('codex 0.149.0');
+  });
+
+  it('honors the server stale projection even inside the local TTL', () => {
+    expect(quotaSnapshotIsStale(
+      { ...snapshot, probeFailedAt: null, isStale: true },
+      600_000,
+      Date.parse('2026-08-27T18:00:01Z'),
+    )).toBe(true);
   });
 });
