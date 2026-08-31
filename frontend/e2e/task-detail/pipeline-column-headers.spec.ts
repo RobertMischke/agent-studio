@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Pipeline column headers (Time / Duration / Tokens / Cost) and phase headers.
@@ -179,6 +180,55 @@ function pipelineWithAllPhases() {
         costStep('post-drift-adr-code', 'claude-haiku-4-5', 12_000, 0.0180),
       ],
       totalTokens: 275_400,
+    },
+  };
+}
+
+function pipelineWithNarrowAspectRows() {
+  const aspects = [
+    step('aspect-requirement-fit', 'Requirement fit across every acceptance criterion', 'aspect', 'parallel'),
+    step('aspect-code-quality', 'Code quality and maintainability review', 'aspect', 'parallel'),
+    step('aspect-documentation-impact', 'Documentation and operator guidance impact', 'aspect', 'parallel'),
+    step('aspect-tests-and-evidence', 'Tests, screenshots, and review evidence', 'aspect', 'parallel'),
+  ];
+  const tool = step('post-git-commit-attribution', 'Git commit attribution evidence', 'tool', 'sequential');
+  const aspectCosts = [20_000, 25_000, 22_000, 28_800];
+  const narrowSteps = [...pre, ...core, ...aspects, tool];
+
+  return {
+    ...pipelineWithMetrics(),
+    pipeline: {
+      ...basePipeline(),
+      post: [...aspects, tool],
+      allSteps: narrowSteps,
+    },
+    execution: {
+      ...pipelineWithMetrics().execution,
+      steps: [
+        execStep('pre-loop-guard', 'module', 'claude-haiku-4-5'),
+        execStep('core-agent-run', 'core', 'claude-opus-4-7'),
+        ...aspects.map((aspect, index) => execStep(
+          aspect.id,
+          'aspect',
+          'claude-haiku-4-5',
+          { verdict: index < 2 ? 'block' : 'pass' },
+        )),
+        execStep('post-git-commit-attribution', 'tool', 'claude-haiku-4-5'),
+      ],
+    },
+    cost: {
+      ...pipelineWithMetrics().cost,
+      steps: [
+        costStep('pre-loop-guard', 'claude-haiku-4-5', 1_200, 0.0021),
+        costStep('core-agent-run', 'claude-opus-4-7', 248_000, 4.37),
+        ...aspects.map((aspect, index) => costStep(
+          aspect.id,
+          'claude-haiku-4-5',
+          aspectCosts[index],
+          0.012,
+        )),
+        costStep('post-git-commit-attribution', 'claude-haiku-4-5', 800, 0.001),
+      ],
     },
   };
 }
@@ -656,6 +706,161 @@ test.describe('Pipeline: per-step metric column headers', () => {
         path: path.join(RESULTS_DIR, 'pipeline-narrow-degraded--mocked.png'),
         fullPage: true,
       });
+    }
+  });
+
+  test('side-sheet-width aspect rows protect names, compact timing, and wrap header stats in both themes', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineWithNarrowAspectRows);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    const pipelineSteps = page.getByTestId('overview-pipeline-steps');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(7);
+
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.id = 'ov-pl-test-width';
+      style.textContent = '.ov-pipeline { width: 340px !important; max-width: 340px !important; }';
+      document.head.appendChild(style);
+    });
+    await expect(pipelineSteps).toHaveCSS('width', '340px');
+
+    const aspectPhase = page.locator('[data-testid="overview-pipeline-phase"][data-phase="aspect"]');
+    const aspectSummary = aspectPhase.getByTestId('overview-pipeline-phase-summary');
+    await expect(aspectSummary).toContainText('Attention');
+    await expect(aspectSummary).toContainText('4/4');
+    await expect(aspectSummary).toContainText('2');
+    await expect(aspectSummary).toContainText('95.8k');
+
+    // Recreate the former single-line/fixed-name treatment for durable before
+    // evidence from the same deterministic fixture and theme tokens.
+    const legacyStyle = await page.addStyleTag({ content: `
+      .ov-pl-phase {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+      }
+      .ov-pl-phase__marker,
+      .ov-pl-phase__label,
+      .ov-pl-phase__info,
+      .ov-pl-phase__rule,
+      .ov-pl-phase__summary {
+        grid-column: auto !important;
+        grid-row: auto !important;
+      }
+      .ov-pl-phase__rule { display: block !important; }
+      .ov-pl-phase__summary {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        flex-wrap: nowrap !important;
+        margin-left: auto !important;
+      }
+      .ov-pl-header,
+      .ov-pl-step {
+        --ov-pl-grid-cols:
+          var(--ov-pipeline-status-col)
+          var(--ov-pipeline-kind-col)
+          minmax(12rem, 2fr)
+          minmax(0, 1fr)
+          96px !important;
+      }
+      .ov-pl-header__timing,
+      .ov-pl-step__timing {
+        grid-template-columns: 38px 52px !important;
+      }
+      .ov-pl-header__time,
+      .ov-pl-step__started { display: inline !important; }
+    ` });
+
+    const legacyOverflow = await page.getByTestId('overview-pipeline-step').evaluateAll(rows =>
+      Math.max(...rows.map(row => row.scrollWidth - row.clientWidth)),
+    );
+    expect(legacyOverflow).toBeGreaterThan(1);
+
+    if (RESULTS_DIR) {
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await pipelineSteps.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-narrow-aspect-before-${theme}--mocked.png`),
+        });
+      }
+    }
+
+    await legacyStyle.evaluate(element => element.remove());
+
+    await expect(page.getByTestId('overview-pipeline-step-started').first()).toBeHidden();
+    await expect(page.getByTestId('overview-pipeline-step-duration').first()).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const rect = (element: Element | null): DOMRect => {
+        if (!(element instanceof HTMLElement)) throw new Error('Expected pipeline row element.');
+        return element.getBoundingClientRect();
+      };
+      const aspectRows = Array.from(document.querySelectorAll<HTMLElement>(
+        '[data-testid="overview-pipeline-step"][data-phase="aspect"]',
+      ));
+      const phase = document.querySelector<HTMLElement>(
+        '[data-testid="overview-pipeline-phase"][data-phase="aspect"]',
+      );
+      if (!phase) throw new Error('Expected ASPECT phase header.');
+      const marker = rect(phase.querySelector('[data-testid="overview-pipeline-phase-marker"]'));
+      const summary = rect(phase.querySelector('[data-testid="overview-pipeline-phase-summary"]'));
+
+      return {
+        maxOverflow: Math.max(...aspectRows.map(row => row.scrollWidth - row.clientWidth)),
+        phaseOverflow: phase.scrollWidth - phase.clientWidth,
+        phaseRowsAreSeparate: summary.top >= marker.bottom,
+        rows: aspectRows.map(row => {
+          const status = rect(row.querySelector('[data-testid="overview-pipeline-step-status"]'));
+          const kind = rect(row.querySelector('[aria-label="Aspect step"]'));
+          const nameCell = rect(row.querySelector('[data-testid="overview-pipeline-step-name-cell"]'));
+          const name = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-name"]');
+          const details = rect(row.querySelector('[data-testid="overview-pipeline-step-details"]'));
+          const meta = rect(row.querySelector('[data-testid="overview-pipeline-step-meta"]'));
+          const timing = rect(row.querySelector('[data-testid="overview-pipeline-step-timing"]'));
+          if (!name) throw new Error('Expected step name.');
+          const centers = [status, kind, details, meta, timing].map(box => box.top + box.height / 2);
+          return {
+            ordered: nameCell.right <= meta.left && meta.right <= timing.left,
+            centerSpread: Math.max(...centers) - Math.min(...centers),
+            statusWidth: status.width,
+            kindWidth: kind.width,
+            detailsWidth: details.width,
+            nameEllipsizes: getComputedStyle(name).textOverflow === 'ellipsis',
+            nameIsTruncated: name.scrollWidth > name.clientWidth,
+          };
+        }),
+      };
+    });
+
+    expect(layout.maxOverflow, `max aspect-row overflow ${layout.maxOverflow}px`).toBeLessThanOrEqual(1);
+    expect(layout.phaseOverflow, `ASPECT header overflow ${layout.phaseOverflow}px`).toBeLessThanOrEqual(1);
+    expect(layout.phaseRowsAreSeparate).toBe(true);
+    expect(layout.rows.every(row => row.ordered)).toBe(true);
+    expect(layout.rows.every(row => row.centerSpread <= 2), JSON.stringify(layout.rows)).toBe(true);
+    expect(layout.rows.every(row => row.statusWidth === layout.rows[0].statusWidth)).toBe(true);
+    expect(layout.rows.every(row => row.kindWidth === layout.rows[0].kindWidth)).toBe(true);
+    expect(layout.rows.every(row => row.detailsWidth === layout.rows[0].detailsWidth)).toBe(true);
+    expect(layout.rows.every(row => row.nameEllipsizes)).toBe(true);
+    expect(layout.rows.some(row => row.nameIsTruncated)).toBe(true);
+
+    const longName = page.locator('[data-step-id="aspect-requirement-fit"]')
+      .getByTestId('overview-pipeline-step-name');
+    await longName.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText(
+      'Requirement fit across every acceptance criterion',
+    );
+    await page.mouse.move(1, 1);
+
+    if (RESULTS_DIR) {
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await pipelineSteps.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-narrow-aspect-after-${theme}--mocked.png`),
+        });
+      }
     }
   });
 

@@ -1167,17 +1167,77 @@
   }
 }
 
-@container ov-pipeline (max-width: 300px) {
+// At side-sheet widths the phase identity keeps the first line and its
+// aggregate moves to a clean second line. The collapse marker and info control
+// retain their own fixed tracks, so a long summary can never collide with
+// either control.
+@container ov-pipeline (max-width: 420px) {
   .ov-pl-phase {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) 16px;
+    column-gap: var(--studio-spacing-2);
+    row-gap: var(--studio-spacing-1);
+  }
+
+  .ov-pl-phase__marker {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .ov-pl-phase__label {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ov-pl-phase__info {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .ov-pl-phase__rule {
+    display: none;
   }
 
   .ov-pl-phase__summary {
-    flex: 1 1 100%;
+    grid-column: 2 / -1;
+    grid-row: 2;
+    width: 100%;
     flex-wrap: wrap;
     justify-content: flex-end;
+    gap: var(--studio-spacing-1);
     min-width: 0;
     margin-left: 0;
+  }
+}
+
+// The narrowest task-detail side sheet has room for the fixed status/kind
+// icons, the name and its details control, compact row metadata, and duration.
+// The secondary start clock yields first. Bounding metadata prevents model or
+// verdict copy from stealing the name track; its controls remain clipped to
+// their compact lane while their complete values stay available via tooltips.
+@container ov-pipeline (max-width: 380px) {
+  .ov-pl-header,
+  .ov-pl-step {
+    --ov-pl-grid-cols:
+      var(--ov-pipeline-status-col)
+      var(--ov-pipeline-kind-col)
+      minmax(0, 1fr)
+      minmax(0, 48px)
+      52px;
+  }
+
+  .ov-pl-header__timing,
+  .ov-pl-step__timing {
+    grid-template-columns: 52px;
+  }
+
+  .ov-pl-header__time,
+  .ov-pl-step__started {
+    display: none;
   }
 }
 
