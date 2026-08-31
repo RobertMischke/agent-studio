@@ -19,9 +19,11 @@
   --ov-pipeline-status-col: 16px;
   --ov-pipeline-kind-col: 26px;
   // The step name is the row's primary information and owns twice the flexible
-  // space of metadata. Both tracks may contract within the row, but the name
-  // keeps a readable floor and secondary model text yields before timing.
-  --ov-pipeline-name-col: minmax(12rem, 2fr);
+  // space of metadata. Both tracks may contract all the way to zero so fixed
+  // icons and the surviving timing metric can never force the row wider than
+  // its split-pane container; the label ellipsizes only when that space is
+  // genuinely exhausted.
+  --ov-pipeline-name-col: minmax(0, 2fr);
   --ov-pipeline-meta-col: minmax(0, 1fr);
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
@@ -636,6 +638,10 @@
     color: var(--studio-fg-muted);
   }
 
+  &__summary > * {
+    white-space: nowrap;
+  }
+
   &__status {
     font-weight: 700;
     letter-spacing: 0.03em;
@@ -978,6 +984,7 @@
     min-width: 0;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: var(--studio-spacing-1);
     overflow: hidden;
     white-space: nowrap;
@@ -1123,10 +1130,10 @@
 
 // Responsive degradation, driven by the pipeline block's own inline-size (it
 // sits in a split task-detail pane, so the viewport width is the wrong signal).
-// The columns are dropped from the secondary edge inward, first Cost, then
-// Tokens, by shortening the shared grid template and hiding the matching
-// cells. The metadata track absorbs the remaining width while Time / Duration
-// stay right-pinned. Step name, status, and duration are never dropped.
+// Secondary metrics compact in priority order: Cost disappears first, then the
+// absolute start clock, then Tokens. Duration stays right-pinned throughout.
+// The name and metadata tracks absorb the remaining width without acquiring an
+// intrinsic minimum, so no child can overlap a neighbouring grid cell.
 @container ov-pipeline (max-width: 620px) {
   .ov-pl-header,
   .ov-pl-step {
@@ -1150,7 +1157,39 @@
   }
 }
 
-@container ov-pipeline (max-width: 460px) {
+@container ov-pipeline (max-width: 540px) {
+  .ov-pl-header,
+  .ov-pl-step {
+    --ov-pipeline-time-col: 52px;
+  }
+
+  .ov-pl-header__timing,
+  .ov-pl-step__timing {
+    grid-template-columns: 52px;
+  }
+
+  .ov-pl-header__time,
+  .ov-pl-step__started {
+    display: none;
+  }
+
+  // At the side-sheet width, give the aggregate its own scan line. The
+  // collapse marker, phase identity, help control, and rule keep the first
+  // line; compact statistics wrap together below without competing with them.
+  .ov-pl-phase {
+    flex-wrap: wrap;
+  }
+
+  .ov-pl-phase__summary {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+    margin-left: 0;
+  }
+}
+
+@container ov-pipeline (max-width: 390px) {
   .ov-pl-header,
   .ov-pl-step {
     --ov-pl-grid-cols:
@@ -1164,20 +1203,6 @@
   .ov-pl-header__tokens,
   .ov-pl-step__tokens {
     display: none;
-  }
-}
-
-@container ov-pipeline (max-width: 300px) {
-  .ov-pl-phase {
-    flex-wrap: wrap;
-  }
-
-  .ov-pl-phase__summary {
-    flex: 1 1 100%;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    min-width: 0;
-    margin-left: 0;
   }
 }
 

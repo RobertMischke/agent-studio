@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Pipeline column headers (Time / Duration / Tokens / Cost) and phase headers.
@@ -179,6 +180,65 @@ function pipelineWithAllPhases() {
         costStep('post-drift-adr-code', 'claude-haiku-4-5', 12_000, 0.0180),
       ],
       totalTokens: 275_400,
+    },
+  };
+}
+
+function pipelineWithNarrowAspectPressure() {
+  const aspectSteps = [
+    step('aspect-requirement-fit', 'Requirement alignment and operator acceptance criteria', 'aspect', 'parallel'),
+    step('aspect-code-quality', 'Code quality and maintainability review', 'aspect', 'parallel'),
+    step('aspect-security', 'Security boundary and dependency review', 'aspect', 'parallel'),
+    step('aspect-ux-quality', 'User experience and visual quality review', 'aspect', 'parallel'),
+  ];
+  const phasePost = [
+    ...aspectSteps,
+    step('post-git-commit-attribution', 'Git attribution', 'tool', 'sequential'),
+    step('post-orchestrator-decision', 'Final verdict', 'orchestrator', 'sequential'),
+    step('post-drift-adr-code', 'ADR drift', 'drift', 'sequential'),
+  ];
+  const aspectExecutions = [
+    execStep('aspect-requirement-fit', 'aspect', 'claude-haiku-4-5', { verdict: 'block', verdictSummary: 'Acceptance evidence is incomplete.' }),
+    execStep('aspect-code-quality', 'aspect', 'claude-haiku-4-5', { verdict: 'concerns', verdictSummary: 'One maintainability concern remains.' }),
+    execStep('aspect-security', 'aspect', 'claude-haiku-4-5', { verdict: 'pass' }),
+    execStep('aspect-ux-quality', 'aspect', 'claude-haiku-4-5', { verdict: 'pass' }),
+  ];
+  const aspectCosts = [
+    costStep('aspect-requirement-fit', 'claude-haiku-4-5', 20_000, 0.0300),
+    costStep('aspect-code-quality', 'claude-haiku-4-5', 24_000, 0.0360),
+    costStep('aspect-security', 'claude-haiku-4-5', 25_000, 0.0375),
+    costStep('aspect-ux-quality', 'claude-haiku-4-5', 26_800, 0.0402),
+  ];
+
+  return {
+    ...pipelineWithMetrics(),
+    pipeline: {
+      ...basePipeline(),
+      post: phasePost,
+      allSteps: [...pre, ...core, ...phasePost],
+    },
+    execution: {
+      ...pipelineWithMetrics().execution,
+      steps: [
+        execStep('pre-loop-guard', 'module', 'claude-haiku-4-5'),
+        execStep('core-agent-run', 'core', 'claude-opus-4-7'),
+        ...aspectExecutions,
+        execStep('post-git-commit-attribution', 'tool', 'claude-haiku-4-5'),
+        execStep('post-orchestrator-decision', 'orchestrator', 'claude-haiku-4-5', { verdict: 'accept' }),
+        execStep('post-drift-adr-code', 'drift', 'claude-haiku-4-5', { verdict: 'clean' }),
+      ],
+    },
+    cost: {
+      ...pipelineWithMetrics().cost,
+      steps: [
+        costStep('pre-loop-guard', 'claude-haiku-4-5', 1_200, 0.0021),
+        costStep('core-agent-run', 'claude-opus-4-7', 248_000, 4.37),
+        ...aspectCosts,
+        costStep('post-git-commit-attribution', 'claude-haiku-4-5', 800, 0.0010),
+        costStep('post-orchestrator-decision', 'claude-haiku-4-5', 5_400, 0.0089),
+        costStep('post-drift-adr-code', 'claude-haiku-4-5', 12_000, 0.0180),
+      ],
+      totalTokens: 363_200,
     },
   };
 }
@@ -599,15 +659,15 @@ test.describe('Pipeline: per-step metric column headers', () => {
     }
   });
 
-  test('narrow pipeline drops Cost then Tokens, keeps Duration, and never overflows a row', async ({ page }) => {
-    await installRoutes(page, '4-auto-review', pipelineWithAllPhases);
+  test('narrow pipeline protects names, compacts timing, and wraps phase statistics in both themes', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineWithNarrowAspectPressure);
     await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
     await dismissErrorDialog(page);
 
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
     await expandAllPipelineSections(page);
-    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(6);
+    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(9);
 
     // The metric columns degrade off the pipeline block's own inline-size, not
     // the viewport. Constrain the grid container directly so the container
@@ -624,21 +684,84 @@ test.describe('Pipeline: per-step metric column headers', () => {
       }, px);
     };
 
+    if (process.env['PIPELINE_CAPTURE_BEFORE'] === '1' && RESULTS_DIR) {
+      await setContainerWidth(430);
+      await pipeline.scrollIntoViewIfNeeded();
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await page.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-narrow-before-${theme}--mocked.png`),
+          fullPage: true,
+        });
+      }
+    }
+
     const cost = page.locator('[data-step-id="core-agent-run"] .ov-pl-step__cost');
     const tokens = page.locator('[data-step-id="core-agent-run"] .ov-pl-step__tokens');
+    const started = page.locator('[data-step-id="core-agent-run"] .ov-pl-step__started');
     const duration = page.locator('[data-step-id="core-agent-run"] .ov-pl-step__duration');
 
-    // Mid-narrow: Cost drops, Tokens + Duration survive.
+    // Side-sheet width: Cost and the secondary absolute clock drop first;
+    // Tokens and the primary Duration metric survive.
     await setContainerWidth(500);
     await expect(cost).toBeHidden();
+    await expect(started).toBeHidden();
     await expect(tokens).toBeVisible();
     await expect(duration).toBeVisible();
 
-    // Very narrow: Tokens drops too; Duration is never dropped.
-    await setContainerWidth(430);
+    // Only at the next compact breakpoint do Tokens drop. Duration remains.
+    await setContainerWidth(360);
     await expect(cost).toBeHidden();
     await expect(tokens).toBeHidden();
     await expect(duration).toBeVisible();
+
+    // Return to the reported side-sheet width for geometry and theme proofs.
+    await setContainerWidth(430);
+    await expect(tokens).toBeVisible();
+
+    const aspectGroup = page.locator('[data-testid="overview-pipeline-group"][data-phase="aspect"]');
+    const aspectHeader = aspectGroup.getByTestId('overview-pipeline-phase');
+    const aspectSummary = aspectHeader.getByTestId('overview-pipeline-phase-summary');
+    await expect(aspectSummary).toContainText('Attention');
+    await expect(aspectSummary).toContainText('4/4');
+    await expect(aspectSummary).toContainText('⚠ 2');
+    await expect(aspectSummary).toContainText('95.8k');
+
+    const geometry = await page.evaluate(() => {
+      const rect = (selector: string, root: ParentNode = document): DOMRect => {
+        const element = root.querySelector<HTMLElement>(selector);
+        if (!element) throw new Error(`missing ${selector}`);
+        return element.getBoundingClientRect();
+      };
+      const row = document.querySelector<HTMLElement>('[data-step-id="aspect-requirement-fit"]')!;
+      const cells = [
+        rect('[data-testid="overview-pipeline-step-status"]', row),
+        rect('.ov-pl-step__kind', row),
+        rect('[data-testid="overview-pipeline-step-name-cell"]', row),
+        rect('[data-testid="overview-pipeline-step-meta"]', row),
+        rect('[data-testid="overview-pipeline-step-timing"]', row),
+        rect('[data-testid="overview-pipeline-step-tokens"]', row),
+      ];
+      const visibleCells = cells.filter(cell => cell.width > 0 && cell.height > 0);
+      const centers = visibleCells.map(cell => cell.top + cell.height / 2);
+      const orderedWithoutOverlap = visibleCells.every((cell, index) =>
+        index === 0 || cell.left >= visibleCells[index - 1].right - 1,
+      );
+      const name = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-name"]')!;
+      const phase = document.querySelector<HTMLElement>('[data-testid="overview-pipeline-phase"][data-phase="aspect"]')!;
+      const marker = rect('.ov-pl-phase__marker', phase);
+      const summary = rect('[data-testid="overview-pipeline-phase-summary"]', phase);
+      return {
+        maxCenterDelta: Math.max(...centers) - Math.min(...centers),
+        orderedWithoutOverlap,
+        nameTruncated: name.scrollWidth > name.clientWidth,
+        summaryBelowCollapseControl: summary.top >= marker.bottom - 1,
+      };
+    });
+    expect(geometry.orderedWithoutOverlap).toBe(true);
+    expect(geometry.maxCenterDelta, `row baseline spread ${geometry.maxCenterDelta}px`).toBeLessThan(3);
+    expect(geometry.nameTruncated).toBe(true);
+    expect(geometry.summaryBelowCollapseControl).toBe(true);
 
     // No horizontal overflow / Schieflage inside any row at the narrowest width:
     // every row's content fits its own box (name ellipsizes, flex track shrinks).
@@ -652,10 +775,13 @@ test.describe('Pipeline: per-step metric column headers', () => {
 
     if (RESULTS_DIR) {
       await pipeline.scrollIntoViewIfNeeded();
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-narrow-degraded--mocked.png'),
-        fullPage: true,
-      });
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await page.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-narrow-after-${theme}--mocked.png`),
+          fullPage: true,
+        });
+      }
     }
   });
 
