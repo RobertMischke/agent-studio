@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Pipeline column headers (Time / Duration / Tokens / Cost) and phase headers.
@@ -145,7 +146,10 @@ function pipelineWithMetrics() {
 
 function pipelineWithAllPhases() {
   const phasePost = [
-    step('aspect-requirement-fit', 'Requirement fit', 'aspect', 'parallel'),
+    step('aspect-requirement-fit', 'Requirement fit against every acceptance criterion', 'aspect', 'parallel'),
+    step('aspect-code-quality', 'Code quality and regression safety', 'aspect', 'parallel'),
+    step('aspect-documentation-impact', 'Documentation and operator guidance impact', 'aspect', 'parallel'),
+    step('aspect-tests-and-evidence', 'Tests, screenshots, and runtime evidence', 'aspect', 'parallel'),
     step('post-git-commit-attribution', 'Git attribution', 'tool', 'sequential'),
     step('post-orchestrator-decision', 'Final verdict', 'orchestrator', 'sequential'),
     step('post-drift-adr-code', 'ADR drift', 'drift', 'sequential'),
@@ -163,6 +167,9 @@ function pipelineWithAllPhases() {
         execStep('pre-loop-guard', 'module', 'claude-haiku-4-5'),
         execStep('core-agent-run', 'core', 'claude-opus-4-7'),
         execStep('aspect-requirement-fit', 'aspect', 'claude-haiku-4-5', { verdict: 'pass' }),
+        execStep('aspect-code-quality', 'aspect', 'claude-haiku-4-5', { verdict: 'concerns' }),
+        execStep('aspect-documentation-impact', 'aspect', 'claude-haiku-4-5', { verdict: 'concerns' }),
+        execStep('aspect-tests-and-evidence', 'aspect', 'claude-haiku-4-5', { verdict: 'pass' }),
         execStep('post-git-commit-attribution', 'tool', 'claude-haiku-4-5'),
         execStep('post-orchestrator-decision', 'orchestrator', 'claude-haiku-4-5', { verdict: 'accept' }),
         execStep('post-drift-adr-code', 'drift', 'claude-haiku-4-5', { verdict: 'clean' }),
@@ -173,12 +180,15 @@ function pipelineWithAllPhases() {
       steps: [
         costStep('pre-loop-guard', 'claude-haiku-4-5', 1_200, 0.0021),
         costStep('core-agent-run', 'claude-opus-4-7', 248_000, 4.37),
-        costStep('aspect-requirement-fit', 'claude-haiku-4-5', 8_000, 0.0120),
+        costStep('aspect-requirement-fit', 'claude-haiku-4-5', 24_000, 0.0360),
+        costStep('aspect-code-quality', 'claude-haiku-4-5', 23_800, 0.0357),
+        costStep('aspect-documentation-impact', 'claude-haiku-4-5', 24_000, 0.0360),
+        costStep('aspect-tests-and-evidence', 'claude-haiku-4-5', 24_000, 0.0360),
         costStep('post-git-commit-attribution', 'claude-haiku-4-5', 800, 0.0010),
         costStep('post-orchestrator-decision', 'claude-haiku-4-5', 5_400, 0.0089),
         costStep('post-drift-adr-code', 'claude-haiku-4-5', 12_000, 0.0180),
       ],
-      totalTokens: 275_400,
+      totalTokens: 363_200,
     },
   };
 }
@@ -500,7 +510,7 @@ test.describe('Pipeline: per-step metric column headers', () => {
     const pipeline = page.getByTestId('overview-pipeline');
     await expect(pipeline).toBeVisible({ timeout: 10_000 });
     await expandAllPipelineSections(page);
-    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(6);
+    await expect(page.getByTestId('overview-pipeline-step')).toHaveCount(9);
 
     const geometry = await page.evaluate(() => {
       const rect = (selector: string): DOMRect => {
@@ -635,10 +645,19 @@ test.describe('Pipeline: per-step metric column headers', () => {
     await expect(duration).toBeVisible();
 
     // Very narrow: Tokens drops too; Duration is never dropped.
-    await setContainerWidth(430);
+    await setContainerWidth(360);
     await expect(cost).toBeHidden();
     await expect(tokens).toBeHidden();
     await expect(duration).toBeVisible();
+
+    if (RESULTS_DIR) {
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await pipeline.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-rows-before-narrow-${theme}--mocked.png`),
+        });
+      }
+    }
 
     // No horizontal overflow / Schieflage inside any row at the narrowest width:
     // every row's content fits its own box (name ellipsizes, flex track shrinks).
@@ -650,13 +669,6 @@ test.describe('Pipeline: per-step metric column headers', () => {
     });
     expect(overflow, `max intra-row overflow ${overflow}px`).toBeLessThanOrEqual(1);
 
-    if (RESULTS_DIR) {
-      await pipeline.scrollIntoViewIfNeeded();
-      await page.screenshot({
-        path: path.join(RESULTS_DIR, 'pipeline-narrow-degraded--mocked.png'),
-        fullPage: true,
-      });
-    }
   });
 
   test('overview content keeps left-aligned prose and tabular measures on ultrawide viewports', async ({ page }) => {
