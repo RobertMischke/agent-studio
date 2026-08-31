@@ -22,6 +22,7 @@ public sealed class QuotaService
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
     private readonly ConcurrentDictionary<string, byte> _backgroundRefreshes = new();
     private readonly TimeSpan _ttl;
+    private readonly TimeSpan _probeTimeout;
     private readonly QuotaCacheStore _store;
     private readonly CliVersionTracker? _versionTracker;
 
@@ -36,19 +37,30 @@ public sealed class QuotaService
         _probes = probes.ToDictionary(p => p.CliType, StringComparer.OrdinalIgnoreCase);
         var ttlSec = int.TryParse(configuration["Quota:TtlSeconds"], out var t) ? t : 600;
         _ttl = TimeSpan.FromSeconds(ttlSec);
+        var probeTimeoutSec = int.TryParse(configuration["Quota:ProbeTimeoutSeconds"], out var timeout) ? timeout : 45;
+        _probeTimeout = TimeSpan.FromSeconds(Math.Clamp(probeTimeoutSec, 5, 120));
         _store = store;
         _versionTracker = versionTracker;
 
         // Hydrate the in-memory cache from disk on startup so the
         // header / strip have something to render before the first
         // probe completes (probes take 30+ seconds per CLI). Stale
-        // detection is the consumer's responsibility via TtlSeconds.
+        // fields are projected from the captured timestamp on every read.
         try
         {
             foreach (var snap in _store.Read())
             {
                 if (string.IsNullOrWhiteSpace(snap.CliType)) continue;
-                _cache[snap.CliType] = snap;
+                _cache[snap.CliType] = snap with
+                {
+                    CapturedAt = snap.CapturedAt ?? snap.FetchedAt,
+                    IsStale = false,
+                    AgeSeconds = 0,
+                    StaleSince = null,
+                    Error = string.IsNullOrWhiteSpace(snap.Error)
+                        ? null
+                        : NormalizeProbeError(snap.Error)
+                };
                 _versionTracker?.Seed(snap.CliType, snap.CliVersion);
             }
             _logger.LogInformation("Hydrated quota cache from disk ({Count} snapshots).", _cache.Count);
@@ -66,11 +78,16 @@ public sealed class QuotaService
 
     public QuotaReport GetCached()
     {
+        var now = DateTime.UtcNow;
         return new QuotaReport
         {
             TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
-                .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
+                .Select(k => ProjectForResponse(
+                    _cache.TryGetValue(k, out var snapshot)
+                        ? snapshot
+                        : new QuotaSnapshot { CliType = k },
+                    now))
                 .ToList()
         };
     }
@@ -147,10 +164,23 @@ public sealed class QuotaService
             {
                 snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
                 snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
+                snap = snap with
+                {
+                    CapturedAt = snap.FetchedAt,
+                    IsStale = false,
+                    AgeSeconds = 0,
+                    StaleSince = null
+                };
             }
             _cache[cliType] = snap;
             PersistCache();
             return snap;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _logger.LogDebug("Quota probe for {Cli} canceled by its caller; retaining cached reading", cliType);
+            _cache.TryGetValue(cliType, out var prior);
+            return prior;
         }
         catch (Exception ex)
         {
@@ -174,11 +204,23 @@ public sealed class QuotaService
         finally { sem.Release(); }
     }
 
-    private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
+    private async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(45));
+        cts.CancelAfter(_probeTimeout);
         return await probe.ProbeAsync(cts.Token);
+    }
+
+    private QuotaSnapshot ProjectForResponse(QuotaSnapshot snapshot, DateTime now)
+    {
+        var freshness = QuotaFreshnessPolicy.Evaluate(snapshot, _ttl, now);
+        return snapshot with
+        {
+            CapturedAt = freshness.CapturedAt,
+            IsStale = freshness.IsStale,
+            AgeSeconds = freshness.AgeSeconds,
+            StaleSince = freshness.StaleSince
+        };
     }
 
     private static QuotaSnapshot RetainLastGoodOnFailure(QuotaSnapshot? previous, QuotaSnapshot failed)

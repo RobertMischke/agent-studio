@@ -386,11 +386,18 @@ never be promoted into that missing standard bucket.
 **Stale-while-revalidate failure contract (AGT-2679).** `GET /api/cli/quota`
 serves the cache immediately and schedules a coalesced, bounded background
 probe. A failed probe does not replace the last good plan or windows. The
-snapshot retains their original `fetchedAt` and adds `probeFailedAt`,
-`cliVersion`, and a normalized `error`. The UI marks those values stale and
-puts the probe error in the marker tooltip. Startup and periodic version checks
-compare Claude and Codex against the disk-cached baseline and log
-`CLI version changed` with the previous version, current version, and source.
+snapshot retains their original `fetchedAt`, exposes it explicitly as
+`capturedAt`, and adds `isStale`, `ageSeconds`, `staleSince`, `probeFailedAt`,
+`cliVersion`, and a normalized `error`. The UI keeps the last-good values
+readable and shows a calm `Stale since <time> · probe failed` note; raw
+cancellation text is never shown, while normalized probe detail remains in the
+marker tooltip.
+Successful readings are persisted in `cli-quota-last-good.json`, with the
+legacy `quota-cache.json` accepted during migration. A hosted refresh cadence
+keeps the cache moving even when no browser is polling it. Startup and periodic
+version checks compare Claude and Codex against the disk-cached baseline and
+log `CLI version changed` with the previous version, current version, and
+source.
 
 **Spark-block split is version-agnostic (AGT-2064).** `/status` renders a
 `<model>-Spark limit:` sub-block with its own near-empty 5h/Weekly lines. The

@@ -70,8 +70,15 @@ CLI execution tests.
   useful error context when editing nearby code.
 - Quota reads are cache-only request paths. `GET /api/cli/quota` must never
   await CLI startup or PTY parsing. Failed refreshes retain the last good
-  values and expose `probeFailedAt`, `cliVersion`, and the probe error so the UI
-  can show an attributable stale marker.
+  values and expose `capturedAt`, `isStale`, `ageSeconds`, `staleSince`,
+  `probeFailedAt`, `cliVersion`, and the probe error so the UI can show an
+  attributable stale marker. Successful Claude and Codex readings persist in
+  `<TaskRepository>/.runtime/cli-quota-last-good.json`; the older
+  `quota-cache.json` remains a read-only migration source. A hosted refresh runs
+  on a bounded cadence in addition to coalesced refreshes requested by stale
+  cache reads. `Quota:RefreshIntervalSeconds` defaults to 600 and is clamped to
+  60 seconds through 24 hours; `Quota:ProbeTimeoutSeconds` defaults to 45 and is
+  clamped to 5 through 120 seconds.
 - Claude and Codex version changes are checked after startup and periodically.
   Keep the structured `CLI version changed` log line when editing version or
   self-heal behavior.

@@ -41,6 +41,18 @@ public record QuotaSnapshot
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
     /// <summary>
+    /// UTC time at which the displayed last-good values were captured.
+    /// This is the explicit wire-contract name; <see cref="FetchedAt"/> remains
+    /// for backward compatibility with existing consumers.
+    /// </summary>
+    public DateTime? CapturedAt { get; init; }
+    /// <summary>True when the reading is older than the cache TTL or the latest probe failed.</summary>
+    public bool IsStale { get; init; }
+    /// <summary>Whole seconds since <see cref="CapturedAt"/> at response time.</summary>
+    public long AgeSeconds { get; init; }
+    /// <summary>UTC time at which this reading became stale, when known.</summary>
+    public DateTime? StaleSince { get; init; }
+    /// <summary>
     /// Version reported by the CLI's <c>--version</c> command for this probe.
     /// Keeping it on the quota snapshot makes parser drift attributable without
     /// requiring a second operator-side reproduction.
@@ -80,7 +92,7 @@ public record QuotaSnapshot
 public record QuotaReport
 {
     public DateTime At { get; init; } = DateTime.UtcNow;
-    /// <summary>Cache TTL (seconds) the backend is using; the UI computes a "stale" badge as <c>now - snapshot.fetchedAt &gt; ttlSeconds</c>.</summary>
+    /// <summary>Cache TTL (seconds), retained for backward-compatible clients that infer freshness locally.</summary>
     public int TtlSeconds { get; init; }
     public List<QuotaSnapshot> Snapshots { get; init; } = [];
 }

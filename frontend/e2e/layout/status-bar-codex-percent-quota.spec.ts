@@ -49,6 +49,9 @@ function codexPercentQuotaReport() {
 test.describe('Status bar quota: Codex %-only payload', () => {
   test.beforeEach(async ({ page }) => {
     mkdirSync(SHOT_DIR, { recursive: true });
+    await page.route('**/api/auth/status', route => route.fulfill({
+      json: { profile: 'local', bootstrapRequired: false, authenticated: true, user: null },
+    }));
     await page.route('**/api/crash-recovery/pending', route => route.fulfill({ json: { pending: [] } }));
     // Specific quota route first (first-registered route wins here) so the
     // Codex card renders our fixture regardless of the live stack.
@@ -84,7 +87,7 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     }
   });
 
-  test('Codex modal shows the implied 100% cap in both themes, not "n/a"', async ({ page }) => {
+  test('Codex modal shows percentage remaining in both themes, not "n/a"', async ({ page }) => {
     // The backend-less worktree dev server can pop a startup "Failed to
     // load …" error dialog; let it settle and dismiss it so it does not
     // intercept the card click. (Against a live backend none of this fires.)
@@ -102,9 +105,9 @@ test.describe('Status bar quota: Codex %-only payload', () => {
 
     const windowsList = page.getByTestId('cli-usage-modal-windows');
     await expect(windowsList).toBeVisible();
-    // Each window card reads its implied 100% cap ("of 100%") for a
-    // %-window instead of a bare "n/a".
-    await expect(page.getByTestId('cli-usage-window').first()).toContainText('100%');
+    // A percentage-only window still derives a readable remaining value
+    // instead of falling back to a bare "n/a".
+    await expect(page.getByTestId('cli-usage-window').first()).toContainText('34% left');
     // And no window falls back to the empty "n/a" placeholder.
     await expect(windowsList).not.toContainText('n/a');
 
@@ -117,10 +120,11 @@ test.describe('Status bar quota: Codex %-only payload', () => {
   });
 
   test('failed probe keeps last-good values with an attributable stale marker', async ({ page, devBackend: _devBackend }) => {
+    void _devBackend;
     await page.unroute('**/api/cli/quota');
     const lastGoodAt = '2026-08-27T18:55:00Z';
     const failedAt = '2026-08-27T19:07:00Z';
-    let payload: { at: string; ttlSeconds: number; snapshots: Array<Record<string, unknown>> } = {
+    let payload: { at: string; ttlSeconds: number; snapshots: Record<string, unknown>[] } = {
       at: failedAt,
       ttlSeconds: 600,
       snapshots: [{
@@ -154,6 +158,10 @@ test.describe('Status bar quota: Codex %-only payload', () => {
       snapshots: [{
         cliType: 'codex',
         fetchedAt: lastGoodAt,
+        capturedAt: lastGoodAt,
+        isStale: true,
+        ageSeconds: 720,
+        staleSince: failedAt,
         cliVersion: 'codex-cli 0.149.0',
         probeFailedAt: failedAt,
         plan: 'Pro',
@@ -176,6 +184,7 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await card.click();
     modal = page.getByTestId('cli-usage-modal-codex');
     const stale = modal.getByTestId('cli-usage-probe-stale');
+    await expect(stale).toContainText('Stale since');
     await expect(stale).toContainText('probe failed');
     await expect(stale).toContainText('codex 0.149.0');
     await expect(stale).toContainText('showing last-good quota values');
