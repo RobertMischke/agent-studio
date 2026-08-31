@@ -7,7 +7,7 @@ import fs from 'node:fs';
 /**
  * Renders the REAL {@link ResultViewComponent} via the `result-view-mockup`
  * standalone app and screenshots the case-based overview layouts + the two new
- * quality-head metric chips (files changed, tests passed) in BOTH themes.
+ * compact quality-head stats (files changed, tests passed) in BOTH themes.
  *
  * Backend-free by design: the gallery builds each card from a canned `status.md`
  * + task metadata, so this is the frontend verification the Teil 1 slice could
@@ -80,7 +80,7 @@ async function stampTheme(page: import('@playwright/test').Page, theme: 'dark' |
 
 test.describe('@mockup result-view (real component)', () => {
   for (const theme of ['dark', 'light'] as const) {
-    test(`renders the case layouts + metric chips in the ${theme} theme`, async ({ page }) => {
+    test(`renders the case layouts + compact summary in the ${theme} theme`, async ({ page }) => {
       await page.setViewportSize({ width: 860, height: 1400 });
       await page.goto(baseUrl);
       await stampTheme(page, theme);
@@ -89,9 +89,19 @@ test.describe('@mockup result-view (real component)', () => {
       await expect(gallery).toBeVisible();
       // All four case cards render.
       await expect(page.getByTestId('gallery-card')).toHaveCount(4);
-      // The two new quality-head chips are present.
+      // The compact summary keeps outcome emphasis and renders quiet stats.
+      await expect(page.getByTestId('result-case-dot').first()).toBeVisible();
       await expect(page.getByTestId('result-metric-files').first()).toBeVisible();
       await expect(page.getByTestId('result-metric-tests').first()).toBeVisible();
+      await expect(page.getByTestId('result-metric-duration').first()).toHaveText('4m');
+      await expect(page.getByTestId('result-metric-tests').first()).toHaveText('24 ✓');
+      await expect(page.getByTestId('result-metric-tokens').first()).toHaveText('48.0k tokens');
+
+      const metricStyle = await page.getByTestId('result-metric-files').first().evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, borderWidth: style.borderWidth };
+      });
+      expect(metricStyle).toEqual({ background: 'rgba(0, 0, 0, 0)', borderWidth: '0px' });
       // The per-case divergence: a blocker layout and a before-after layout exist.
       await expect(page.locator('[data-testid="result-overview"][data-layout="blocker"]')).toHaveCount(1);
       await expect(page.locator('[data-testid="result-overview"][data-layout="before-after"]')).toHaveCount(1);
@@ -99,6 +109,31 @@ test.describe('@mockup result-view (real component)', () => {
 
       await page.screenshot({
         path: path.join(RESULTS_DIR, `result-view-${theme}--mocked.png`),
+        fullPage: true,
+      });
+    });
+  }
+
+  for (const theme of ['dark', 'light'] as const) {
+    test(`wraps without horizontal overflow at a narrow width in the ${theme} theme`, async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 1200 });
+      await page.goto(baseUrl);
+      await stampTheme(page, theme);
+
+      const firstCard = page.getByTestId('gallery-card').first();
+      const summary = firstCard.getByTestId('result-summary-meta');
+      await expect(summary).toBeVisible();
+      await expect(firstCard.getByTestId('result-metric-tokens')).toBeVisible();
+      await expect(firstCard.getByTestId('result-metric-commits')).toBeVisible();
+
+      const geometry = await firstCard.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+
+      await page.screenshot({
+        path: path.join(RESULTS_DIR, `result-summary-narrow-${theme}--mocked.png`),
         fullPage: true,
       });
     });

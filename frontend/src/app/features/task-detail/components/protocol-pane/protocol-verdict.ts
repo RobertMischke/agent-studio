@@ -24,9 +24,9 @@ export interface ProtocolVerdict {
   detail: string;
   /**
    * Run duration as written by the runner into the `# Status` header of
-   * status.md (e.g. `4 min`). Surfaced as an icon-prefixed chip on the
-   * verdict pill instead of leaving the Status section in the rendered
-   * body. Null when status.md has no Duration line yet.
+   * status.md (e.g. `4 min`). Surfaced as a compact inline stat beside the
+   * outcome instead of leaving the Status section in the rendered body.
+   * Null when status.md has no Duration line yet.
    */
   duration: string | null;
 }
