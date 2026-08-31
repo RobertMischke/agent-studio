@@ -2,6 +2,32 @@
      role="tablist"
      [attr.aria-label]="ariaLabel()"
      [style.--pane-tab-min-width.px]="minimumTabWidth()">
+  <div class="pane-tabs__measurement" aria-hidden="true">
+    @for (tab of tabs(); track trackTab($index, tab)) {
+      <span class="pane-tab pane-tab--measure"
+            [attr.data-pane-tab-measure-id]="tab.id">
+        @if (tab.icon) {
+          <app-studio-icon class="pane-tab__icon" [name]="tab.icon" [size]="12"></app-studio-icon>
+        } @else if (tab.emoji) {
+          <span class="pane-tab__emoji">{{ tab.emoji }}</span>
+        }
+        <span class="pane-tab__label">{{ tab.label }}</span>
+        @if (tab.badge !== null && tab.badge !== undefined && tab.badge !== '' && tab.badge !== 0) {
+          <app-count-badge class="pane-tab__badge"
+                           [value]="tab.badge"
+                           tone="default"
+                           variant="pane-tab" />
+        }
+        @if (tab.indicator === 'spinner') {
+          <span class="pane-tab__spinner"></span>
+        } @else if (tab.indicator === 'live') {
+          <span class="pane-tab__livedot"></span>
+        }
+      </span>
+    }
+    <span class="pane-tab pane-tab--overflow pane-tab--measure"
+          data-pane-tab-overflow-measure>⋯</span>
+  </div>
   @for (tab of inlineTabs(); track trackTab($index, tab)) {
     <button type="button"
             [ngClass]="tabClass(tab)"
@@ -39,13 +65,6 @@
             [attr.aria-expanded]="overflowOpen()"
             (click)="toggleOverflow($event)">
       <span aria-hidden="true">⋯</span>
-      @if (overflowBadgeTotal(); as badgeTotal) {
-        <app-count-badge class="pane-tab__overflow-badge"
-                         [value]="badgeTotal"
-                         tone="default"
-                         variant="pane-tab"
-                         data-testid="pane-tabs-overflow-badge" />
-      }
     </button>
   }
 </div>

@@ -15,10 +15,30 @@
  */
 
 .pane-tabs {
+  position: relative;
   display: inline-flex;
   align-items: stretch;
   gap: 0;
   min-width: 0;
+}
+
+/* Intrinsic sizing rail. It contains every tab regardless of the visible
+ * overflow split, so the controller measures real labels, icons, badges, and
+ * settled fonts without letting the duplicate content affect layout or the
+ * accessibility tree. */
+.pane-tabs__measurement {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: inline-flex;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.pane-tabs__measurement .pane-tab--measure {
+  flex: 0 0 auto;
+  font-weight: 600;
 }
 
 /* The component host `<app-pane-tabs>` is itself a flex ITEM of

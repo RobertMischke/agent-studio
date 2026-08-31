@@ -22,7 +22,6 @@
                      ariaLabel="Task / Activity / Result"
                      [tabs]="protocolTabs()"
                      [activeTabId]="activeInspectorTab()"
-                     [overflowAfter]="maximized() ? null : 2"
                      (click)="focusTabSurface()"
                      (tabChange)="onInspectorTabChange($event)" />
     </ng-container>
