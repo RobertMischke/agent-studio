@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Pipeline column headers (Time / Duration / Tokens / Cost) and phase headers.
@@ -183,6 +184,55 @@ function pipelineWithAllPhases() {
   };
 }
 
+function pipelineNarrowStress() {
+  const post = [
+    step('analysis-runtime-observability', 'Runtime observability findings and correlation analysis', 'analysis', 'sequential'),
+    step('aspect-requirement-fit', 'Requirement fit across every acceptance criterion', 'aspect', 'parallel'),
+    step('aspect-code-quality', 'Code quality and maintainability review', 'aspect', 'parallel'),
+    step('aspect-documentation-impact', 'Documentation and operator workflow impact', 'aspect', 'parallel'),
+    step('aspect-tests-and-evidence', 'Tests, narrow screenshots, and regression evidence', 'aspect', 'parallel'),
+    step('post-lint-scss', 'Frontend stylesheet verification and token compliance', 'tool', 'sequential'),
+  ];
+  const tokenTotals = [12_000, 24_000, 23_900, 24_000, 23_900, 4_800];
+  const verdicts = [null, 'pass', 'concerns', 'pass', 'block', null];
+
+  return {
+    ...pipelineWithMetrics(),
+    pipeline: {
+      ...basePipeline(),
+      post,
+      allSteps: [...pre, ...core, ...post],
+    },
+    execution: {
+      ...pipelineWithMetrics().execution,
+      steps: [
+        execStep('pre-loop-guard', 'module', 'claude-haiku-4-5'),
+        execStep('core-agent-run', 'core', 'claude-opus-4-7'),
+        ...post.map((pipelineStep, index) => execStep(
+          pipelineStep.id,
+          pipelineStep.kind,
+          'claude-haiku-4-5-20251001',
+          verdicts[index] ? { verdict: verdicts[index] } : {},
+        )),
+      ],
+    },
+    cost: {
+      ...pipelineWithMetrics().cost,
+      steps: [
+        costStep('pre-loop-guard', 'claude-haiku-4-5', 1_200, 0.0021),
+        costStep('core-agent-run', 'claude-opus-4-7', 248_000, 4.37),
+        ...post.map((pipelineStep, index) => costStep(
+          pipelineStep.id,
+          'claude-haiku-4-5-20251001',
+          tokenTotals[index],
+          tokenTotals[index] / 1_000_000,
+        )),
+      ],
+      totalTokens: 357_800,
+    },
+  };
+}
+
 function pipelineWithDisabledStep() {
   const body = pipelineWithAllPhases();
   return {
@@ -300,6 +350,9 @@ async function installRoutes(page: Page, state: string, pipelineBody: () => unkn
 }
 
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
+const NARROW_EVIDENCE_PHASE = process.env['PIPELINE_EVIDENCE_PHASE'] === 'before'
+  ? 'before'
+  : 'after';
 
 async function dismissErrorDialog(page: Page): Promise<void> {
   const overlay = page.getByTestId('error-dialog-overlay');
@@ -657,6 +710,94 @@ test.describe('Pipeline: per-step metric column headers', () => {
         fullPage: true,
       });
     }
+  });
+
+  test('narrow ANALYSIS, ASPECT, and TOOL groups keep identity and duration collision-free in both themes', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineNarrowStress);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+
+    await page.evaluate(() => {
+      const tag = document.createElement('style');
+      tag.id = 'ov-pl-narrow-stress-width';
+      tag.textContent = '.ov-pipeline { width: 340px !important; max-width: 340px !important; }';
+      document.head.appendChild(tag);
+    });
+
+    const aspectPhase = page.getByTestId('overview-pipeline-phase')
+      .filter({ hasText: 'ASPECT' });
+    await expect(aspectPhase.getByTestId('overview-pipeline-phase-summary'))
+      .toContainText('Attention4/4⚠ 295.8k');
+
+    for (const theme of ['light', 'dark'] as const) {
+      await setTheme(page, theme);
+      await pipeline.screenshot({
+        path: path.join(
+          RESULTS_DIR,
+          `pipeline-narrow-rows-${NARROW_EVIDENCE_PHASE}-${theme}--mocked.png`,
+        ),
+      });
+    }
+
+    const geometry = await page.getByTestId('overview-pipeline-step').evaluateAll((rows) =>
+      rows
+        .filter(row => ['analysis', 'aspect', 'tool'].includes(row.getAttribute('data-phase') ?? ''))
+        .map(row => {
+          const box = row.getBoundingClientRect();
+          const status = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-status"]')!.getBoundingClientRect();
+          const nameCell = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-name-cell"]')!.getBoundingClientRect();
+          const meta = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-meta"]')!.getBoundingClientRect();
+          const timing = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-timing"]')!.getBoundingClientRect();
+          const started = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-started"]')!;
+          const duration = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-duration"]')!.getBoundingClientRect();
+          return {
+            id: row.getAttribute('data-step-id'),
+            overflow: row.scrollWidth - row.clientWidth,
+            statusCenter: status.top + status.height / 2,
+            nameCenter: nameCell.top + nameCell.height / 2,
+            nameWidth: nameCell.width,
+            nameRight: nameCell.right,
+            metaTop: meta.top,
+            timingLeft: timing.left,
+            timingRight: timing.right,
+            durationRight: duration.right,
+            rowRight: box.right,
+            startedDisplay: getComputedStyle(started).display,
+          };
+        }),
+    );
+
+    expect(geometry).toHaveLength(6);
+    for (const row of geometry) {
+      expect(row.overflow, `${row.id} overflow`).toBeLessThanOrEqual(1);
+      expect(Math.abs(row.statusCenter - row.nameCenter), `${row.id} primary baseline`).toBeLessThanOrEqual(3);
+      expect(row.nameWidth, `${row.id} flexible name width`).toBeGreaterThan(80);
+      expect(row.nameRight, `${row.id} name/timing collision`).toBeLessThanOrEqual(row.timingLeft + 1);
+      expect(row.metaTop, `${row.id} metadata should move below the primary line`).toBeGreaterThan(row.nameCenter);
+      expect(row.startedDisplay, `${row.id} timestamp should compact first`).toBe('none');
+      expect(row.durationRight, `${row.id} duration alignment`).toBeLessThanOrEqual(row.rowRight + 1);
+      expect(row.timingRight, `${row.id} timing alignment`).toBeLessThanOrEqual(row.rowRight + 1);
+    }
+
+    const phaseGeometry = await aspectPhase.evaluate((phase) => {
+      const marker = phase.querySelector<HTMLElement>('[data-testid="overview-pipeline-phase-marker"]')!.getBoundingClientRect();
+      const summary = phase.querySelector<HTMLElement>('[data-testid="overview-pipeline-phase-summary"]')!.getBoundingClientRect();
+      const box = phase.getBoundingClientRect();
+      return {
+        overflow: phase.scrollWidth - phase.clientWidth,
+        markerBottom: marker.bottom,
+        summaryTop: summary.top,
+        summaryRight: summary.right,
+        phaseRight: box.right,
+      };
+    });
+    expect(phaseGeometry.overflow).toBeLessThanOrEqual(1);
+    expect(phaseGeometry.summaryTop).toBeGreaterThanOrEqual(phaseGeometry.markerBottom);
+    expect(phaseGeometry.summaryRight).toBeLessThanOrEqual(phaseGeometry.phaseRight + 1);
   });
 
   test('overview content keeps left-aligned prose and tabular measures on ultrawide viewports', async ({ page }) => {

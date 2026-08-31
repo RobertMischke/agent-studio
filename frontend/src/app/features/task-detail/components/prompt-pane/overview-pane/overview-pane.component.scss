@@ -1124,9 +1124,9 @@
 // Responsive degradation, driven by the pipeline block's own inline-size (it
 // sits in a split task-detail pane, so the viewport width is the wrong signal).
 // The columns are dropped from the secondary edge inward, first Cost, then
-// Tokens, by shortening the shared grid template and hiding the matching
-// cells. The metadata track absorbs the remaining width while Time / Duration
-// stay right-pinned. Step name, status, and duration are never dropped.
+// Tokens. At side-sheet width, the timestamp yields too: duration stays on the
+// primary baseline while secondary metadata moves below the flexible name.
+// Step name, status, kind, and duration are never dropped.
 @container ov-pipeline (max-width: 620px) {
   .ov-pl-header,
   .ov-pl-step {
@@ -1167,13 +1167,63 @@
   }
 }
 
-@container ov-pipeline (max-width: 300px) {
+@container ov-pipeline (max-width: 430px) {
+  .ov-pl-header,
+  .ov-pl-step {
+    --ov-pl-grid-cols:
+      var(--ov-pipeline-status-col)
+      var(--ov-pipeline-kind-col)
+      minmax(0, 1fr)
+      52px;
+  }
+
+  .ov-pl-header {
+    &::before { grid-column: 1 / 4; }
+
+    &__timing { grid-column: 4; grid-template-columns: 52px; gap: 0; }
+
+    &__time { display: none; }
+  }
+
+  .ov-pl-step {
+    row-gap: var(--studio-spacing-1);
+
+    &__name-cell { grid-column: 3; grid-row: 1; }
+
+    &__meta {
+      grid-column: 3 / 5;
+      grid-row: 2;
+      max-width: 100%;
+      flex-wrap: wrap;
+      overflow: hidden;
+      white-space: normal;
+    }
+
+    &__timing { grid-column: 4; grid-row: 1; grid-template-columns: 52px; gap: 0; }
+
+    &__started { display: none; }
+  }
+
   .ov-pl-phase {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 14px max-content 16px minmax(0, 1fr);
+    column-gap: var(--studio-spacing-2);
+    row-gap: var(--studio-spacing-1);
+
+    &__marker { grid-column: 1; grid-row: 1; }
+
+    &__label { grid-column: 2; grid-row: 1; min-width: 0; }
+
+    &__info { grid-column: 3; grid-row: 1; }
+
+    &__rule { grid-column: 4; grid-row: 1; min-width: 0; }
   }
 
   .ov-pl-phase__summary {
-    flex: 1 1 100%;
+    grid-column: 2 / 5;
+    grid-row: 2;
+    justify-self: end;
+    max-width: 100%;
     flex-wrap: wrap;
     justify-content: flex-end;
     min-width: 0;
