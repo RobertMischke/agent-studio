@@ -8,13 +8,13 @@ namespace AgentStudio.Cli;
 /// cache. Lives at <c>&lt;TaskRepository&gt;/.runtime/quota-cache.json</c>
 /// (or under <c>AppContext.BaseDirectory/runtime/</c> when no
 /// TaskRepository is configured) so that a backend restart does not
-/// leave the header empty until the first probe completes - which can
+/// leave the header empty until the first probe completes, which can
 /// take 30+ seconds per CLI.
 ///
 /// <para>
 /// Stored format: a flat list of <see cref="QuotaSnapshot"/> records, one
-/// per CLI. Cheap to read on startup, cheap to overwrite after each
-/// successful probe. Tolerant to corruption: a malformed file is logged
+/// per CLI. Cheap to read on startup and cheap to overwrite after each
+/// probe outcome so failure metadata also survives restart. Tolerant to corruption: a malformed file is logged
 /// and ignored, the in-memory cache simply starts empty.
 /// </para>
 /// </summary>
@@ -28,7 +28,10 @@ public sealed class QuotaCacheStore
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        // Response-only age/stale fields keep their default values in the
+        // in-memory cache and are omitted from the durable last-good file.
+        // CapturedAt is non-default on successful readings and is persisted.
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault
     };
 
     private static readonly JsonSerializerOptions ReadOpts = new()

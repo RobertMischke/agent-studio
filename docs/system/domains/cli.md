@@ -69,9 +69,16 @@ CLI execution tests.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
 - Quota reads are cache-only request paths. `GET /api/cli/quota` must never
-  await CLI startup or PTY parsing. Failed refreshes retain the last good
-  values and expose `probeFailedAt`, `cliVersion`, and the probe error so the UI
-  can show an attributable stale marker.
+  start or await CLI startup or PTY parsing. A hosted refresher owns the bounded
+  startup pass and periodic schedule, and each complete probe has a hard
+  timeout. Successful Claude and Codex snapshots persist under the configured
+  task repository's `.runtime/` state and hydrate synchronously on restart.
+  Failed refreshes retain the last good values and expose `capturedAt`,
+  `ageSeconds`, `stale`, `probeFailedAt`, `cliVersion`, and a normalized probe
+  error so the UI can show an attributable stale marker without leaking
+  cancellation text. When the failed attempt used a newer binary than the
+  retained reading, `probeCliVersion` carries that attempted version while
+  `cliVersion` remains attached to the last-good percentages.
 - Claude and Codex version changes are checked after startup and periodically.
   Keep the structured `CLI version changed` log line when editing version or
   self-heal behavior.

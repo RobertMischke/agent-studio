@@ -6,13 +6,13 @@ namespace AgentStudio.Cli;
 /// Orchestrates the per-CLI <see cref="IQuotaProbe"/> instances:
 /// <list type="bullet">
 ///   <item>In-memory cache keyed by CLI type, with a TTL (default 10 min).</item>
-///   <item>Stale-while-revalidate: cached snapshot is returned immediately, a background re-probe
-///         updates the cache when the entry is stale and not currently being refreshed.</item>
-///   <item><see cref="ForceRefreshAsync"/> awaits the next probe and replaces the cached value.</item>
+///   <item>Cache-only reads that never start or await a live CLI process.</item>
+///   <item>Durable last-good snapshots that survive backend restarts.</item>
+///   <item><see cref="RefreshAllAsync"/> awaits probes and replaces cached values.</item>
 ///   <item>Concurrent re-probes for the same CLI are coalesced via per-CLI locks.</item>
 /// </list>
-/// Probing is expensive (each call spawns a CLI in a PTY for several seconds), so callers
-/// should rely on the cache and only force-refresh on user intent or after a job exits.
+/// The hosted refresher owns scheduled probing. Other callers should rely on the cache and
+/// only force-refresh on explicit user intent or after a job exits.
 /// </summary>
 public sealed class QuotaService
 {
@@ -20,7 +20,6 @@ public sealed class QuotaService
     private readonly IReadOnlyDictionary<string, IQuotaProbe> _probes;
     private readonly ConcurrentDictionary<string, QuotaSnapshot> _cache = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
-    private readonly ConcurrentDictionary<string, byte> _backgroundRefreshes = new();
     private readonly TimeSpan _ttl;
     private readonly QuotaCacheStore _store;
     private readonly CliVersionTracker? _versionTracker;
@@ -48,7 +47,13 @@ public sealed class QuotaService
             foreach (var snap in _store.Read())
             {
                 if (string.IsNullOrWhiteSpace(snap.CliType)) continue;
-                _cache[snap.CliType] = snap;
+                var hasLastGood = snap.Windows.Count > 0 || !string.IsNullOrWhiteSpace(snap.Plan);
+                _cache[snap.CliType] = snap with
+                {
+                    CapturedAt = snap.CapturedAt ?? (hasLastGood ? snap.FetchedAt : null),
+                    AgeSeconds = null,
+                    Stale = false
+                };
                 _versionTracker?.Seed(snap.CliType, snap.CliVersion);
             }
             _logger.LogInformation("Hydrated quota cache from disk ({Count} snapshots).", _cache.Count);
@@ -66,12 +71,46 @@ public sealed class QuotaService
 
     public QuotaReport GetCached()
     {
+        var now = DateTime.UtcNow;
         return new QuotaReport
         {
+            At = now,
             TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
-                .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
+                .Select(k => _cache.TryGetValue(k, out var snapshot)
+                    ? WithFreshness(snapshot, now)
+                    : new QuotaSnapshot
+                    {
+                        CliType = k,
+                        FetchedAt = default,
+                        CapturedAt = null,
+                        AgeSeconds = null,
+                        Stale = true
+                    })
                 .ToList()
+        };
+    }
+
+    private QuotaSnapshot WithFreshness(QuotaSnapshot snapshot, DateTime now)
+    {
+        var hasLastGood = snapshot.Windows.Count > 0 || !string.IsNullOrWhiteSpace(snapshot.Plan);
+        if (!hasLastGood)
+        {
+            return snapshot with
+            {
+                CapturedAt = null,
+                AgeSeconds = null,
+                Stale = true
+            };
+        }
+
+        var capturedAt = snapshot.CapturedAt ?? snapshot.FetchedAt;
+        var age = now > capturedAt ? now - capturedAt : TimeSpan.Zero;
+        return snapshot with
+        {
+            CapturedAt = capturedAt,
+            AgeSeconds = (long)Math.Floor(age.TotalSeconds),
+            Stale = snapshot.ProbeFailedAt.HasValue || age > _ttl
         };
     }
 
@@ -84,37 +123,6 @@ public sealed class QuotaService
     {
         if (string.IsNullOrWhiteSpace(cliType)) return null;
         return _cache.TryGetValue(cliType, out var s) ? s : null;
-    }
-
-    /// <summary>
-    /// Returns the cached snapshot for every probe immediately, kicking off a background
-    /// re-probe for any entry that is missing or older than the TTL.
-    /// </summary>
-    public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
-    {
-        // The HTTP request token is deliberately not passed to the refresh.
-        // A disconnected client must not cancel shared cache maintenance, and
-        // no synchronous CLI startup work may run on the GET request thread.
-        _ = ct;
-        foreach (var k in _probes.Keys)
-        {
-            var stale = !_cache.TryGetValue(k, out var s)
-                || (DateTime.UtcNow - (s.ProbeFailedAt ?? s.FetchedAt)) > _ttl;
-            if (stale) QueueBackgroundRefresh(k);
-        }
-        return GetCached();
-    }
-
-    private void QueueBackgroundRefresh(string cliType)
-    {
-        if (!_backgroundRefreshes.TryAdd(cliType, 0)) return;
-
-        _ = Task.Run(async () =>
-        {
-            try { await RefreshAsync(cliType, CancellationToken.None); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Background quota refresh for {Cli} failed", cliType); }
-            finally { _backgroundRefreshes.TryRemove(cliType, out _); }
-        });
     }
 
     /// <summary>Force a re-probe of every CLI and await all of them.</summary>
@@ -147,6 +155,15 @@ public sealed class QuotaService
             {
                 snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
                 snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
+                snap = snap with
+                {
+                    CapturedAt = snap.Suspicious && previous != null
+                        ? previous.CapturedAt ?? previous.FetchedAt
+                        : snap.FetchedAt,
+                    AgeSeconds = null,
+                    Stale = false,
+                    ProbeCliVersion = null
+                };
             }
             _cache[cliType] = snap;
             PersistCache();
@@ -178,7 +195,11 @@ public sealed class QuotaService
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(45));
-        return await probe.ProbeAsync(cts.Token);
+        // Some probe setup (including CLI version discovery) occurs before the
+        // probe reaches its first await. Isolate that synchronous portion too,
+        // so the 45-second boundary covers the complete probe operation.
+        var probeTask = Task.Run(() => probe.ProbeAsync(cts.Token), cts.Token);
+        return await probeTask.WaitAsync(cts.Token);
     }
 
     private static QuotaSnapshot RetainLastGoodOnFailure(QuotaSnapshot? previous, QuotaSnapshot failed)
@@ -193,13 +214,14 @@ public sealed class QuotaService
             return failed with
             {
                 Error = error,
-                ProbeFailedAt = failedAt
+                ProbeFailedAt = failedAt,
+                ProbeCliVersion = failed.CliVersion
             };
         }
 
         return previous! with
         {
-            CliVersion = failed.CliVersion ?? previous.CliVersion,
+            ProbeCliVersion = failed.CliVersion ?? previous.ProbeCliVersion ?? previous.CliVersion,
             ProbeFailedAt = failedAt,
             Error = error,
             RawSample = failed.RawSample ?? previous.RawSample,

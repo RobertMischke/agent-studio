@@ -41,11 +41,29 @@ public record QuotaSnapshot
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
     /// <summary>
+    /// UTC time of the last successful parsed reading. This is the explicit
+    /// API name for <see cref="FetchedAt"/>; the older field remains on the
+    /// wire for compatibility with existing consumers.
+    /// </summary>
+    public DateTime? CapturedAt { get; init; }
+    /// <summary>Whole seconds since <see cref="CapturedAt"/> at response time.</summary>
+    public long? AgeSeconds { get; init; }
+    /// <summary>
+    /// True when the last good reading exceeded the cache TTL, no good reading
+    /// exists yet, or the most recent live probe failed.
+    /// </summary>
+    public bool Stale { get; init; }
+    /// <summary>
     /// Version reported by the CLI's <c>--version</c> command for this probe.
     /// Keeping it on the quota snapshot makes parser drift attributable without
     /// requiring a second operator-side reproduction.
     /// </summary>
     public string? CliVersion { get; init; }
+    /// <summary>
+    /// Version used by the most recent failed attempt when it differs from the
+    /// version attached to the retained last-good reading.
+    /// </summary>
+    public string? ProbeCliVersion { get; init; }
     /// <summary>
     /// UTC time of the most recent failed probe. When this is set,
     /// <see cref="FetchedAt"/>, <see cref="Plan"/>, and <see cref="Windows"/>
