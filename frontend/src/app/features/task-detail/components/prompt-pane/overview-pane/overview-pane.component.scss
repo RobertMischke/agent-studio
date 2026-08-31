@@ -19,9 +19,11 @@
   --ov-pipeline-status-col: 16px;
   --ov-pipeline-kind-col: 26px;
   // The step name is the row's primary information and owns twice the flexible
-  // space of metadata. Both tracks may contract within the row, but the name
-  // keeps a readable floor and secondary model text yields before timing.
-  --ov-pipeline-name-col: minmax(12rem, 2fr);
+  // space of metadata. Both tracks must be allowed to contract all the way to
+  // zero so a split detail pane cannot force the grid wider than its container.
+  // The visible label ellipsizes while its complete explanation stays in the
+  // existing tooltip.
+  --ov-pipeline-name-col: minmax(0, 2fr);
   --ov-pipeline-meta-col: minmax(0, 1fr);
   --ov-pipeline-time-col: 96px;
   --ov-pipeline-tokens-col: 56px;
@@ -554,7 +556,8 @@
   appearance: none;
   -webkit-appearance: none;
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: 14px minmax(64px, max-content) 16px minmax(24px, 1fr) max-content;
   align-items: center;
   gap: var(--studio-spacing-2);
   width: 100%;
@@ -603,7 +606,7 @@
   }
 
   &__rule {
-    flex: 1 1 24px;
+    width: 100%;
     height: 1px;
     background: color-mix(in srgb, var(--ov-pl-phase-accent) 48%, var(--studio-border));
   }
@@ -627,11 +630,10 @@
 
   // Aggregate section state stays readable whether open or collapsed.
   &__summary {
-    flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     gap: var(--studio-spacing-2);
-    margin-left: auto;
+    min-width: 0;
     font-size: 10px;
     color: var(--studio-fg-muted);
   }
@@ -1151,13 +1153,25 @@
 }
 
 @container ov-pipeline (max-width: 460px) {
+  .ov-pl-phase {
+    grid-template-columns: 14px minmax(0, max-content) 16px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .ov-pl-phase__summary {
+    grid-column: 2 / -1;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
   .ov-pl-header,
   .ov-pl-step {
+    --ov-pipeline-time-col: 52px;
     --ov-pl-grid-cols:
       var(--ov-pipeline-status-col)
       var(--ov-pipeline-kind-col)
-      var(--ov-pipeline-name-col)
-      var(--ov-pipeline-meta-col)
+      minmax(0, 3fr)
+      minmax(0, 2fr)
       var(--ov-pipeline-time-col);
   }
 
@@ -1165,19 +1179,17 @@
   .ov-pl-step__tokens {
     display: none;
   }
-}
 
-@container ov-pipeline (max-width: 300px) {
-  .ov-pl-phase {
-    flex-wrap: wrap;
+  .ov-pl-header__timing,
+  .ov-pl-step__timing {
+    grid-template-columns: 52px;
   }
 
-  .ov-pl-phase__summary {
-    flex: 1 1 100%;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    min-width: 0;
-    margin-left: 0;
+  .ov-pl-header__time,
+  .ov-pl-step__started,
+  .ov-pl-step__model,
+  .ov-pl-step__parallel-note {
+    display: none;
   }
 }
 

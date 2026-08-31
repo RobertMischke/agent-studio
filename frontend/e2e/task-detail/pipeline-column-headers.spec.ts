@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
+import { setTheme } from '../helpers/theme';
 
 /**
  * Pipeline column headers (Time / Duration / Tokens / Cost) and phase headers.
@@ -190,6 +191,59 @@ function pipelineWithDisabledStep() {
     config: {
       ...body.config,
       'post-drift-adr-code': { enabled: false, model: null, mode: null },
+    },
+  };
+}
+
+function pipelineWithCrowdedNarrowGroups() {
+  const crowdedPost = [
+    step('analysis-regression-radar', 'Regression radar analysis with extended provenance', 'analysis', 'sequential'),
+    step('aspect-requirement-fit', 'Requirement fit across every acceptance criterion', 'aspect', 'parallel'),
+    step('aspect-code-quality', 'Code quality and maintainability review', 'aspect', 'parallel'),
+    step('aspect-tests-and-evidence', 'Tests and durable review evidence', 'aspect', 'parallel'),
+    step('aspect-documentation-impact', 'Documentation and operator workflow impact', 'aspect', 'parallel'),
+    step('post-git-commit-attribution', 'Git attribution and provenance tooling', 'tool', 'sequential'),
+  ];
+  const metricSteps = [
+    costStep('analysis-regression-radar', 'claude-haiku-4-5', 6_200, 0.0093),
+    costStep('aspect-requirement-fit', 'claude-haiku-4-5', 20_000, 0.0300),
+    costStep('aspect-code-quality', 'claude-haiku-4-5', 24_000, 0.0360),
+    costStep('aspect-tests-and-evidence', 'claude-haiku-4-5', 25_800, 0.0387),
+    costStep('aspect-documentation-impact', 'claude-haiku-4-5', 26_000, 0.0390),
+    costStep('post-git-commit-attribution', 'claude-haiku-4-5', 4_800, 0.0072),
+  ];
+  return {
+    ...pipelineWithMetrics(),
+    pipeline: {
+      ...basePipeline(),
+      post: crowdedPost,
+      allSteps: [...pre, ...core, ...crowdedPost],
+    },
+    execution: {
+      ...pipelineWithMetrics().execution,
+      steps: [
+        execStep('pre-loop-guard', 'module', 'claude-haiku-4-5'),
+        execStep('core-agent-run', 'core', 'claude-opus-4-7'),
+        execStep('analysis-regression-radar', 'analysis', 'claude-haiku-4-5'),
+        execStep('aspect-requirement-fit', 'aspect', 'claude-haiku-4-5', { verdict: 'pass' }),
+        execStep('aspect-code-quality', 'aspect', 'claude-haiku-4-5', {
+          status: 'failed', verdict: 'block', error: 'A blocking maintainability concern remains.',
+        }),
+        execStep('aspect-tests-and-evidence', 'aspect', 'claude-haiku-4-5', {
+          verdict: 'concerns', concernSummary: 'The narrow-width evidence was missing.',
+        }),
+        execStep('aspect-documentation-impact', 'aspect', 'claude-haiku-4-5', { verdict: 'pass' }),
+        execStep('post-git-commit-attribution', 'tool', 'claude-haiku-4-5'),
+      ],
+    },
+    cost: {
+      ...pipelineWithMetrics().cost,
+      steps: [
+        costStep('pre-loop-guard', 'claude-haiku-4-5', 1_200, 0.0021),
+        costStep('core-agent-run', 'claude-opus-4-7', 248_000, 4.37),
+        ...metricSteps,
+      ],
+      totalTokens: 356_000,
     },
   };
 }
@@ -657,6 +711,136 @@ test.describe('Pipeline: per-step metric column headers', () => {
         fullPage: true,
       });
     }
+  });
+
+  test('crowded analysis, aspect, and tool groups stay collision-free at side-sheet width', async ({ page }) => {
+    await installRoutes(page, '4-auto-review', pipelineWithCrowdedNarrowGroups);
+    await page.goto(`/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`);
+    await dismissErrorDialog(page);
+
+    const pipeline = page.getByTestId('overview-pipeline');
+    await expect(pipeline).toBeVisible({ timeout: 10_000 });
+    await expandAllPipelineSections(page);
+
+    await page.evaluate(() => {
+      const tag = document.createElement('style');
+      tag.id = 'ov-pl-crowded-width';
+      tag.textContent = '.ov-pipeline { width: 320px !important; max-width: 320px !important; }';
+      document.head.appendChild(tag);
+    });
+    const pipelineSteps = page.getByTestId('overview-pipeline-steps');
+    await expect(pipelineSteps).toBeVisible();
+
+    const aspectPhase = page.locator('[data-testid="overview-pipeline-phase"][data-phase="aspect"]');
+    const aspectSummary = aspectPhase.getByTestId('overview-pipeline-phase-summary');
+    await expect(aspectSummary).toContainText('Attention');
+    await expect(aspectSummary.getByTestId('overview-pipeline-phase-ran')).toHaveText('4/4');
+    await expect(aspectSummary.getByTestId('overview-pipeline-phase-concern')).toHaveText('⚠ 2');
+    await expect(aspectSummary).toContainText('95.8k');
+
+    if (RESULTS_DIR) {
+      await pipelineSteps.scrollIntoViewIfNeeded();
+      await page.evaluate(() => {
+        const tag = document.createElement('style');
+        tag.id = 'ov-pl-before-layout';
+        tag.textContent = `
+          .ov-pl-phase { display: flex !important; }
+          .ov-pl-phase__rule { flex: 1 1 24px !important; width: auto !important; }
+          .ov-pl-phase__summary {
+            flex: 0 0 auto !important;
+            flex-wrap: nowrap !important;
+            margin-left: auto !important;
+          }
+          .ov-pl-header, .ov-pl-step {
+            --ov-pipeline-time-col: 96px !important;
+            --ov-pl-grid-cols: 16px 26px minmax(12rem, 2fr) minmax(0, 1fr) 96px !important;
+          }
+          .ov-pl-header__timing, .ov-pl-step__timing { grid-template-columns: 38px 52px !important; }
+          .ov-pl-header__time, .ov-pl-step__started, .ov-pl-step__model { display: inline !important; }
+          .ov-pl-step__parallel-note { display: inline-flex !important; }
+        `;
+        document.head.appendChild(tag);
+      });
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await pipelineSteps.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-narrow-before-${theme}--mocked.png`),
+        });
+      }
+      await page.evaluate(() => document.getElementById('ov-pl-before-layout')?.remove());
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        await pipelineSteps.screenshot({
+          path: path.join(RESULTS_DIR, `pipeline-narrow-after-${theme}--mocked.png`),
+        });
+      }
+    }
+
+    const geometry = await page.evaluate(() => {
+      const visibleRect = (root: ParentNode, selector: string): DOMRect => {
+        const element = root.querySelector<HTMLElement>(selector);
+        if (!element) throw new Error(`Missing ${selector}`);
+        return element.getBoundingClientRect();
+      };
+      const rows = Array.from(document.querySelectorAll<HTMLElement>(
+        '[data-testid="overview-pipeline-step"][data-phase="aspect"]',
+      ));
+      const rowMeasurements = rows.map((row) => {
+        const cells = [
+          visibleRect(row, '[data-testid="overview-pipeline-step-status"]'),
+          visibleRect(row, '[role="img"][aria-label="Aspect step"]'),
+          visibleRect(row, '[data-testid="overview-pipeline-step-name-cell"]'),
+          visibleRect(row, '[data-testid="overview-pipeline-step-meta"]'),
+          visibleRect(row, '[data-testid="overview-pipeline-step-timing"]'),
+        ];
+        const name = row.querySelector<HTMLElement>('[data-testid="overview-pipeline-step-name"]')!;
+        const details = visibleRect(row, '[data-testid="overview-pipeline-step-details"]');
+        return {
+          overflow: row.scrollWidth - row.clientWidth,
+          gaps: cells.slice(0, -1).map((cell, index) => cells[index + 1].left - cell.right),
+          centreSpread: Math.max(...cells.map(cell => cell.top + cell.height / 2))
+            - Math.min(...cells.map(cell => cell.top + cell.height / 2)),
+          widths: {
+            status: cells[0].width,
+            kind: cells[1].width,
+            details: details.width,
+          },
+          nameTruncated: name.scrollWidth > name.clientWidth,
+          nameDetailsGap: details.left - name.getBoundingClientRect().right,
+        };
+      });
+      const headers = Array.from(document.querySelectorAll<HTMLElement>(
+        '[data-testid="overview-pipeline-phase"][data-phase="analysis"], '
+          + '[data-testid="overview-pipeline-phase"][data-phase="aspect"], '
+          + '[data-testid="overview-pipeline-phase"][data-phase="tool"]',
+      ));
+      const aspectHeader = headers.find(header => header.dataset['phase'] === 'aspect')!;
+      const marker = visibleRect(aspectHeader, '[data-testid="overview-pipeline-phase-marker"]');
+      const summary = visibleRect(aspectHeader, '[data-testid="overview-pipeline-phase-summary"]');
+      return {
+        rows: rowMeasurements,
+        headerOverflow: Math.max(...headers.map(header => header.scrollWidth - header.clientWidth)),
+        headerSummaryGap: summary.top - marker.bottom,
+      };
+    });
+
+    expect(geometry.rows).toHaveLength(4);
+    expect(geometry.headerOverflow, `header overflow ${geometry.headerOverflow}px`).toBeLessThanOrEqual(1);
+    expect(geometry.headerSummaryGap, 'summary should wrap below the collapse control').toBeGreaterThanOrEqual(0);
+    for (const [index, row] of geometry.rows.entries()) {
+      expect(row.overflow, `aspect row ${index} overflow ${row.overflow}px`).toBeLessThanOrEqual(1);
+      expect(Math.min(...row.gaps), `aspect row ${index} gaps ${JSON.stringify(row.gaps)}`).toBeGreaterThanOrEqual(-1);
+      expect(row.centreSpread, `aspect row ${index} centre spread ${row.centreSpread}px`).toBeLessThanOrEqual(1);
+      expect(row.widths.status, `aspect row ${index} status width`).toBeGreaterThan(0);
+      expect(row.widths.kind, `aspect row ${index} kind width`).toBeGreaterThanOrEqual(20);
+      expect(row.widths.details, `aspect row ${index} details width`).toBeGreaterThanOrEqual(20);
+      expect(row.nameTruncated, `aspect row ${index} long name should ellipsize`).toBe(true);
+      expect(row.nameDetailsGap, `aspect row ${index} name/details gap`).toBeGreaterThanOrEqual(-1);
+    }
+
+    const firstAspect = page.locator('[data-testid="overview-pipeline-step"][data-phase="aspect"]').first();
+    await expect(firstAspect.getByTestId('overview-pipeline-step-started')).toBeHidden();
+    await expect(firstAspect.getByTestId('overview-pipeline-step-duration')).toBeVisible();
   });
 
   test('overview content keeps left-aligned prose and tabular measures on ultrawide viewports', async ({ page }) => {
