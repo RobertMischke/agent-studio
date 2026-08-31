@@ -89,7 +89,7 @@ describe('PaneTabsComponent (smoke)', () => {
       { id: 'docs', label: 'Docs', badge: 4 },
     ]);
     fixture.componentRef.setInput('activeTabId', 'code-review');
-    fixture.componentRef.setInput('overflowAfter', 3);
+    fixture.componentInstance.availableWidth.set(280);
     fixture.detectChanges();
 
     expect(fixture.componentInstance.inlineTabs().map(tab => tab.id)).toEqual([
@@ -120,7 +120,7 @@ describe('PaneTabsComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelectorAll('[data-testid="pane-tabs-overflow"]')).toHaveLength(0);
   });
 
-  it('reduces the inline capacity from the observed strip width and aggregates hidden badges', async () => {
+  it('shows overflow only when tabs do not fit and keeps a hidden tab badge in its menu row', async () => {
     await TestBed.configureTestingModule({
       imports: [PaneTabsComponent],
       providers: [
@@ -131,6 +131,18 @@ describe('PaneTabsComponent (smoke)', () => {
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(PaneTabsComponent);
+    fixture.componentRef.setInput('tabs', [
+      { id: 'task', label: 'Task' },
+      { id: 'result', label: 'Result' },
+    ]);
+    fixture.componentRef.setInput('activeTabId', 'task');
+    fixture.componentInstance.availableWidth.set(480);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.inlineTabs().map(tab => tab.id)).toEqual(['task', 'result']);
+    expect(fixture.componentInstance.overflowTabs()).toEqual([]);
+    expect(fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow"]')).toBeNull();
+
     fixture.componentRef.setInput('tabs', [
       { id: 'overview', label: 'Overview' },
       { id: 'timeline', label: 'Timeline' },
@@ -154,7 +166,13 @@ describe('PaneTabsComponent (smoke)', () => {
       'docs',
     ]);
     expect(fixture.componentInstance.overflowBadgeTotal()).toBe(6);
-    expect(fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow-badge"]')?.textContent?.trim()).toBe('6');
+    expect(fixture.componentInstance.overflowMenuItems()).toEqual([
+      expect.objectContaining({ id: 'timeline', label: 'Timeline' }),
+      expect.objectContaining({ id: 'evidence', label: 'Evidence', trailingBadge: '2' }),
+      expect.objectContaining({ id: 'docs', label: 'Docs', trailingBadge: '4' }),
+    ]);
+    expect(fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow-badge"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toMatch(/⋯\s*6/);
     expect(fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow"]')?.getAttribute('aria-label')).toBe(
       'More tabs: 3 hidden tabs, 6 badge items',
     );

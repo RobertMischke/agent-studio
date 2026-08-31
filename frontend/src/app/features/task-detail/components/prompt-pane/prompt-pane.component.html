@@ -12,7 +12,6 @@
                      ariaLabel="Prompt pane tabs"
                      [tabs]="promptTabs()"
                      [activeTabId]="activeTab()"
-                     [overflowAfter]="maximized() ? null : 3"
                      (click)="focusTabSurface()"
                      (tabChange)="onPromptTabChange($event)" />
     </ng-container>

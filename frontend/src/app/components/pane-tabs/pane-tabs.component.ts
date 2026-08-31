@@ -85,6 +85,8 @@ export type PaneTabsVariant = 'header' | 'pill';
 export class PaneTabsComponent implements AfterViewInit, OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private resizeObserver: ResizeObserver | null = null;
+  private measurementFrame: number | null = null;
+  private destroyed = false;
 
   readonly tabs = input.required<readonly PaneTabDef[]>();
   readonly activeTabId = input.required<string>();
@@ -93,14 +95,6 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
   readonly listModifier = input<string | null>(null);
   /** `aria-label` for the tablist container. */
   readonly ariaLabel = input<string | null>(null);
-  /**
-   * Optional responsive inline limit. Remaining tabs move into the shared
-   * text-only overflow menu. If the active tab would be hidden, it replaces
-   * the final inline slot so current location remains visible.
-  */
-  readonly overflowAfter = input<number | null>(null);
-  /** Host width below which `overflowAfter` is applied. */
-  readonly overflowBelow = input<number>(440);
   /** Minimum readable width reserved for each inline tab. */
   readonly minimumTabWidth = input<number>(72);
   /** Width reserved for the overflow trigger, including its aggregate badge. */
@@ -113,9 +107,7 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
 
   readonly inlineTabs = computed<readonly PaneTabDef[]>(() => {
     const tabs = this.tabs();
-    const requestedLimit = this.overflowAfter();
     const width = this.availableWidth();
-    const compact = width === null || width < this.overflowBelow();
     const minimumTabWidth = Math.max(1, this.minimumTabWidth());
     const allTabsFit = width === null || tabs.length * minimumTabWidth <= width;
     const widthLimit = allTabsFit
@@ -127,10 +119,7 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
               minimumTabWidth,
           ),
         );
-    const requestedWidthLimit = compact && requestedLimit !== null
-      ? Math.max(1, requestedLimit)
-      : tabs.length;
-    const limit = Math.min(tabs.length, widthLimit, requestedWidthLimit);
+    const limit = Math.min(tabs.length, widthLimit);
     if (limit >= tabs.length) return tabs;
 
     const visible = tabs.slice(0, limit);
@@ -184,17 +173,53 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
   });
 
   ngAfterViewInit(): void {
-    if (typeof ResizeObserver === 'undefined') return;
-    this.resizeObserver = new ResizeObserver(([entry]) => {
-      if (!entry) return;
-      this.availableWidth.set(entry.contentRect.width);
-      if (this.overflowTabs().length === 0) this.closeOverflow();
-    });
-    this.resizeObserver.observe(this.host.nativeElement);
+    const host = this.host.nativeElement;
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.scheduleMeasurement());
+      this.resizeObserver.observe(host);
+      if (host.parentElement) this.resizeObserver.observe(host.parentElement);
+    }
+
+    // The header gives this flex item exactly the space left after telemetry,
+    // info, maximize, and close controls. Read that laid-out width instead of
+    // applying a tab-count breakpoint that can manufacture overflow in empty
+    // space. A second pass after fonts settle prevents an early zero or stale
+    // glyph layout from becoming the lasting overflow state.
+    this.scheduleMeasurement();
+    const fonts = host.ownerDocument.fonts;
+    if (fonts) void fonts.ready.then(() => this.scheduleMeasurement());
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.resizeObserver?.disconnect();
+    const view = this.host.nativeElement.ownerDocument.defaultView;
+    if (view && this.measurementFrame !== null) {
+      view.cancelAnimationFrame(this.measurementFrame);
+    }
+  }
+
+  private scheduleMeasurement(): void {
+    if (this.destroyed || this.measurementFrame !== null) return;
+    const view = this.host.nativeElement.ownerDocument.defaultView;
+    if (!view || typeof view.requestAnimationFrame !== 'function') {
+      this.measureAvailableWidth();
+      return;
+    }
+    this.measurementFrame = view.requestAnimationFrame(() => {
+      this.measurementFrame = null;
+      this.measureAvailableWidth();
+    });
+  }
+
+  private measureAvailableWidth(): void {
+    if (this.destroyed) return;
+    const width = this.host.nativeElement.getBoundingClientRect().width;
+    // Hidden or not-yet-laid-out panes report zero. Keep the unlatched null
+    // state (all tabs inline) until a real layout measurement is available.
+    if (width <= 0) return;
+    this.availableWidth.set(width);
+    if (this.overflowTabs().length === 0) this.closeOverflow();
   }
 
   trackTab(_index: number, tab: PaneTabDef): string {

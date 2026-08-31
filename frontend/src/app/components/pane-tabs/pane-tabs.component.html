@@ -36,16 +36,9 @@
             data-testid="pane-tabs-overflow"
             [attr.aria-label]="overflowAriaLabel()"
             aria-haspopup="menu"
-            [attr.aria-expanded]="overflowOpen()"
+      [attr.aria-expanded]="overflowOpen()"
             (click)="toggleOverflow($event)">
       <span aria-hidden="true">⋯</span>
-      @if (overflowBadgeTotal(); as badgeTotal) {
-        <app-count-badge class="pane-tab__overflow-badge"
-                         [value]="badgeTotal"
-                         tone="default"
-                         variant="pane-tab"
-                         data-testid="pane-tabs-overflow-badge" />
-      }
     </button>
   }
 </div>
