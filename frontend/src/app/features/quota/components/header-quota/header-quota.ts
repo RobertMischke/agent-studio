@@ -16,7 +16,7 @@ import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../models/quota
 import { cliTypeIcon } from '../../../../services/format.util';
 import { QuotaApiService } from '../../services/quota-api.service';
 import { JobsHubClient } from '../../../../services/jobs-hub-client.service';
-import { quotaProbeFailureLabel, quotaSnapshotIsStale } from '../../quota-freshness.util';
+import { quotaProbeFailureLabel, quotaSnapshotIsStale, quotaVisibleError } from '../../quota-freshness.util';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 
 type Tone = 'ok' | 'warn' | 'hot' | 'unknown';
@@ -173,7 +173,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   }
 
   private buildCard(s: QuotaSnapshot, ttlMs: number, now: number): QuotaCardModel {
-    const fetchedMs = s.fetchedAt ? Date.parse(s.fetchedAt) : NaN;
+    const capturedAt = s.capturedAt ?? s.fetchedAt;
+    const fetchedMs = capturedAt ? Date.parse(capturedAt) : NaN;
     const ageMs = Number.isFinite(fetchedMs) ? Math.max(0, now - fetchedMs) : Number.POSITIVE_INFINITY;
     const stale = quotaSnapshotIsStale(s, ttlMs, now);
     const freshness = !s.fetchedAt
@@ -187,7 +188,8 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const probeFailureLabel = s.windows.length > 0 || !!s.plan
       ? quotaProbeFailureLabel(s)
       : null;
-    const unavailableError = !!s.error && s.windows.length === 0;
+    const visibleError = quotaVisibleError(s.error);
+    const unavailableError = !!visibleError && s.windows.length === 0;
     const tone = this.cardTone(shortWindow, weekWindow, unavailableError, primary);
     const state = this.cardState(tone, stale, unavailableError, shortWindow, weekWindow, primary);
     return {
@@ -198,11 +200,11 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       chips,
       tone,
       state,
-      fetchedAt: s.fetchedAt,
+      fetchedAt: capturedAt,
       stale,
       freshness,
       windows: s.windows,
-      error: s.error,
+      error: visibleError,
       probeFailureLabel,
       source: s.source
     };

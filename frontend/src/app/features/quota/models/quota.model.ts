@@ -26,6 +26,12 @@ export interface QuotaWindow {
 export interface QuotaSnapshot {
   cliType: CliType;
   fetchedAt: string;
+  /** Explicit wire alias for fetchedAt: the last-good capture time. */
+  capturedAt?: string;
+  /** Age of the last-good capture when the backend built this response. */
+  ageSeconds?: number | null;
+  /** Backend-projected stale flag; clients still advance age locally between polls. */
+  stale?: boolean;
   /** CLI `--version` output recorded alongside this probe. */
   cliVersion?: string | null;
   /** Most recent failed attempt; fetchedAt remains the last-good data time. */

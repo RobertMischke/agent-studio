@@ -13,7 +13,7 @@
     @if (failureLabel(); as failure) {
       <div class="cum__stale"
            data-testid="cli-usage-probe-stale"
-           [cacTooltip]="row()?.error ?? failure">
+           [cacTooltip]="failure">
         {{ failure }} · showing last-good quota values
       </div>
     } @else if (row()?.error; as err) {
@@ -28,7 +28,7 @@
         }
       </div>
       @if (windowViews().length === 0) {
-        <p class="cum__empty">No quota window data.</p>
+        <p class="cum__empty">No saved quota reading yet. A background probe will refresh this automatically.</p>
       } @else {
         <ul class="cum__windows" data-testid="cli-usage-modal-windows">
           @for (w of windowViews(); track w.label) {

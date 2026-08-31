@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QuotaSnapshot } from './models/quota.model';
-import { quotaProbeFailureLabel, quotaSnapshotIsStale } from './quota-freshness.util';
+import { quotaProbeFailureLabel, quotaSnapshotIsStale, quotaVisibleError } from './quota-freshness.util';
 
 const snapshot: QuotaSnapshot = {
   cliType: 'codex',
@@ -21,7 +21,13 @@ describe('quota freshness', () => {
 
   it('attributes the failed attempt to the exact CLI version', () => {
     const label = quotaProbeFailureLabel(snapshot);
+    expect(label).toContain('Stale since');
     expect(label).toContain('probe failed');
-    expect(label).toContain('codex 0.149.0');
+    expect(label).toContain('Codex 0.149.0');
+  });
+
+  it('never exposes cancellation implementation wording from an older backend', () => {
+    expect(quotaVisibleError('A task was canceled.'))
+      .toBe('Quota probe timed out before the CLI panel rendered.');
   });
 });

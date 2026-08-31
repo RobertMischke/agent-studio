@@ -20,24 +20,29 @@ public sealed class QuotaService
     private readonly IReadOnlyDictionary<string, IQuotaProbe> _probes;
     private readonly ConcurrentDictionary<string, QuotaSnapshot> _cache = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
-    private readonly ConcurrentDictionary<string, byte> _backgroundRefreshes = new();
     private readonly TimeSpan _ttl;
+    private readonly TimeSpan _probeTimeout;
     private readonly QuotaCacheStore _store;
     private readonly CliVersionTracker? _versionTracker;
+    private readonly TimeProvider _time;
 
     public QuotaService(
         ILogger<QuotaService> logger,
         IEnumerable<IQuotaProbe> probes,
         IConfiguration configuration,
         QuotaCacheStore store,
-        CliVersionTracker? versionTracker = null)
+        CliVersionTracker? versionTracker = null,
+        TimeProvider? time = null)
     {
         _logger = logger;
         _probes = probes.ToDictionary(p => p.CliType, StringComparer.OrdinalIgnoreCase);
         var ttlSec = int.TryParse(configuration["Quota:TtlSeconds"], out var t) ? t : 600;
         _ttl = TimeSpan.FromSeconds(ttlSec);
+        var timeoutSec = int.TryParse(configuration["Quota:ProbeTimeoutSeconds"], out var timeout) ? timeout : 45;
+        _probeTimeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSec, 5, 120));
         _store = store;
         _versionTracker = versionTracker;
+        _time = time ?? TimeProvider.System;
 
         // Hydrate the in-memory cache from disk on startup so the
         // header / strip have something to render before the first
@@ -66,11 +71,15 @@ public sealed class QuotaService
 
     public QuotaReport GetCached()
     {
+        var now = _time.GetUtcNow().UtcDateTime;
         return new QuotaReport
         {
+            At = now,
             TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
-                .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
+                .Select(k => _cache.TryGetValue(k, out var s)
+                    ? ProjectFreshness(s, now)
+                    : new QuotaSnapshot { CliType = k, FetchedAt = now, Stale = true })
                 .ToList()
         };
     }
@@ -87,34 +96,13 @@ public sealed class QuotaService
     }
 
     /// <summary>
-    /// Returns the cached snapshot for every probe immediately, kicking off a background
-    /// re-probe for any entry that is missing or older than the TTL.
+    /// Compatibility alias for the cache-only request path. Refresh scheduling
+    /// belongs to <see cref="QuotaRefreshHostedService"/>, never to an HTTP GET.
     /// </summary>
     public QuotaReport GetWithBackgroundRefresh(CancellationToken ct = default)
     {
-        // The HTTP request token is deliberately not passed to the refresh.
-        // A disconnected client must not cancel shared cache maintenance, and
-        // no synchronous CLI startup work may run on the GET request thread.
         _ = ct;
-        foreach (var k in _probes.Keys)
-        {
-            var stale = !_cache.TryGetValue(k, out var s)
-                || (DateTime.UtcNow - (s.ProbeFailedAt ?? s.FetchedAt)) > _ttl;
-            if (stale) QueueBackgroundRefresh(k);
-        }
         return GetCached();
-    }
-
-    private void QueueBackgroundRefresh(string cliType)
-    {
-        if (!_backgroundRefreshes.TryAdd(cliType, 0)) return;
-
-        _ = Task.Run(async () =>
-        {
-            try { await RefreshAsync(cliType, CancellationToken.None); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Background quota refresh for {Cli} failed", cliType); }
-            finally { _backgroundRefreshes.TryRemove(cliType, out _); }
-        });
     }
 
     /// <summary>Force a re-probe of every CLI and await all of them.</summary>
@@ -146,7 +134,7 @@ public sealed class QuotaService
             else
             {
                 snap = await ReconcileSuspiciousDropAsync(cliType, probe, previous, snap, ct);
-                snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, DateTime.UtcNow);
+                snap = QuotaWindowProjection.AnchorWindowStarts(previous, snap, _time.GetUtcNow().UtcDateTime);
             }
             _cache[cliType] = snap;
             PersistCache();
@@ -174,11 +162,21 @@ public sealed class QuotaService
         finally { sem.Release(); }
     }
 
-    private static async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
+    private async Task<QuotaSnapshot> ProbeOnceAsync(IQuotaProbe probe, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(45));
+        cts.CancelAfter(_probeTimeout);
         return await probe.ProbeAsync(cts.Token);
+    }
+
+    private QuotaSnapshot ProjectFreshness(QuotaSnapshot snapshot, DateTime now)
+    {
+        var age = now <= snapshot.FetchedAt ? TimeSpan.Zero : now - snapshot.FetchedAt;
+        return snapshot with
+        {
+            AgeSeconds = (long)Math.Floor(age.TotalSeconds),
+            Stale = snapshot.ProbeFailedAt.HasValue || age > _ttl
+        };
     }
 
     private static QuotaSnapshot RetainLastGoodOnFailure(QuotaSnapshot? previous, QuotaSnapshot failed)

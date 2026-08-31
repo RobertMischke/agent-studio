@@ -33,7 +33,7 @@
       @if (card.probeFailureLabel) {
         <span class="hquota__stale-label"
               data-testid="hquota-stale-marker"
-              [cacTooltip]="card.error ?? card.probeFailureLabel">stale</span>
+              [cacTooltip]="card.probeFailureLabel">stale</span>
       } @else if (card.stale) {
         <span class="hquota__stale-dot" aria-label="Stale snapshot">●</span>
       }

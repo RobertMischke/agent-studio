@@ -6,19 +6,34 @@ export function quotaSnapshotIsStale(
   now: number,
 ): boolean {
   if (snapshot.probeFailedAt) return true;
-  const fetchedMs = snapshot.fetchedAt ? Date.parse(snapshot.fetchedAt) : NaN;
+  if (snapshot.stale === true) return true;
+  const fetchedMs = Date.parse(snapshot.capturedAt ?? snapshot.fetchedAt ?? '');
   return !Number.isFinite(fetchedMs) || Math.max(0, now - fetchedMs) > ttlMs;
 }
 
 export function quotaProbeFailureLabel(snapshot: QuotaSnapshot): string | null {
   if (!snapshot.probeFailedAt) return null;
   const failedMs = Date.parse(snapshot.probeFailedAt);
-  const time = Number.isFinite(failedMs)
-    ? new Date(failedMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-    : 'unknown time';
-  const cli = snapshot.cliType.toLowerCase();
+  const capturedMs = Date.parse(snapshot.capturedAt ?? snapshot.fetchedAt ?? '');
+  const failedTime = formatTime(failedMs);
+  const capturedTime = formatTime(capturedMs);
+  const cli = snapshot.cliType.slice(0, 1).toUpperCase() + snapshot.cliType.slice(1).toLowerCase();
   const version = normalizedVersion(snapshot.cliVersion);
-  return `probe failed ${time}, ${cli}${version ? ` ${version}` : ''}`;
+  return `Stale since ${capturedTime}, probe failed ${failedTime} · ${cli}${version ? ` ${version}` : ''}`;
+}
+
+/** Keep runtime cancellation wording out of every quota surface, including old backends. */
+export function quotaVisibleError(error: string | null | undefined): string | null {
+  if (!error?.trim()) return null;
+  return /(?:task|operation) was cancel(?:l)?ed/i.test(error)
+    ? 'Quota probe timed out before the CLI panel rendered.'
+    : error;
+}
+
+function formatTime(value: number): string {
+  return Number.isFinite(value)
+    ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    : 'unknown time';
 }
 
 function normalizedVersion(raw: string | null | undefined): string | null {

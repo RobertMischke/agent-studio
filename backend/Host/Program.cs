@@ -778,7 +778,11 @@ builder.Services.AddSingleton<NpmGlobalInstaller>();
 builder.Services.AddSingleton<LocalCliRepairService>();
 builder.Services.AddSingleton<QuotaService>();
 if (!builder.Environment.IsEnvironment("Test") && !underTestHost)
+{
     builder.Services.AddHostedService<CliVersionMonitorHostedService>();
+    if (!publicDemoExecutionProfile)
+        builder.Services.AddHostedService<QuotaRefreshHostedService>();
+}
 builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddSingleton<CliQuotaWaitPolicyService>();
 builder.Services.AddSingleton<CliQuotaFallbackService>();

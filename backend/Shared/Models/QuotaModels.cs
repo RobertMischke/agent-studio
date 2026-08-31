@@ -41,6 +41,19 @@ public record QuotaSnapshot
     public string CliType { get; init; } = "";
     public DateTime FetchedAt { get; init; } = DateTime.UtcNow;
     /// <summary>
+    /// Wire-contract name for the time at which the last good values were
+    /// captured. <see cref="FetchedAt"/> remains for compatibility with
+    /// existing consumers and persisted snapshots.
+    /// </summary>
+    public DateTime CapturedAt => FetchedAt;
+    /// <summary>Age of the last good reading when this response was built.</summary>
+    public long? AgeSeconds { get; init; }
+    /// <summary>
+    /// True when the last good reading is older than the cache TTL or a newer
+    /// probe failed. This is projected at response time and is not probe state.
+    /// </summary>
+    public bool Stale { get; init; }
+    /// <summary>
     /// Version reported by the CLI's <c>--version</c> command for this probe.
     /// Keeping it on the quota snapshot makes parser drift attributable without
     /// requiring a second operator-side reproduction.

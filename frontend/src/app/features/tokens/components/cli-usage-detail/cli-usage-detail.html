@@ -110,6 +110,7 @@
             <p>
               {{ row.plan ?? 'No plan reported' }}
               @if (row.source) { <span> · {{ row.source }}</span> }
+              @if (row.cliVersion) { <span> · CLI {{ row.cliVersion }}</span> }
               <span> · {{ row.freshness }}</span>
             </p>
           </div>
@@ -126,7 +127,7 @@
         @if (row.showingLastGood && row.probeFailureLabel) {
           <div class="cud__stale"
                data-testid="cli-usage-detail-probe-stale"
-               [cacTooltip]="row.error ?? row.probeFailureLabel">
+               [cacTooltip]="row.probeFailureLabel">
             {{ row.probeFailureLabel }} · showing last-good quota values
           </div>
         } @else if (row.error) {
@@ -137,7 +138,7 @@
           <div class="cud__panel">
             <h5>Quota windows</h5>
             @if (row.windows.length === 0) {
-              <p class="cud__empty">No quota window data.</p>
+              <p class="cud__empty">No saved quota reading yet. A background probe will refresh this automatically.</p>
             } @else {
               <table>
                 <thead>

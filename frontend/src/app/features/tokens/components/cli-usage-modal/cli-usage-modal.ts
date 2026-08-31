@@ -97,6 +97,7 @@ export class CliUsageModalComponent {
     if (!r) return 'No data yet';
     const parts: string[] = [r.plan ?? 'No plan reported'];
     if (r.source) parts.push(r.source);
+    if (r.cliVersion) parts.push(`CLI ${r.cliVersion}`);
     parts.push(r.freshness);
     return parts.join(' · ');
   });

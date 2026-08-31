@@ -143,7 +143,8 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await expect(beforeCard).toHaveAttribute('data-state', 'error');
     await beforeCard.click();
     let modal = page.getByTestId('cli-usage-modal-codex');
-    await expect(modal).toContainText('A task was canceled.');
+    await expect(modal).toContainText('Quota probe timed out before the CLI panel rendered.');
+    await expect(modal).not.toContainText('A task was canceled.');
     await expect(modal.getByTestId('cli-usage-modal-windows')).toHaveCount(0);
     await modal.screenshot({ path: `${SHOT_DIR}/quota-probe-before--mocked.png` });
 
@@ -176,8 +177,9 @@ test.describe('Status bar quota: Codex %-only payload', () => {
     await card.click();
     modal = page.getByTestId('cli-usage-modal-codex');
     const stale = modal.getByTestId('cli-usage-probe-stale');
+    await expect(stale).toContainText('Stale since');
     await expect(stale).toContainText('probe failed');
-    await expect(stale).toContainText('codex 0.149.0');
+    await expect(stale).toContainText('Codex 0.149.0');
     await expect(stale).toContainText('showing last-good quota values');
     await expect(modal.getByText('61% used')).toBeVisible();
     await stale.hover();
