@@ -4,8 +4,8 @@ import type { TaskDetail } from '../../../app/models/task.model';
 
 /**
  * Isolated render of the REAL {@link ResultViewComponent} across the case
- * families that pick distinct overview layouts, plus the two new quality-head
- * metric chips (files changed, tests passed). Backend-free: each card is built
+ * families that pick distinct overview layouts, plus the compact quality-head
+ * stats (files changed, tests passed). Backend-free: each card is built
  * from a canned `status.md` + task metadata, exactly as the live protocol pane
  * builds it, so the Playwright spec can screenshot both themes without a running
  * dev backend.
@@ -13,6 +13,7 @@ import type { TaskDetail } from '../../../app/models/task.model';
 function verdict(overrides: Partial<ProtocolVerdict> = {}): ProtocolVerdict {
   return {
     kind: 'ok',
+    status: 'succeeded',
     emoji: '🟢',
     label: 'Success',
     detail: 'Last run completed successfully.',
@@ -48,12 +49,24 @@ interface GalleryCard {
 
 const CARDS: GalleryCard[] = [
   {
-    heading: 'bugfix - sequence layout, files + tests chips',
+    heading: 'pipeline failure - reported result-summary density',
     detail: detail(
-      `# Status\n\n- Result: Success\n- Duration: 4 min\n- Files: 3\n- Tests: 24 passed\n\n## Overview\n- Problem: The verdict banner was unreadable on the light theme.\n- Solution: Re-toned it to a neutral surface with a semantic accent stripe.\n`,
-      { taskType: 'bug' },
+      `# Status\n\n- Result: Partial\n- Duration: 20 min\n- Files: 40\n- Tests: 81 passed\n\n## Overview\n- Problem: The result-summary badges consumed a tall row.\n- Solution: Compact the same facts onto one calm baseline.\n`,
+      {
+        taskType: 'bug',
+        tags: [],
+        tokenSummary: { totalTokens: 72_910 },
+        commits: [],
+        codeActivityDetected: undefined,
+      },
     ),
-    verdict: verdict(),
+    verdict: verdict({
+      kind: 'problem',
+      status: 'failed',
+      label: 'Pipeline failure',
+      emoji: '🔴',
+      duration: '20 min',
+    }),
   },
   {
     heading: 'ui-cleanup - before/after two-column layout',

@@ -23,10 +23,9 @@ import { buildTokenCostTooltip } from '../../../tokens';
 import type { ProtocolVerdict } from './protocol-verdict';
 import { classifyResultCase, type ResultCaseResult } from './result-case';
 
-/** One chip in the metric head. Only chips with real data are emitted. */
+/** One stat in the metric head. Only stats with real data are emitted. */
 export interface ResultMetric {
   id: string;
-  icon: string;
   label: string;
   value: string;
   tooltip?: string;
@@ -88,11 +87,20 @@ export function classifyTestsMetric(raw: string): { value: string; tone: ResultM
     const passed = Number(ratio[1]);
     const total = Number(ratio[2]);
     const tone: ResultMetric['tone'] = passed < total ? 'warn' : 'ok';
-    return { value: `${passed}/${total}`, tone };
+    return { value: `${passed}/${total} ✓`, tone };
   }
   if (/\bfail|\bbroke|\berror/.test(lower)) return { value: text, tone: 'problem' };
-  if (/\bpass|\bgreen|\bok\b/.test(lower)) return { value: text, tone: 'ok' };
+  if (/\bpass/.test(lower)) return { value: text.replace(/\s+passed\b/i, ' ✓'), tone: 'ok' };
+  if (/\bgreen|\bok\b/.test(lower)) return { value: text, tone: 'ok' };
   return { value: text, tone: 'neutral' };
+}
+
+/** Collapse the common protocol duration units without changing the quantity. */
+export function compactDuration(raw: string): string {
+  return raw.trim()
+    .replace(/^(\d+(?:\.\d+)?)\s*(?:minutes?|mins?)$/i, '$1m')
+    .replace(/^(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)$/i, '$1h')
+    .replace(/^(\d+(?:\.\d+)?)\s*(?:seconds?|secs?)$/i, '$1s');
 }
 
 const GRADE_META: Record<string, { tone: ResultMetric['tone']; tooltip: string }> = {
@@ -225,11 +233,11 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   const grade = codeReviewGradeFromTags(info.tags);
   if (grade) {
     const meta = GRADE_META[grade] ?? { tone: 'neutral' as const, tooltip: `Code review grade ${grade}.` };
-    metrics.push({ id: 'grade', icon: '🎓', label: 'Review', value: `Grade ${grade}`, tone: meta.tone, tooltip: meta.tooltip });
+    metrics.push({ id: 'grade', label: 'Review', value: `Grade ${grade}`, tone: meta.tone, tooltip: meta.tooltip });
   }
 
   if (verdict.duration) {
-    metrics.push({ id: 'duration', icon: '⏱', label: 'Duration', value: verdict.duration });
+    metrics.push({ id: 'duration', label: 'Duration', value: compactDuration(verdict.duration) });
   }
 
   // Files changed + tests passed: the two quality-head metrics the Result
@@ -242,7 +250,6 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const value = Number.isFinite(n) ? `${n} file${n === 1 ? '' : 's'}` : filesRaw;
     metrics.push({
       id: 'files',
-      icon: '📄',
       label: 'Files',
       value,
       tooltip: 'Files changed by this task (from the run diff).',
@@ -254,7 +261,6 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const { value, tone } = classifyTestsMetric(testsRaw);
     metrics.push({
       id: 'tests',
-      icon: '🧪',
       label: 'Tests',
       value,
       tone,
@@ -267,9 +273,8 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
     const tokenSummary = info.tokenSummary!;
     metrics.push({
       id: 'tokens',
-      icon: '🪙',
       label: 'Tokens',
-      value: formatTokens(totalTokens),
+      value: `${formatTokens(totalTokens)} tokens`,
       tooltip: buildTokenCostTooltip({
         costUsd: tokenSummary.estimatedApiCostUsd,
         priceKnown: tokenSummary.allModelsPriced === true,
@@ -282,14 +287,13 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   if (commitCount > 0) {
     metrics.push({
       id: 'commits',
-      icon: '⑃',
       label: 'Commits',
       value: `${commitCount} commit${commitCount === 1 ? '' : 's'}`,
     });
   } else if (info.codeActivityDetected === true) {
-    metrics.push({ id: 'commits', icon: '⑃', label: 'Commits', value: 'pending', tooltip: 'Work landed but the attributed commit chain is still resolving.' });
+    metrics.push({ id: 'commits', label: 'Commits', value: 'pending', tooltip: 'Work landed but the attributed commit chain is still resolving.' });
   } else if (info.codeActivityDetected === false) {
-    metrics.push({ id: 'commits', icon: '⑃', label: 'Commits', value: 'no code change', tooltip: 'The run moved no code (analysis / docs / investigation).' });
+    metrics.push({ id: 'commits', label: 'Commits', value: 'no code change', tooltip: 'The run moved no code (analysis / docs / investigation).' });
   }
 
   return metrics;

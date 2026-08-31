@@ -7,7 +7,7 @@ import fs from 'node:fs';
 /**
  * Renders the REAL {@link ResultViewComponent} via the `result-view-mockup`
  * standalone app and screenshots the case-based overview layouts + the two new
- * quality-head metric chips (files changed, tests passed) in BOTH themes.
+ * compact quality-head stats (files changed, tests passed) in BOTH themes.
  *
  * Backend-free by design: the gallery builds each card from a canned `status.md`
  * + task metadata, so this is the frontend verification the Teil 1 slice could
@@ -23,6 +23,7 @@ const DIST_DIR = path.resolve(__dirname, '..', '..', 'dist', 'result-view-mockup
 const RESULTS_DIR =
   process.env.JOB_RESULTS_DIR?.trim() ||
   path.resolve(__dirname, '..', '..', '..', 'docs', 'mockups', 'result-view', 'evidence');
+const SCREENSHOT_PHASE = process.env.RESULT_SUMMARY_SCREENSHOT_PHASE?.trim() || 'after';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -80,7 +81,7 @@ async function stampTheme(page: import('@playwright/test').Page, theme: 'dark' |
 
 test.describe('@mockup result-view (real component)', () => {
   for (const theme of ['dark', 'light'] as const) {
-    test(`renders the case layouts + metric chips in the ${theme} theme`, async ({ page }) => {
+    test(`renders the case layouts + compact metric row in the ${theme} theme`, async ({ page }) => {
       await page.setViewportSize({ width: 860, height: 1400 });
       await page.goto(baseUrl);
       await stampTheme(page, theme);
@@ -89,17 +90,19 @@ test.describe('@mockup result-view (real component)', () => {
       await expect(gallery).toBeVisible();
       // All four case cards render.
       await expect(page.getByTestId('gallery-card')).toHaveCount(4);
-      // The two new quality-head chips are present.
+      // The quality-head stats are present and retain their meaning.
       await expect(page.getByTestId('result-metric-files').first()).toBeVisible();
       await expect(page.getByTestId('result-metric-tests').first()).toBeVisible();
-      // The per-case divergence: a blocker layout and a before-after layout exist.
-      await expect(page.locator('[data-testid="result-overview"][data-layout="blocker"]')).toHaveCount(1);
+      // The per-case divergence: blocker and before-after layouts exist.
+      await expect(page.locator('[data-testid="result-overview"][data-layout="blocker"]')).toHaveCount(2);
       await expect(page.locator('[data-testid="result-overview"][data-layout="before-after"]')).toHaveCount(1);
-      await expect(page.locator('[data-testid="result-overview"][data-layout="sequence"]')).toHaveCount(1);
 
       await page.screenshot({
         path: path.join(RESULTS_DIR, `result-view-${theme}--mocked.png`),
         fullPage: true,
+      });
+      await page.getByTestId('gallery-card').first().screenshot({
+        path: path.join(RESULTS_DIR, `result-summary-${SCREENSHOT_PHASE}-${theme}--mocked.png`),
       });
     });
   }
