@@ -120,6 +120,61 @@ describe('PaneTabsComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelectorAll('[data-testid="pane-tabs-overflow"]')).toHaveLength(0);
   });
 
+  it('does not render overflow for two tabs that fit in a wide strip', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PaneTabsComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PaneTabsComponent);
+    fixture.componentRef.setInput('tabs', [
+      { id: 'task', label: 'Task' },
+      { id: 'result', label: 'Result' },
+    ]);
+    fixture.componentRef.setInput('activeTabId', 'task');
+    fixture.componentRef.setInput('overflowAfter', 1);
+    fixture.componentInstance.availableWidth.set(320);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.inlineTabs().map(tab => tab.id)).toEqual(['task', 'result']);
+    expect(fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow"]')).toBeNull();
+  });
+
+  it('keeps an overflowed tab badge inside its menu row instead of loose in the bar', async () => {
+    await TestBed.configureTestingModule({
+      imports: [PaneTabsComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PaneTabsComponent);
+    fixture.componentRef.setInput('tabs', [
+      { id: 'overview', label: 'Overview' },
+      { id: 'timeline', label: 'Timeline', badge: 13 },
+      { id: 'result', label: 'Result' },
+      { id: 'files', label: 'Files' },
+    ]);
+    fixture.componentRef.setInput('activeTabId', 'overview');
+    fixture.componentRef.setInput('minimumTabWidth', 72);
+    fixture.componentInstance.availableWidth.set(150);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.overflowTabs().map(tab => tab.id)).toContain('timeline');
+    expect(fixture.componentInstance.overflowMenuItems()).toContainEqual(
+      expect.objectContaining({ id: 'timeline', label: 'Timeline', trailingBadge: '13' }),
+    );
+    const overflow = fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow"]');
+    expect(overflow?.textContent).toContain('13');
+    expect(overflow?.nextElementSibling?.textContent?.trim()).not.toBe('13');
+  });
+
   it('reduces the inline capacity from the observed strip width and aggregates hidden badges', async () => {
     await TestBed.configureTestingModule({
       imports: [PaneTabsComponent],
