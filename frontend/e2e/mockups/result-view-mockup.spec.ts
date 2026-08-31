@@ -7,7 +7,8 @@ import fs from 'node:fs';
 /**
  * Renders the REAL {@link ResultViewComponent} via the `result-view-mockup`
  * standalone app and screenshots the case-based overview layouts + the two new
- * quality-head metric chips (files changed, tests passed) in BOTH themes.
+ * compact, divider-separated quality stats (files changed, tests passed) in
+ * BOTH themes and at a narrow responsive width.
  *
  * Backend-free by design: the gallery builds each card from a canned `status.md`
  * + task metadata, so this is the frontend verification the Teil 1 slice could
@@ -89,9 +90,13 @@ test.describe('@mockup result-view (real component)', () => {
       await expect(gallery).toBeVisible();
       // All four case cards render.
       await expect(page.getByTestId('gallery-card')).toHaveCount(4);
-      // The two new quality-head chips are present.
+      // Quality stats stay compact and unboxed; only the outcome carries colour.
       await expect(page.getByTestId('result-metric-files').first()).toBeVisible();
       await expect(page.getByTestId('result-metric-tests').first()).toBeVisible();
+      await expect(page.getByTestId('result-metric-duration').first()).toHaveText('4m');
+      await expect(page.getByTestId('result-metric-tests').first()).toHaveText('24 ✓');
+      await expect(page.getByTestId('result-metric-tokens').first()).toContainText('tokens');
+      await expect(page.locator('.result__metric-icon')).toHaveCount(0);
       // The per-case divergence: a blocker layout and a before-after layout exist.
       await expect(page.locator('[data-testid="result-overview"][data-layout="blocker"]')).toHaveCount(1);
       await expect(page.locator('[data-testid="result-overview"][data-layout="before-after"]')).toHaveCount(1);
@@ -100,6 +105,14 @@ test.describe('@mockup result-view (real component)', () => {
       await page.screenshot({
         path: path.join(RESULTS_DIR, `result-view-${theme}--mocked.png`),
         fullPage: true,
+      });
+
+      await page.setViewportSize({ width: 420, height: 900 });
+      const firstSummary = page.getByTestId('result-summary').first();
+      await expect(firstSummary).toBeVisible();
+      await expect(firstSummary).toHaveCSS('flex-wrap', 'wrap');
+      await firstSummary.screenshot({
+        path: path.join(RESULTS_DIR, `result-summary-narrow-${theme}--mocked.png`),
       });
     });
   }

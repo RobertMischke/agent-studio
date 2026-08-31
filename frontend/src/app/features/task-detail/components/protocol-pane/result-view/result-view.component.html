@@ -1,40 +1,39 @@
 @if (doc(); as d) {
   <article class="result" [attr.data-case]="d.case.case" data-testid="result-view">
-    <!-- 1. Metric head: case badge + at-a-glance chips. Product-directed
-         metric row (frontend/AGENTS.md "Result view"), not a metrics grid. -->
+    <!-- 1. Compact meta head: one emphasized outcome plus quiet, inline stats. -->
     <header class="result__head">
-      <span class="result__case"
-            [attr.data-tone]="outcomeTone()"
-            [attr.data-outcome]="verdict().status || verdict().kind"
-            data-testid="result-case-badge"
-            [cacTooltip]="verdict().detail">
-        <span class="result__case-glyph" aria-hidden="true">{{ verdict().emoji }}</span>
-        <span class="result__case-label">{{ verdict().label }}</span>
-      </span>
-      <div class="result__metrics" role="group" aria-label="Run metrics">
-        @for (m of d.metrics; track m.id) {
-          @if (m.id === 'grade') {
-            <button type="button"
-                    class="result__metric result__metric--link"
+      <div class="result__summary" data-testid="result-summary">
+        <span class="result__case"
+              [attr.data-tone]="outcomeTone()"
+              [attr.data-outcome]="verdict().status || verdict().kind"
+              data-testid="result-case-badge"
+              [cacTooltip]="verdict().detail">
+          <span class="result__case-dot" aria-hidden="true"></span>
+          <span class="result__case-label">{{ verdict().label }}</span>
+        </span>
+        <div class="result__metrics" role="group" aria-label="Run metrics">
+          @for (m of d.metrics; track m.id) {
+            @if (m.id === 'grade') {
+              <button type="button"
+                      class="result__metric result__metric--link"
+                      [attr.data-metric]="m.id"
+                      [attr.data-tone]="m.tone || 'neutral'"
+                      [attr.data-testid]="'result-metric-' + m.id"
+                      [cacTooltip]="(m.tooltip || m.label) + ' Open the review document.'"
+                      (click)="navigateMetric.emit(m.id)">
+                <span class="result__metric-value">{{ m.value }}</span>
+              </button>
+            } @else {
+              <span class="result__metric"
                     [attr.data-metric]="m.id"
                     [attr.data-tone]="m.tone || 'neutral'"
                     [attr.data-testid]="'result-metric-' + m.id"
-                    [cacTooltip]="(m.tooltip || m.label) + ' Open the review document.'"
-                    (click)="navigateMetric.emit(m.id)">
-              <span class="result__metric-icon" aria-hidden="true">{{ m.icon }}</span>
-              <span class="result__metric-value">{{ m.value }}</span>
-            </button>
-          } @else {
-            <span class="result__metric"
-                  [attr.data-metric]="m.id"
-                  [attr.data-tone]="m.tone || 'neutral'"
-                  [attr.data-testid]="'result-metric-' + m.id"
-                  [cacTooltip]="m.tooltip || m.label">
-              <span class="result__metric-icon" aria-hidden="true">{{ m.icon }}</span>
-              <span class="result__metric-value">{{ m.value }}</span>
-            </span>
+                    [cacTooltip]="m.tooltip || m.label">
+                <span class="result__metric-value">{{ m.value }}</span>
+              </span>
+            }
           }
-        }
+        </div>
       </div>
       <div class="result__actions">
         @if (provenance(); as generation) {

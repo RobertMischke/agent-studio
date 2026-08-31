@@ -4,7 +4,7 @@
  * A {@link ResultDocument} is a single, presentation-ready projection of a
  * finished run that the Result view renders in three layers, top to bottom:
  *
- *   1. a **metric head** (code-review grade, duration, tokens, commits)
+ *   1. a compact **meta head** (code-review grade, duration, tokens, commits)
  *   2. an **overview** ("problem -> solution", the shareable one-liner)
  *   3. the **detail** markdown (What Was Done / Open Items / Notes / Images)
  *
@@ -23,7 +23,7 @@ import { buildTokenCostTooltip } from '../../../tokens';
 import type { ProtocolVerdict } from './protocol-verdict';
 import { classifyResultCase, type ResultCaseResult } from './result-case';
 
-/** One chip in the metric head. Only chips with real data are emitted. */
+/** One stat in the meta head. Only stats with real data are emitted. */
 export interface ResultMetric {
   id: string;
   icon: string;
@@ -88,9 +88,11 @@ export function classifyTestsMetric(raw: string): { value: string; tone: ResultM
     const passed = Number(ratio[1]);
     const total = Number(ratio[2]);
     const tone: ResultMetric['tone'] = passed < total ? 'warn' : 'ok';
-    return { value: `${passed}/${total}`, tone };
+    return { value: `${passed}/${total} ✓`, tone };
   }
   if (/\bfail|\bbroke|\berror/.test(lower)) return { value: text, tone: 'problem' };
+  const passed = /^(\d+)\s+passed\b/i.exec(text);
+  if (passed) return { value: `${passed[1]} ✓`, tone: 'ok' };
   if (/\bpass|\bgreen|\bok\b/.test(lower)) return { value: text, tone: 'ok' };
   return { value: text, tone: 'neutral' };
 }
@@ -101,6 +103,17 @@ const GRADE_META: Record<string, { tone: ResultMetric['tone']; tooltip: string }
   C: { tone: 'warn', tooltip: 'Code review grade C - concerns worth a look.' },
   D: { tone: 'problem', tooltip: 'Code review grade D - blocking issues.' },
 };
+
+/** Keep the source duration intact while tightening its common written units. */
+export function compactDuration(value: string): string {
+  return value
+    .trim()
+    .replace(/\s*(milliseconds?|msecs?)\b/gi, 'ms')
+    .replace(/\s*(hours?|hrs?)\b/gi, 'h')
+    .replace(/\s*(minutes?|mins?)\b/gi, 'm')
+    .replace(/\s*(seconds?|secs?)\b/gi, 's')
+    .replace(/\s*(days?)\b/gi, 'd');
+}
 
 /**
  * Read the code-review letter grade (A-D) out of the task tags. The grade is
@@ -229,7 +242,7 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
   }
 
   if (verdict.duration) {
-    metrics.push({ id: 'duration', icon: '⏱', label: 'Duration', value: verdict.duration });
+    metrics.push({ id: 'duration', icon: '⏱', label: 'Duration', value: compactDuration(verdict.duration) });
   }
 
   // Files changed + tests passed: the two quality-head metrics the Result
@@ -269,7 +282,7 @@ function buildMetrics(detail: TaskDetail, verdict: ProtocolVerdict, markdown: st
       id: 'tokens',
       icon: '🪙',
       label: 'Tokens',
-      value: formatTokens(totalTokens),
+      value: `${formatTokens(totalTokens)} tokens`,
       tooltip: buildTokenCostTooltip({
         costUsd: tokenSummary.estimatedApiCostUsd,
         priceKnown: tokenSummary.allModelsPriced === true,

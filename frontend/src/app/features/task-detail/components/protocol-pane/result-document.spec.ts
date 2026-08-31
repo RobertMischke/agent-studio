@@ -5,6 +5,7 @@ import {
   buildResultDocument,
   classifyTestsMetric,
   codeReviewGradeFromTags,
+  compactDuration,
   parseCaseHint,
   parseHeaderMetric,
 } from './result-document';
@@ -153,12 +154,20 @@ describe('parseHeaderMetric', () => {
 
 describe('classifyTestsMetric', () => {
   it('reads an X/Y tally and warns when some failed', () => {
-    expect(classifyTestsMetric('11/12 passed')).toEqual({ value: '11/12', tone: 'warn' });
-    expect(classifyTestsMetric('12/12 passed')).toEqual({ value: '12/12', tone: 'ok' });
+    expect(classifyTestsMetric('11/12 passed')).toEqual({ value: '11/12 ✓', tone: 'warn' });
+    expect(classifyTestsMetric('12/12 passed')).toEqual({ value: '12/12 ✓', tone: 'ok' });
   });
   it('tones a bare pass green and a failure red', () => {
-    expect(classifyTestsMetric('12 passed').tone).toBe('ok');
+    expect(classifyTestsMetric('12 passed')).toEqual({ value: '12 ✓', tone: 'ok' });
     expect(classifyTestsMetric('2 failed').tone).toBe('problem');
+  });
+});
+
+describe('compactDuration', () => {
+  it('compacts common written units without changing the amount', () => {
+    expect(compactDuration('20 min')).toBe('20m');
+    expect(compactDuration('1 hour 20 minutes')).toBe('1h 20m');
+    expect(compactDuration('45 seconds')).toBe('45s');
   });
 });
 
@@ -199,14 +208,14 @@ describe('buildResultDocument', () => {
     expect(grade?.tone).toBe('ok');
   });
 
-  it('adds duration + tokens + commits chips when the data is present', () => {
+  it('adds compact duration + token units + commits when the data is present', () => {
     const doc = buildResultDocument(
       detail({ totalTokens: 1_500_000, commits: 2 }),
       verdict({ duration: '4 min' }),
     );
-    expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4 min');
+    expect(doc.metrics.find((x) => x.id === 'duration')?.value).toBe('4m');
     const tokens = doc.metrics.find((x) => x.id === 'tokens');
-    expect(tokens?.value).toBe('1.50M');
+    expect(tokens?.value).toBe('1.50M tokens');
     expect(tokens?.tooltip).toContain('Estimated cost: $1.25');
     expect(tokens?.tooltip).toContain('historical list prices');
     expect(doc.metrics.find((x) => x.id === 'commits')?.value).toBe('2 commits');
@@ -217,7 +226,7 @@ describe('buildResultDocument', () => {
     const doc = buildResultDocument(detail({ statusMarkdown: md }), verdict());
     expect(doc.metrics.find((x) => x.id === 'files')?.value).toBe('3 files');
     const tests = doc.metrics.find((x) => x.id === 'tests');
-    expect(tests?.value).toBe('11/12');
+    expect(tests?.value).toBe('11/12 ✓');
     expect(tests?.tone).toBe('warn');
   });
 
