@@ -6,6 +6,7 @@ import {
   OnDestroy,
   ViewEncapsulation,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -85,6 +86,9 @@ export type PaneTabsVariant = 'header' | 'pill';
 export class PaneTabsComponent implements AfterViewInit, OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private resizeObserver: ResizeObserver | null = null;
+  private measurementFrame: number | null = null;
+  private viewReady = false;
+  private readonly onFontsLoaded = () => this.scheduleMeasurement();
 
   readonly tabs = input.required<readonly PaneTabDef[]>();
   readonly activeTabId = input.required<string>();
@@ -93,50 +97,50 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
   readonly listModifier = input<string | null>(null);
   /** `aria-label` for the tablist container. */
   readonly ariaLabel = input<string | null>(null);
-  /**
-   * Optional responsive inline limit. Remaining tabs move into the shared
-   * text-only overflow menu. If the active tab would be hidden, it replaces
-   * the final inline slot so current location remains visible.
-  */
-  readonly overflowAfter = input<number | null>(null);
-  /** Host width below which `overflowAfter` is applied. */
-  readonly overflowBelow = input<number>(440);
   /** Minimum readable width reserved for each inline tab. */
   readonly minimumTabWidth = input<number>(72);
-  /** Width reserved for the overflow trigger, including its aggregate badge. */
-  readonly overflowButtonWidth = input<number>(48);
 
   readonly tabChange = output<string>();
   readonly overflowOpen = signal(false);
   readonly overflowAnchor = signal<HTMLElement | null>(null);
   readonly availableWidth = signal<number | null>(null);
+  readonly measuredTabWidths = signal<Readonly<Record<string, number>>>({});
+  readonly measuredOverflowWidth = signal(0);
+
+  private readonly tabMeasurementEffect = effect(
+    () => {
+      this.tabs();
+      this.activeTabId();
+      this.minimumTabWidth();
+      if (this.viewReady) this.scheduleMeasurement();
+    },
+    { manualCleanup: true },
+  );
 
   readonly inlineTabs = computed<readonly PaneTabDef[]>(() => {
     const tabs = this.tabs();
-    const requestedLimit = this.overflowAfter();
+    if (this.variant() !== 'header') return tabs;
     const width = this.availableWidth();
-    const compact = width === null || width < this.overflowBelow();
-    const minimumTabWidth = Math.max(1, this.minimumTabWidth());
-    const allTabsFit = width === null || tabs.length * minimumTabWidth <= width;
-    const widthLimit = allTabsFit
-      ? tabs.length
-      : Math.max(
-          1,
-          Math.floor(
-            (Math.max(0, width ?? 0) - Math.max(0, this.overflowButtonWidth())) /
-              minimumTabWidth,
-          ),
-        );
-    const requestedWidthLimit = compact && requestedLimit !== null
-      ? Math.max(1, requestedLimit)
-      : tabs.length;
-    const limit = Math.min(tabs.length, widthLimit, requestedWidthLimit);
-    if (limit >= tabs.length) return tabs;
+    const tabWidths = this.measuredTabWidths();
+    if (width === null || width <= 0 || tabs.some(tab => !tabWidths[tab.id])) return tabs;
 
-    const visible = tabs.slice(0, limit);
+    const totalWidth = tabs.reduce((sum, tab) => sum + tabWidths[tab.id], 0);
+    if (totalWidth <= width + 0.5) return tabs;
+
+    const availableForTabs = Math.max(0, width - this.measuredOverflowWidth());
     const active = tabs.find(tab => tab.id === this.activeTabId());
-    if (!active || visible.some(tab => tab.id === active.id)) return visible;
-    return [...visible.slice(0, -1), active];
+    const first = active ?? tabs[0];
+    if (!first) return tabs;
+
+    const visibleIds = new Set([first.id]);
+    let visibleWidth = tabWidths[first.id];
+    for (const tab of tabs) {
+      if (visibleIds.has(tab.id)) continue;
+      if (visibleWidth + tabWidths[tab.id] > availableForTabs + 0.5) break;
+      visibleIds.add(tab.id);
+      visibleWidth += tabWidths[tab.id];
+    }
+    return tabs.filter(tab => visibleIds.has(tab.id));
   });
 
   readonly overflowTabs = computed<readonly PaneTabDef[]>(() => {
@@ -155,26 +159,9 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
     })),
   );
 
-  readonly overflowBadgeTotal = computed<number | null>(() => {
-    let total = 0;
-    let hasNumericBadge = false;
-    for (const tab of this.overflowTabs()) {
-      if (tab.badge === null || tab.badge === undefined || tab.badge === '') continue;
-      const value = typeof tab.badge === 'number' ? tab.badge : Number(tab.badge);
-      if (!Number.isFinite(value) || value <= 0) continue;
-      total += value;
-      hasNumericBadge = true;
-    }
-    return hasNumericBadge ? total : null;
-  });
-
   readonly overflowAriaLabel = computed(() => {
     const hiddenCount = this.overflowTabs().length;
-    const badgeTotal = this.overflowBadgeTotal();
-    const badgeLabel = badgeTotal === null
-      ? ''
-      : `, ${badgeTotal} badge ${badgeTotal === 1 ? 'item' : 'items'}`;
-    return `More tabs: ${hiddenCount} hidden ${hiddenCount === 1 ? 'tab' : 'tabs'}${badgeLabel}`;
+    return `More tabs: ${hiddenCount} hidden ${hiddenCount === 1 ? 'tab' : 'tabs'}`;
   });
 
   readonly containerClass = computed(() => {
@@ -184,17 +171,54 @@ export class PaneTabsComponent implements AfterViewInit, OnDestroy {
   });
 
   ngAfterViewInit(): void {
-    if (typeof ResizeObserver === 'undefined') return;
-    this.resizeObserver = new ResizeObserver(([entry]) => {
-      if (!entry) return;
-      this.availableWidth.set(entry.contentRect.width);
-      if (this.overflowTabs().length === 0) this.closeOverflow();
-    });
-    this.resizeObserver.observe(this.host.nativeElement);
+    this.viewReady = true;
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.scheduleMeasurement());
+      this.resizeObserver.observe(this.host.nativeElement);
+    }
+    if (typeof document !== 'undefined' && document.fonts) {
+      void document.fonts.ready.then(() => this.scheduleMeasurement());
+      document.fonts.addEventListener('loadingdone', this.onFontsLoaded);
+    }
+    this.scheduleMeasurement();
   }
 
   ngOnDestroy(): void {
+    this.viewReady = false;
+    this.tabMeasurementEffect.destroy();
     this.resizeObserver?.disconnect();
+    if (this.measurementFrame !== null) cancelAnimationFrame(this.measurementFrame);
+    if (typeof document !== 'undefined' && document.fonts) {
+      document.fonts.removeEventListener('loadingdone', this.onFontsLoaded);
+    }
+  }
+
+  private scheduleMeasurement(): void {
+    if (!this.viewReady || typeof requestAnimationFrame === 'undefined') return;
+    if (this.measurementFrame !== null) cancelAnimationFrame(this.measurementFrame);
+    this.measurementFrame = requestAnimationFrame(() => {
+      this.measurementFrame = null;
+      this.measureTabs();
+    });
+  }
+
+  private measureTabs(): void {
+    const host = this.host.nativeElement;
+    const availableWidth = host.getBoundingClientRect().width;
+    if (availableWidth <= 0) return;
+
+    const widths: Record<string, number> = {};
+    for (const element of host.querySelectorAll<HTMLElement>('[data-pane-tab-measure]')) {
+      const id = element.dataset['paneTabId'];
+      if (id) widths[id] = element.getBoundingClientRect().width;
+    }
+    if (this.tabs().some(tab => !widths[tab.id])) return;
+
+    const overflowMeasure = host.querySelector<HTMLElement>('[data-pane-overflow-measure]');
+    this.availableWidth.set(availableWidth);
+    this.measuredTabWidths.set(widths);
+    this.measuredOverflowWidth.set(overflowMeasure?.getBoundingClientRect().width ?? 0);
+    if (this.overflowTabs().length === 0) this.closeOverflow();
   }
 
   trackTab(_index: number, tab: PaneTabDef): string {

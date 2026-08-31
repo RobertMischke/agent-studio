@@ -749,7 +749,7 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
     }
   });
 
-  test('tabs, Pipeline, Runs, and Evidence stay within one pane scroll surface', async ({ page }) => {
+  test('tabs use actual overflow width, keep badges in the menu, and share one pane scroll surface', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem(
         'taskboard.panesVisible',
@@ -781,12 +781,12 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
         const maximize = header.querySelector<HTMLElement>('[data-testid="pane-header-maximize"]');
         const close = header.querySelector<HTMLElement>('[data-testid="pane-header-hide"]');
         const headerBox = header.getBoundingClientRect();
-        if (!more || !maximize || !close) return null;
+        if (!maximize || !close) return null;
         return {
           headerRight: headerBox.right,
           lastTabRight: tabs.at(-1)?.getBoundingClientRect().right ?? 0,
-          moreLeft: more.getBoundingClientRect().left,
-          moreRight: more.getBoundingClientRect().right,
+          moreLeft: more?.getBoundingClientRect().left ?? null,
+          moreRight: more?.getBoundingClientRect().right ?? null,
           maximizeLeft: maximize.getBoundingClientRect().left,
           maximizeRight: maximize.getBoundingClientRect().right,
           closeLeft: close.getBoundingClientRect().left,
@@ -795,9 +795,13 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
         };
       });
       expect(headerGeometry).not.toBeNull();
-      expect(headerGeometry!.tabCount).toBe(viewport.name === 'wide' ? 3 : 1);
-      expect(headerGeometry!.lastTabRight).toBeLessThanOrEqual(headerGeometry!.moreLeft + 1);
-      expect(headerGeometry!.moreRight).toBeLessThanOrEqual(headerGeometry!.maximizeLeft - 4);
+      expect(headerGeometry!.tabCount).toBeGreaterThanOrEqual(1);
+      if (headerGeometry!.moreLeft !== null && headerGeometry!.moreRight !== null) {
+        expect(headerGeometry!.lastTabRight).toBeLessThanOrEqual(headerGeometry!.moreLeft + 1);
+        expect(headerGeometry!.moreRight).toBeLessThanOrEqual(headerGeometry!.maximizeLeft - 4);
+      } else {
+        expect(headerGeometry!.lastTabRight).toBeLessThanOrEqual(headerGeometry!.maximizeLeft - 4);
+      }
       expect(headerGeometry!.maximizeRight).toBeLessThanOrEqual(headerGeometry!.closeLeft - 4);
       expect(headerGeometry!.closeRight).toBeLessThanOrEqual(headerGeometry!.headerRight + 1);
 
@@ -816,40 +820,27 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
       });
 
       const promptOverflow = promptHeader.getByTestId('pane-tabs-overflow');
-      await expect(promptOverflow).toHaveAttribute(
-        'aria-label',
-        `More tabs: ${viewport.name === 'wide' ? 2 : 4} hidden tabs, 4 badge items`,
-      );
-      await expect(promptHeader.getByTestId('pane-tabs-overflow-badge')).toHaveText('4');
+      await expect(promptOverflow).toHaveAttribute('aria-label', /More tabs: \d+ hidden tabs?/);
+      await expect(promptOverflow).toHaveText('⋯');
       await promptOverflow.click();
       await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeVisible();
-      await expect(page.getByTestId('pane-tabs-overflow-item-code-review')).toHaveText('Code Review');
-      await expect(page.getByTestId('pane-tabs-overflow-item-description')).toContainText('Docs');
+      const docsOverflowItem = page.getByTestId('pane-tabs-overflow-item-description');
+      await expect(docsOverflowItem).toContainText('Docs');
+      await expect(docsOverflowItem.getByText('4', { exact: true })).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeHidden();
 
-      const protocolGeometry = await protocolHeader.evaluate((header) => {
-        const tabs = Array.from(header.querySelectorAll<HTMLElement>('[role="tab"]'));
-        const active = header.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
-        const more = header.querySelector<HTMLElement>('[data-testid="pane-tabs-overflow"]');
-        if (!active || !more) return null;
-        const activeBox = active.getBoundingClientRect();
-        const moreBox = more.getBoundingClientRect();
-        return {
-          tabCount: tabs.length,
-          activeVisible: activeBox.width > 0,
-          activeBeforeOverflow: activeBox.right <= moreBox.left + 1,
-        };
-      });
-      expect(protocolGeometry).toEqual({
-        tabCount: viewport.name === 'wide' ? 2 : 1,
-        activeVisible: true,
-        activeBeforeOverflow: true,
-      });
-      await protocolHeader.getByTestId('pane-tabs-overflow').click();
-      await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeVisible();
-      await expect(page.getByTestId('pane-tabs-overflow-item-protocol')).toHaveText('Result');
-      await page.keyboard.press('Escape');
+      const protocolOverflow = protocolHeader.getByTestId('pane-tabs-overflow');
+      if (viewport.name === 'wide') {
+        await expect(protocolHeader.getByRole('tab')).toHaveCount(3);
+        await expect(protocolOverflow).toHaveCount(0);
+      } else {
+        await expect(protocolOverflow).toBeVisible();
+        await protocolOverflow.click();
+        await expect(page.getByTestId('pane-tabs-overflow-panel')).toBeVisible();
+        await expect(page.getByTestId('pane-tabs-overflow-item-protocol')).toHaveText('Result');
+        await page.keyboard.press('Escape');
+      }
 
       await expectNoHorizontalOverflow(promptPane);
       await expectNoHorizontalOverflow(promptBody);
@@ -878,7 +869,7 @@ test.describe('Overview agent-run metrics fix (tokens + cumulative duration)', (
           await page.screenshot({
             path: path.join(
               RESULTS_DIR,
-              `agt-2519-tabs--${viewport.name}-${theme}--mocked.png`,
+              `agt-2691-tab-overflow-after--${viewport.name}-${theme}--mocked.png`,
             ),
             fullPage: false,
           });

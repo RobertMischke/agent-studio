@@ -12,7 +12,7 @@ import { PaneTabsComponent } from './pane-tabs.component';
  * renders without throwing when the required inputs are seeded.
  */
 describe('PaneTabsComponent (smoke)', () => {
-  it('compiles + renders with two tabs', async () => {
+  it('renders two tabs without an overflow menu in a wide container', async () => {
     try {
       await TestBed.configureTestingModule({
         imports: [PaneTabsComponent],
@@ -29,12 +29,16 @@ describe('PaneTabsComponent (smoke)', () => {
         { id: 'b', label: 'B', testid: 'tab-b' },
       ]);
       fixture.componentRef.setInput('activeTabId', 'a');
+      fixture.componentInstance.availableWidth.set(360);
+      fixture.componentInstance.measuredTabWidths.set({ a: 92, b: 88 });
+      fixture.componentInstance.measuredOverflowWidth.set(24);
       try { fixture.detectChanges(); } catch (e) {
         console.warn('[smoke] PaneTabsComponent initial render skipped:', (e as Error).message);
       }
       expect(fixture.componentInstance).toBeTruthy();
       const buttons = fixture.nativeElement.querySelectorAll('button.pane-tab');
       expect(buttons.length).toBe(2);
+      expect(fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow"]')).toBeNull();
     } catch (e) {
       console.warn('[smoke] PaneTabsComponent TestBed setup skipped:', (e as Error).message);
       expect(PaneTabsComponent).toBeTruthy();
@@ -89,7 +93,15 @@ describe('PaneTabsComponent (smoke)', () => {
       { id: 'docs', label: 'Docs', badge: 4 },
     ]);
     fixture.componentRef.setInput('activeTabId', 'code-review');
-    fixture.componentRef.setInput('overflowAfter', 3);
+    fixture.componentInstance.availableWidth.set(340);
+    fixture.componentInstance.measuredTabWidths.set({
+      overview: 80,
+      timeline: 80,
+      evidence: 80,
+      'code-review': 100,
+      docs: 72,
+    });
+    fixture.componentInstance.measuredOverflowWidth.set(24);
     fixture.detectChanges();
 
     expect(fixture.componentInstance.inlineTabs().map(tab => tab.id)).toEqual([
@@ -120,7 +132,7 @@ describe('PaneTabsComponent (smoke)', () => {
     expect(fixture.nativeElement.querySelectorAll('[data-testid="pane-tabs-overflow"]')).toHaveLength(0);
   });
 
-  it('reduces the inline capacity from the observed strip width and aggregates hidden badges', async () => {
+  it('shows a narrow overflow menu and keeps a hidden tab badge on its menu row', async () => {
     await TestBed.configureTestingModule({
       imports: [PaneTabsComponent],
       providers: [
@@ -133,15 +145,21 @@ describe('PaneTabsComponent (smoke)', () => {
     const fixture = TestBed.createComponent(PaneTabsComponent);
     fixture.componentRef.setInput('tabs', [
       { id: 'overview', label: 'Overview' },
-      { id: 'timeline', label: 'Timeline' },
+      { id: 'timeline', label: 'Timeline', badge: 13 },
       { id: 'evidence', label: 'Evidence', badge: 2 },
       { id: 'code-review', label: 'Code Review' },
       { id: 'docs', label: 'Docs', badge: '4' },
     ]);
     fixture.componentRef.setInput('activeTabId', 'code-review');
-    fixture.componentRef.setInput('minimumTabWidth', 70);
-    fixture.componentRef.setInput('overflowButtonWidth', 40);
     fixture.componentInstance.availableWidth.set(180);
+    fixture.componentInstance.measuredTabWidths.set({
+      overview: 70,
+      timeline: 70,
+      evidence: 70,
+      'code-review': 70,
+      docs: 70,
+    });
+    fixture.componentInstance.measuredOverflowWidth.set(40);
     fixture.detectChanges();
 
     expect(fixture.componentInstance.inlineTabs().map(tab => tab.id)).toEqual([
@@ -153,10 +171,19 @@ describe('PaneTabsComponent (smoke)', () => {
       'evidence',
       'docs',
     ]);
-    expect(fixture.componentInstance.overflowBadgeTotal()).toBe(6);
-    expect(fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow-badge"]')?.textContent?.trim()).toBe('6');
+    expect(fixture.componentInstance.overflowMenuItems()).toEqual([
+      expect.objectContaining({ id: 'timeline', label: 'Timeline', trailingBadge: '13' }),
+      expect.objectContaining({ id: 'evidence', label: 'Evidence', trailingBadge: '2' }),
+      expect.objectContaining({ id: 'docs', label: 'Docs', trailingBadge: '4' }),
+    ]);
+    const overflowButton = fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow"]');
+    expect(overflowButton?.textContent?.trim()).toBe('⋯');
     expect(fixture.nativeElement.querySelector('[data-testid="pane-tabs-overflow"]')?.getAttribute('aria-label')).toBe(
-      'More tabs: 3 hidden tabs, 6 badge items',
+      'More tabs: 3 hidden tabs',
     );
+
+    fixture.componentInstance.overflowOpen.set(true);
+    fixture.detectChanges();
+    expect(document.body.querySelector('[data-testid="pane-tabs-overflow-item-timeline"]')?.textContent).toContain('13');
   });
 });
