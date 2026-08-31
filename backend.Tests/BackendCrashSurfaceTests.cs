@@ -226,6 +226,83 @@ public class BackendCrashSurfaceTests
         await host.StopAsync(TimeSpan.FromSeconds(5));
     }
 
+    /// <summary>
+    /// Regression for the promotion-gate test-host crash (trains 40/41/42):
+    /// the crash-recovery / crash-surface tests build a rolling logger under a
+    /// per-run temp dir and delete that dir at teardown. A leaked writer - the
+    /// process-global UnobservedTaskException handler still pinned to the boot's
+    /// recorder - then fires on the finalizer thread against a path that no
+    /// longer exists ("[BackendFileLogger] WriteRaw failed: Could not find a
+    /// part of the path ...atp-crash-&lt;guid&gt;/&lt;day&gt;.log"). A logger is
+    /// not allowed to crash the process it serves, so neither the sink nor the
+    /// recorder may throw once their directory is gone.
+    /// </summary>
+    [Fact]
+    public void Sink_And_Recorder_SurviveTheirLogDirectoryVanishingMidRun()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "atp-crash-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var options = new BackendFileLoggerOptions { LogDirectory = dir, RetentionDays = 14 };
+        using var sink = new BackendFileLogSink(options);
+        var recorder = new CrashRecorder(options, sink);
+
+        // Warm the sink so a same-day rollover short-circuit is in effect, then
+        // pull the directory out from under it exactly like a teardown cleanup.
+        sink.WriteRaw("before the directory is deleted");
+        Directory.Delete(dir, recursive: true);
+
+        var threw = false;
+        try
+        {
+            sink.WriteRaw("written after the log directory was deleted");
+            recorder.Record(
+                "UnobservedTaskException",
+                new InvalidOperationException("post-teardown finalizer-thread throw"),
+                isTerminating: false);
+        }
+        catch
+        {
+            threw = true;
+        }
+
+        Assert.False(threw, "logging/crash-recording after the log dir vanished must never throw");
+    }
+
+    /// <summary>
+    /// The crash recorder is invoked from <c>TaskScheduler.UnobservedTaskException</c>,
+    /// which is raised on the finalizer thread where an escaping exception is
+    /// fatal. Even a hostile exception whose own <c>Message</c>/<c>StackTrace</c>
+    /// accessors throw must not turn the reporter into the thing that kills the
+    /// host - <see cref="CrashRecorder.Record"/> has to return, not throw.
+    /// </summary>
+    [Fact]
+    public void Record_NeverThrows_EvenWhenTheExceptionAccessorsThrow()
+    {
+        using var temp = new TempDir();
+        var options = new BackendFileLoggerOptions { LogDirectory = temp.Path, RetentionDays = 14 };
+        using var sink = new BackendFileLogSink(options);
+        var recorder = new CrashRecorder(options, sink);
+
+        var hostile = new AggregateException("outer", new HostileException());
+
+        CrashRecord? record = null;
+        var threw = false;
+        try { record = recorder.Record("UnobservedTaskException", hostile, isTerminating: false); }
+        catch { threw = true; }
+
+        Assert.False(threw, "Record must swallow a misbehaving exception, not rethrow it onto the finalizer thread");
+        Assert.NotNull(record);
+        Assert.Equal("UnobservedTaskException", record!.Source);
+    }
+
+    /// <summary>An exception whose accessors blow up - the edge the reporter must survive.</summary>
+    private sealed class HostileException : Exception
+    {
+        public override string Message => throw new InvalidOperationException("Message accessor blew up");
+        public override string? StackTrace => throw new InvalidOperationException("StackTrace accessor blew up");
+        public override string ToString() => throw new InvalidOperationException("ToString blew up");
+    }
+
     private static Exception? TryThrow(Action action)
     {
         try { action(); }

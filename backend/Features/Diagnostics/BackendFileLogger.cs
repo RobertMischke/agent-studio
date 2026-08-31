@@ -7,6 +7,39 @@ using Microsoft.Extensions.Options;
 namespace AgentStudio.Diagnostics;
 
 /// <summary>
+/// Writes a last-resort diagnostic line to stderr and swallows any failure.
+/// The file-logger, crash-recorder and process-global crash handlers all run
+/// from contexts where an escaping exception is fatal - the finalizer thread
+/// (<c>TaskScheduler.UnobservedTaskException</c>), the
+/// <c>AppDomain.UnhandledException</c> callback and <c>ProcessExit</c>. During
+/// test-host teardown the captured stderr pipe can already be closed, so even
+/// <see cref="Console.Error"/>'s own <c>WriteLine</c> can throw an
+/// <see cref="IOException"/> / <see cref="ObjectDisposedException"/>. A logger
+/// must never be the thing that crashes the process it is trying to report on,
+/// so every such write goes through here.
+/// </summary>
+internal static class DiagnosticsConsole
+{
+    public static void Error(string message)
+    {
+        try
+        {
+            Console.Error.WriteLine(message);
+        }
+        catch
+        {
+            // Last-resort writer: the file sink and the process-global crash
+            // handlers call this precisely because the normal logging pipeline
+            // is unreliable here (finalizer thread, a stderr pipe already closed
+            // at teardown). Routing this failure back through Serilog/SilentCatch
+            // could recurse into the very sink that just failed, so it is
+            // deliberately swallowed - there is nothing safe left to do.
+            return;
+        }
+    }
+}
+
+/// <summary>
 /// Knobs for the rolling backend file logger. Bound from the
 /// <c>Logging:BackendFile</c> section if present; defaults are tuned so
 /// <c>./api.sh start</c> produces a useful log without any extra config.
@@ -124,7 +157,7 @@ public sealed class BackendFileLogSink : IDisposable
                 // Logging itself must never crash the process. Report via
                 // Console.Error rather than the logging pipeline (this IS the
                 // file sink; routing through Serilog/ILogger could recurse).
-                Console.Error.WriteLine($"[BackendFileLogger] WriteRaw failed: {ex.Message}");
+                DiagnosticsConsole.Error($"[BackendFileLogger] WriteRaw failed: {ex.Message}");
             }
         }
     }
@@ -145,7 +178,7 @@ public sealed class BackendFileLogSink : IDisposable
         {
             // Touch so the file appears even before the first write succeeds.
             try { File.WriteAllBytes(_currentPath, Array.Empty<byte>()); }
-            catch (Exception ex) { Console.Error.WriteLine($"[BackendFileLogger] touch failed: {ex.Message}"); }
+            catch (Exception ex) { DiagnosticsConsole.Error($"[BackendFileLogger] touch failed: {ex.Message}"); }
         }
         // Day rollover is the natural time to also reap old files.
         if (_currentPath != null) PruneOldFiles();
@@ -154,7 +187,7 @@ public sealed class BackendFileLogSink : IDisposable
     private void EnsureDirectory()
     {
         try { Directory.CreateDirectory(ResolvedDirectory); }
-        catch (Exception ex) { Console.Error.WriteLine($"[BackendFileLogger] EnsureDirectory failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticsConsole.Error($"[BackendFileLogger] EnsureDirectory failed: {ex.Message}"); }
     }
 
     private void PruneOldFiles()
@@ -170,11 +203,11 @@ public sealed class BackendFileLogSink : IDisposable
                 if (day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) < cutoff)
                 {
                     try { File.Delete(file); }
-                    catch (Exception ex) { Console.Error.WriteLine($"[BackendFileLogger] prune delete failed for {file}: {ex.Message}"); }
+                    catch (Exception ex) { DiagnosticsConsole.Error($"[BackendFileLogger] prune delete failed for {file}: {ex.Message}"); }
                 }
             }
         }
-        catch (Exception ex) { Console.Error.WriteLine($"[BackendFileLogger] PruneOldFiles failed: {ex.Message}"); }
+        catch (Exception ex) { DiagnosticsConsole.Error($"[BackendFileLogger] PruneOldFiles failed: {ex.Message}"); }
     }
 
     private static void AppendField(StringBuilder sb, string key, string? value)

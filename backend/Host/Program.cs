@@ -153,19 +153,36 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 // (e.g. CLI output streaming, SignalR fan-out) used to take down the whole API
 // silently with an empty stderr. Log them and persist a crash marker so the
 // next operator (or Layer 3 review) can find the cause without re-attaching.
-TaskScheduler.UnobservedTaskException += (_, e) =>
+// Held in named delegates (not inline lambdas) so a test host can detach them
+// on shutdown - WebApplicationFactory<Program> re-runs this entry point on
+// every boot, and re-subscribing without ever unsubscribing leaked one handler
+// per boot, each pinned to that boot's since-deleted temp log directory. Every
+// body is wrapped: UnobservedTaskException is raised on the finalizer thread,
+// where an escaping exception is fatal, and even the fallback stderr write can
+// throw once the captured pipe is closed at teardown.
+EventHandler<UnobservedTaskExceptionEventArgs> onUnobservedTaskException = (_, e) =>
 {
-    crashRecorder.Record("UnobservedTaskException", e.Exception, isTerminating: false);
-    Console.Error.WriteLine($"[UnobservedTaskException] {e.Exception}");
-    e.SetObserved();
-};
-AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-{
-    if (e.ExceptionObject is Exception ex)
+    try
     {
-        crashRecorder.Record("UnhandledException", ex, isTerminating: e.IsTerminating);
+        crashRecorder.Record("UnobservedTaskException", e.Exception, isTerminating: false);
+        DiagnosticsConsole.Error($"[UnobservedTaskException] {e.Exception}");
     }
-    Console.Error.WriteLine($"[UnhandledException] terminating={e.IsTerminating} {e.ExceptionObject}");
+    catch (Exception ex) { DiagnosticsConsole.Error($"[UnobservedTaskException] handler failed: {ex.Message}"); }
+    // SetObserved only flips a flag on the args and never throws; it stays in a
+    // finally so the exception is marked observed even if Record faulted above.
+    finally { e.SetObserved(); }
+};
+UnhandledExceptionEventHandler onUnhandledException = (_, e) =>
+{
+    try
+    {
+        if (e.ExceptionObject is Exception ex)
+        {
+            crashRecorder.Record("UnhandledException", ex, isTerminating: e.IsTerminating);
+        }
+        DiagnosticsConsole.Error($"[UnhandledException] terminating={e.IsTerminating} {e.ExceptionObject}");
+    }
+    catch (Exception ex) { DiagnosticsConsole.Error($"[UnhandledException] handler failed: {ex.Message}"); }
 };
 
 // ProcessExit fires for any normal CLR teardown - Ctrl+C, parent shell exit,
@@ -186,7 +203,7 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 // The marker file lives next to last-crash.json so a future operator finds
 // both in one glance. Failure to write is intentionally swallowed - we are
 // already in the host's last-gasp window.
-AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+EventHandler onProcessExit = (_, _) =>
 {
     try
     {
@@ -200,12 +217,16 @@ AppDomain.CurrentDomain.ProcessExit += (_, _) =>
             reason = "ProcessExit",
         }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
-    // Last-gasp teardown: log via Console.Error rather than Serilog, whose
-    // console sink may already be flushing/disposed during ProcessExit.
-    catch (Exception ex) { Console.Error.WriteLine($"[ProcessExit] shutdown-marker write failed: {ex}"); }
+    // Last-gasp teardown: log via stderr rather than Serilog, whose console
+    // sink may already be flushing/disposed during ProcessExit. DiagnosticsConsole
+    // swallows a broken pipe so the exit handler can never throw.
+    catch (Exception ex) { DiagnosticsConsole.Error($"[ProcessExit] shutdown-marker write failed: {ex}"); }
     try { fileLogSink.WriteRaw($"{DateTime.UtcNow:O} INFO  Program ProcessExit fired (pid={Environment.ProcessId})"); }
-    catch (Exception ex) { Console.Error.WriteLine($"[ProcessExit] shutdown-marker log failed: {ex}"); }
+    catch (Exception ex) { DiagnosticsConsole.Error($"[ProcessExit] shutdown-marker log failed: {ex}"); }
 };
+TaskScheduler.UnobservedTaskException += onUnobservedTaskException;
+AppDomain.CurrentDomain.UnhandledException += onUnhandledException;
+AppDomain.CurrentDomain.ProcessExit += onProcessExit;
 
 // Boot-time silent-death detector. The handlers above can only witness a
 // *managed* death; a StackOverflowException, an OS OOM-kill, or a native PTY
@@ -872,6 +893,26 @@ if (SecurityProfiles.IsLocal(builder.Configuration))
 }
 
 var app = builder.Build();
+
+// Under a test host, WebApplicationFactory<Program> boots this entry point once
+// per fixture and disposes the host at the end of each. Detach the process-
+// global crash handlers on stop so reboots don't accumulate a growing chain of
+// subscribers pinned to already-deleted temp log directories - that leak is what
+// put dozens of finalizer-thread callbacks onto dead paths (the "[BackendFileLogger]
+// WriteRaw failed: ... path not found" spam) and turned the crash-surface test's
+// GC.WaitForPendingFinalizers() into a host-crash risk. Production keeps them for
+// the whole process lifetime (the host stops only at real shutdown), so the
+// ProcessExit shutdown marker still gets written there.
+if (underTestHost)
+{
+    app.Lifetime.ApplicationStopped.Register(() =>
+    {
+        TaskScheduler.UnobservedTaskException -= onUnobservedTaskException;
+        AppDomain.CurrentDomain.UnhandledException -= onUnhandledException;
+        AppDomain.CurrentDomain.ProcessExit -= onProcessExit;
+    });
+}
+
 var networkedSecurityProfile = SecurityProfiles.IsNetworked(app.Configuration);
 var projectScopedSignalRProfile = networkedSecurityProfile || publicDemoExecutionProfile;
 var includeExceptionDetails = SecurityProfiles.IsLocal(app.Configuration)

@@ -77,19 +77,19 @@ public sealed class CrashRecorder
         // Boot diagnostics must never block boot and must not re-enter the
         // logging pipeline (this is part of it), so each best-effort step
         // reports a swallowed failure via Console.Error rather than ILogger.
-        try { (prevStarted, prevPid) = ReadStartupMarker(); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] ReadStartupMarker failed: {ex.Message}"); }
-        try { lastShutdown = ReadCapturedAt(ShutdownMarkerPath); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] ReadCapturedAt(shutdown) failed: {ex.Message}"); }
-        try { lastCrash = ReadCapturedAt(MarkerPath); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] ReadCapturedAt(crash) failed: {ex.Message}"); }
+        try { (prevStarted, prevPid) = ReadStartupMarker(); } catch (Exception ex) { DiagnosticsConsole.Error($"[CrashRecorder] ReadStartupMarker failed: {ex.Message}"); }
+        try { lastShutdown = ReadCapturedAt(ShutdownMarkerPath); } catch (Exception ex) { DiagnosticsConsole.Error($"[CrashRecorder] ReadCapturedAt(shutdown) failed: {ex.Message}"); }
+        try { lastCrash = ReadCapturedAt(MarkerPath); } catch (Exception ex) { DiagnosticsConsole.Error($"[CrashRecorder] ReadCapturedAt(crash) failed: {ex.Message}"); }
 
         var verdict = CrashForensics.Classify(prevStarted, lastShutdown, lastCrash);
         var report = new PreviousRunReport(verdict, prevStarted, prevPid, lastShutdown, lastCrash);
 
-        try { LogVerdict(report); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] LogVerdict failed: {ex.Message}"); }
+        try { LogVerdict(report); } catch (Exception ex) { DiagnosticsConsole.Error($"[CrashRecorder] LogVerdict failed: {ex.Message}"); }
         if (verdict == PreviousRunVerdict.SilentKill)
         {
-            try { WriteSilentKillMarker(report); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] WriteSilentKillMarker failed: {ex.Message}"); }
+            try { WriteSilentKillMarker(report); } catch (Exception ex) { DiagnosticsConsole.Error($"[CrashRecorder] WriteSilentKillMarker failed: {ex.Message}"); }
         }
-        try { ArmStartupMarker(); } catch (Exception ex) { Console.Error.WriteLine($"[CrashRecorder] ArmStartupMarker failed: {ex.Message}"); }
+        try { ArmStartupMarker(); } catch (Exception ex) { DiagnosticsConsole.Error($"[CrashRecorder] ArmStartupMarker failed: {ex.Message}"); }
 
         return report;
     }
@@ -175,17 +175,42 @@ public sealed class CrashRecorder
     /// </summary>
     public CrashRecord Record(string source, Exception exception, bool isTerminating = false)
     {
-        // Flatten so nested AggregateExceptions become a single layer in
-        // the on-disk trace. The marker still reports the *inner* type
-        // because "AggregateException" alone tells the operator nothing.
-        var flattened = exception is AggregateException agg ? agg.Flatten() : exception;
-        var rootCause = ResolveRootCause(flattened);
-        var record = BuildRecord(source, rootCause, flattened, exception, isTerminating);
+        // This is the crash reporter, and it is invoked from the process-global
+        // handlers wired in Program.cs: TaskScheduler.UnobservedTaskException
+        // (raised on the finalizer thread) and AppDomain.UnhandledException. An
+        // exception escaping here would surface on those threads, where an
+        // unhandled throw is fatal - so the reporter would crash the very
+        // process it exists to describe. Everything is wrapped: the record
+        // build, the flatten, and the two write paths (which are individually
+        // guarded too) can never let anything out. A test-host that deleted the
+        // temp log directory mid-run, or whose captured stderr pipe is already
+        // closed, must still get a survivable no-op here.
+        try
+        {
+            // Flatten so nested AggregateExceptions become a single layer in
+            // the on-disk trace. The marker still reports the *inner* type
+            // because "AggregateException" alone tells the operator nothing.
+            var flattened = exception is AggregateException agg ? agg.Flatten() : exception;
+            var rootCause = ResolveRootCause(flattened);
+            var record = BuildRecord(source, rootCause, flattened, exception, isTerminating);
 
-        WriteLogEntry(source, flattened, isTerminating);
-        WriteMarker(record);
+            WriteLogEntry(source, flattened, isTerminating);
+            WriteMarker(record);
 
-        return record;
+            return record;
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsConsole.Error($"[CrashRecorder] Record failed for {source}: {ex.Message}");
+            return new CrashRecord
+            {
+                CapturedAt = DateTime.UtcNow,
+                Source = source,
+                ExceptionType = exception.GetType().FullName ?? exception.GetType().Name,
+                Message = "(crash recorder failed to serialise the exception)",
+                IsTerminating = isTerminating,
+            };
+        }
     }
 
     private static Exception ResolveRootCause(Exception ex)
@@ -216,7 +241,7 @@ public sealed class CrashRecorder
         {
             // Logging the crash must never crash. Marker still gets a chance
             // below. Report via Console.Error, not the logging pipeline.
-            Console.Error.WriteLine($"[CrashRecorder] WriteLogEntry failed for {source}: {logEx.Message}");
+            DiagnosticsConsole.Error($"[CrashRecorder] WriteLogEntry failed for {source}: {logEx.Message}");
         }
     }
 
@@ -235,7 +260,7 @@ public sealed class CrashRecorder
         {
             // Same reason as above: this path runs from a process-wide handler,
             // so report via Console.Error rather than the logging pipeline.
-            Console.Error.WriteLine($"[CrashRecorder] WriteMarker failed: {ex.Message}");
+            DiagnosticsConsole.Error($"[CrashRecorder] WriteMarker failed: {ex.Message}");
         }
     }
 
