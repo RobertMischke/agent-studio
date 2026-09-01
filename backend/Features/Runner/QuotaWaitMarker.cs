@@ -62,17 +62,20 @@ public static class QuotaWaitMarker
         }
     }
 
-    public static void Clear(string jobFolder, ILogger? logger = null)
+    public static bool Clear(string jobFolder, ILogger? logger = null)
     {
-        if (string.IsNullOrWhiteSpace(jobFolder)) return;
+        if (string.IsNullOrWhiteSpace(jobFolder)) return false;
         try
         {
             var path = Path.Combine(jobFolder, FileName);
-            if (File.Exists(path)) File.Delete(path);
+            if (!File.Exists(path)) return false;
+            File.Delete(path);
+            return true;
         }
         catch (Exception ex)
         {
             logger?.LogWarning(ex, "Failed to clear quota wait marker in {Folder}", jobFolder);
+            return false;
         }
     }
 

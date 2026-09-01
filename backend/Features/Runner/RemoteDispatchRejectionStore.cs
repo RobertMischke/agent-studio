@@ -62,8 +62,8 @@ public sealed class RemoteDispatchRejectionStore
 
     public void Clear(TaskInfo task)
     {
-        TaskJsonFile.RemoveField(task.FolderPath, FieldName, _logger);
-        _scanner?.InvalidateCache();
+        if (TaskJsonFile.RemoveField(task.FolderPath, FieldName, _logger))
+            _scanner?.InvalidateCache();
     }
 
     internal static RemoteDispatchRejection? Read(string folderPath)

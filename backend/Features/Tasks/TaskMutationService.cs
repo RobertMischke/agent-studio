@@ -923,9 +923,21 @@ public class TaskMutationService
     public bool SetJobPhase(string folderPath, string? phase)
     {
         if (!Directory.Exists(folderPath)) return false;
-        TaskJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
-        TaskJsonFile.UpdateField(folderPath, "phaseEnteredAt",
-            string.IsNullOrWhiteSpace(phase) ? "" : DateTime.UtcNow.ToString("o"), _logger);
+        var normalizedPhase = phase ?? "";
+        if (TaskJsonFile.TryReadStringField(folderPath, "phase", _logger, out var currentPhase)
+            && string.Equals(currentPhase ?? "", normalizedPhase, StringComparison.Ordinal))
+            return true;
+
+        TaskJsonFile.UpdateFields(
+            folderPath,
+            new Dictionary<string, object>
+            {
+                ["phase"] = normalizedPhase,
+                ["phaseEnteredAt"] = string.IsNullOrWhiteSpace(phase)
+                    ? ""
+                    : DateTime.UtcNow.ToString("o"),
+            },
+            _logger);
         return Updated();
     }
 

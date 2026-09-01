@@ -422,6 +422,7 @@ builder.Services.AddSingleton<TaskWatcherService>();
 // events and by mutation services. Wired into TaskScannerService below via
 // SetIndexCache so existing ScanAllJobs callers transparently benefit.
 builder.Services.AddSingleton<TaskIndexCache>();
+builder.Services.AddHostedService<TaskIndexCacheDiagnosticsService>();
 builder.Services.AddSingleton<JobStatsMetadataCache>();
 // TaskAccess layer (ADR-0024 phase 2-4): the typed façade in front of
 // TaskScannerService / TaskMutationService / TaskStateMachine /

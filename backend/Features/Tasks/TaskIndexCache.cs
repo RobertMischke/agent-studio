@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 
 namespace AgentStudio.Tasks;
 
@@ -35,6 +36,7 @@ public sealed class TaskIndexCache
     private readonly TimeSpan _safetyTtl;
     private readonly Func<List<TaskInfo>> _scanAllJobsRaw;
     private readonly Action? _beforeRefreshGenerationCapture;
+    private readonly ILogger<TaskIndexCache> _logger;
 
     // Cache slot: snapshot + when it was taken + whether a mutation/watcher
     // event marked it stale before the next read got there.
@@ -104,9 +106,17 @@ public sealed class TaskIndexCache
     {
         _scanAllJobsRaw = scanAllJobsRaw;
         _beforeRefreshGenerationCapture = beforeRefreshGenerationCapture;
+        _logger = logger;
         var ttlSec = int.TryParse(config["TaskIndexCache:SafetyTtlSeconds"], out var v) ? v : 30;
         _safetyTtl = TimeSpan.FromSeconds(Math.Max(1, ttlSec));
     }
+
+    internal TaskIndexCacheStats GetStats() => new(
+        Interlocked.Read(ref Hits),
+        Interlocked.Read(ref Misses),
+        Interlocked.Read(ref StaleHits),
+        Interlocked.Read(ref ExternalInvalidations),
+        Interlocked.Read(ref MutationInvalidations));
 
     /// <summary>
     /// Returns the cached snapshot of board jobs (every lane except the
@@ -328,7 +338,10 @@ public sealed class TaskIndexCache
     /// and from mutation services (API-driven changes) so a write is always
     /// visible on the next read.
     /// </summary>
-    public void Invalidate(InvalidationSource source = InvalidationSource.Mutation)
+    public void Invalidate(
+        InvalidationSource source = InvalidationSource.Mutation,
+        [CallerMemberName] string callerMemberName = "",
+        [CallerFilePath] string callerFilePath = "")
     {
         // Publish the required mutation generation, general invalidation
         // generation and dirty bit under the same lock. A reader can therefore
@@ -348,6 +361,11 @@ public sealed class TaskIndexCache
             Interlocked.Increment(ref ExternalInvalidations);
         else
             Interlocked.Increment(ref MutationInvalidations);
+        _logger.LogDebug(
+            "task-index-cache-invalidated source={Source} caller={Caller} callerFile={CallerFile}",
+            source,
+            callerMemberName,
+            callerFilePath);
     }
 
     /// <summary>
@@ -369,3 +387,10 @@ public sealed class TaskIndexCache
         Mutation,
     }
 }
+
+internal sealed record TaskIndexCacheStats(
+    long Hits,
+    long Misses,
+    long StaleHits,
+    long ExternalInvalidations,
+    long MutationInvalidations);
