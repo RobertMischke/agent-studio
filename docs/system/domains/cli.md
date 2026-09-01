@@ -1,6 +1,6 @@
 # CLI Domain Map
 
-Version: 2026-06-09
+Version: 2026-09-01
 Status: System-of-record map for CLI adapter and quota changes.
 
 Use this when a change touches Claude, Codex, Copilot, Gemini, prompt handoff,
@@ -80,9 +80,12 @@ CLI execution tests.
   absent Windows `.cmd` command shim receives a forced relink so an unchanged
   package version still regenerates bin shims. Custom executable paths and
   present-but-broken command shims remain outside this policy. Repair verifies
-  both the `.cmd` shim and `--version`, and is limited to one persisted attempt
-  per CLI per hour. Successful repair is informational; failure is the alarm
-  boundary and names the observed package/shim state and attempted action.
+  npm itself with `npm --version` from an explicit active-Node, APPDATA, or PATH
+  location before install, then verifies both the `.cmd` shim and CLI
+  `--version`. It is limited to one persisted attempt per CLI per hour. The
+  runner-status projection contains only active failures: a successful repair
+  or later healthy probe clears the entry, and the durable resolved journal row
+  prevents restart rehydration from restoring a stale alarm.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

@@ -88,8 +88,14 @@ public sealed class LocalCliRepairService
         _journalPath = journalPath;
         foreach (var entry in ReadJournal())
         {
-            if (entry.Outcome is not ("repaired" or "failed")) continue;
-            _latest[entry.CliType] = ToStatus(entry);
+            if (entry.Outcome == "failed")
+            {
+                _latest[entry.CliType] = ToStatus(entry);
+            }
+            else if (entry.Outcome is "repaired" or "resolved" or "healthy")
+            {
+                _latest.Remove(entry.CliType);
+            }
         }
     }
 
@@ -98,6 +104,7 @@ public sealed class LocalCliRepairService
         lock (_sync)
         {
             return _latest.Values
+                .Where(item => item.Outcome == "failed")
                 .OrderByDescending(item => item.OccurredAt)
                 .ToArray();
         }
@@ -115,7 +122,12 @@ public sealed class LocalCliRepairService
         CancellationToken ct)
     {
         var before = probe();
-        if (before.Available || !_isWindows()) return before;
+        if (before.Available)
+        {
+            ReconcileHealthy(cliType, before);
+            return before;
+        }
+        if (!_isWindows()) return before;
 
         var appData = _appData();
         if (string.IsNullOrWhiteSpace(appData)) return before;
@@ -208,10 +220,9 @@ public sealed class LocalCliRepairService
                 evidence);
             AppendJournal(entry);
 
-            var status = ToStatus(entry);
-            lock (_sync) _latest[cliType] = status;
             if (succeeded)
             {
+                lock (_sync) _latest.Remove(cliType);
                 _logger.LogInformation(
                     "Local CLI repaired cli={Cli} packageStateBefore={PackageStateBefore} packageStateAfter=present shimStateBefore={ShimStateBefore} shimStateAfter=present repairAction={RepairAction} repairedAt={RepairedAt:o} previousVersion={PreviousVersion} currentVersion={CurrentVersion}",
                     cliType,
@@ -224,6 +235,8 @@ public sealed class LocalCliRepairService
             }
             else
             {
+                var status = ToStatus(entry);
+                lock (_sync) _latest[cliType] = status;
                 _logger.LogError(
                     "Local CLI repair failed cli={Cli} packageStateBefore={PackageStateBefore} packageStateAfter={PackageStateAfter} shimStateBefore={ShimStateBefore} shimStateAfter={ShimStateAfter} repairAction={RepairAction} postInstallState={PostInstallState} attemptedAt={AttemptedAt:o} npmExitCode={ExitCode} detail={Detail}",
                     cliType,
@@ -236,6 +249,7 @@ public sealed class LocalCliRepairService
                     occurredAt,
                     install.ExitCode,
                     detail);
+                if (after.Available) ReconcileHealthy(cliType, after);
             }
             return after;
         }
@@ -243,6 +257,45 @@ public sealed class LocalCliRepairService
         {
             lock (_sync) _inFlight.Remove(cliType);
         }
+    }
+
+    private void ReconcileHealthy(
+        string cliType,
+        (bool Available, string? Version, string Path) probe)
+    {
+        LocalCliRepairStatus? staleStatus;
+        lock (_sync) _latest.TryGetValue(cliType, out staleStatus);
+        if (staleStatus is null) return;
+
+        var occurredAt = _clock();
+        AppendJournal(new LocalCliRepairJournalEntry(
+            occurredAt,
+            cliType,
+            "resolved",
+            "healthy-probe",
+            "",
+            "",
+            null,
+            probe.Path,
+            [],
+            staleStatus.VersionAfter ?? staleStatus.VersionBefore,
+            probe.Version,
+            null,
+            $"{cliType} CLI probes healthy; cleared stale {staleStatus.Outcome} repair status.",
+            "",
+            "",
+            []));
+        lock (_sync)
+        {
+            if (_latest.TryGetValue(cliType, out var current) && current == staleStatus)
+                _latest.Remove(cliType);
+        }
+        _logger.LogInformation(
+            "Local CLI healthy; cleared stale repair status cli={Cli} previousOutcome={PreviousOutcome} healthyAt={HealthyAt:o} version={Version}",
+            cliType,
+            staleStatus.Outcome,
+            occurredAt,
+            probe.Version ?? "unknown");
     }
 
     public static NpmCliInstallInspection Inspect(
@@ -452,6 +505,8 @@ public sealed class LocalCliRepairService
         NpmCliRepairPlan repairPlan,
         string shimStateBefore)
     {
+        if (install.Outcome == NpmGlobalInstallOutcome.NpmUnavailable)
+            return $"{cliType} CLI repair failed: npm unavailable. {install.StandardError}";
         if (!install.Succeeded)
             return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} attempted, but npm exited {install.ExitCode?.ToString() ?? "without an exit code"}.";
         if (!packagePresentAfter)
