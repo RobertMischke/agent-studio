@@ -12,7 +12,8 @@ happened, what evidence exists, and why the task is ready for review.
 - Route: `/tasks/DEMO-9`
 - Viewport: `1440x900`
 - Data state: pinned DEMO-9 task selected by the Playwright spec
-- Visible state: task prompt and protocol pane are visible together
+- Visible state: the Overview tab and the protocol pane (labelled Result in the
+  inspector) are visible together
 
 This state matters because a reviewer should not have to reconstruct task
 history from a terminal transcript. The protocol pane keeps the review story
@@ -29,9 +30,10 @@ Manifest id: `task-detail-protocol`
 The Playwright spec:
 
 1. Opens `/`.
-2. Opens the preferred pinned DEMO-9 task card.
+2. Opens the pinned DEMO-9 task card.
 3. Waits for `pane-protocol`.
-4. Captures `docs/assets/images/detail-protocol--pinned.png`.
+4. Clicks `inspector-tab-protocol`.
+5. Captures `docs/assets/images/detail-protocol--pinned.png`.
 
 ## Marketing Usage
 

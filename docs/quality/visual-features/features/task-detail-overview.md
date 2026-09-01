@@ -14,7 +14,8 @@ current review posture in one place.
 - Route: `/tasks/DEMO-9`
 - Viewport: `1440x900`
 - Data state: pinned DEMO-9 task selected from the live board
-- Visible state: Overview tab, task status, agent block, references, and pipeline
+- Visible state: Overview tab, task status, agent block, references, and pipeline,
+  with the inspector on the Task tab
 
 ## How To Recreate The Screenshot
 
@@ -22,8 +23,9 @@ current review posture in one place.
 ./scripts/visual-docs/generate.sh
 ```
 
-The Playwright spec opens the board, selects a preferred pinned DEMO-9 task such as
-`ASS-847`, waits for `overview-tab`, and captures
+The Playwright spec opens the board, selects the pinned DEMO-9 task, waits for
+`overview-tab` and for the settled review summary in `escalation-essence`, clicks
+`inspector-tab-task`, and captures
 `docs/assets/images/detail-overview--pinned.png`.
 
 ## Marketing Usage

@@ -27,7 +27,46 @@ async function applyVisualCaptureMode(page: Page): Promise<void> {
   });
 }
 
+// Playwright scrolls a target into view before clicking it. The task-detail
+// panes are horizontally scrollable (their content needs more width than the
+// 1440px capture viewport leaves them), so clicking a tab far to the right of a
+// pane tab strip - Docs, Code Review - drags the WHOLE pane sideways, and the
+// pane keeps that offset for every later shot. That is how the evidence,
+// timeline, docs, and code-review captures ended up starting mid-word
+// ("UAL EVIDENCE", "HIS PAGE"). Park every scroll container back at its left
+// edge right before the screenshot so each image starts at the real left edge.
+async function resetHorizontalScroll(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>('*'))) {
+      if (el.scrollLeft !== 0) el.scrollLeft = 0;
+    }
+    if (window.scrollX !== 0) window.scrollTo(0, window.scrollY);
+  });
+}
+
+// Several panes render a "Loading..." placeholder while their document, code
+// review, or agent-work payload is still in flight. A screenshot taken in that
+// window documents the spinner instead of the feature, so hold the shot until
+// no visible placeholder is left.
+async function waitForLoadingPlaceholders(page: Page, timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const stillLoading = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('*')).some(
+        (el) =>
+          el.children.length === 0 &&
+          el.textContent?.trim() === 'Loading...' &&
+          (el as HTMLElement).offsetParent !== null,
+      ),
+    );
+    if (!stillLoading) return;
+    await page.waitForTimeout(250);
+  }
+}
+
 async function capture(page: Page, fileName: string) {
+  await waitForLoadingPlaceholders(page);
+  await resetHorizontalScroll(page);
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
@@ -112,7 +151,25 @@ test('readme screenshots - board and task detail states', async ({ page }) => {
   await openPinnedTask(page, PRIMARY_TASK_LABEL);
   await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('overview-tab')).toBeVisible({ timeout: 10_000 });
+  // The escalation header and the pipeline section hydrate a moment after the
+  // task opens. Capturing straight away froze the intermediate state
+  // ("0 review rounds - Grade not recorded"), so wait for the settled pinned
+  // review summary before the first task-detail shot.
+  await expect(page.getByTestId('escalation-essence')).toContainText('Grade B', { timeout: 20_000 });
+  // The overview shot is the prompt pane's Overview tab beside the inspector's
+  // Task tab. Selecting the inspector tab explicitly is what keeps this shot
+  // distinct from the protocol shot below: the inspector opens on the protocol
+  // tab by default, so without this the two captures were byte-identical.
+  await page.getByTestId('inspector-tab-task').click();
+  await expect(page.getByTestId('inspector-tab-task')).toHaveAttribute('aria-selected', 'true');
   await capture(page, 'detail-overview--pinned.png');
+
+  // Protocol shot: same panes, inspector switched to the protocol tab (labelled
+  // "Result" in the UI; the testid keeps the original `protocol` name).
+  await page.getByTestId('inspector-tab-protocol').click();
+  await expect(page.getByTestId('inspector-tab-protocol')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
+  await capture(page, 'detail-protocol--pinned.png');
 
   await page.getByTestId('prompt-tab-description').click();
   await expect(page.getByTestId('files-pane')).toBeVisible({ timeout: 10_000 });
@@ -130,9 +187,9 @@ test('readme screenshots - board and task detail states', async ({ page }) => {
   await expect(page.getByTestId('code-review-panel')).toBeVisible({ timeout: 10_000 });
   await capture(page, 'detail-code-review--pinned.png');
 
+  // Back to the prompt pane's Overview tab for the remaining pane-layout shots.
   await page.getByTestId('prompt-tab-overview').click();
   await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
-  await capture(page, 'detail-protocol--pinned.png');
 
   await page.getByTestId('inspector-tab-activity').click();
   await expect(page.getByTestId('activity-panel')).toBeVisible({ timeout: 10_000 });
