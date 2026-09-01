@@ -27,11 +27,11 @@ describe('ProviderAuthStatusService', () => {
     service.ingest([snapshot('ready')]);
     expect(notifications.notifications()).toHaveLength(0);
 
-    service.ingest([snapshot('unavailable')]);
+    service.ingest([snapshot('unavailable', null, 'signed-out')]);
 
     expect(notifications.notifications()).toHaveLength(1);
     expect(notifications.notifications()[0].title).toBe('Claude sign-in required');
-    expect(notifications.notifications()[0].message).toContain('changed from OK to unavailable');
+    expect(notifications.notifications()[0].message).toContain('genuinely signed out');
     expect(notifications.notifications()[0].message).toContain('runner-berlin');
   });
 
@@ -42,14 +42,28 @@ describe('ProviderAuthStatusService', () => {
     service.ingest([snapshot('ready', expiresAt)]);
 
     expect(notifications.notifications()).toHaveLength(1);
-    expect(notifications.notifications()[0].title).toBe('Claude authentication expires soon');
+    expect(notifications.notifications()[0].title).toBe('Claude credentials expiring');
     expect(notifications.notifications()[0].message).toContain('expires in 10 days');
+    expect(notifications.notifications()[0].kind).toBe('info');
+  });
+
+  it('reports retrying and rate-limited as quiet states rather than sign-in alarms', () => {
+    service.ingest([snapshot('ready')]);
+    service.ingest([snapshot('ready', null, 'transient-error')]);
+    service.ingest([snapshot('unavailable', null, 'rate-limited')]);
+
+    expect(notifications.notifications().map(item => item.title)).toEqual([
+      'Claude auth retrying',
+      'Claude rate-limited',
+    ]);
+    expect(notifications.notifications().every(item => item.kind === 'info')).toBe(true);
   });
 });
 
 function snapshot(
   status: 'ready' | 'unavailable',
   expiresAt: string | null = null,
+  condition: 'authenticated' | 'transient-error' | 'rate-limited' | 'expiring' | 'signed-out' | null = null,
 ): TaskServerRunnerCapabilitySnapshot {
   const now = new Date().toISOString();
   return {
@@ -73,7 +87,7 @@ function snapshot(
       healthState: 'healthy', advertisedAt: now,
       freshUntil: new Date(Date.now() + 120_000).toISOString(), isFresh: true,
       consecutiveFailures: 0, detail: status === 'ready' ? 'Active session confirmed' : 'Not logged in',
-      expiresAt, affectedClaims: [], recoveryHistory: [],
+      condition, expiresAt, affectedClaims: [], recoveryHistory: [],
     }],
   };
 }

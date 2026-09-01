@@ -2198,6 +2198,31 @@
             one-slice review and a passing-build repeated-block escalation to <span class="lane">5e-escalated</span>.
           </td>
         </tr>
+        <tr id="case-agt-2694">
+          <td>2026-08-31</td>
+          <td><code>AGT-2694</code><br><span class="small">Codex tool failure latched provider authentication unavailable</span></td>
+          <td>
+            A Codex run exited 1 after <code>apply_patch</code> could not find stale context in
+            <code>V1ReviewPlaneEndpoints.cs</code>. The host banner called the exit an authentication failure, Ready cards
+            waited, and <code>codex login status</code> reported <code>Logged in</code> seconds later. The false state survived
+            until an operator refreshed credentials and restarted the Runner. This repeated the AGT-2660 probe-latch class
+            while crossing the AGT-2673 self-heal and AGT-2680 provider-limit boundaries.
+          </td>
+          <td>
+            Generic nonzero CLI output entered the provider-auth failure route. The idle probe required repeated logout
+            evidence, but completed runs bypassed that state machine and the Task Server preserved a draining health state
+            across later healthy advertisements. Rate limits, transient token refresh, ordinary network failure, and tool
+            errors had no typed condition at this boundary. Credential expiry metadata existed only in frontend fixtures.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> idle probes and completed runs now use one fail-open classifier and one
+            consecutive-logout state machine. The exact tool error remains run-local; rate limits carry a separate reset;
+            transient auth errors retain last-good; and only repeated explicit sign-out becomes unavailable. A positive
+            probe atomically clears persisted drain state without restart. Secret-free Claude/Codex credential freshness
+            supplies a quiet expiry warning, and Execution Hosts names retrying, limited, expiring, and signed-out states
+            separately. The task remained in its normal run retry/conclusion path rather than reaching an auth terminal.
+          </td>
+        </tr>
       </tbody>
     </table>
 

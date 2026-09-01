@@ -153,7 +153,7 @@ describe('RemoteHostCardComponent', () => {
       .toContain('Task inflowopen');
   });
 
-  it('shows per-provider auth state, probe detail, expiry warning, and latest transition', () => {
+  it('shows typed provider auth state, probe detail, expiry warning, and latest transition', () => {
     const fixture = mount({
       ...HOST,
       capabilityHealth: [{
@@ -162,13 +162,14 @@ describe('RemoteHostCardComponent', () => {
         freshUntil: '2026-07-10T12:02:30Z', isFresh: true, consecutiveFailures: 0,
         affectedClaims: [], recoveryHistory: [],
       }, {
-        key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: 'unavailable',
+        key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: 'ready',
         healthState: 'healthy', advertisedAt: '2026-07-10T11:59:30Z',
         freshUntil: '2026-07-10T12:02:30Z', isFresh: true, consecutiveFailures: 0,
-        detail: 'Not logged in', expiresAt: '2026-07-20T12:00:00Z', affectedClaims: [],
+        detail: 'Credentials expiring; non-interactive refresh available', condition: 'expiring',
+        expiresAt: '2026-07-20T12:00:00Z', affectedClaims: [],
         recoveryHistory: [{
-          occurredAt: '2026-07-10T11:59:30Z', fromState: 'ready', toState: 'unavailable',
-          reason: 'Provider authentication probe changed from ready to unavailable.',
+          occurredAt: '2026-07-10T11:59:30Z', fromState: 'unavailable', toState: 'ready',
+          reason: 'Positive provider authentication probe recovered the capability.',
         }],
       }],
     });
@@ -177,15 +178,15 @@ describe('RemoteHostCardComponent', () => {
     ) as HTMLElement;
 
     expect(badge.textContent).toContain('Claude');
-    expect(badge.textContent).toContain('unavailable');
-    expect(badge.getAttribute('data-state')).toBe('unavailable');
+    expect(badge.textContent).toContain('credentials expiring');
+    expect(badge.getAttribute('data-state')).toBe('expiring');
     expect(fixture.debugElement
       .query(By.css('[data-testid="remote-host-provider-auth-claude"]'))
-      .injector.get(AppTooltipDirective).appTooltip()).toContain('Not logged in');
+      .injector.get(AppTooltipDirective).appTooltip()).toContain('non-interactive refresh available');
     expect(fixture.nativeElement.querySelector('[data-testid="remote-host-provider-auth-expiry-claude"]')?.textContent)
       .toContain('Expires in 10 days');
     expect(fixture.nativeElement.querySelector('[data-testid="remote-host-provider-auth-history-claude"]')?.textContent)
-      .toContain('ready → unavailable');
+      .toContain('unavailable → ready');
   });
 
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {

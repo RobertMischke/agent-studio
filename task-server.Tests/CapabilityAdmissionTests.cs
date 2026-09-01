@@ -292,6 +292,95 @@ public sealed class CapabilityAdmissionTests
             });
     }
 
+    [Fact]
+    public async Task Positive_auth_probe_clears_persisted_drain_without_restart_but_transient_probe_does_not()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        const string runner = "codex";
+        const string instance = "codex-instance";
+        var capability = CapabilityProtocol.ProviderAuthentication("codex");
+        await RegisterAndAdvertiseAsync(
+            store,
+            clock,
+            runner,
+            instance,
+            "host-a",
+            CapabilityProtocol.CodingExecutor,
+            capability);
+        await FailAsync(store, clock, runner, instance, capability, "auth-1");
+        await FailAsync(store, clock, runner, instance, capability, "auth-2");
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await store.AdvertiseCapabilitiesAsync(
+            Advertisement(clock, runner, instance, 2, CapabilityProtocol.CodingExecutor, capability) with
+            {
+                Capabilities =
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        capability,
+                        "provider-auth",
+                        "ready",
+                        Identity: "codex",
+                        Detail: "transient auth error, retrying",
+                        Condition: "transient-error"),
+                ],
+            },
+            runner,
+            default);
+        var retained = Assert.Single(
+            Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default)).Capabilities,
+            item => item.Key == capability);
+        Assert.Equal(CapabilityHealthStates.Draining, retained.HealthState);
+
+        var expiry = clock.GetUtcNow().AddDays(7).UtcDateTime;
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await store.AdvertiseCapabilitiesAsync(
+            Advertisement(clock, runner, instance, 3, CapabilityProtocol.CodingExecutor, capability) with
+            {
+                Capabilities =
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        capability,
+                        "provider-auth",
+                        "ready",
+                        Identity: "codex",
+                        Detail: "credentials expiring; codex login status confirmed an active session",
+                        Condition: "expiring",
+                        ExpiresAt: expiry),
+                ],
+            },
+            runner,
+            default);
+
+        var recovered = Assert.Single(
+            Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default)).Capabilities,
+            item => item.Key == capability);
+        Assert.Equal(CapabilityHealthStates.Healthy, recovered.HealthState);
+        Assert.Equal(0, recovered.ConsecutiveFailures);
+        Assert.Null(recovered.CooldownUntil);
+        Assert.Equal("expiring", recovered.Condition);
+        Assert.Equal(expiry, recovered.ExpiresAt);
+        Assert.Contains(
+            recovered.RecoveryHistory,
+            item => item.FromState == CapabilityHealthStates.Draining
+                    && item.ToState == CapabilityHealthStates.Healthy);
+
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                runner,
+                instance,
+                RequiredCapabilities: [CapabilityProtocol.CodingExecutor, capability]),
+            runner,
+            default);
+        Assert.Equal("claimed", claim.Status);
+    }
+
     [Theory]
     [InlineData(CapabilityProtocol.Disk)]
     [InlineData(CapabilityProtocol.LeaseAuthority)]

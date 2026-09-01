@@ -212,6 +212,19 @@ Canary failure returns to a longer cooldown. Do not lower
 the central runtime capacity as a repair. Healthy capabilities and unrelated
 services on the same host continue using the configured slots.
 
+Provider authentication uses a stricter contract. One transient probe or run
+error retains the last usable state and retries; a rate limit carries its reset
+time and is not presented as sign-out. Two consecutive, distinguishable
+provider-authentication failures are required before the capability says
+`genuinely signed out, re-auth needed`. A later successful CLI status probe,
+including one with a non-blocking expiry warning, clears the persisted
+capability circuit and resumes admission without a service restart. The runner
+also reads host-local Claude and Codex credential metadata
+without logging token values. Known expiry enters a quiet 14-day warning while
+remaining claim-admissible. Provider limit reset (`retryAt`) and credential
+expiry (`expiresAt`) remain separate so neither produces the other's operator
+message.
+
 Execution Hosts shows the capability state, reason, first and last failure,
 cooldown, canary claim, affected coding and review attempts, and recovery
 history. A stale advertisement is explicitly stale. AGT-2142 telemetry appears

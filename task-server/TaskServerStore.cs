@@ -2431,6 +2431,9 @@ public sealed partial class TaskServerStore
                 version TEXT,
                 identity_value TEXT,
                 detail TEXT,
+                condition TEXT,
+                expires_at TEXT,
+                retry_at TEXT,
                 advertised_at TEXT NOT NULL,
                 fresh_until TEXT NOT NULL,
                 generation INTEGER NOT NULL,
@@ -2739,6 +2742,9 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "artifacts", "sequence", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runs", "required_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
         await EnsureColumnAsync(connection, "runs", "canary_capabilities_json", "TEXT NOT NULL DEFAULT '[]'", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "condition", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "expires_at", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "retry_at", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "host_orchestrator_minimum", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "host_orchestrator_maximum", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "role_max_parallelism", "INTEGER", ct);

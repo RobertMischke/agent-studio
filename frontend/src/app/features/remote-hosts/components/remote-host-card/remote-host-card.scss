@@ -186,8 +186,16 @@
 }
 .provider-auth__badge strong { color: var(--studio-fg-strong); }
 .provider-auth__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--studio-fg-dim); }
-.provider-auth__badge[data-state='unavailable'] { background: var(--notify-error-tint); color: var(--notify-error-icon-fg); }
-.provider-auth__badge[data-state='unavailable'] .provider-auth__dot { background: var(--severity-high); }
+.provider-auth__badge[data-state='unavailable'],
+.provider-auth__badge[data-state='signed-out'] { background: var(--notify-error-tint); color: var(--notify-error-icon-fg); }
+.provider-auth__badge[data-state='unavailable'] .provider-auth__dot,
+.provider-auth__badge[data-state='signed-out'] .provider-auth__dot { background: var(--severity-high); }
+.provider-auth__badge[data-state='retrying'],
+.provider-auth__badge[data-state='limited'],
+.provider-auth__badge[data-state='expiring'] { background: var(--notify-warning-tint); color: var(--notify-warning-icon-fg); }
+.provider-auth__badge[data-state='retrying'] .provider-auth__dot,
+.provider-auth__badge[data-state='limited'] .provider-auth__dot,
+.provider-auth__badge[data-state='expiring'] .provider-auth__dot { background: var(--severity-medium); }
 .provider-auth__expiry { color: var(--notify-warning-icon-fg); font-size: 10px; }
 .provider-auth__history { color: var(--studio-fg-muted); font-size: 10px; }
 

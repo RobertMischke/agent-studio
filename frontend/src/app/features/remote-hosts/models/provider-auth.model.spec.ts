@@ -24,6 +24,25 @@ describe('provider auth projection', () => {
     expect(unknown.detail).toContain('expired');
   });
 
+  it('keeps transient and expiring auth admissible while naming limits and real sign-out', () => {
+    const retrying = providerAuthBadgesForSnapshot(
+      snapshot('ready', 'healthy', true, 'transient auth error, retrying', null, 'transient-error'),
+      NOW,
+    )[0];
+    const limited = providerAuthBadgesForSnapshot(
+      snapshot('unavailable', 'healthy', true, 'rate-limited until reset', null, 'rate-limited'),
+      NOW,
+    )[0];
+    const signedOut = providerAuthBadgesForSnapshot(
+      snapshot('unavailable', 'healthy', true, 're-auth needed', null, 'signed-out'),
+      NOW,
+    )[0];
+
+    expect(retrying).toMatchObject({ state: 'retrying', stateLabel: 'transient auth error, retrying' });
+    expect(limited.state).toBe('limited');
+    expect(signedOut).toMatchObject({ state: 'signed-out', stateLabel: 'genuinely signed out, re-auth needed' });
+  });
+
   it('warns fourteen days before a known credential expiry', () => {
     const expiresAt = new Date(NOW + 13 * 24 * 60 * 60_000).toISOString();
     const badge = providerAuthBadgesForSnapshot(
@@ -81,6 +100,19 @@ describe('provider auth projection', () => {
       NOW,
     ))).toBeNull();
   });
+
+  it('names a provider limit without asking the operator to sign in', () => {
+    const task = { state: '2-ready', cliType: 'claude' } as TaskInfo;
+    const limited = providerAuthBadgesForSnapshot(
+      snapshot('unavailable', 'healthy', true, 'rate-limited until reset', null, 'rate-limited'),
+      NOW,
+    );
+
+    const reason = providerAuthWaitReason(task, limited);
+
+    expect(reason?.label).toContain('Claude rate-limited');
+    expect(reason?.label).not.toContain('sign-in');
+  });
 });
 
 function snapshot(
@@ -89,6 +121,7 @@ function snapshot(
   isFresh: boolean,
   detail = 'Active session confirmed',
   expiresAt: string | null = null,
+  condition: 'authenticated' | 'transient-error' | 'rate-limited' | 'expiring' | 'signed-out' | null = null,
 ): TaskServerRunnerCapabilitySnapshot {
   return {
     runnerId: 'agent-runner-01',
@@ -122,6 +155,7 @@ function snapshot(
       isFresh,
       consecutiveFailures: healthState === 'healthy' ? 0 : 1,
       detail,
+      condition,
       expiresAt,
       affectedClaims: [],
       recoveryHistory: [],

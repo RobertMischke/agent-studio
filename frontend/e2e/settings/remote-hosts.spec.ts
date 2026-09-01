@@ -701,18 +701,18 @@ test.describe('Execution Hosts settings section', () => {
     expect(String(createBody?.['promptMarkdown'])).not.toContain(providerSecret);
   });
 
-  test('shows provider auth OK, unavailable, and unknown states with renewal context', async ({ page }) => {
+  test('shows signed-out, transient, limited, and expiring provider auth states', async ({ page }) => {
     const now = Date.now();
-    const capability = (key: string, advertisedStatus: string, detail?: string) => ({
+    const capability = (key: string, advertisedStatus: string, detail?: string, condition?: string) => ({
       key, category: key.split(':')[0], advertisedStatus, healthState: 'healthy',
       reason: null, advertisedAt: new Date(now - 30_000).toISOString(),
       freshUntil: new Date(now + 120_000).toISOString(), isFresh: true,
       firstFailureAt: null, lastFailureAt: null, cooldownUntil: null,
       canaryClaimId: null, consecutiveFailures: 0, version: null,
-      identity: key.split(':')[1], detail, affectedClaims: [], recoveryHistory: [],
+      identity: key.split(':')[1], detail, condition, affectedClaims: [], recoveryHistory: [],
     });
     const claude = {
-      ...capability('provider-auth:claude', 'unavailable', 'Not logged in'),
+      ...capability('provider-auth:claude', 'unavailable', 'genuinely signed out, re-auth needed', 'signed-out'),
       expiresAt: new Date(now + 10 * 24 * 60 * 60_000).toISOString(),
       recoveryHistory: [{
         occurredAt: new Date(now - 30_000).toISOString(), fromState: 'ready',
@@ -730,8 +730,15 @@ test.describe('Execution Hosts settings section', () => {
         hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
         capabilities: [
           capability('cli-execution:claude', 'ready'), claude,
-          capability('cli-execution:codex', 'ready'), capability('provider-auth:codex', 'ready', 'Active session confirmed'),
-          capability('cli-execution:gemini', 'ready'),
+          capability('cli-execution:codex', 'ready'), capability('provider-auth:codex', 'ready', 'transient auth error, retrying', 'transient-error'),
+          capability('cli-execution:gemini', 'ready'), {
+            ...capability('provider-auth:gemini', 'unavailable', 'rate-limited until 2026-09-01T14:00:00Z', 'rate-limited'),
+            retryAt: '2026-09-01T14:00:00Z',
+          },
+          capability('cli-execution:copilot', 'ready'), {
+            ...capability('provider-auth:copilot', 'ready', 'credentials expiring; non-interactive refresh available', 'expiring'),
+            expiresAt: new Date(now + 8 * 24 * 60 * 60_000).toISOString(),
+          },
         ],
         telemetry: null,
       }]),
@@ -740,13 +747,17 @@ test.describe('Execution Hosts settings section', () => {
     await page.goto('/#/workspace/settings/remote-hosts');
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     await expandHost(remote);
-    await expect(remote.getByTestId('remote-host-provider-auth-claude')).toHaveAttribute('data-state', 'unavailable');
-    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'ok');
-    await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toHaveAttribute('data-state', 'unknown');
-    await expect(remote.getByTestId('remote-host-provider-auth-expiry-claude')).toContainText('Expires in 10 days');
+    await expect(remote.getByTestId('remote-host-provider-auth-claude')).toHaveAttribute('data-state', 'signed-out');
+    await expect(remote.getByTestId('remote-host-provider-auth-claude')).toContainText('genuinely signed out, re-auth needed');
+    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'retrying');
+    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toContainText('transient auth error, retrying');
+    await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toHaveAttribute('data-state', 'limited');
+    await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toContainText('rate-limited until');
+    await expect(remote.getByTestId('remote-host-provider-auth-copilot')).toHaveAttribute('data-state', 'expiring');
+    await expect(remote.getByTestId('remote-host-provider-auth-expiry-copilot')).toContainText('Expires in 8 days');
     await expect(remote.getByTestId('remote-host-provider-auth-history-claude')).toContainText('ready → unavailable');
     await remote.getByTestId('remote-host-provider-auth-claude').hover();
-    await expect(page.getByRole('tooltip')).toContainText('Not logged in');
+    await expect(page.getByRole('tooltip')).toContainText('re-auth needed');
 
     await setTheme(page, 'dark');
     await remote.screenshot({ path: join(SHOT_DIR, 'provider-auth-states-dark--mocked.png') });

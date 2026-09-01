@@ -773,10 +773,17 @@ public sealed class RemoteTaskRunner
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
-                    if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
+                    var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                   ?? AgentCliProcess.ConfiguredCliType(_options);
+                    var providerBinary = RunnerCapabilityProbe.CodingCliBinaries(_options)
+                        .FirstOrDefault(item => string.Equals(item.CliType, provider, StringComparison.Ordinal))
+                        .Binary
+                        ?? _options.CliBin;
+                    var providerFailure = ProviderAuthFailureClassifier.Classify(processResult);
+                    var providerStatus = ProviderAuthProbe.Shared.RecordRuntimeResult(providerBinary, processResult);
+                    if (providerFailure.Kind == ProviderAuthFailureKind.SignedOut
+                        && providerStatus?.Condition == ProviderAuthCondition.SignedOut)
                     {
-                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
-                                       ?? AgentCliProcess.ConfiguredCliType(_options);
                         var claimId = outbox?.Authority.RunId;
                         var diagnostic = result.StdErr
                             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
@@ -799,6 +806,14 @@ public sealed class RemoteTaskRunner
                         shipper.Add(
                             "system",
                             $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized");
+                    }
+                    else if (providerFailure.Kind is ProviderAuthFailureKind.RateLimited
+                             or ProviderAuthFailureKind.TransientAuth)
+                    {
+                        shipper.Add(
+                            "system",
+                            $"[runner] provider-auth condition={providerStatus?.Condition ?? "unchanged"} "
+                            + $"provider={provider} detail={providerStatus?.Detail ?? providerFailure.Detail}");
                     }
                     var classified = result.TimedOut
                         ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)

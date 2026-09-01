@@ -11,6 +11,10 @@ public sealed class RunnerCapabilityProbeTests
     [InlineData(1, "", "HTTP 401 Missing bearer authentication", true)]
     [InlineData(1, "", "login required", true)]
     [InlineData(1, "", "ordinary product failure", false)]
+    [InlineData(1, "", "ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find context 'public sealed class V1ReviewExecutorRegistry' in /worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs", false)]
+    [InlineData(1, "", "HTTP 429 rate limit exceeded; retry in 15 minutes", false)]
+    [InlineData(1, "", "OAuth token refresh timed out due to a transient network error", false)]
+    [InlineData(128, "", "fatal: Authentication failed for https://github.com/example/repo.git", false)]
     [InlineData(0, "", "HTTP 401 in historical output", false)]
     public void Provider_authentication_failure_requires_a_nonzero_typed_signal(
         int exitCode,
@@ -21,6 +25,23 @@ public sealed class RunnerCapabilityProbeTests
             expected,
             RunnerCapabilityProbe.IsProviderAuthenticationFailure(
                 new ProcessResult(exitCode, stdout, stderr)));
+
+    [Fact]
+    public void Provider_failure_classifier_routes_limits_and_transient_refresh_errors_away_from_sign_in()
+    {
+        var now = new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
+
+        var limited = ProviderAuthFailureClassifier.Classify(
+            new ProcessResult(1, "", "rate limit exceeded; retry in 20 minutes"),
+            now);
+        var transient = ProviderAuthFailureClassifier.Classify(
+            new ProcessResult(1, "", "OAuth token refresh timed out due to a network error"),
+            now);
+
+        Assert.Equal(ProviderAuthFailureKind.RateLimited, limited.Kind);
+        Assert.Equal(now.AddMinutes(20), limited.RetryAt);
+        Assert.Equal(ProviderAuthFailureKind.TransientAuth, transient.Kind);
+    }
 
     [Theory]
     [InlineData("/usr/local/bin/codex", "codex")]

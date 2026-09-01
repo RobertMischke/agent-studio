@@ -505,11 +505,28 @@ state.
   `/opt/agent-host/current` (or `RUNNER_RELEASE_ID`) rather than the generic
   assembly package version.
 - Provider-auth advertisement changes are appended to the same bounded recovery
-  history exposed by the management snapshot. Execution Hosts turns that data
-  into per-CLI `OK`, `Unavailable`, and `Unknown` badges, transition
-  notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
-  A recognized provider-auth run failure reports unavailability immediately so
-  revocation between periodic probes is visible.
+  history exposed by the management snapshot. One shared classifier consumes
+  both idle status probes and completed CLI output. Only distinguishable
+  provider sign-out signatures increment the two-observation logout threshold;
+  tool failures, generic exit 1, timeouts, network/refresh races, and unknown
+  output retain the last usable state. Rate-limit output becomes a typed
+  `rate-limited` condition with its reset time instead of a sign-in failure.
+  A later positive probe advertises `authenticated`, or `expiring` when the
+  session remains usable inside its warning window, and atomically clears the
+  persisted suspect/draining state, failure count, cooldown, and canary without
+  restarting the Runner. Execution Hosts renders `transient auth error,
+  retrying`, `rate-limited until <time>`, `credentials expiring`, and
+  `genuinely signed out, re-auth needed` separately. Only the last creates the
+  persistent sign-in alarm and Ready-card sign-in wait.
+- Provider credential freshness is a secret-free runner concern. The probe
+  reads only the host-local `~/.codex/auth.json` and
+  `~/.claude/.credentials.json`, never returns token values, and carries known
+  expiry plus provider-limit retry time in separate additive capability fields.
+  Claude uses the refresh-token deadline when present. Codex uses the access
+  token JWT deadline and records whether the opaque refresh token makes
+  non-interactive renewal available. A 14-day warning remains claim-admissible
+  and quiet; the ordinary CLI status/run path is the non-interactive refresh
+  opportunity, and only repeated explicit logout turns it into re-authentication.
 - Account-level provider session, usage, and rate limits are CLI capability
   state, not task outcomes. The local runner records `claude: limited until
   <time>` in runner status, persists the current card in provider-scoped

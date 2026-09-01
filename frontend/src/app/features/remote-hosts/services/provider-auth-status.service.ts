@@ -54,22 +54,35 @@ export class ProviderAuthStatusService implements OnDestroy {
     if (wasLoaded) {
       for (const [id, current] of next) {
         const prior = this.previous.get(id);
-        if (prior?.state === 'ok' && current.state === 'unavailable') {
+        if (prior?.state !== 'signed-out' && current.state === 'signed-out') {
           this.notifications.warning(
-            `${current.providerLabel} authentication changed from OK to unavailable on ${current.hostName}. Ready cards assigned to this host are waiting. ${current.detail}`,
+            `${current.providerLabel} is genuinely signed out on ${current.hostName}; re-authentication is needed. Ready cards assigned to this host are waiting. ${current.detail}`,
             `${current.providerLabel} sign-in required`,
+          );
+        } else if (prior?.state !== current.state && current.state === 'retrying') {
+          this.notifications.info(
+            `${current.providerLabel} reported a transient authentication error on ${current.hostName}. The last usable state is retained while the runner retries.`,
+            `${current.providerLabel} auth retrying`,
+          );
+        } else if (prior?.state !== current.state && current.state === 'limited') {
+          this.notifications.info(
+            `${current.providerLabel} is ${current.stateLabel} on ${current.hostName}. This is a provider limit, not a sign-in failure.`,
+            `${current.providerLabel} rate-limited`,
           );
         }
       }
     }
     for (const current of next.values()) {
-      if (!current.expiresSoon || !current.expiresAt || !current.expiryLabel) continue;
+      if (!current.expiresSoon
+        || !current.expiresAt
+        || !current.expiryLabel
+        || !['ok', 'retrying', 'expiring'].includes(current.state)) continue;
       const warningKey = `${current.id}:${current.expiresAt}`;
       if (this.expiryWarnings.has(warningKey)) continue;
       this.expiryWarnings.add(warningKey);
-      this.notifications.warning(
-        `${current.providerLabel} authentication on ${current.hostName} ${current.expiryLabel.toLowerCase()}. Renew it before Ready cards are held.`,
-        `${current.providerLabel} authentication expires soon`,
+      this.notifications.info(
+        `${current.providerLabel} credentials on ${current.hostName} ${current.expiryLabel.toLowerCase()}. The runner will allow non-interactive refresh when available; re-authenticate if the warning persists.`,
+        `${current.providerLabel} credentials expiring`,
       );
     }
     this.previous = next;
