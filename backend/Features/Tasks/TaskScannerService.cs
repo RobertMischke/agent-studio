@@ -92,9 +92,14 @@ public class TaskScannerService : ITaskScanner
     /// the FileSystemWatcher's debounce window. No-op when no cache is
     /// registered (test fixtures that build the scanner directly).
     /// </summary>
-    public void InvalidateCache()
+    public void InvalidateCache(
+        [System.Runtime.CompilerServices.CallerMemberName] string callerMember = "",
+        [System.Runtime.CompilerServices.CallerFilePath] string callerFile = "")
     {
-        _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        _indexCache?.Invalidate(
+            TaskIndexCache.InvalidationSource.Mutation,
+            callerMember,
+            callerFile);
         _statsMetadataCache?.Invalidate();
     }
 

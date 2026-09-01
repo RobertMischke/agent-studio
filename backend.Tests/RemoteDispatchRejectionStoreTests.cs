@@ -85,6 +85,40 @@ public sealed class RemoteDispatchRejectionStoreTests : IDisposable
         Assert.Equal(secondReadyAt.AddMinutes(1), refreshed.RejectedAtUtc);
     }
 
+    [Fact]
+    public void Clear_InvalidatesOnlyWhenPersistedRejectionWasRemoved()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(Path.Combine(_folder, "task.json"), "{}");
+        var config = new ConfigurationBuilder().Build();
+        var scanner = new TaskScannerService(
+            config,
+            NullLogger<TaskScannerService>.Instance,
+            new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config));
+        var cache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
+        scanner.SetIndexCache(cache);
+        var store = new RemoteDispatchRejectionStore(
+            NullLogger<RemoteDispatchRejectionStore>.Instance,
+            scanner);
+        var task = new TaskInfo { Id = "task-1", FolderPath = _folder };
+
+        store.Clear(task);
+        Assert.Equal(0, cache.MutationInvalidations);
+
+        TaskJsonFile.UpdateFieldOrThrow(
+            _folder,
+            RemoteDispatchRejectionStore.FieldName,
+            new RemoteDispatchRejection { Code = "test" });
+        store.Clear(task);
+
+        Assert.Equal(1, cache.MutationInvalidations);
+        using (var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(_folder, "task.json"))))
+            Assert.False(json.RootElement.TryGetProperty(RemoteDispatchRejectionStore.FieldName, out _));
+
+        store.Clear(task);
+        Assert.Equal(1, cache.MutationInvalidations);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_folder)) Directory.Delete(_folder, recursive: true);

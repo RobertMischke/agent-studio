@@ -64,6 +64,48 @@ public class TaskIndexCacheTests : IDisposable
     }
 
     [Fact]
+    public void Invalidate_LogsOriginatingCallerThroughScannerWrapper()
+    {
+        var logger = new CapturingLogger<TaskIndexCache>();
+        var cache = new TaskIndexCache(_scanner, logger, _config);
+        _scanner.SetIndexCache(cache);
+
+        _scanner.InvalidateCache();
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(
+            nameof(Invalidate_LogsOriginatingCallerThroughScannerWrapper),
+            entry.Single(field => field.Key == "CallerMember").Value);
+        Assert.EndsWith(
+            "TaskIndexCacheTests.cs",
+            Assert.IsType<string>(entry.Single(field => field.Key == "CallerFile").Value),
+            StringComparison.Ordinal);
+        Assert.Equal(
+            TaskIndexCache.InvalidationSource.Mutation,
+            entry.Single(field => field.Key == "Source").Value);
+    }
+
+    [Fact]
+    public void StatsRollup_ReportsAllCacheCounters()
+    {
+        WriteJob(TaskStates.Ready, "stats-job", "Stats");
+        _ = _cache.GetSnapshot();
+        _ = _cache.GetSnapshot();
+        _cache.Invalidate(TaskIndexCache.InvalidationSource.External);
+        _cache.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        var logger = new CapturingLogger<TaskIndexCacheStatsService>();
+
+        new TaskIndexCacheStatsService(_cache, logger).LogRollup();
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(1L, entry.Single(field => field.Key == "Hits").Value);
+        Assert.Equal(1L, entry.Single(field => field.Key == "Misses").Value);
+        Assert.Equal(0L, entry.Single(field => field.Key == "StaleHits").Value);
+        Assert.Equal(1L, entry.Single(field => field.Key == "ExternalInvalidations").Value);
+        Assert.Equal(1L, entry.Single(field => field.Key == "MutationInvalidations").Value);
+    }
+
+    [Fact]
     public void Invalidate_CausesNextReadToSeeFreshDiskState()
     {
         WriteJob("2-ready", "job-1", "First");

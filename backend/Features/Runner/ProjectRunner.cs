@@ -818,9 +818,9 @@ public class ProjectRunner
         }, _logger);
     }
 
-    private void ClearQuotaWait(TaskInfo info)
+    internal void ClearQuotaWait(TaskInfo info)
     {
-        QuotaWaitMarker.Clear(info.FolderPath, _logger);
+        if (!QuotaWaitMarker.Clear(info.FolderPath, _logger)) return;
         // quota-wait.json participates in the indexed TaskInfo projection.
         // Make deletion visible synchronously so a recovered provider wait
         // cannot be re-read from a stale task snapshot on the next tick.

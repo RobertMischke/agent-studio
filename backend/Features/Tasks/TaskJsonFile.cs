@@ -38,6 +38,43 @@ internal static class TaskJsonFile
     }
 
     /// <summary>
+    /// Reads <c>task.json</c> once and replaces or adds several top-level
+    /// fields in one atomic rewrite while preserving existing field order.
+    /// </summary>
+    internal static void UpdateFields(
+        string jobDir,
+        IReadOnlyDictionary<string, object> values,
+        ILogger logger)
+    {
+        if (!File.Exists(Path.Combine(jobDir, "task.json"))) return;
+        try
+        {
+            var jobJsonPath = Path.Combine(jobDir, "task.json");
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+
+            var remaining = new Dictionary<string, object>(values);
+            var updated = new Dictionary<string, object>();
+            foreach (var kv in doc)
+            {
+                if (remaining.Remove(kv.Key, out var replacement))
+                    updated[kv.Key] = replacement;
+                else
+                    updated[kv.Key] = kv.Value;
+            }
+            foreach (var kv in remaining)
+                updated[kv.Key] = kv.Value;
+
+            Write(jobJsonPath, updated);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update fields in task.json at {Dir}", jobDir);
+        }
+    }
+
+    /// <summary>
     /// Strict counterpart used by multi-file mutations that must roll back
     /// when any write fails. Unlike <see cref="UpdateField"/>, this method
     /// never turns a failed write into an apparent success.
@@ -76,17 +113,17 @@ internal static class TaskJsonFile
     /// file or key is absent. Used to clean up obsolete fields after a feature
     /// is removed (e.g. the operator-override <c>excludedCommits</c> array).
     /// </summary>
-    internal static void RemoveField(string jobDir, string fieldName, ILogger logger)
+    internal static bool RemoveField(string jobDir, string fieldName, ILogger logger)
     {
         var jobJsonPath = Path.Combine(jobDir, "task.json");
-        if (!File.Exists(jobJsonPath)) return;
+        if (!File.Exists(jobJsonPath)) return false;
 
         try
         {
             var json = File.ReadAllText(jobJsonPath);
             var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
                       ?? new Dictionary<string, JsonElement>();
-            if (!doc.ContainsKey(fieldName)) return;
+            if (!doc.ContainsKey(fieldName)) return false;
 
             var updated = new Dictionary<string, object>();
             foreach (var kv in doc)
@@ -96,10 +133,12 @@ internal static class TaskJsonFile
             }
 
             Write(jobJsonPath, updated);
+            return true;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to remove field {Field} from task.json at {Dir}", fieldName, jobDir);
+            return false;
         }
     }
 

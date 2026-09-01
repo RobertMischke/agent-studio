@@ -36,6 +36,8 @@ public sealed class ProjectRunnerModeTests : IDisposable
     private readonly string _watchPath;
     private readonly string _workspaceRoot;
     private TaskStateMachine? _states;
+    private TaskScannerService? _scanner;
+    private TaskIndexCache? _indexCache;
     private const string ProjectName = "demo";
 
     public ProjectRunnerModeTests()
@@ -425,6 +427,31 @@ public sealed class ProjectRunnerModeTests : IDisposable
         Assert.Equal(reset, limit.LimitedUntil);
     }
 
+    [Fact]
+    public void ClearQuotaWait_InvalidatesOnlyForDeletion_AndRefreshesProjection()
+    {
+        WriteJob(TaskStates.Progress, "job-quota-wait");
+        var folder = Path.Combine(_watchPath, TaskStates.Progress, "job-quota-wait");
+        QuotaWaitMarker.Write(folder, new QuotaWaitRecord
+        {
+            CliType = "claude",
+            ResetAt = DateTime.UtcNow.AddHours(1),
+            Reason = "test quota wait",
+        });
+        var runner = BuildRunner();
+        var info = Assert.Single(_scanner!.ScanAllJobs());
+        Assert.NotNull(info.QuotaWait);
+        var invalidationsBeforeClear = _indexCache!.MutationInvalidations;
+
+        runner.ClearQuotaWait(info);
+
+        Assert.Equal(invalidationsBeforeClear + 1, _indexCache.MutationInvalidations);
+        Assert.Null(Assert.Single(_scanner.ScanAllJobs()).QuotaWait);
+
+        runner.ClearQuotaWait(info);
+        Assert.Equal(invalidationsBeforeClear + 1, _indexCache.MutationInvalidations);
+    }
+
     /// <summary>
     /// Mixed transient failures across DIFFERENT jobs (none repeating to the
     /// threshold) must not park a task and must not halt: the window resets and
@@ -615,6 +642,7 @@ public sealed class ProjectRunnerModeTests : IDisposable
 
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new TaskScannerService(config, NullLogger<TaskScannerService>.Instance, summary);
+        _scanner = scanner;
         var states = new TaskStateMachine(scanner, NullLogger<TaskStateMachine>.Instance);
         _states = states;
         var mutations = new TaskMutationService(scanner, new ClientIdentityStore(config, NullLogger<ClientIdentityStore>.Instance), new ProjectRegistry(config, NullLogger<ProjectRegistry>.Instance), new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance), NullLogger<TaskMutationService>.Instance);
@@ -626,6 +654,7 @@ public sealed class ProjectRunnerModeTests : IDisposable
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
         var indexCache = new TaskIndexCache(scanner, NullLogger<TaskIndexCache>.Instance, config);
+        _indexCache = indexCache;
         scanner.SetIndexCache(indexCache);
         var taskAccess = new AgentStudio.TaskAccess.TaskAccessService(
             scanner, mutations, states, transitions, indexCache,

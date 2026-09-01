@@ -922,10 +922,36 @@ public class TaskMutationService
     /// </summary>
     public bool SetJobPhase(string folderPath, string? phase)
     {
-        if (!Directory.Exists(folderPath)) return false;
-        TaskJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
-        TaskJsonFile.UpdateField(folderPath, "phaseEnteredAt",
-            string.IsNullOrWhiteSpace(phase) ? "" : DateTime.UtcNow.ToString("o"), _logger);
+        var taskJsonPath = Path.Combine(folderPath, "task.json");
+        if (!File.Exists(taskJsonPath)) return false;
+
+        var normalizedPhase = phase ?? "";
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(taskJsonPath));
+            var currentPhase = document.RootElement.TryGetProperty("phase", out var phaseElement)
+                && phaseElement.ValueKind == JsonValueKind.String
+                    ? phaseElement.GetString() ?? ""
+                    : "";
+            if (string.Equals(currentPhase, normalizedPhase, StringComparison.Ordinal))
+                return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read phase from task.json at {Dir}", folderPath);
+            return false;
+        }
+
+        TaskJsonFile.UpdateFields(
+            folderPath,
+            new Dictionary<string, object>
+            {
+                ["phase"] = normalizedPhase,
+                ["phaseEnteredAt"] = string.IsNullOrWhiteSpace(phase)
+                    ? ""
+                    : DateTime.UtcNow.ToString("o"),
+            },
+            _logger);
         return Updated();
     }
 
