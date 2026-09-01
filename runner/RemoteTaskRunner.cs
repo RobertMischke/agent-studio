@@ -773,10 +773,17 @@ public sealed class RemoteTaskRunner
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
-                    if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
+                    var invocation = AgentCliProcess.Resolve(_options, slot.RunSpec);
+                    var providerAccess = ProviderAccessClassifier.Classify(
+                        processResult.ExitCode,
+                        processResult.StdOut,
+                        processResult.StdErr);
+                    var providerAuth = ProviderAuthProbe.Shared.RecordProcessResult(
+                        invocation.FileName,
+                        processResult);
+                    if (providerAccess.Kind == ProviderAccessEvidenceKind.AuthenticationFailure)
                     {
-                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
-                                       ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var provider = invocation.CliType;
                         var claimId = outbox?.Authority.RunId;
                         var diagnostic = result.StdErr
                             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
@@ -799,6 +806,18 @@ public sealed class RemoteTaskRunner
                         shipper.Add(
                             "system",
                             $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized");
+                    }
+                    else if (providerAccess.Kind == ProviderAccessEvidenceKind.RateLimited)
+                    {
+                        shipper.Add(
+                            "system",
+                            $"[runner] provider-auth state=limited provider={invocation.CliType} until={providerAuth.LimitedUntil:o}; claims wait for provider recovery, not sign-in");
+                    }
+                    else if (providerAccess.Kind == ProviderAccessEvidenceKind.TransientFailure)
+                    {
+                        shipper.Add(
+                            "system",
+                            $"[runner] provider-auth state=retrying provider={invocation.CliType}; last-good capability retained");
                     }
                     var classified = result.TimedOut
                         ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)

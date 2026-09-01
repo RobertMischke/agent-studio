@@ -136,6 +136,41 @@ public sealed class ManagementApiTests : IDisposable
                           && capability.HealthState == Contract.CapabilityHealthStates.Suspect
                           && capability.ConsecutiveFailures == 1
                           && capability.FirstFailureAt is not null);
+
+        var expiresAt = DateTime.UtcNow.AddDays(10);
+        registry.AdvertiseCapabilities(
+            runnerId,
+            new Contract.CapabilityAdvertisementRequest(
+                runnerId,
+                instanceId,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                DateTime.UtcNow,
+                180,
+                2,
+                [
+                    new Contract.AdvertisedCapabilityDto(
+                        Contract.CapabilityProtocol.CliExecution("claude"),
+                        "cli-execution"),
+                    new Contract.AdvertisedCapabilityDto(
+                        Contract.CapabilityProtocol.ProviderAuthentication("claude"),
+                        "provider-auth",
+                        "ready",
+                        Signal: "credentials-expiring",
+                        ExpiresAt: expiresAt),
+                ]));
+
+        var recovered = Assert.Single(registry.ListCapabilitySnapshots());
+        var recoveredAuth = Assert.Single(
+            recovered.Capabilities,
+            capability => capability.Key == "provider-auth:claude");
+        Assert.Equal(Contract.CapabilityHealthStates.Healthy, recoveredAuth.HealthState);
+        Assert.Equal(0, recoveredAuth.ConsecutiveFailures);
+        Assert.Equal("credentials-expiring", recoveredAuth.Signal);
+        Assert.Equal(expiresAt, recoveredAuth.ExpiresAt);
+        Assert.Contains(
+            recoveredAuth.RecoveryHistory,
+            item => item.FromState == Contract.CapabilityHealthStates.Suspect
+                    && item.ToState == Contract.CapabilityHealthStates.Healthy);
     }
 
     [Fact]

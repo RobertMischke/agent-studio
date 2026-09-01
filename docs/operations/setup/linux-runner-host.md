@@ -253,8 +253,11 @@ is one file for all provider environment credentials:
 `/etc/agent-runner/provider-auth.env`, mode `0640`, owner `root`, group `agent`.
 Both `agent-runner.service` and `agent-runner-review.service` load this file with
 `EnvironmentFile=` after their role-specific environment file. The auth probe
-and CLI launch read only the resulting process environment. They do not read a
-credential path.
+and CLI launch use the resulting process environment as authentication
+authority. A separate metadata-only freshness check reads native
+`~/.claude/.credentials.json` and `~/.codex/auth.json` files when they exist and
+returns only expiry and modification timestamps. It never exposes token values
+or treats an unknown file format as signed out.
 
 Provision the complete file through SSH standard input. This example prompts
 without echo and keeps the token out of local history and the remote command
@@ -321,17 +324,20 @@ both installed units, verifies the variable name in each daemon's
 the value in the Studio database, repository, task, log, or evidence artifact.
 
 Provider capability snapshots refresh every 60 seconds. Execution Hosts shows
-**OK**, **Unavailable**, or **Unknown** per CLI, with the probe detail in the
-tooltip. Provider auth probes run at most every five minutes, use a 30-second
-timeout, and run at lower CPU priority on Linux. A timeout, empty output, launch
-failure, or unsupported command keeps the last advertised verdict and writes a
-`runner-provider-auth-probe-degraded` journal line. Two consecutive explicit
-logout answers are required for `OK -> Unavailable`; that transition creates an
-operator notification and updates Ready card wait reasons. A later successful
-probe writes `runner-provider-auth-probe-recovered` and advertises **OK** without
-a service restart. A recognized auth failure from a run reports the capability
-failure immediately. When a capability advertises a known expiry, Studio warns
-during the final 14 days. Follow
+**OK**, **Retrying**, **Limited**, **Expiring**, **Unavailable**, or **Unknown**
+per CLI, with the probe detail in the tooltip. Provider auth probes run at most
+every five minutes, use a 30-second timeout, and run at lower CPU priority on
+Linux. A timeout, network failure, token-refresh race, empty output, launch
+failure, unsupported command, tool error, or otherwise indeterminate non-zero
+exit keeps the last advertised verdict and writes a
+`runner-provider-auth-probe-degraded` journal line. Rate limits retain a
+provider-scoped **Limited** state until their parsed or bounded reset time. Two
+consecutive explicit logout answers are required for `OK -> Unavailable`; only
+that transition creates a sign-in-required operator notification and Ready-card
+wait reason. A later successful probe writes
+`runner-provider-auth-probe-recovered`, clears the matching capability circuit,
+and advertises **OK** without a service restart. When credential metadata exposes
+an expiry, Studio gives a quiet warning during the final 14 days. Follow
 [cli-relogin-runbook.md](./cli-relogin-runbook.md) for renewal.
 
 Do not create provider-specific files such as `claude.env`.

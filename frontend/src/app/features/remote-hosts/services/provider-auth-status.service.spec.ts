@@ -45,11 +45,20 @@ describe('ProviderAuthStatusService', () => {
     expect(notifications.notifications()[0].title).toBe('Claude authentication expires soon');
     expect(notifications.notifications()[0].message).toContain('expires in 10 days');
   });
+
+  it('does not raise a sign-in alarm for retrying or limited states', () => {
+    service.ingest([snapshot('ready', null, 'ok')]);
+    service.ingest([snapshot('ready', null, 'transient-auth-error')]);
+    service.ingest([snapshot('limited', null, 'rate-limited')]);
+
+    expect(notifications.notifications()).toHaveLength(0);
+  });
 });
 
 function snapshot(
-  status: 'ready' | 'unavailable',
+  status: 'ready' | 'limited' | 'unavailable',
   expiresAt: string | null = null,
+  signal: 'ok' | 'transient-auth-error' | 'rate-limited' | 'signed-out' = status === 'unavailable' ? 'signed-out' : 'ok',
 ): TaskServerRunnerCapabilitySnapshot {
   const now = new Date().toISOString();
   return {
@@ -73,7 +82,7 @@ function snapshot(
       healthState: 'healthy', advertisedAt: now,
       freshUntil: new Date(Date.now() + 120_000).toISOString(), isFresh: true,
       consecutiveFailures: 0, detail: status === 'ready' ? 'Active session confirmed' : 'Not logged in',
-      expiresAt, affectedClaims: [], recoveryHistory: [],
+      signal, expiresAt, affectedClaims: [], recoveryHistory: [],
     }],
   };
 }

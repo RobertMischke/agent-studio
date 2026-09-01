@@ -184,8 +184,12 @@ export interface RemoteHostCapabilityHealth {
   version?: string | null;
   identity?: string | null;
   detail?: string | null;
+  /** Typed provider condition. A ready transient state retains last-good admission. */
+  signal?: 'ok' | 'transient-auth-error' | 'rate-limited' | 'signed-out' | 'credentials-expiring' | 'binary-missing' | null;
   /** Optional provider-reported credential expiry. Older runners omit it. */
   expiresAt?: string | null;
+  limitedUntil?: string | null;
+  credentialModifiedAt?: string | null;
   affectedClaims: readonly string[];
   recoveryHistory: readonly CapabilityRecoveryEvent[];
 }

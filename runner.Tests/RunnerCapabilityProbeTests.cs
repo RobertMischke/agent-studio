@@ -11,6 +11,8 @@ public sealed class RunnerCapabilityProbeTests
     [InlineData(1, "", "HTTP 401 Missing bearer authentication", true)]
     [InlineData(1, "", "login required", true)]
     [InlineData(1, "", "ordinary product failure", false)]
+    [InlineData(1, "", "rate limit exceeded; resets at 2026-09-01T18:00:00Z", false)]
+    [InlineData(1, "", "ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find context 'public sealed class V1ReviewExecutorRegistry' in /home/agent/runner-work/PROJ-002/worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs", false)]
     [InlineData(0, "", "HTTP 401 in historical output", false)]
     public void Provider_authentication_failure_requires_a_nonzero_typed_signal(
         int exitCode,

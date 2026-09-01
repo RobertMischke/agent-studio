@@ -2178,6 +2178,29 @@
             every matching wait and resumes the card automatically.
           </td>
         </tr>
+        <tr id="case-agt-2694">
+          <td>2026-08-31</td>
+          <td><code>AGT-2694</code><br><span class="small">Codex tool exit latched as provider authentication unavailable</span></td>
+          <td>
+            A Codex run exited non-zero after <code>apply_patch</code> could not find stale source context. The runner reported
+            Codex authentication as unavailable even though <code>codex login status</code> returned <code>Logged in</code>
+            seconds later. Ready cards waited until an operator restarted the runner and refreshed credentials.
+          </td>
+          <td>
+            Provider access classification was split across the run outcome adapter, provider-limit detector, auth probe,
+            and compatibility capability registry. Generic exit output could enter the auth circuit, while a successful
+            later advertisement was not allowed to clear an active cooldown. Credential expiry existed only as an optional
+            frontend field and was never produced by the runner.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> one shared provider-access classifier now separates explicit sign-out,
+            rate limit, transient transport or refresh races, and ordinary tool failures for Claude and Codex. Provider auth
+            requires two consecutive explicit failures, retains last-good on indeterminate output, and clears its own circuit
+            after a positive probe without restart. Rate limits keep their reset-time limited state. Metadata-only credential
+            monitoring emits a quiet expiry warning, and the host UI labels retrying, limited, expiring, and signed-out states.
+            Exact apply-patch, recovery, threshold, quota, and expiry regressions pin the terminal paths.
+          </td>
+        </tr>
         <tr id="case-agt-2687">
           <td>2026-08-27</td>
           <td><code>AGT-2687</code><br><span class="small">requirement-fit open-scope review carousel</span></td>

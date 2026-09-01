@@ -6,7 +6,7 @@ import type {
   TaskServerRunnerCapabilitySnapshot,
 } from './remote-host.model';
 
-export type ProviderAuthDisplayState = 'ok' | 'unavailable' | 'unknown';
+export type ProviderAuthDisplayState = 'ok' | 'retrying' | 'limited' | 'expiring' | 'unavailable' | 'unknown';
 
 export interface ProviderAuthBadge {
   id: string;
@@ -17,12 +17,14 @@ export interface ProviderAuthBadge {
   hostName: string;
   aliases: readonly string[];
   state: ProviderAuthDisplayState;
+  signal: RemoteHostCapabilityHealth['signal'];
   detail: string;
   advertisedAt: string | null;
   reachable: boolean;
   expiresAt: string | null;
   expiresSoon: boolean;
   expiryLabel: string | null;
+  limitedUntil: string | null;
   history: readonly CapabilityRecoveryEvent[];
 }
 
@@ -103,13 +105,15 @@ export function providerAuthWaitReason(
     status.provider === provider
     && (!configuredRunner
       || status.aliases.some(alias => alias.toLowerCase() === configuredRunner.toLowerCase())));
-  if (candidates.some(status => status.state === 'ok' && status.reachable)) return null;
+  if (candidates.some(status =>
+    status.reachable && ['ok', 'retrying', 'expiring'].includes(status.state))) return null;
 
   const providerLabel = label(provider);
   const hostNames = [...new Set(candidates.map(status => status.hostName).filter(Boolean))];
   const target = hostNames.length > 0
     ? hostNames.join(', ')
     : configuredRunner ?? 'an execution host';
+  const limited = candidates.find(status => status.state === 'limited');
   const unavailable = candidates.filter(status => status.state === 'unavailable');
   const detail = unavailable.length > 0
     ? unavailable.map(status => `${status.hostName}: ${status.detail}`).join('\n')
@@ -120,8 +124,12 @@ export function providerAuthWaitReason(
         : `No reachable runner capability snapshot advertises provider-auth:${provider}.`;
   return {
     provider,
-    label: `Waiting for ${providerLabel} sign-in on ${target}`,
-    tooltip: `${detail}\nThe task stays Ready until a fresh provider probe reports OK.`,
+    label: limited
+      ? `${providerLabel} rate-limited on ${target}${limited.limitedUntil ? ` until ${limited.limitedUntil}` : ''}`
+      : `Waiting for ${providerLabel} sign-in on ${target}`,
+    tooltip: limited
+      ? `${limited.detail}\nThe task stays Ready and retries automatically after the provider limit.`
+      : `${detail}\nThe task stays Ready until a fresh provider probe reports OK.`,
     hostNames: hostNames.length > 0 ? hostNames : configuredRunner ? [configuredRunner] : [],
   };
 }
@@ -148,6 +156,7 @@ function badgeFromCapability(
   nowMs: number,
 ): ProviderAuthBadge {
   const expiresAt = capability?.expiresAt ?? null;
+  const limitedUntil = capability?.limitedUntil ?? null;
   const expiryMs = expiresAt ? Date.parse(expiresAt) : Number.NaN;
   const expired = Number.isFinite(expiryMs) && expiryMs <= nowMs;
   const expiresSoon = Number.isFinite(expiryMs)
@@ -155,16 +164,18 @@ function badgeFromCapability(
     && expiryMs - nowMs <= PROVIDER_AUTH_EXPIRY_WARNING_MS;
   let state: ProviderAuthDisplayState;
   if (!capability || !capability.isFresh || !runnerReachable) state = 'unknown';
-  else if (expired
-    || capability.advertisedStatus !== 'ready'
+  else if (capability.signal === 'rate-limited' || capability.advertisedStatus === 'limited') state = 'limited';
+  else if (capability.advertisedStatus !== 'ready'
     || capability.healthState !== 'healthy') state = 'unavailable';
+  else if (capability.signal === 'transient-auth-error') state = 'retrying';
+  else if (capability.signal === 'credentials-expiring' || expiresSoon || expired) state = 'expiring';
   else state = 'ok';
 
   const detail = capability
     ? !capability.isFresh
       ? `The last provider probe expired at ${capability.freshUntil}. ${capability.detail ?? capability.reason ?? ''}`.trim()
       : expired
-        ? `The advertised provider credential expired at ${expiresAt}.`
+        ? capability.detail ?? `Credential metadata expired at ${expiresAt}, but the latest provider probe remains active.`
         : capability.reason || capability.detail || `provider-auth:${provider} is ${capability.advertisedStatus}.`
     : `No provider-auth:${provider} capability was advertised for this CLI.`;
   return {
@@ -176,12 +187,14 @@ function badgeFromCapability(
     hostName,
     aliases: aliases.filter(Boolean),
     state,
+    signal: capability?.signal ?? null,
     detail,
     advertisedAt: capability?.advertisedAt ?? null,
     reachable: runnerReachable && !!capability?.isFresh,
     expiresAt,
     expiresSoon,
     expiryLabel: Number.isFinite(expiryMs) ? expiryDistance(expiryMs - nowMs) : null,
+    limitedUntil,
     history: capability?.recoveryHistory ?? [],
   };
 }

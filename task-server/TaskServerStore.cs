@@ -2431,6 +2431,10 @@ public sealed partial class TaskServerStore
                 version TEXT,
                 identity_value TEXT,
                 detail TEXT,
+                signal TEXT,
+                credential_expires_at TEXT,
+                limited_until TEXT,
+                credential_modified_at TEXT,
                 advertised_at TEXT NOT NULL,
                 fresh_until TEXT NOT NULL,
                 generation INTEGER NOT NULL,
@@ -2745,6 +2749,10 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_version", "INTEGER", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "signal", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "credential_expires_at", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "limited_until", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "credential_modified_at", "TEXT", ct);
         await EnsureColumnAsync(connection, "orchestration_runs", "task_version", "INTEGER NOT NULL DEFAULT 0", ct);
         await ExecuteAsync(connection, """
             INSERT INTO runtime_capacity_settings(

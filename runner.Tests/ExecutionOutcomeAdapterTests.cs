@@ -423,6 +423,19 @@ public sealed class ExecutionOutcomeAdapterTests
     }
 
     [Fact]
+    public void Apply_patch_verification_failure_is_a_cli_tool_failure_not_authentication()
+    {
+        const string error = "ERROR codex_core::tools::router: error=apply_patch verification failed: "
+            + "Failed to find context 'public sealed class V1ReviewExecutorRegistry' in "
+            + "/home/agent/runner-work/PROJ-002/worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs";
+
+        var result = ExecutionOutcomeAdapter.Classify(Coding(ExitCode: 1, StdErr: error));
+
+        Assert.Equal(ExecutionOutcomeKind.CliCrash, result.Outcome);
+        Assert.NotEqual(ExecutionRecoveryAction.WaitForCapabilityRecovery, result.RecoveryAction);
+    }
+
+    [Fact]
     public void Prompt_echo_sentinel_does_not_override_a_distinct_final_assistant_output()
     {
         var result = ExecutionOutcomeAdapter.Classify(Coding(
