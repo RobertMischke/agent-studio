@@ -161,7 +161,12 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             _configuration.GetValue<int?>("Integration:AcceptedAlertThresholdMinutes") ?? 30,
             1,
             24 * 60);
-        var candidates = _scanner.ScanAllAutomationJobsWithArchive()
+        // The alert is a filesystem invariant, so each interval reads current
+        // task.json records rather than relying on the board snapshot cache.
+        // This bounds convergence after an external recovery append to one
+        // backstop interval even when the watcher misses the write.
+        var candidates = _scanner.ScanAllJobsRaw()
+            .Where(job => !job.Fixture)
             .Where(IsPotentialAlertLane)
             .OrderBy(job => job.EnteredLaneAt)
             .ThenBy(job => job.Id, StringComparer.OrdinalIgnoreCase)
@@ -214,17 +219,10 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         // Only an acceptance-stage start counts as the acceptance record; the
         // integrate-on-delivery start (stage pre-human-review) precedes Human
         // Review and would make a later acceptance look older than it is.
-        var integrationStarted = _timeline?.ReadAll(job.FolderPath)
-            .Where(item => string.Equals(
-                item.Kind,
-                TimelineEventKinds.IntegrationStarted,
-                StringComparison.Ordinal))
-            .Where(item => !string.Equals(
-                item.Details?.GetValueOrDefault("stage"),
-                RemoteDeliveryIntegrationCoordinator.PreHumanReviewStage,
-                StringComparison.Ordinal))
-            .OrderByDescending(item => item.Ts)
-            .FirstOrDefault();
+        var integrationStarted = _timeline is null
+            ? null
+            : TaskIntegrationRecordDetector.LatestAcceptanceStarted(
+                _timeline.ReadAll(job.FolderPath));
         if (integrationStarted is not null)
             return (true, integrationStarted.Ts.ToUniversalTime());
 

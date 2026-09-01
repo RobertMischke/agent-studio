@@ -92,6 +92,7 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
     [InlineData(IntegrationRecordClasses.IntegratedVerified)]
     [InlineData(IntegrationRecordClasses.IntegratedHistorical)]
     [InlineData(IntegrationRecordClasses.NoCodeExpected)]
+    [InlineData(IntegrationRecordClasses.NoAttributionLegacy)]
     [InlineData(IntegrationRecordClasses.ContentOnFence)]
     [InlineData(IntegrationRecordClasses.GenuinelyMissing)]
     public void Alert_HistoricalVerificationClass_IsNotALiveAcceptanceStall(string classification)

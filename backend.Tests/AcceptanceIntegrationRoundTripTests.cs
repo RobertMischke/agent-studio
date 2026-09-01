@@ -1169,6 +1169,68 @@ public sealed class AcceptanceIntegrationRoundTripTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "MachineBound")]
+    public void AcceptedAlert_ExternalRecordAppendConvergesOnNextRefreshDespiteStaleBoardCache()
+    {
+        var deliverySha = PublishDelivery("alert-refresh.txt", "stalled acceptance\n");
+        var deps = Build(deliverySha);
+        Assert.Equal(
+            MoveJobStatus.Success,
+            deps.States.MoveJob(Slug, TaskStates.Completed, _watchPath).Status);
+        var completed = deps.Scanner.FindJob(Slug, _watchPath)!;
+        var acceptedAt = DateTime.UtcNow.AddMinutes(-45);
+        deps.Timeline.Append(completed.FolderPath, new TimelineEvent
+        {
+            Kind = TimelineEventKinds.IntegrationStarted,
+            Actor = TimelineActors.System,
+            Summary = "Acceptance integration started.",
+            Ts = acceptedAt,
+        });
+
+        var cache = new TaskIndexCache(
+            deps.Scanner,
+            NullLogger<TaskIndexCache>.Instance,
+            deps.Configuration);
+        deps.Scanner.SetIndexCache(cache);
+        Assert.Null(TaskIntegrationRecordDetector.LatestVerification(
+            Assert.Single(deps.Scanner.ScanAllAutomationJobsWithArchive())));
+        var backstop = new AcceptedIntegrationBackstopHostedService(
+            deps.Scanner,
+            deps.Settings,
+            deps.Merge,
+            deps.Integration,
+            deps.Mutations,
+            deps.Configuration,
+            NullLogger<AcceptedIntegrationBackstopHostedService>.Instance,
+            timeline: deps.Timeline,
+            pipelineLog: deps.Pipeline);
+        Assert.Equal(1, backstop.RefreshAlert(DateTime.UtcNow).StalledTaskCount);
+
+        TaskJsonFile.UpdateFieldOrThrow(
+            completed.FolderPath,
+            "integrationRecords",
+            new[]
+            {
+                new TaskIntegrationRecord
+                {
+                    Id = "operator-legacy-backfill-v1",
+                    Version = 1,
+                    Classification = IntegrationRecordClasses.NoAttributionLegacy,
+                    RecordedAtUtc = DateTime.UtcNow,
+                    AcceptedAtUtc = acceptedAt,
+                    Evidence = "Legacy card predates commit attribution and has no surviving delivery evidence.",
+                },
+            });
+        Assert.Null(TaskIntegrationRecordDetector.LatestVerification(
+            Assert.Single(deps.Scanner.ScanAllAutomationJobsWithArchive())));
+
+        var refreshed = backstop.RefreshAlert(DateTime.UtcNow.AddMinutes(15));
+
+        Assert.False(refreshed.Active);
+        Assert.Equal(0, refreshed.StalledTaskCount);
+    }
+
+    [Fact]
     public void LegacyTransactionalAcceptance_InterruptedByRestart_ResumesFromIntegratingReview()
     {
         var deliverySha = PublishDelivery("transactional-restart.txt", "durable integrating phase\n");
