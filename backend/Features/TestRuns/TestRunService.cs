@@ -1,15 +1,15 @@
 namespace AgentStudio.TestRuns;
 
-using System.Collections.Concurrent;
-
 public sealed class TestRunService
 {
+    internal static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan ShortFallbackTtl = TimeSpan.FromSeconds(5);
+
     private readonly TestRunStore _store;
     private readonly ProjectRegistry _projects;
     private readonly TaskScannerService _scanner;
     private readonly GitService _git;
-    private readonly ConcurrentDictionary<string, (string Signature, DateTime At, Dictionary<string, TaskTestRunEvidence> Value)> _evidenceCache =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly GenerationSingleFlightCache<Dictionary<string, TaskTestRunEvidence>> _evidenceCache = new();
 
     public TestRunService(TestRunStore store, ProjectRegistry projects, TaskScannerService scanner, GitService git)
     {
@@ -167,32 +167,39 @@ public sealed class TestRunService
             }
             var runs = _store.List(project.Id);
             var signature = Signature(groupedJobs, runs, taskScoped);
-            if (!_evidenceCache.TryGetValue(projectJobs.Key, out var cached)
-                || cached.Signature != signature
-                || DateTime.UtcNow - cached.At > TimeSpan.FromSeconds(5))
-            {
-                var refs = runs.Select(run => run.Commit)
-                    .Concat(groupedJobs.Select(BoardMergeStatusService.AnchorFor).OfType<string>())
-                    .Concat(taskScoped.Values.SelectMany(snapshot => snapshot.Sources).Select(source => source.Commit))
-                    .Where(reference => !string.IsNullOrWhiteSpace(reference))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                var graph = _git.GetCommitParentGraph(repo, refs);
-                var distances = refs.ToDictionary(
-                    reference => reference,
-                    reference => AncestorDistances(graph, reference),
-                    StringComparer.OrdinalIgnoreCase);
-                var integrationMerges = _git.GetIntegrationMergesByKey(
-                    repo,
-                    runs.Select(run => run.Commit).ToArray());
-                var value = groupedJobs.ToDictionary(
-                    job => job.TaskKey,
-                    job => Match(job, runs, distances, integrationMerges, taskScoped[job.TaskKey].Sources),
-                    StringComparer.Ordinal);
-                cached = (signature, DateTime.UtcNow, value);
-                _evidenceCache[projectJobs.Key] = cached;
-            }
-            foreach (var pair in cached.Value) result[pair.Key] = pair.Value;
+            var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
+                repo,
+                runs.Select(run => run.Branch)
+                    .Concat(groupedJobs.Select(job => job.IntegrationBranch))
+                    .OfType<string>()
+                    .Where(branch => !string.IsNullOrWhiteSpace(branch)));
+            var cached = _evidenceCache.GetOrCreateVersioned(
+                $"{repo}\0{project.Id}",
+                $"{signature}\0{refFingerprint.Value}",
+                refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl,
+                () =>
+                {
+                    var refs = runs.Select(run => run.Commit)
+                        .Concat(groupedJobs.Select(BoardMergeStatusService.AnchorFor).OfType<string>())
+                        .Concat(taskScoped.Values.SelectMany(snapshot => snapshot.Sources).Select(source => source.Commit))
+                        .Where(reference => !string.IsNullOrWhiteSpace(reference))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    var graph = _git.GetCommitParentGraph(repo, refs);
+                    var distances = refs.ToDictionary(
+                        reference => reference,
+                        reference => AncestorDistances(graph, reference),
+                        StringComparer.OrdinalIgnoreCase);
+                    var integrationMerges = _git.GetIntegrationMergesByKey(
+                        repo,
+                        runs.Select(run => run.Commit).ToArray());
+                    var value = groupedJobs.ToDictionary(
+                        job => job.TaskKey,
+                        job => Match(job, runs, distances, integrationMerges, taskScoped[job.TaskKey].Sources),
+                        StringComparer.Ordinal);
+                    return value;
+                });
+            foreach (var pair in cached) result[pair.Key] = pair.Value;
         }
         return result;
     }

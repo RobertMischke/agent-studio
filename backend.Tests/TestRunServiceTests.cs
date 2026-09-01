@@ -66,6 +66,47 @@ public sealed class TestRunServiceTests : IDisposable
     }
 
     [Fact]
+    public void CardEvidence_ReusesProjectionUntilRepositoryRefsChange()
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+        stack.Service.Create("Demo", Request(commit, "completed", "passed"));
+        var job = Task("cached", stack.Storage, commit);
+
+        using (GitProcessTelemetry.BeginRequest("first", NullLogger.Instance, includeNested: true))
+        {
+            Assert.Equal("perfect", stack.Service.BuildLookup([job])[job.TaskKey].MatchQuality);
+            Assert.True(GitProcessTelemetry.CurrentTally()!.Value.Spawns > 0);
+        }
+
+        using (GitProcessTelemetry.BeginRequest("unchanged", NullLogger.Instance, includeNested: true))
+        {
+            Assert.Equal("perfect", stack.Service.BuildLookup([job])[job.TaskKey].MatchQuality);
+            Assert.Equal(0, GitProcessTelemetry.CurrentTally()!.Value.Spawns);
+        }
+
+        Commit(stack.Repo, "new-ref.txt", "new", "Move integration ref");
+
+        using (GitProcessTelemetry.BeginRequest("changed-ref", NullLogger.Instance, includeNested: true))
+        {
+            Assert.Equal("perfect", stack.Service.BuildLookup([job])[job.TaskKey].MatchQuality);
+            Assert.True(GitProcessTelemetry.CurrentTally()!.Value.Spawns > 0);
+        }
+
+        var movedCommit = RevParse(stack.Repo, "HEAD");
+        var movedRun = stack.Service.Create("Demo", Request(movedCommit, "completed", "passed"))!;
+        var movedJob = Task("cached", stack.Storage, movedCommit);
+
+        using (GitProcessTelemetry.BeginRequest("new-run", NullLogger.Instance, includeNested: true))
+        {
+            var evidence = stack.Service.BuildLookup([movedJob])[movedJob.TaskKey];
+            Assert.Equal(movedRun.Id, evidence.RunId);
+            Assert.Equal("perfect", evidence.MatchQuality);
+            Assert.True(GitProcessTelemetry.CurrentTally()!.Value.Spawns > 0);
+        }
+    }
+
+    [Fact]
     public void Lifecycle_PersistsForwardTransitions_AndRejectsBackwardState()
     {
         var stack = BuildStack();
