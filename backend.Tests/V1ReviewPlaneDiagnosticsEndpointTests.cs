@@ -146,6 +146,59 @@ public sealed class V1ReviewPlaneDiagnosticsEndpointTests : IDisposable
     }
 
     [Fact]
+    public void Confirmed_provider_probe_clears_provider_auth_drain_without_registration()
+    {
+        var registry = new V1ReviewExecutorRegistry();
+        var capability = Contract.CapabilityProtocol.ProviderAuthentication("codex");
+        registry.Register(
+            RunnerId,
+            new Contract.RegisterRunnerRequest(
+                RunnerId,
+                "review-host",
+                Instance,
+                "1.0.0",
+                Contract.TaskServerProtocol.Current,
+                [Contract.ReviewCapabilities.ReviewExecutor]));
+        registry.AdvertiseCapabilities(
+            RunnerId,
+            new Contract.CapabilityAdvertisementRequest(
+                RunnerId,
+                Instance,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                DateTime.UtcNow,
+                180,
+                1,
+                [new Contract.AdvertisedCapabilityDto(capability, "provider-auth")]));
+        registry.ReportCapabilityFailure(
+            RunnerId,
+            Failure(capability, "ProviderUnauthorized", "provider-auth:1", DateTime.UtcNow));
+        registry.ReportCapabilityFailure(
+            RunnerId,
+            Failure(capability, "ProviderUnauthorized", "provider-auth:2", DateTime.UtcNow));
+        Assert.True(registry.TryGetCapabilityPause(RunnerId, out _));
+
+        var recovered = registry.AdvertiseCapabilities(
+            RunnerId,
+            new Contract.CapabilityAdvertisementRequest(
+                RunnerId,
+                Instance,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                DateTime.UtcNow,
+                180,
+                2,
+                [new Contract.AdvertisedCapabilityDto(
+                    capability,
+                    "provider-auth",
+                    Condition: "ok",
+                    Detail: "Fresh login status probe confirmed an active session.")]));
+
+        Assert.False(registry.TryGetCapabilityPause(RunnerId, out _));
+        var auth = Assert.Single(recovered.Capabilities, item => item.Key == capability);
+        Assert.Equal("ok", auth.Condition);
+        Assert.Equal(Contract.CapabilityHealthStates.Healthy, auth.HealthState);
+    }
+
+    [Fact]
     [Trait("Category", "MachineBound")]
     public async Task Concurrent_registration_and_advertisement_never_hold_the_registry_gate()
     {

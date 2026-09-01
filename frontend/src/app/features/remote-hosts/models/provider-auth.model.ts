@@ -6,7 +6,7 @@ import type {
   TaskServerRunnerCapabilitySnapshot,
 } from './remote-host.model';
 
-export type ProviderAuthDisplayState = 'ok' | 'unavailable' | 'unknown';
+export type ProviderAuthDisplayState = 'ok' | 'retrying' | 'expiring' | 'unavailable' | 'unknown';
 
 export interface ProviderAuthBadge {
   id: string;
@@ -103,7 +103,9 @@ export function providerAuthWaitReason(
     status.provider === provider
     && (!configuredRunner
       || status.aliases.some(alias => alias.toLowerCase() === configuredRunner.toLowerCase())));
-  if (candidates.some(status => status.state === 'ok' && status.reachable)) return null;
+  if (candidates.some(status =>
+    status.reachable
+    && (status.state === 'ok' || status.state === 'retrying' || status.state === 'expiring'))) return null;
 
   const providerLabel = label(provider);
   const hostNames = [...new Set(candidates.map(status => status.hostName).filter(Boolean))];
@@ -155,16 +157,17 @@ function badgeFromCapability(
     && expiryMs - nowMs <= PROVIDER_AUTH_EXPIRY_WARNING_MS;
   let state: ProviderAuthDisplayState;
   if (!capability || !capability.isFresh || !runnerReachable) state = 'unknown';
-  else if (expired
-    || capability.advertisedStatus !== 'ready'
-    || capability.healthState !== 'healthy') state = 'unavailable';
+  else if (capability.advertisedStatus !== 'ready') state = 'unavailable';
+  else if (capability.condition === 'transient-auth-error') state = 'retrying';
+  else if (capability.condition === 'credentials-expiring') state = 'expiring';
+  else if (capability.healthState !== 'healthy') state = 'unavailable';
   else state = 'ok';
 
   const detail = capability
     ? !capability.isFresh
       ? `The last provider probe expired at ${capability.freshUntil}. ${capability.detail ?? capability.reason ?? ''}`.trim()
       : expired
-        ? `The advertised provider credential expired at ${expiresAt}.`
+        ? `The credential freshness deadline passed at ${expiresAt}, but the latest provider probe remains ready. Re-authentication is recommended.`
         : capability.reason || capability.detail || `provider-auth:${provider} is ${capability.advertisedStatus}.`
     : `No provider-auth:${provider} capability was advertised for this CLI.`;
   return {

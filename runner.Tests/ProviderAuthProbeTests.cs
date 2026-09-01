@@ -30,7 +30,8 @@ public sealed class ProviderAuthProbeTests
             ttl,
             timeout,
             negativeConfirmations,
-            diagnosticLog);
+            diagnosticLog,
+            _ => null);
 
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]
@@ -317,6 +318,80 @@ public sealed class ProviderAuthProbeTests
         Assert.Equal(ProviderAuthProbe.Ready, status.Status);
         Assert.True(status.ProbeDegraded);
         Assert.Contains("1/2", status.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_single_transient_run_failure_keeps_last_good_and_the_next_probe_recovers()
+    {
+        var probe = Probe(Answers(0, "Logged in"));
+        await probe.RefreshAsync("codex", CancellationToken.None);
+
+        var classified = probe.RecordRunResult(
+            "codex",
+            new ProcessResult(1, "", "token refresh failed: connection reset by peer"));
+        var retrying = probe.Current("codex");
+
+        Assert.Equal(AgentStudio.CliHosting.ProviderFailureKind.Transient, classified.Kind);
+        Assert.Equal(ProviderAuthProbe.Ready, retrying.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionTransient, retrying.Condition);
+
+        var recovered = await probe.RefreshAsync("codex", CancellationToken.None);
+        Assert.Equal(ProviderAuthProbe.Ready, recovered.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionOk, recovered.Condition);
+    }
+
+    [Fact]
+    public void Two_distinguishable_run_auth_failures_block_but_one_does_not()
+    {
+        var probe = Probe(Answers(0, "Logged in"));
+        var failure = new ProcessResult(1, "", "ChatGPT account authentication failed: login required");
+
+        probe.RecordRunResult("codex", failure);
+        Assert.Equal(ProviderAuthProbe.Ready, probe.Current("codex").Status);
+
+        probe.RecordRunResult("codex", failure);
+        var signedOut = probe.Current("codex");
+        Assert.Equal(ProviderAuthProbe.Unavailable, signedOut.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionSignedOut, signedOut.Condition);
+        Assert.Contains("genuinely signed out", signedOut.Detail, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("You have hit your session limit; resets at 23:00")]
+    [InlineData("ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find context 'public sealed class V1ReviewExecutorRegistry' in /worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs")]
+    public void Rate_limits_and_tool_failures_never_change_provider_auth(string error)
+    {
+        var probe = Probe(Answers(0, "Logged in"));
+
+        probe.RecordRunResult("codex", new ProcessResult(1, "", error));
+        var status = probe.Current("codex");
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionOk, status.Condition);
+        Assert.False(status.ProbeDegraded);
+    }
+
+    [Fact]
+    public async Task Credential_expiry_is_a_non_blocking_warning_before_reauthentication_is_due()
+    {
+        var now = new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
+        var expiresAt = now.AddDays(10);
+        var probe = new ProviderAuthProbe(
+            Answers(0, "Logged in"),
+            _ => true,
+            () => now,
+            credentialFreshness: _ => new ProviderCredentialFreshness(
+                expiresAt,
+                now.AddHours(-2),
+                "Refresh credential expiry is known.",
+                RequiresReauthenticationAtExpiry: true));
+
+        var status = await probe.RefreshAsync("claude", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionExpiring, status.Condition);
+        Assert.Equal(expiresAt, status.ExpiresAt);
+        Assert.Contains("credentials expiring", status.Detail, StringComparison.Ordinal);
     }
 
     [Fact]

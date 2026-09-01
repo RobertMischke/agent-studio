@@ -506,10 +506,14 @@ state.
   assembly package version.
 - Provider-auth advertisement changes are appended to the same bounded recovery
   history exposed by the management snapshot. Execution Hosts turns that data
-  into per-CLI `OK`, `Unavailable`, and `Unknown` badges, transition
-  notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
-  A recognized provider-auth run failure reports unavailability immediately so
-  revocation between periodic probes is visible.
+  into per-CLI `OK`, `Retrying`, `Expiring`, `Unavailable`, and `Unknown`
+  badges, transition notifications, optional 14-day re-auth expiry warnings,
+  and Ready-card wait reasons. Run exits and periodic status commands use one
+  provider-failure classifier. Rate limits enter the provider-limit circuit;
+  tool failures and indeterminate exits retain last-good auth. Only consecutive
+  distinguishable credential failures advertise `unavailable`. A later
+  confirmed status probe clears the provider-auth failure circuit and
+  re-advertises recovery without a runner restart.
 - Account-level provider session, usage, and rate limits are CLI capability
   state, not task outcomes. The local runner records `claude: limited until
   <time>` in runner status, persists the current card in provider-scoped

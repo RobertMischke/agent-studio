@@ -35,6 +35,44 @@ describe('provider auth projection', () => {
     expect(badge.expiryLabel).toBe('Expires in 13 days');
   });
 
+  it('keeps transient and expiring conditions claimable while showing their distinct state', () => {
+    const transient = providerAuthBadgesForSnapshot(
+      snapshot('ready', 'suspect', true, 'transient auth error, retrying', null, 'transient-auth-error'),
+      NOW,
+    )[0];
+    const expiring = providerAuthBadgesForSnapshot(
+      snapshot(
+        'ready',
+        'healthy',
+        true,
+        'credentials expiring',
+        new Date(NOW + 10 * 24 * 60 * 60_000).toISOString(),
+        'credentials-expiring',
+      ),
+      NOW,
+    )[0];
+
+    expect(transient.state).toBe('retrying');
+    expect(expiring.state).toBe('expiring');
+  });
+
+  it('does not block on a credential timestamp while the fresh probe remains ready', () => {
+    const badge = providerAuthBadgesForSnapshot(
+      snapshot(
+        'ready',
+        'healthy',
+        true,
+        'credentials expiring',
+        new Date(NOW - 60_000).toISOString(),
+        'credentials-expiring',
+      ),
+      NOW,
+    )[0];
+
+    expect(badge.state).toBe('expiring');
+    expect(badge.detail).toContain('latest provider probe remains ready');
+  });
+
   it('holds a Ready card on its configured host until usable auth is advertised', () => {
     const task = {
       state: '2-ready',
@@ -60,6 +98,10 @@ describe('provider auth projection', () => {
     });
     expect(providerAuthWaitReason(task, providerAuthBadgesForSnapshot(snapshot('ready', 'healthy', true), NOW)))
       .toBeNull();
+    expect(providerAuthWaitReason(task, providerAuthBadgesForSnapshot(
+      snapshot('ready', 'suspect', true, 'retrying', null, 'transient-auth-error'),
+      NOW,
+    ))).toBeNull();
     expect(providerAuthWaitReason({ ...task, state: '3-progress' }, unavailable)).toBeNull();
   });
 
@@ -89,6 +131,7 @@ function snapshot(
   isFresh: boolean,
   detail = 'Active session confirmed',
   expiresAt: string | null = null,
+  condition: 'ok' | 'transient-auth-error' | 'credentials-expiring' | 'signed-out' | null = null,
 ): TaskServerRunnerCapabilitySnapshot {
   return {
     runnerId: 'agent-runner-01',
@@ -122,6 +165,7 @@ function snapshot(
       isFresh,
       consecutiveFailures: healthState === 'healthy' ? 0 : 1,
       detail,
+      condition,
       expiresAt,
       affectedClaims: [],
       recoveryHistory: [],

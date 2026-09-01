@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using AgentStudio.CliHosting;
 
 namespace AgentStudio.Runner;
 
@@ -21,24 +22,6 @@ public static partial class ProviderLimitDetector
 {
     public static readonly TimeSpan UnknownResetRetry = TimeSpan.FromMinutes(15);
 
-    private static readonly string[] ExhaustedNeedles =
-    [
-        "hit your session limit",
-        "session limit",
-        "session limit reached",
-        "usage limit",
-        "usage limit reached",
-        "you've reached your usage limit",
-        "quota exceeded",
-        "rate limit exceeded",
-        "rate_limit_exceeded",
-        "insufficient_quota",
-        "too many requests",
-        "429",
-        "status=rejected",
-        "· rejected ·",
-    ];
-
     public static ProviderLimitStatus? Detect(
         string? cliType,
         IEnumerable<string?> output,
@@ -47,7 +30,7 @@ public static partial class ProviderLimitDetector
     {
         if (string.IsNullOrWhiteSpace(cliType)) return null;
         var text = string.Join('\n', output.Where(line => !string.IsNullOrWhiteSpace(line)));
-        if (!ExhaustedNeedles.Any(needle => text.Contains(needle, StringComparison.OrdinalIgnoreCase)))
+        if (!ProviderFailureClassifier.IsRateLimit(text))
             return null;
 
         var observedAt = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
@@ -106,12 +89,7 @@ public static partial class ProviderLimitDetector
 
     private static string FirstLimitLine(string text)
     {
-        foreach (var line in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (ExhaustedNeedles.Any(needle => line.Contains(needle, StringComparison.OrdinalIgnoreCase)))
-                return line.Trim().Length <= 300 ? line.Trim() : line.Trim()[..300];
-        }
-        return "provider rejected the request at the account limit";
+        return ProviderFailureClassifier.FirstRateLimitLine(text);
     }
 
     [GeneratedRegex(@"\bresets?(?:\s+(?:at|on))?\s+(?<value>\d{4}-\d{2}-\d{2}[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\s*Z|\s*[+-]\d{2}:?\d{2})?)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

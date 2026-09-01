@@ -43,7 +43,7 @@ describe('RemoteQueueStarvationBannerComponent', () => {
     ) as HTMLElement;
     expect(banner.textContent).toContain('Claude claims limited until');
     expect(banner.textContent).toContain('resume automatically');
-    expect(banner.textContent).toContain('Codex and other CLI claims remain eligible');
+    expect(banner.textContent).toContain('Other CLI claims remain eligible');
     expect(banner.textContent).not.toContain('waiting despite free Runner capacity');
     fixture.destroy();
     http.verify();

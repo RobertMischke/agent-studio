@@ -8,9 +8,14 @@ namespace AgentRunner.Tests;
 public sealed class RunnerCapabilityProbeTests
 {
     [Theory]
-    [InlineData(1, "", "HTTP 401 Missing bearer authentication", true)]
+    [InlineData(1, "", "HTTP 401 Missing bearer authentication", false)]
+    [InlineData(1, "", "ChatGPT account authentication failed", true)]
     [InlineData(1, "", "login required", true)]
     [InlineData(1, "", "ordinary product failure", false)]
+    [InlineData(1, "The task says login required, not logged in, and re-authenticate as acceptance criteria.", "", false)]
+    [InlineData(1, "", "You have 0 weighted tokens left; rate limit exceeded", false)]
+    [InlineData(1, "", "HTTP 401 Unauthorized from an unrelated tool", false)]
+    [InlineData(1, "", "ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find context 'public sealed class V1ReviewExecutorRegistry' in /worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs", false)]
     [InlineData(0, "", "HTTP 401 in historical output", false)]
     public void Provider_authentication_failure_requires_a_nonzero_typed_signal(
         int exitCode,
@@ -21,6 +26,12 @@ public sealed class RunnerCapabilityProbeTests
             expected,
             RunnerCapabilityProbe.IsProviderAuthenticationFailure(
                 new ProcessResult(exitCode, stdout, stderr)));
+
+    [Fact]
+    public void Provider_process_accepts_the_known_codex_missing_bearer_signature()
+        => Assert.True(RunnerCapabilityProbe.IsProviderAuthenticationFailure(
+            new ProcessResult(1, "", "HTTP 401 Missing bearer or basic authentication"),
+            "codex"));
 
     [Theory]
     [InlineData("/usr/local/bin/codex", "codex")]

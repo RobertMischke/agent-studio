@@ -2440,6 +2440,9 @@ public sealed partial class TaskServerStore
                 canary_claim_id TEXT,
                 consecutive_failures INTEGER NOT NULL DEFAULT 0,
                 recovery_history_json TEXT NOT NULL DEFAULT '[]',
+                condition TEXT,
+                credential_expires_at TEXT,
+                credential_refreshed_at TEXT,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY(runner_id, capability_key)
             );
@@ -2745,6 +2748,9 @@ public sealed partial class TaskServerStore
         await EnsureColumnAsync(connection, "runners", "effective_max_parallelism", "INTEGER", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_at", "TEXT", ct);
         await EnsureColumnAsync(connection, "runners", "runtime_capacity_applied_version", "INTEGER", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "condition", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "credential_expires_at", "TEXT", ct);
+        await EnsureColumnAsync(connection, "runner_capabilities", "credential_refreshed_at", "TEXT", ct);
         await EnsureColumnAsync(connection, "orchestration_runs", "task_version", "INTEGER NOT NULL DEFAULT 0", ct);
         await ExecuteAsync(connection, """
             INSERT INTO runtime_capacity_settings(

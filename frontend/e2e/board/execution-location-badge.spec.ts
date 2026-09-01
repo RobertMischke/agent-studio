@@ -360,7 +360,7 @@ test('distinguishes a Claude provider limit from stalled pickup and promises aut
   const banner = page.getByTestId('remote-queue-starvation-banner');
   await expect(banner.getByTestId('notice-bar-headline')).toContainText('Claude claims limited until');
   await expect(banner.getByTestId('notice-bar-detail')).toContainText('resume automatically after a fresh quota probe');
-  await expect(banner.getByTestId('notice-bar-detail')).toContainText('Codex and other CLI claims remain eligible');
+  await expect(banner.getByTestId('notice-bar-detail')).toContainText('Other CLI claims remain eligible');
   await expect(banner).not.toContainText('waiting despite free Runner capacity');
   await expectFlatFullBleedNoticeBar(banner);
 

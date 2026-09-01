@@ -321,17 +321,20 @@ both installed units, verifies the variable name in each daemon's
 the value in the Studio database, repository, task, log, or evidence artifact.
 
 Provider capability snapshots refresh every 60 seconds. Execution Hosts shows
-**OK**, **Unavailable**, or **Unknown** per CLI, with the probe detail in the
-tooltip. Provider auth probes run at most every five minutes, use a 30-second
-timeout, and run at lower CPU priority on Linux. A timeout, empty output, launch
-failure, or unsupported command keeps the last advertised verdict and writes a
-`runner-provider-auth-probe-degraded` journal line. Two consecutive explicit
-logout answers are required for `OK -> Unavailable`; that transition creates an
-operator notification and updates Ready card wait reasons. A later successful
-probe writes `runner-provider-auth-probe-recovered` and advertises **OK** without
-a service restart. A recognized auth failure from a run reports the capability
-failure immediately. When a capability advertises a known expiry, Studio warns
-during the final 14 days. Follow
+**OK**, **Retrying**, **Expiring**, **Unavailable**, or **Unknown** per CLI,
+with probe detail in the tooltip. Provider auth probes run at most every five
+minutes, retry degraded or unavailable states after 30 seconds, use a 30-second
+timeout, and run at lower CPU priority on Linux. Run output and status commands
+share one classifier. A timeout, token-refresh race, network failure, empty
+output, launch failure, unsupported command, or ordinary tool failure keeps the
+last advertised verdict. Rate limits enter the provider-limit circuit. Two
+consecutive distinguishable logout answers are required for `OK ->
+Unavailable`; only that state blocks claims and raises the re-auth prompt. A
+later successful probe writes `runner-provider-auth-probe-recovered`, clears
+the provider-auth failure circuit, and advertises **OK** without a service
+restart. The probe reads only timing metadata from provider-owned credential
+files when present. Known re-auth expiry warns during the final 14 days while
+remaining claimable. Follow
 [cli-relogin-runbook.md](./cli-relogin-runbook.md) for renewal.
 
 Do not create provider-specific files such as `claude.env`.
