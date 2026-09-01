@@ -69,7 +69,7 @@ async function stubBackgroundApis(page: Page) {
     { id: 'local-default', displayName: 'operator-workstation', kind: 'human', registeredAt: now, lastSeenAt: now },
     { id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service', registeredAt: now, lastSeenAt: now,
       runnerGitStatus: 'ready', runnerGitCheckedAt: now, runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 2,
-      runnerActiveGateCount: 0, runnerGateCapacity: 4 },
+    },
   ]));
   await page.route('**/api/v1/management/remote-hosts', json([]));
   await page.route('**/api/clients/*/telemetry?window=*', json({ clientId: 'mock', window: '14d', points: [{
@@ -447,7 +447,6 @@ test.describe('Execution Hosts settings section', () => {
         id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
         registeredAt: now, lastSeenAt: now, runnerGitStatus: 'ready',
         runnerDaemonState: 'running', runnerActiveSlots: 1, runnerAvailableSlots: 19,
-        runnerActiveGateCount: 2, runnerGateCapacity: 4,
       }]) });
     });
     await page.route('**/api/clients/agent-runner-01/telemetry?window=*', route => route.fulfill({
@@ -472,12 +471,15 @@ test.describe('Execution Hosts settings section', () => {
     await expandHost(remote);
     await expect(remote.getByTestId('remote-host-activity')).toContainText('Daemonrunning');
     await expect(remote.getByTestId('remote-host-run-pool')).toContainText('1 active');
-    await expect(remote.getByTestId('remote-host-gate-pool')).toContainText('2 running · pool 4');
-    await expect(remote.getByTestId('remote-host-cpu-context')).toContainText('GATE work does not consume a RUN slot');
+    await expect(remote.getByTestId('remote-host-gate-pool')).toHaveCount(0);
+    await expect(remote.getByTestId('remote-host-cpu-context')).toContainText('other processes');
     await expect(remote.getByTestId('remote-host-vitals')).toContainText('53%');
     await expect(remote.getByTestId('remote-host-slots-context')).toContainText('1 RUN active · host load 7.7 of 12 cores');
     await remote.scrollIntoViewIfNeeded();
-    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-live-first-mount--mocked.png'), fullPage: false });
+    await setTheme(page, 'light');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-live-first-mount-light--mocked.png'), fullPage: false });
+    await setTheme(page, 'dark');
+    await page.screenshot({ path: join(SHOT_DIR, 'remote-host-live-first-mount-dark--mocked.png'), fullPage: false });
   });
 
   test('shows and centrally updates the host runtime capacity', async ({ page }) => {

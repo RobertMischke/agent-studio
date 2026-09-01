@@ -187,6 +187,7 @@
     <p><strong>Do not</strong> make “host capability” a stand-alone execution model: capability is an eligibility predicate, not a work item. Reuse the Review Plane's exact-subject and isolation implementation, but do not hide deterministic gates inside the review lifecycle. This preserves clear gate identity and matches the Tranche 0 actor split.</p>
   </div>
   <p>In the target, “local fallback” means another registered Agent Host that is eligible to claim the same immutable gate attempt. It never means silently returning to an in-process build on the Task Server or Studio backend. If no eligible executor remains after the infrastructure retry budget, the central state is <code>GateInfra</code>, not a fabricated product failure.</p>
+  <div class="callout"><p><strong>Implementation outcome · 2026-09-01:</strong> the shipped bounded form freezes deterministic gate commands into the immutable ReviewSubject and executes them under a claimed, leased, and fenced ReviewAttempt. Remote step evidence retains the individual <code>post-build-test-gate</code> identity and exact-SHA proof. AGT-2262 removed the direct SSH path after this became canonical; local-only cards retain the local gate runner without serving as a remote fallback.</p></div>
 </section>
 
 <section id="current" data-concept-section="evidence">

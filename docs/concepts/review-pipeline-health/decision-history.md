@@ -2,6 +2,17 @@
 
 Newest first. Every entry: date · decision · reasoning · card/commit reference.
 
+## 2026-09-01: SSH gate bridge retired after the fenced replacement
+
+Canonical remote verification now freezes `post-build-test-gate` into the
+immutable Remote Review plan. A Review Executor claims the attempt under the
+Task Server lease and fence, materializes the exact Result SHA, executes the
+typed command plan, and reports step evidence and cleanup proof. AGT-2262
+therefore removed backend SSH dispatch, the `$HOME/gate-work` convention, the
+host-side gate semaphore, SSH-specific log fields, and the process-local gate
+workload projection. Local-only cards retain the ordinary local gate runner;
+there is no remote-to-local fallback. → AGT-2262.
+
 ## 2026-08-18: Review-plane restart is loss-free; adaptive parallelism and plane priority ship as recommendations, not auto-executors
 The critical unknown blocking AGT-2645's auto-scaling proposal, whether
 `sudo agent-runner-deploy config review RUNNER_MAX_PARALLELISM <n>` (the

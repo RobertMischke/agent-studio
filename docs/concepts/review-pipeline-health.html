@@ -205,11 +205,12 @@ starves, however many cards are ready.</p>
       <li>After lock acquisition there is <strong>no watchdog</strong>: a hung spawn held the lock
           for 2.5&nbsp;h on 23.07.; ~12 queued gates died at the 62-min queue SLA.</li>
       <li>Queue-SLA victims count as card failures and consume anti-churn budget.</li>
-      <li><strong>Since 23.07.:</strong> the <strong>ssh-gate bridge</strong> runs gates on the
-          remote host first (2 in parallel, full suite ≈ 2&nbsp;min, disposable worktree at the
-          exact SHA, remote-side timeout); the local path remains only as fallback.</li>
+      <li><strong>Historical:</strong> the 23.07. SSH bridge removed the immediate bottleneck.
+          Since AGT-2262, canonical remote gates run inside a claimed and fenced Remote Review
+          attempt at the exact Result SHA. The backend no longer starts an SSH gate or silently
+          falls back from remote execution to its local machine.</li>
     </ul>
-    <div class="cards">containment: MachineBound traits + build-profile filter · bridge: AGT-2222 T2 (cleanup card tracks its removal)</div>
+    <div class="cards">containment: MachineBound traits + build-profile filter · bridge history: AGT-2222 T2 · teardown: AGT-2262</div>
   </div>
   <div class="panel soll"><span class="tag">SOLL</span>
     <h3>Merged subject, watchdog, distributed</h3>

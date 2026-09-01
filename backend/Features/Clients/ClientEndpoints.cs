@@ -32,7 +32,6 @@ public static class ClientEndpoints
 
         clients.MapGet("/", (
             ClientIdentityStore store,
-            AgentStudio.Pipeline.RemoteGateActivityStore gateActivity,
             ProjectRegistry registry,
             ProjectSettingsService projectSettings) =>
         {
@@ -48,14 +47,7 @@ public static class ClientEndpoints
                         projectSettings,
                         now),
                 };
-                if (record.RunnerDaemonState is null && record.RunnerGitStatus is null)
-                    return summary;
-                var gates = gateActivity.ForRunner(record.Id);
-                return summary with
-                {
-                    RunnerActiveGateCount = gates.Active,
-                    RunnerGateCapacity = gates.Capacity,
-                };
+                return summary;
             }).ToList();
             summaries.AddRange(store.ListDiagnostics().Select(DiagnosticSummary));
             return Results.Ok(summaries);

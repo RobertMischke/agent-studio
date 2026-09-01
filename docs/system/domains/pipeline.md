@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-27
+Version: 2026-09-01
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -206,10 +206,6 @@ steer the pipeline in this policy version.
   unavailable, recovery also fails closed without releasing a push. This closes
   the BP-02 merge-commit-before-gate crash window without treating Git ancestry
   as a verdict.
-- `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
-  read model fed by the SSH gate start/completion events. The Execution Hosts view
-  uses it to show GATE work separately from daemon RUN slots; the store is
-  visibility-only and never admits, cancels, or reorders a gate.
 - `runner/RemoteReviewWorkspace.cs` and
   `contracts/TaskServer.Contracts/ReviewContracts.cs`: exact-subject remote
   verification. A frozen command is either a deterministic tool command or a
@@ -226,6 +222,11 @@ steer the pipeline in this policy version.
   review.
 - `backend/Features/Runner/RemoteReviewPlanBuilder.cs` freezes the effective
   build profile and enabled pipeline aspects into the initial ReviewSubject.
+  This is the canonical remote build/test gate transport: an eligible Review
+  Executor claims the fenced ReviewAttempt, runs the immutable
+  `post-build-test-gate` command plan at the exact Result SHA, and returns typed
+  command evidence. The backend never dispatches a gate through SSH. Local-only
+  cards continue to use `BuildTestGateRunner` and its machine-wide admission.
   Auto-discovery reads only Git-tracked entry points, manifests, and
   conventional lockfiles, never working-tree-only folders. A
   `ReviewInfra / PreparationFailed` retry rebuilds the plan from the current

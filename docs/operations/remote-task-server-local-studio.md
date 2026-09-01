@@ -1,8 +1,8 @@
 # Remote Task Server with local Agent Studio
 
 Status: Phase A architecture delivered; Phase B deployment remains subject to
-Robert's approval. Updated 2026-08-09 with the Remote post-processing ownership
-and migration cut. This task changes no Phase B infrastructure; its delivered
+Robert's approval. Updated 2026-09-01 with the Remote post-processing ownership,
+gate transport cleanup, and migration cut. This task changes no Phase B infrastructure; its delivered
 Task Server decision slice is described below. Every deployment action belongs
 to a separate Phase B task after approval.
 
@@ -316,7 +316,7 @@ concern.
 | Step | Current local dependencies and locks | Target and required contract | Order |
 |---|---|---|---:|
 | `post-orchestrator-review` | Card body, status, CLI tail, results inventory, completion acceptance, review-cycle counter, `CompletionGate`, and `PipelineExecutionLog`. | **Server decision.** For canonical Remote Review, the Task Server now accepts only normalized fenced report facts and keeps the card in Auto Review through cleanup. Legacy card completeness still needs a structured fact migration. | S1, Remote delivered |
-| `post-build-test-gate` | Watched repository path, exact SHA, `BuildProfile`, mode, timeouts, `ProcessGate`, machine `flock`, optional SSH bridge, and disposable review root. | **Host-capable.** Create an immutable GateSubject/GateAttempt with RunAttempt ID, repository source, Result-SHA, plan/policy digest, argv, working directory, environment allow-list, deadlines, resource class, and output bounds. Host reports tested HEAD/tree, exit/signal, classification, artifact hashes, and cleanup proof. | G1, first candidate |
+| `post-build-test-gate` | Local-only cards use the watched repository path, exact SHA, `BuildProfile`, timeouts, `ProcessGate`, machine `flock`, and a disposable review root. | **Remote delivered through the Review Plane.** `RemoteReviewPlanBuilder` freezes the build profile into the immutable ReviewSubject. The claimed and fenced ReviewAttempt executes the typed gate command at the exact Result SHA and reports HEAD/tree, exit/signal, classification, artifacts, and cleanup proof. There is no SSH dispatch or backend fallback for canonical remote work. | R1, delivered |
 | `aspect-requirement-fit` | Prompt, task/status evidence, result inventory, branch diff, template, model routing, token budget, CLI, and exact checkout. | **Host-capable, already represented by Remote Review.** Keep immutable ReviewSubject, resolved model plan, typed verdict, usage, and exact-SHA workspace proof; Task Server owns effects. | R1 |
 | `aspect-code-quality` | Same checkout, evidence, prompt, model, CLI, and budget dependencies. | **Host-capable through Remote Review** with the same subject and report contract. | R1 |
 | `aspect-documentation-impact` | Same dependencies plus repository documentation inventory. | **Host-capable through Remote Review** with declared documentation inputs in the subject digest. | R1 |
@@ -400,8 +400,8 @@ The interface cut is:
    product or infrastructure failure, artifact hashes, toolchain digest, and
    cleanup proof. It never chooses a lane.
 5. Task Server validates and persists the report. Engine consumes the terminal
-   gate result; Task Server applies retry or reissue policy. The existing SSH
-   bridge is removed only after parity and restart/loss canaries pass.
+   gate result; Task Server applies retry or reissue policy. AGT-2262 removed
+   the former direct SSH bridge after this fenced path became canonical.
 
 ### Migration sequence and completion condition
 

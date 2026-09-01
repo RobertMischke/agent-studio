@@ -68,6 +68,8 @@
   </div>
 </header>
 
+<div class="box ok"><h4>Archived outcome · 2026-09-01</h4><p>The replacement-first sequence is complete. Canonical remote build/test verification now runs as an immutable command in a claimed, leased, and fenced Remote Review attempt at the exact Result SHA. AGT-2262 removed the backend SSH dispatch, the host <code>$HOME/gate-work</code> convention, the bridge semaphore, and its process-local workload projection. The local gate runner remains only for local cards; it is not a fallback from remote execution.</p></div>
+
 <h2 id="gate"><span class="no">A</span>Was ein „Gate" ist — und warum es der Engpass war</h2>
 <p>Ein <b>Gate</b> ist die Qualitätsprüfung vor der Abnahme: Bevor eine Karte akzeptiert wird, fährt der Orchestrator Build + Testsuite gegen den Karten-Stand. Fällt das Gate durch, geht die Karte nicht durch.</p>
 <p>Lange lief das <b>lokal und seriell</b>: jedes Gate 15–27 Minuten, dazu Repo-Contention (mehrere Gates am selben Arbeitsverzeichnis) und Last-Flakes. Das war der Durchsatz-Boden — der Betrieb wartete auf Gates, nicht auf die Agenten.</p>
@@ -136,7 +138,7 @@
   <li><b>Die Brücke darf bis dahin bleiben.</b> Sie ist als Provisorium markiert, hat einen Fallback auf lokal, und hält den Durchsatz oben. Kein Druck, sie voreilig zu entfernen.</li>
 </ul>
 <p class="dim">Zusammengefasst: AGT-2262 ist das Aufräumen am Ende einer Kette, kein eigenständiger Start. Zielbild entscheiden → Ersatz bauen → Abriss. Nur so tauscht man den Hack gegen etwas Besseres statt gegen den nächsten Hack.</p>
-<div class="box"><h4>Lebenszyklus dieses Dokuments</h4><p>Dieses Doc begleitet die Kette. Sobald <b>AGT-2262 abgeschlossen</b> ist (Brücke entfernt), hat es seinen Zweck erfüllt und wird ins <b>Archiv</b> klassifiziert (Wiki-Klassifikation „archived") — es bleibt lesbar und verlinkbar, verschwindet aber aus der aktuellen Ansicht.</p></div>
+<div class="box"><h4>Document lifecycle</h4><p>AGT-2262 is complete and this page is classified as <b>archived</b>. It remains readable as the historical replacement-first rationale but is no longer current operating guidance.</p></div>
 
 </main>
 </body>
