@@ -15,9 +15,14 @@ export interface StatusBarHostLoad {
 
 const MAX_TELEMETRY_AGE_MS = 5 * 60_000;
 
-/** A host qualifies for the live status-bar signal while it has stats and is neither offline nor retired. */
-function isLiveHost(host: RemoteHost): boolean {
+/** A host qualifies for the load signal while it has stats and is neither offline nor retired. */
+function isLiveLoadHost(host: RemoteHost): boolean {
   return host.stats !== null && host.status !== 'offline' && host.status !== 'retired';
+}
+
+/** Slot utilization comes from the runner heartbeat and does not depend on telemetry history loading. */
+function isLiveSlotHost(host: RemoteHost): boolean {
+  return host.role === 'remote' && host.status !== 'offline' && host.status !== 'retired';
 }
 
 /** The host's freshest telemetry point, or null when it is missing or older than {@link MAX_TELEMETRY_AGE_MS}. */
@@ -27,6 +32,13 @@ function freshPoint(host: RemoteHost, nowMs: number): HostTelemetryPoint | null 
   const observedAt = Date.parse(point.timestamp);
   if (!Number.isFinite(observedAt) || nowMs - observedAt > MAX_TELEMETRY_AGE_MS) return null;
   return point;
+}
+
+function freshSlotPoint(host: RemoteHost, nowMs: number): HostTelemetryPoint | null {
+  const point = host.telemetry?.points.at(-1) ?? null;
+  if (point === null) return null;
+  const observedAt = Date.parse(point.timestamp);
+  return Number.isFinite(observedAt) && nowMs - observedAt <= MAX_TELEMETRY_AGE_MS ? point : null;
 }
 
 /**
@@ -41,7 +53,7 @@ export function summarizeStatusBarHostLoad(
   nowMs = Date.now(),
 ): StatusBarHostLoad | null {
   const points = hosts
-    .filter(isLiveHost)
+    .filter(isLiveLoadHost)
     .map(host => freshPoint(host, nowMs))
     .filter((point): point is HostTelemetryPoint => point !== null);
 
@@ -76,11 +88,20 @@ export interface StatusBarPlaneSlots {
   active: number;
   /**
    * Sum of every contributing host's own configured slot ceiling
-   * (`runtimeCapacity.maxParallelism`, the daemon-reported
-   * `effectiveMaxParallelism`, or the active+available split - same priority
-   * order the host card uses). Null when no host in the plane reports one, so
-   * the footer never fabricates a fleet-wide maximum (AGT-2645).
+   * (the daemon-reported `effectiveMaxParallelism`, the active+available
+   * heartbeat split, or the desired runtime capacity). Null when any connected
+   * host in the plane lacks a ceiling, so the footer never presents a partial
+   * fleet-wide maximum as complete.
    */
+  ceiling: number | null;
+  /** Per-runner detail retained for the tooltip while the primary label stays compact. */
+  hosts: readonly StatusBarHostSlots[];
+}
+
+export interface StatusBarHostSlots {
+  id: string;
+  name: string;
+  active: number;
   ceiling: number | null;
 }
 
@@ -90,20 +111,28 @@ export interface StatusBarSlotsByRole {
 }
 
 function hostSlotCeiling(host: RemoteHost): number | null {
-  if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
+  // The daemon-reported effective value is the ceiling actually used by its
+  // "into slot N/M" claim path. A desired central value can be newer than the
+  // daemon's applied configuration, so it must not win while adoption is pending.
   if (host.effectiveMaxParallelism !== null && host.effectiveMaxParallelism !== undefined) {
     return host.effectiveMaxParallelism;
   }
   if (host.activeTaskCount !== undefined && host.availableSlots !== undefined) {
     return host.activeTaskCount + host.availableSlots;
   }
+  if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
   return null;
 }
 
+function hostActiveSlots(host: RemoteHost, nowMs: number): number {
+  if (host.activeTaskCount !== undefined) return Math.max(0, host.activeTaskCount);
+  return Math.max(0, freshSlotPoint(host, nowMs)?.activeSlots ?? 0);
+}
+
 /**
- * Split active execution slots and configured ceilings by executor plane
- * (coding vs review) so the footer can show "coding x/N - review y/M"
- * instead of one merged figure that hides review-plane load (AGT-2645).
+ * Split live remote execution slots and configured ceilings by executor plane
+ * so the footer can show "remote x/N - review y/M" instead of a runner-host
+ * count or one merged figure that hides review-plane load.
  * Coding and review daemons register as separate RunnerIds even on a shared
  * physical host, so each `RemoteHost` belongs to exactly one plane
  * ({@link hostExecutorRole}) and this is a plain filter + reduce over the
@@ -114,16 +143,23 @@ export function summarizeStatusBarSlotsByRole(
   nowMs = Date.now(),
 ): StatusBarSlotsByRole {
   const result: StatusBarSlotsByRole = {
-    coding: { active: 0, ceiling: null },
-    review: { active: 0, ceiling: null },
+    coding: { active: 0, ceiling: null, hosts: [] },
+    review: { active: 0, ceiling: null, hosts: [] },
   };
   for (const host of hosts) {
-    if (!isLiveHost(host)) continue;
+    if (!isLiveSlotHost(host)) continue;
     const plane = result[hostExecutorRole(host)];
-    const point = freshPoint(host, nowMs);
-    if (point) plane.active += point.activeSlots;
+    const active = hostActiveSlots(host, nowMs);
     const ceiling = hostSlotCeiling(host);
-    if (ceiling !== null) plane.ceiling = (plane.ceiling ?? 0) + ceiling;
+    plane.active += active;
+    plane.hosts = [...plane.hosts, { id: host.id, name: host.name, active, ceiling }];
+  }
+  for (const plane of [result.coding, result.review]) {
+    // A partial fleet denominator would look precise while under-counting
+    // capacity. Show N/M only when every connected host reports M.
+    plane.ceiling = plane.hosts.length > 0 && plane.hosts.every(host => host.ceiling !== null)
+      ? plane.hosts.reduce((sum, host) => sum + (host.ceiling ?? 0), 0)
+      : null;
   }
   return result;
 }

@@ -337,9 +337,13 @@ without a parallel surface.
   Board cards deliberately show the actual live runner from the fenced run
   lease, not merely this configured target, so assignment and attribution
   cannot be confused. A fresh connected remote lease also drives the card's
-  CURRENT running copy and the status bar's separate local / remote totals;
-  a disconnected, expired, or recovering location remains an acute orphan
-  candidate. These consumers reuse the grouped-board and execution-location
+  CURRENT running copy. The status bar instead projects live runner-heartbeat
+  utilization by execution plane: `remote N/M` for coding and `review N/M` for
+  review, summed across connected hosts, with compact `idle` zero states. Host
+  names, host count, and each host's slot split stay in the tooltip; board lease
+  counts are reconciliation detail rather than the primary utilization number.
+  A disconnected, expired, or recovering location remains an acute orphan
+  candidate. These consumers reuse the grouped-board and execution-host
   snapshots and do not add another polling path. The historical target is the
   ordered, immutable route
   defined by [Runner provenance and host handoff](../../concepts/completion-review-and-remote-runner-stability.html#provenance):

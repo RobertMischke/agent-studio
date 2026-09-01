@@ -137,12 +137,20 @@ describe('summarizeStatusBarSlotsByRole', () => {
     const review = { ...remoteHost(1, 8, 3, undefined, { executorRole: 'review', maxParallelism: 6 }), id: 'remote-2', clientId: 'remote-2' };
 
     expect(summarizeStatusBarSlotsByRole([coding, review])).toEqual({
-      coding: { active: 2, ceiling: 8 },
-      review: { active: 3, ceiling: 6 },
+      coding: {
+        active: 2,
+        ceiling: 8,
+        hosts: [{ id: 'remote-1', name: 'remote-1', active: 2, ceiling: 8 }],
+      },
+      review: {
+        active: 3,
+        ceiling: 6,
+        hosts: [{ id: 'remote-2', name: 'remote-1', active: 3, ceiling: 6 }],
+      },
     });
   });
 
-  it('treats the local host as coding-plane since it never advertises an executor capability', () => {
+  it('excludes local execution because the primary signal is remote utilization', () => {
     const local = {
       ...remoteHost(1, 4, 1),
       id: 'local',
@@ -153,8 +161,8 @@ describe('summarizeStatusBarSlotsByRole', () => {
     };
 
     expect(summarizeStatusBarSlotsByRole([local])).toEqual({
-      coding: { active: 1, ceiling: null },
-      review: { active: 0, ceiling: null },
+      coding: { active: 0, ceiling: null, hosts: [] },
+      review: { active: 0, ceiling: null, hosts: [] },
     });
   });
 
@@ -170,8 +178,64 @@ describe('summarizeStatusBarSlotsByRole', () => {
     const offline = { ...remoteHost(1, 8, 5, undefined, { maxParallelism: 8 }), status: 'offline' as const };
 
     expect(summarizeStatusBarSlotsByRole([offline])).toEqual({
-      coding: { active: 0, ceiling: null },
-      review: { active: 0, ceiling: null },
+      coding: { active: 0, ceiling: null, hosts: [] },
+      review: { active: 0, ceiling: null, hosts: [] },
     });
+  });
+
+  it('sums busy slots and ceilings across several coding hosts', () => {
+    const berlin = {
+      ...remoteHost(1, 8, 3, undefined, { maxParallelism: 4 }),
+      id: 'runner-berlin',
+      name: 'runner-berlin',
+      clientId: 'runner-berlin',
+      activeTaskCount: 3,
+    };
+    const london = {
+      ...remoteHost(1, 8, 2, undefined, { maxParallelism: 4 }),
+      id: 'runner-london',
+      name: 'runner-london',
+      clientId: 'runner-london',
+      activeTaskCount: 2,
+    };
+
+    expect(summarizeStatusBarSlotsByRole([berlin, london]).coding).toEqual({
+      active: 5,
+      ceiling: 8,
+      hosts: [
+        { id: 'runner-berlin', name: 'runner-berlin', active: 3, ceiling: 4 },
+        { id: 'runner-london', name: 'runner-london', active: 2, ceiling: 4 },
+      ],
+    });
+  });
+
+  it('uses heartbeat slot counts without waiting for telemetry history', () => {
+    const host = {
+      ...remoteHost(1, 8, 0, undefined, { maxParallelism: 8 }),
+      stats: null,
+      telemetry: null,
+      activeTaskCount: 6,
+      availableSlots: 2,
+    };
+
+    expect(summarizeStatusBarSlotsByRole([host]).coding).toMatchObject({
+      active: 6,
+      ceiling: 8,
+    });
+  });
+
+  it('does not publish a partial aggregate ceiling', () => {
+    const known = remoteHost(1, 8, 2, undefined, { maxParallelism: 8 });
+    const unknown = {
+      ...remoteHost(1, 8, 1),
+      id: 'remote-2',
+      clientId: 'remote-2',
+      runtimeCapacity: null,
+      effectiveMaxParallelism: null,
+      activeTaskCount: undefined,
+      availableSlots: undefined,
+    };
+
+    expect(summarizeStatusBarSlotsByRole([known, unknown]).coding.ceiling).toBeNull();
   });
 });

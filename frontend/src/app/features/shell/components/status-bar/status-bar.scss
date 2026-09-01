@@ -35,6 +35,7 @@ app-status-bar {
   background: var(--studio-bg-activitybar, #181825);
   border-top: 1px solid var(--studio-border, rgba(255, 255, 255, 0.06));
   font-size: var(--statusbar-font-size);
+  font-variant-numeric: tabular-nums;
   line-height: 1;
   color: var(--studio-fg-dim, rgba(255, 255, 255, 0.70));
   letter-spacing: 0;

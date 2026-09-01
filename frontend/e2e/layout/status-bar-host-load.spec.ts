@@ -98,6 +98,17 @@ async function stubHostLoad(
   }));
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/runner/status', json({ projects: runnerProjects, cliRepairs }));
+  await page.route('**/api/runner/auto-review-queue', json({
+    queueDepth: 0,
+    activeJobs: 0,
+    isStagnant: false,
+    stagnantSince: null,
+    stagnantThresholdMinutes: 20,
+    drainRatePerMinute: 0,
+    medianReviewDurationMs: null,
+    throughputWindowMinutes: 15,
+    observedAt: now,
+  }));
   await page.route('**/api/clients', json([{
     id: 'agent-runner-01',
     displayName: 'agent-runner-01',
@@ -160,12 +171,16 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('1 local · 3 remote');
-    await expect(page.getByTestId('status-bar').getByText('8/16 auto')).toBeVisible();
+    await expect(running).toContainText('remote 3/8');
+    await expect(running).not.toContainText('1 remote');
+    await expect(running).toHaveAttribute('data-pulsing', 'true');
+    await expect(page.getByTestId('status-bar').getByText('auto 8/16')).toBeVisible();
     await expect(running).toHaveAttribute('data-signal-tone', 'working');
     await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText('Open execution hosts');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Remote coding: 3 of 8 slots busy');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Connected host (1): agent-runner-01 (3/8 busy)');
     await expect(page.getByTestId('cac-tooltip')).toContainText('Execution host load 7.2 / 12 cores (60%)');
     await expect(page.getByTestId('cac-tooltip')).toContainText('3 active execution slots');
 
@@ -207,13 +222,118 @@ test.describe('Status bar execution-host load companion signal', () => {
     });
   });
 
+  test('sums several coding hosts and keeps per-host detail in the tooltip', async ({ page }) => {
+    await stubHostLoad(page, 0, 6, 6, 6.2);
+    const now = new Date().toISOString();
+    const client = (id: string, active: number) => ({
+      id,
+      displayName: id,
+      kind: 'service',
+      registeredAt: now,
+      lastSeenAt: now,
+      runnerGitStatus: 'ready',
+      runnerDaemonState: 'running',
+      runnerActiveSlots: active,
+      runnerAvailableSlots: 4 - active,
+      runnerEffectiveMaxParallelism: 4,
+    });
+    const capability = {
+      key: 'executor:coding',
+      category: 'executor',
+      advertisedStatus: 'ready',
+      healthState: 'healthy',
+      advertisedAt: now,
+      freshUntil: new Date(Date.now() + 60_000).toISOString(),
+      isFresh: true,
+      consecutiveFailures: 0,
+      affectedClaims: [],
+      recoveryHistory: [],
+    };
+    const snapshot = (id: string) => ({
+      runnerId: id,
+      name: id,
+      hostId: `host-${id}`,
+      instanceId: 'coding',
+      runnerVersion: '1.2.0',
+      protocolVersion: 2,
+      status: 'active',
+      registeredAt: now,
+      lastSeenAt: now,
+      hostAdmission: {
+        hostId: `host-${id}`,
+        admissionState: 'open',
+        automaticDrainReason: null,
+        automaticDrainAt: null,
+        operatorDrainReason: null,
+        operatorDrainAt: null,
+      },
+      capabilities: [capability],
+      effectiveMaxParallelism: 4,
+    });
+    const telemetry = (clientId: string, activeSlots: number) => ({
+      clientId,
+      window: '1h',
+      points: [{
+        timestamp: now,
+        cpuPercent: 52,
+        load1: 3.1,
+        load5: 3.1,
+        load15: 3.1,
+        memoryUsedBytes: 12_000_000_000,
+        memoryTotalBytes: 32_000_000_000,
+        swapInBytesPerSecond: 0,
+        swapOutBytesPerSecond: 0,
+        cpuStealPercent: 0,
+        ioWaitPercent: 0,
+        cpuCores: 8,
+        activeSlots,
+      }],
+      findings: [],
+    });
+
+    await page.unroute('**/api/clients');
+    await page.route('**/api/clients', json([
+      client('agent-runner-01', 4),
+      client('agent-runner-02', 2),
+    ]));
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', json([
+      snapshot('agent-runner-01'),
+      snapshot('agent-runner-02'),
+    ]));
+    await page.unroute('**/api/clients/agent-runner-01/telemetry?window=1h');
+    await page.unroute('**/api/clients/agent-runner-01/telemetry?window=14d');
+    await page.route('**/api/clients/agent-runner-01/telemetry?window=*', json(telemetry('agent-runner-01', 4)));
+    await page.route('**/api/clients/agent-runner-02/telemetry?window=*', json(telemetry('agent-runner-02', 2)));
+
+    await page.goto('/');
+
+    const running = page.getByTestId('status-bar-running');
+    await expect(running).toContainText('remote 6/8');
+    await running.hover();
+    const tooltip = page.getByTestId('cac-tooltip');
+    await expect(tooltip).toContainText('Connected hosts (2)');
+    await expect(tooltip).toContainText('agent-runner-01 (4/4 busy)');
+    await expect(tooltip).toContainText('agent-runner-02 (2/4 busy)');
+
+    await setTheme(page, 'dark');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-remote-6-of-8-dark--mocked.png'),
+    });
+    await setTheme(page, 'light');
+    await page.getByTestId('status-bar').screenshot({
+      path: join(RESULTS_DIR, 'status-bar-remote-6-of-8-light--mocked.png'),
+    });
+  });
+
   test('click opens Execution Hosts management', async ({ page }) => {
     await stubHostLoad(page, 2, 0, 0, 3.6);
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('2 local');
-    await expect(running).not.toContainText('remote');
+    await expect(running).toContainText('remote idle');
+    await expect(running).not.toContainText('2 local');
+    await expect(running).toHaveAttribute('data-pulsing', 'false');
     await running.click();
 
     await expect(page).toHaveURL(/#\/workspace\/settings\/execution-hosts(?:&|$)/);
@@ -227,9 +347,8 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('no runners');
+    await expect(running).toContainText('remote idle');
     await expect(running).not.toContainText('local');
-    await expect(running).not.toContainText('remote');
     await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
     await expect(running).toHaveAttribute('data-signal-correlation', 'load-without-runs');
     await running.hover();
@@ -337,6 +456,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.unroute('**/api/clients/agent-runner-01/telemetry?window=14d');
     await page.route('**/api/clients/agent-runner-01/telemetry?window=*', json(telemetry('agent-runner-01', 0)));
     await page.route('**/api/clients/agent-runner-review-01/telemetry?window=*', json(telemetry('agent-runner-review-01', 4)));
+    await page.unroute('**/api/runner/auto-review-queue');
     await page.route('**/api/runner/auto-review-queue', json({
       queueDepth: 7,
       activeJobs: 4,
@@ -352,13 +472,16 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('coding 0/8');
-    await expect(running).not.toContainText('no runners');
+    await expect(running).toContainText('remote idle');
     await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
     const review = page.getByTestId('status-bar-review');
-    await expect(review).toContainText('review 4/6 active');
-    await expect(review).toContainText('7 waiting');
+    await expect(review).toContainText('review 4/6');
+    await expect(review).not.toContainText('waiting');
     await review.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Review: 4 of 6 slots busy');
+    await expect(page.getByTestId('cac-tooltip')).toContainText(
+      'Connected host (1): agent-runner-review-01 (4/6 busy)',
+    );
     await expect(page.getByTestId('cac-tooltip')).toContainText('4 processing, 7 waiting');
 
     await setTheme(page, 'dark');
@@ -376,7 +499,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('5 remote');
+    await expect(running).toContainText('remote 5/8');
     await expect(running).not.toContainText('local');
     await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
     await expect(running).toHaveAttribute('data-signal-correlation', 'runs-without-load');
@@ -397,11 +520,11 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('2 remote');
+    await expect(running).toContainText('remote 3/8');
     await expect(page.getByTestId('status-bar-running-divergence')).toBeVisible();
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText(
-      'Board leases report 2 remote, but fresh host telemetry reports 3 active slots.',
+      'board leases report 2 remote runs, but runner heartbeats report 3 busy coding slots.',
     );
 
     await setTheme(page, 'dark');
