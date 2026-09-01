@@ -2153,7 +2153,30 @@
             <span class="pill ok">fixed in dev</span> the periodic local capability probe now distinguishes a retained npm
             package with missing shims from a truly absent installation. Claude and Codex receive at most one persisted
             global reinstall attempt per hour. The repair journal captures versions, npm output, package timestamps, and
-            nearby npm debug-log activity. Success appears as a quiet status-bar note; only failure raises an alarm.
+            nearby npm debug-log activity. A healthy CLI consumes no status-bar space; only a current failure raises an alarm.
+          </td>
+        </tr>
+        <tr id="case-agt-2696">
+          <td>2026-08-31</td>
+          <td><code>AGT-2696</code><br><span class="small">local CLI repair could not launch npm and retained a stale alarm</span></td>
+          <td>
+            The Codex package remained installed while its command shim was absent. The bounded repair tried to relink it,
+            but Node searched for npm under the backend working directory and exited with
+            <code>MODULE_NOT_FOUND</code>. An operator restored Codex out of band, yet
+            <code>/api/runner/status.cliRepairs</code> continued to report the old failure across healthy probes and backend
+            restarts, leaving a permanent status-bar alarm for a usable CLI.
+          </td>
+          <td>
+            npm resolution accepted an unverified wrapper and inherited the backend working directory. Independently, the
+            healthy-probe fast path did not reconcile the in-memory repair status, and boot rehydration treated the last
+            failed journal row as current forever.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> repair now resolves absolute npm candidates from the active Node
+            installation, APPDATA, and PATH, runs a bounded <code>npm --version</code> preflight with an explicit working
+            directory, and records a typed <code>npm-unavailable</code> result when none can run. A healthy probe appends a
+            durable resolution and removes the status entry. Repaired and resolved outcomes remain journal history only;
+            healthy CLIs render no persistent UI row.
           </td>
         </tr>
         <tr id="case-agt-2680">
