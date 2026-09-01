@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lagebild 01.09. | Betriebs-Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00; --info: #2a78d6;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f; --info: #3987e5;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { padding: 44px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 28px; }
+  header.page h1 { font-size: 1.7rem; margin: 0 0 6px; }
+  header.page p { color: var(--ink-2); margin: 0; max-width: 72ch; }
+  h2 { font-size: 1.2rem; margin: 40px 0 12px; }
+  h3 { font-size: 1.02rem; margin: 24px 0 8px; }
+  p, li { color: var(--ink-2); max-width: 78ch; }
+  strong { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-3); font-weight: 600; font-size: 0.83rem; }
+  code { background: var(--surface-3); padding: 1px 6px; border-radius: 4px; font-size: 0.88em; }
+  .status { display:inline-block; padding: 1px 9px; border-radius: 10px; font-size: 0.8rem; font-weight: 600; }
+  .ok   { background: var(--ok-soft); color: var(--ok); }
+  .bad  { background: var(--bad-soft); color: var(--bad); }
+  .warn { background: var(--warn-soft); color: var(--warn); }
+  .info { background: var(--accent-soft); color: var(--info); }
+  .card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 14px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  figure { margin: 18px 0; overflow-x: auto; }
+  figcaption { color: var(--ink-3); font-size: 0.85rem; margin-top: 6px; }
+</style>
+</head>
+<body>
+<main>
+<header class="page">
+  <h1>Lagebild 01.09.</h1>
+  <p>Betriebs-Dossier: Zustand der Pipeline nach der Gate-Heilung, offene Posten, und die nächsten besten Schritte in Reihenfolge. Stand 01.09.2026 früh.</p>
+</header>
+
+<h2>Kurzfassung</h2>
+<div class="card">
+  <p><strong>Beide QS-Gate-Blocker sind behoben und verifiziert.</strong> Die QS-Lane war doppelt blockiert: (1)&nbsp;zwei flaky Tests (Timeout-Budgets) ließen jede Lieferung als „new failure" durchfallen; (2)&nbsp;ein geleakter Merge-Konflikt-Marker in <code>review-panel.ts</code> auf origin/main brach jeden Frontend-Build (verify-4). Fixes: <code>367aeff</code> (Test-Stabilisierung, stress-verifiziert 3×14 grün unter CPU-Last) und <code>7d3abdf</code> (Marker-Auflösung, 53/53 Frontend-Tests grün). Alle blockierten Karten sind neu eingereiht; die ersten bauen bereits auf der reparierten Basis.</p>
+</div>
+
+<h2>Pipeline-Zustand</h2>
+<figure>
+<svg viewBox="0 0 980 210" width="980" height="210" role="img" aria-label="Pipeline-Fluss mit Blockern">
+  <style>
+    .lane { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+    .lbl  { font: 600 13px system-ui; fill: var(--ink-1); }
+    .sub  { font: 12px system-ui; fill: var(--ink-2); }
+    .cnt  { font: 700 20px system-ui; fill: var(--ink-1); }
+    .arr  { stroke: var(--ink-3); stroke-width: 1.6; marker-end: url(#a); fill: none; }
+    .fixed{ font: 11px system-ui; fill: var(--ok); }
+  </style>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="context-stroke"/></marker></defs>
+  <rect class="lane" x="10"  y="30" width="150" height="90" rx="8"/>
+  <rect class="lane" x="215" y="30" width="150" height="90" rx="8"/>
+  <rect class="lane" x="420" y="30" width="150" height="90" rx="8"/>
+  <rect class="lane" x="625" y="30" width="150" height="90" rx="8"/>
+  <rect class="lane" x="820" y="30" width="150" height="90" rx="8"/>
+  <text class="lbl" x="30" y="55">Ready</text>        <text class="cnt" x="30" y="90">13</text> <text class="sub" x="30" y="110">AGT 5 · QS 9 …</text>
+  <text class="lbl" x="235" y="55">Coding</text>      <text class="cnt" x="235" y="90">↑</text> <text class="sub" x="235" y="110">8 Slots, füllt sich</text>
+  <text class="lbl" x="440" y="55">Gate</text>        <text class="cnt" x="440" y="90">✓</text> <text class="sub" x="440" y="110">verify 1–4 grün*</text>
+  <text class="lbl" x="645" y="55">Integration</text> <text class="cnt" x="645" y="90">✓</text> <text class="sub" x="645" y="110">merge → origin/main</text>
+  <text class="lbl" x="840" y="55">Acceptance</text>  <text class="cnt" x="840" y="90">✓</text> <text class="sub" x="840" y="110">Rail (AGT-2683)</text>
+  <path class="arr" d="M162 75 H 213"/>
+  <path class="arr" d="M367 75 H 418"/>
+  <path class="arr" d="M572 75 H 623"/>
+  <path class="arr" d="M777 75 H 818"/>
+  <text class="fixed" x="420" y="150">* .NET-Flakes stabilisiert (367aeff): WaitForStateAsync 2s→30s-Deadline, MethodBody-Regex 1s→10s+graceful</text>
+  <text class="fixed" x="420" y="170">* Frontend-Build repariert (7d3abdf): Konflikt-Marker aus QS-83-Salvage aufgelöst, 53/53 grün</text>
+</svg>
+<figcaption>Der Fluss ist wieder durchgängig; die zwei Gate-Blocker (rot gewesen: Gate + Frontend-Build) sind behoben.</figcaption>
+</figure>
+
+<h2>Was heute Nacht passiert ist</h2>
+<table>
+  <tr><th>Befund</th><th>Ursache</th><th>Zustand</th></tr>
+  <tr><td>Jede QS-Lieferung „delivery-gate-failed", wechselnde Test-Teilmengen</td><td>Flaky <code>ReviewRunStoreTests</code> (2s-Poll-Budget) + <code>AttackCoverageTests</code> (1s-Regex-Timeout); cache-hit-Baseline fror sie grün ein → jeder Live-Flake = „new failure"</td><td><span class="status ok">behoben 367aeff</span></td></tr>
+  <tr><td>Nach dem Test-Fix weiterhin „unparsed failure in verify-4" für alle Karten</td><td>Geleakte Konflikt-Marker in <code>review-panel.ts</code> auf origin/main: das Operator-Integrationsskript las den Exit-Code von <code>local</code> statt von <code>git merge-tree</code> und pushte einen konfliktbehafteten Tree (QS-83-Salvage)</td><td><span class="status ok">behoben 7d3abdf</span></td></tr>
+  <tr><td>RUN-1150/RUN-1151 im Runbook-Backlog</td><td>Karten-Anlage-Duplikate vom 31.08. (project-als-Query-Falle), Original AGT-2695 längst geliefert</td><td><span class="status ok">gelöscht</span></td></tr>
+  <tr><td>QS-78/82 „integration-error" nach Gate-Pass</td><td>Lieferung traf den Marker-kaputten main; mit 7d3abdf-Basis neu eingereiht</td><td><span class="status info">läuft neu</span></td></tr>
+</table>
+
+<h2>Nächste beste Schritte</h2>
+<table>
+  <tr><th>#</th><th>Schritt</th><th>Warum jetzt</th><th>Wer</th></tr>
+  <tr><td>1</td><td><strong>QS-Durchlauf beobachten:</strong> QS-68/72/75/76/77/78/82/89/93 laufen gegen das geheilte Gate; erste Landung auf origin/main ist der Systembeweis</td><td>Validiert beide Fixes end-to-end; bei erneutem Fail sofort Grade lesen (weiterer Flake?)</td><td>Wächter</td></tr>
+  <tr><td>2</td><td><strong>AGT-Review-Kette leeren:</strong> AGT-2689/90/91 (auto-review) → Integration → develop</td><td>Füllt den nächsten Promotion-Zug</td><td>Pipeline</td></tr>
+  <tr><td>3</td><td><strong>Zug 49 fahren</strong>, sobald develop 5+ Commits vor main liegt (aktuell 0)</td><td>Shippt AGT-2696 (CLI-Self-Heal komplett + Zero-Space-UX) und die UI-Karten; danach verifizierter Stable-Rollout mit Prozess-StartTime-Beweis + Boot-Probe</td><td>Operator</td></tr>
+  <tr><td>4</td><td><strong>Gruppe C entscheiden:</strong> AGT-2671 (workbench.json-Konflikt: auflösen oder Auftrag neu schneiden), QS-95 (Program.cs-Rebase), QS-84 (Neu-Schnitt)</td><td>Letzte echte Merge-Konflikte; brauchen Robert-Entscheid</td><td>Robert</td></tr>
+  <tr><td>5</td><td><strong>Gruppe D entscheiden:</strong> QS-59 (Docs-Karten am Code-Gate vorbei?), AGT-2692 (Quarantäne-Fix gaten+attribuieren), QS-85/91 (Supersede-Archiv bestätigen)</td><td>Policy-Fragen, je 1 Satz</td><td>Robert</td></tr>
+  <tr><td>6</td><td><strong>Follow-up-Slices schneiden</strong>, sobald die ersten Ein-Scheiben-Karten (QS-68 S0-a etc.) landen</td><td>Je Dossier ~6 Rest-Slices warten als Folgekarten</td><td>Operator</td></tr>
+  <tr><td>7</td><td><strong>537-Legacy-Alarm:</strong> eigener Reconciliation-Sweep (akzeptierte Altkarten seit 09.06.)</td><td>Separate historische Akte, nicht dringend, aber groß</td><td>eigene Karte</td></tr>
+</table>
+
+<h2>Deployment-Regel (verifizierter Rollout)</h2>
+<div class="grid">
+  <div class="card">
+    <h3>Wann deployen</h3>
+    <p>Promotion-Zug, sobald develop ≥ 5 Commits vor main liegt oder ein dringlicher Fix wartet (CLI-Self-Heal zählt dazu). Aktuell: develop == main → warten auf die Review-Kette (Schritt 2).</p>
+  </div>
+  <div class="card">
+    <h3>Wie verifizieren (Pflicht seit AGT-2678)</h3>
+    <p>Nach jedem Stable-Rollout: <strong>(a)</strong> Backend-Prozess hat neue StartTime (alter PID tot), <strong>(b)</strong> <code>healthz</code> 200 lokal + durch den Tunnel, <strong>(c)</strong> Frontend 200 über <code>localhost:4011</code> inkl. Proxy-Durchstich auf echte Daten, <strong>(d)</strong> beide Runner-Planes neu gestartet und <code>active</code>, <strong>(e)</strong> Boot-Probe ohne Page-Error. Erst dann gilt der Rollout als erfolgreich.</p>
+  </div>
+</div>
+
+<h2>Gelernte Härtungen (in Memory gesichert)</h2>
+<ul>
+  <li><strong>Plumbing-Merges:</strong> Exit-Code nie über <code>local var=$(cmd)</code> lesen; vor jedem Push <code>git grep -lE '^&lt;&lt;&lt;&lt;&lt;&lt;&lt; '</code> als Marker-Probe.</li>
+  <li><strong>Flaky-Gate-Signatur:</strong> „N new failures … 0 pre-existing … Baseline (cache hit)" mit wechselnden Teilmengen = Gate-Problem, nicht Karten-Problem.</li>
+  <li><strong>Windows-lokal vs Linux-Gate:</strong> lokal immer <code>--filter "Category!=MachineBound"</code>; Datei-Lock-Fails (<code>\\?\C:\…</code>) sind kein Gate-Signal.</li>
+  <li><strong>Steer-Texte branch-aware:</strong> QS integriert nach origin/main — nie pauschal „develop rebasen".</li>
+</ul>
+
+<p style="color: var(--ink-3); font-size: 0.85rem; margin-top: 40px;">Betriebs-Dossier, erstellt vom Orchestrator-Wächter · Quellen: remote-review-grades der Karten, Runner-Journal, git-Historie quality-studio/agent-studio · Verwandt: <a href="../live-improvement-log/index.html">Live-Improvement-Log</a>, <a href="../operational-resilience/index.html">Operational Resilience</a></p>
+</main>
+</body>
+</html>
