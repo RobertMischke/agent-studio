@@ -196,6 +196,8 @@ export interface TaskServerTelemetrySnapshot {
   memoryUsedBytes: number | null;
   memoryTotalBytes: number | null;
   cpuCores: number;
+  /** Live occupied slots reported by this runner process. */
+  activeSlots?: number;
   diskFreeBytes?: number | null;
   diskTotalBytes?: number | null;
   taskServerConnectionStatus?: 'unknown' | 'reachable' | 'unreachable';

@@ -9,24 +9,17 @@ import { TaskService } from '../../../../services/task.service';
 
 describe('formatRunningLabel', () => {
   it.each([
-    { local: 2, remote: 3, expected: '2 local · 3 remote' },
-    { local: 2, remote: 0, expected: '2 local' },
-    { local: 0, remote: 1, expected: '1 remote' },
-    { local: 0, remote: 0, expected: 'no runners' },
-  ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
-    expect(formatRunningLabel(local, remote)).toBe(expected);
+    { local: 2, remote: 3, ceiling: 8, hosts: 1, expected: '2 local · remote 3/8' },
+    { local: 2, remote: 0, ceiling: null, hosts: 0, expected: '2 local' },
+    { local: 0, remote: 1, ceiling: 8, hosts: 1, expected: 'remote 1/8' },
+    { local: 0, remote: 0, ceiling: null, hosts: 0, expected: 'no runners' },
+    { local: 0, remote: 0, ceiling: 8, hosts: 1, expected: 'remote idle' },
+  ])('renders $expected for local=$local and remote=$remote', ({ local, remote, ceiling, hosts, expected }) => {
+    expect(formatRunningLabel(local, remote, ceiling, hosts)).toBe(expected);
   });
 
-  it('never renders "no runners" while the review plane has active workers (AGT-2645)', () => {
-    expect(formatRunningLabel(0, 0, 3)).not.toContain('no runners');
-  });
-
-  it('falls back to a vague label when the coding slot ceiling is unknown', () => {
-    expect(formatRunningLabel(0, 0, 3)).toBe('coding idle');
-  });
-
-  it('shows the honest coding slot ceiling once it is known', () => {
-    expect(formatRunningLabel(0, 0, 3, 8)).toBe('coding 0/8');
+  it('keeps the remote unit explicit when the ceiling is not yet known', () => {
+    expect(formatRunningLabel(0, 3, null, 1)).toBe('remote 3');
   });
 });
 
