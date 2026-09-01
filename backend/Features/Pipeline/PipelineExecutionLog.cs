@@ -43,6 +43,14 @@ public sealed class PipelineExecutionLog
 
     private readonly ILogger<PipelineExecutionLog> _logger;
     private readonly ConcurrentDictionary<string, object> _locks = new(StringComparer.OrdinalIgnoreCase);
+    // Read-model memoization keyed on the file's (mtime, length). Board polls
+    // call Read per active card every request; every WriteAtomic here advances
+    // the file's mtime, so a changed record misses the cache on the very next
+    // Read while an unchanged one is served without a ReadAllText + parse +
+    // normalize. The normalized record is pure given the file bytes, so caching
+    // it is safe for every consumer.
+    private readonly ConcurrentDictionary<string, ReadCacheEntry> _readCache =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly AsyncLocal<AttemptFence?> _attemptFence = new();
 
     public PipelineExecutionLog(ILogger<PipelineExecutionLog> logger)
@@ -347,8 +355,36 @@ public sealed class PipelineExecutionLog
     /// </summary>
     public PipelineExecutionRecord? Read(string jobFolderPath)
     {
+        var path = Path.Combine(jobFolderPath, FileName);
+        long mtimeTicks;
+        long length;
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists) return null;
+            mtimeTicks = info.LastWriteTimeUtc.Ticks;
+            length = info.Length;
+        }
+        catch
+        {
+            // Stat failed (path issue, race). Fall back to an uncached read so
+            // this path stays exactly as forgiving as it was before.
+            var direct = TryRead(jobFolderPath);
+            return direct is null ? null : NormalizeCompletedRecord(direct);
+        }
+
+        var key = NormalizeKey(jobFolderPath);
+        if (_readCache.TryGetValue(key, out var cached)
+            && cached.MtimeTicks == mtimeTicks
+            && cached.Length == length)
+        {
+            return cached.Record;
+        }
+
         var record = TryRead(jobFolderPath);
-        return record is null ? null : NormalizeCompletedRecord(record);
+        var normalized = record is null ? null : NormalizeCompletedRecord(record);
+        _readCache[key] = new ReadCacheEntry(mtimeTicks, length, normalized);
+        return normalized;
     }
 
     /// <summary>
@@ -502,6 +538,8 @@ public sealed class PipelineExecutionLog
             || !startedAt.HasValue
             || startedAt.Value >= current.StartedAt;
     }
+
+    private sealed record ReadCacheEntry(long MtimeTicks, long Length, PipelineExecutionRecord? Record);
 
     private sealed record AttemptFence(string FolderKey, int Attempt, AttemptFence? Parent);
 

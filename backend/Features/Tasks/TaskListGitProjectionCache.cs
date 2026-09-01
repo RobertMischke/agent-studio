@@ -70,13 +70,22 @@ public sealed class TaskListGitProjectionCache
     /// refresh. The method performs no Git operation and never waits for an
     /// in-flight refresh.
     /// </summary>
-    public TaskListGitProjection ReadCacheOnly(IReadOnlyCollection<TaskInfo> tasks)
+    /// <param name="inputVersion">
+    /// Optional snapshot-generation stamp from <see cref="TaskIndexCache"/>. When
+    /// supplied it replaces the per-request <see cref="InputSignature"/> hash: the
+    /// generation already advances on every task mutation, watcher event, or
+    /// safety-TTL rescan, so a warm poll skips the O(N + commits) walk and still
+    /// forces a refresh the moment the underlying snapshot changes.
+    /// </param>
+    public TaskListGitProjection ReadCacheOnly(
+        IReadOnlyCollection<TaskInfo> tasks,
+        long? inputVersion = null)
     {
         if (tasks.Count == 0) return TaskListGitProjection.Empty;
 
         var captured = tasks.ToArray();
         var scopeKey = ScopeKey(captured);
-        var signature = InputSignature(captured);
+        var signature = inputVersion ?? InputSignature(captured);
         var entry = _entries.GetOrAdd(scopeKey, static _ => new CacheEntry());
         TaskListGitProjection snapshot;
         var queueRefresh = false;
@@ -104,7 +113,7 @@ public sealed class TaskListGitProjectionCache
         string scopeKey,
         CacheEntry entry,
         TaskInfo[] tasks,
-        int signature)
+        long signature)
     {
         try
         {
@@ -136,7 +145,7 @@ public sealed class TaskListGitProjectionCache
         string scopeKey,
         CacheEntry entry,
         IReadOnlyCollection<TaskInfo> tasks,
-        int signature)
+        long signature)
     {
         var stopwatch = Stopwatch.StartNew();
         TaskListGitProjection? refreshed = null;
@@ -180,9 +189,13 @@ public sealed class TaskListGitProjectionCache
     }
 
     private static string ScopeKey(IEnumerable<TaskInfo> tasks)
+        // Distinct the raw watch paths first so the expensive Path.GetFullPath
+        // normalization runs once per project rather than once per task.
         => string.Join(
             "|",
-            tasks.Select(task => NormalizePath(task.WatchPath))
+            tasks.Select(task => task.WatchPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(NormalizePath)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
 
@@ -230,7 +243,7 @@ public sealed class TaskListGitProjectionCache
         public TaskListGitProjection Snapshot { get; set; } = TaskListGitProjection.Empty;
         public bool HasSnapshot { get; set; }
         public bool Refreshing { get; set; }
-        public int InputSignature { get; set; }
+        public long InputSignature { get; set; }
         public DateTimeOffset RefreshAfter { get; set; } = DateTimeOffset.MinValue;
     }
 }

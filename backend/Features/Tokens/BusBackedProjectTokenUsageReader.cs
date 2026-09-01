@@ -1,4 +1,6 @@
-
+using System.Globalization;
+using AgentStudio.Shared;
+using AgentStudio.Tasks;
 
 namespace AgentStudio.Tokens;
 
@@ -29,21 +31,34 @@ namespace AgentStudio.Tokens;
 /// </remarks>
 public sealed class BusBackedProjectTokenUsageReader
 {
+    // The merged bus + receipt snapshot is a pure projection of on-disk facts
+    // (the bus day-files and every task.json receipt, archive included). A board
+    // poll re-derives it per project on every request, and the receipt walk
+    // alone is heavier than the board scan. Memoize it against the task index
+    // snapshot generation: token numbers then lag by at most one generation
+    // (mutation, watcher event, or the index safety TTL), which is acceptable
+    // because receipts already lag the live bus.
+    private static readonly TimeSpan SnapshotTtl = TimeSpan.FromSeconds(60);
+
     private readonly AgentMessageBusStore _store;
     private readonly IConfiguration _config;
     private readonly JobStatsMetadataCache _jobStatsMetadata;
     private readonly ProjectTokenReceiptReader _receipts;
+    private readonly TaskIndexCache? _indexCache;
+    private readonly GenerationSingleFlightCache<ProjectTokenUsageSnapshot> _snapshotCache = new();
 
     public BusBackedProjectTokenUsageReader(
         AgentMessageBusStore store,
         IConfiguration config,
         JobStatsMetadataCache jobStatsMetadata,
-        ProjectTokenReceiptReader receipts)
+        ProjectTokenReceiptReader receipts,
+        TaskIndexCache? indexCache = null)
     {
         _store = store;
         _config = config;
         _jobStatsMetadata = jobStatsMetadata;
         _receipts = receipts;
+        _indexCache = indexCache;
     }
 
     public ProjectTokenUsageSummary BuildSummary(string projectName, string watchPath, DateTime? nowUtc = null)
@@ -125,6 +140,23 @@ public sealed class BusBackedProjectTokenUsageReader
         => TokenSummaryService.SummarizePerJob(LoadSnapshot(projectName, watchPath).Entries);
 
     internal ProjectTokenUsageSnapshot LoadSnapshot(string projectName, string watchPath)
+    {
+        // Without an index cache (unit tests that drive the reader directly) or
+        // without any key material, compute directly so behavior stays identical
+        // to the pre-memoization reader.
+        if (_indexCache is null
+            || (string.IsNullOrWhiteSpace(projectName) && string.IsNullOrWhiteSpace(watchPath)))
+        {
+            return LoadSnapshotUncached(projectName, watchPath);
+        }
+
+        var key = $"{projectName}\n{watchPath}";
+        var version = _indexCache.Generation.ToString(CultureInfo.InvariantCulture);
+        return _snapshotCache.GetOrCreateVersioned(
+            key, version, SnapshotTtl, () => LoadSnapshotUncached(projectName, watchPath));
+    }
+
+    private ProjectTokenUsageSnapshot LoadSnapshotUncached(string projectName, string watchPath)
     {
         var warnings = new List<string>();
         var sources = new List<string>();

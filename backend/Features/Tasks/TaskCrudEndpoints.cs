@@ -89,7 +89,7 @@ public static class TaskCrudEndpoints
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var dependencyLookups = BuildDependencyGraphLookups(raw, scanner);
-            var gitLookup = gitProjection.ReadCacheOnly(raw);
+            var gitLookup = gitProjection.ReadCacheOnly(raw, scanner.SnapshotGeneration);
             var liveLookup = liveStatus.BuildLookup(raw);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters))
                           .WithLiveStatus(liveLookup)
@@ -123,7 +123,7 @@ public static class TaskCrudEndpoints
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var dependencyLookups = BuildDependencyGraphLookups(raw, scanner);
-            var gitLookup = gitProjection.ReadCacheOnly(raw);
+            var gitLookup = gitProjection.ReadCacheOnly(raw, scanner.SnapshotGeneration);
             var liveLookup = liveStatus.BuildLookup(raw);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup, dependencyLookups.WaitsOn, dependencyLookups.TransitiveWaiters))
                           .WithLiveStatus(liveLookup)

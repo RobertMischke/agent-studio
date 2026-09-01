@@ -74,6 +74,13 @@ public sealed class TaskIndexCache
     // while the published snapshot predates an API mutation.
     private long _requiredMutationGen;
     private long _publishedMutationGen;
+    // Monotonic id of the currently published snapshot. Incremented once per
+    // successful disk-walk publish (a mutation, a watcher event, or the safety
+    // TTL). Downstream projections that re-derive expensive per-request state
+    // from the same on-disk facts (token snapshots, task-list Git signatures)
+    // memoize against this so a warm poll where nothing changed pays O(1)
+    // instead of re-walking the workspace.
+    private long _snapshotGeneration;
 
     // Cheap diagnostics so a perf regression here is visible in /healthz or
     // a future debug endpoint without spinning up a profiler.
@@ -111,6 +118,19 @@ public sealed class TaskIndexCache
     {
         EnsureFresh();
         lock (_lock) return _snapshot;
+    }
+
+    /// <summary>
+    /// Version stamp of the currently published snapshot. It advances on every
+    /// snapshot publish (mutation, watcher event, or safety-TTL rescan) and is
+    /// stable between publishes, so a caller that already forced freshness via
+    /// <see cref="GetSnapshot"/> can memoize derived projections against this
+    /// value without re-reading the workspace. This getter never triggers a
+    /// refresh; read it after a snapshot accessor when a current value matters.
+    /// </summary>
+    public long Generation
+    {
+        get { lock (_lock) return _snapshotGeneration; }
     }
 
     /// <summary>
@@ -280,6 +300,7 @@ public sealed class TaskIndexCache
                 _archiveSnapshot = archive.ToImmutableList();
                 _referenceIndex = referenceIndex;
                 _snapshotAtUtc = DateTime.UtcNow;
+                _snapshotGeneration++;
                 _hasSnapshot = true;
                 _publishedMutationGen = Math.Max(_publishedMutationGen, mutationGenBefore);
                 _dirty = _invalidationGen != genBefore;
