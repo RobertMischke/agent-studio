@@ -1,22 +1,35 @@
 namespace AgentStudio.TestRuns;
 
-using System.Collections.Concurrent;
-
 public sealed class TestRunService
 {
+    /// <summary>
+    /// Safety lifetime for a project's test-run evidence lookup, mirroring
+    /// <see cref="BoardMergeStatusService.CacheTtl"/>. Normal invalidation is
+    /// signature- and ref-fingerprint-driven, so a stable repo reuses one
+    /// projection across board polls instead of recomputing every 5 seconds.
+    /// </summary>
+    internal static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan ShortFallbackTtl = TimeSpan.FromSeconds(5);
+
     private readonly TestRunStore _store;
     private readonly ProjectRegistry _projects;
     private readonly TaskScannerService _scanner;
     private readonly GitService _git;
-    private readonly ConcurrentDictionary<string, (string Signature, DateTime At, Dictionary<string, TaskTestRunEvidence> Value)> _evidenceCache =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ProjectSettingsService _settings;
+    private readonly GenerationSingleFlightCache<Dictionary<string, TaskTestRunEvidence>> _evidenceCache = new();
 
-    public TestRunService(TestRunStore store, ProjectRegistry projects, TaskScannerService scanner, GitService git)
+    public TestRunService(
+        TestRunStore store,
+        ProjectRegistry projects,
+        TaskScannerService scanner,
+        GitService git,
+        ProjectSettingsService settings)
     {
         _store = store;
         _projects = projects;
         _scanner = scanner;
         _git = git;
+        _settings = settings;
     }
 
     public ProjectRecord? ResolveProject(string handle) =>
@@ -167,34 +180,44 @@ public sealed class TestRunService
             }
             var runs = _store.List(project.Id);
             var signature = Signature(groupedJobs, runs, taskScoped);
-            if (!_evidenceCache.TryGetValue(projectJobs.Key, out var cached)
-                || cached.Signature != signature
-                || DateTime.UtcNow - cached.At > TimeSpan.FromSeconds(5))
-            {
-                var refs = runs.Select(run => run.Commit)
-                    .Concat(groupedJobs.Select(BoardMergeStatusService.AnchorFor).OfType<string>())
-                    .Concat(taskScoped.Values.SelectMany(snapshot => snapshot.Sources).Select(source => source.Commit))
-                    .Where(reference => !string.IsNullOrWhiteSpace(reference))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                var graph = _git.GetCommitParentGraph(repo, refs);
-                var distances = refs.ToDictionary(
-                    reference => reference,
-                    reference => AncestorDistances(graph, reference),
-                    StringComparer.OrdinalIgnoreCase);
-                var integrationMerges = _git.GetIntegrationMergesByKey(
-                    repo,
-                    runs.Select(run => run.Commit).ToArray());
-                var value = groupedJobs.ToDictionary(
-                    job => job.TaskKey,
-                    job => Match(job, runs, distances, integrationMerges, taskScoped[job.TaskKey].Sources),
-                    StringComparer.Ordinal);
-                cached = (signature, DateTime.UtcNow, value);
-                _evidenceCache[projectJobs.Key] = cached;
-            }
-            foreach (var pair in cached.Value) result[pair.Key] = pair.Value;
+            var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
+                repo,
+                [_settings.Get(project.DisplayName).IntegrationBranch, BoardMergeStatusService.ReleaseBranch]);
+            var version = signature + "\0" + refFingerprint.Value;
+            var value = _evidenceCache.GetOrCreateVersioned(
+                projectJobs.Key,
+                version,
+                _ => refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl,
+                () => ComputeEvidence(repo, groupedJobs, runs, taskScoped));
+            foreach (var pair in value) result[pair.Key] = pair.Value;
         }
         return result;
+    }
+
+    private Dictionary<string, TaskTestRunEvidence> ComputeEvidence(
+        string repo,
+        IReadOnlyList<TaskInfo> groupedJobs,
+        IReadOnlyList<TestRunRecord> runs,
+        IReadOnlyDictionary<string, TaskScopedTestEvidenceSnapshot> taskScoped)
+    {
+        var refs = runs.Select(run => run.Commit)
+            .Concat(groupedJobs.Select(BoardMergeStatusService.AnchorFor).OfType<string>())
+            .Concat(taskScoped.Values.SelectMany(snapshot => snapshot.Sources).Select(source => source.Commit))
+            .Where(reference => !string.IsNullOrWhiteSpace(reference))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var graph = _git.GetCommitParentGraph(repo, refs);
+        var distances = refs.ToDictionary(
+            reference => reference,
+            reference => AncestorDistances(graph, reference),
+            StringComparer.OrdinalIgnoreCase);
+        var integrationMerges = _git.GetIntegrationMergesByKey(
+            repo,
+            runs.Select(run => run.Commit).ToArray());
+        return groupedJobs.ToDictionary(
+            job => job.TaskKey,
+            job => Match(job, runs, distances, integrationMerges, taskScoped[job.TaskKey].Sources),
+            StringComparer.Ordinal);
     }
 
     public DeploymentTestRunReference? LastGreenForDeployment(string projectHandle, string? headCommit)

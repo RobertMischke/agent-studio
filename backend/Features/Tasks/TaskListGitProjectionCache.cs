@@ -44,11 +44,26 @@ public sealed class TaskListGitProjectionCache
         ILogger<TaskListGitProjectionCache> logger,
         TimeProvider timeProvider)
         : this(
-            tasks => new TaskListGitProjection(
-                mergeStatus.BuildLookup(tasks),
-                integrationStatus.BuildLookup(tasks),
-                publishStatus.BuildLookup(tasks),
-                testRuns.BuildLookup(tasks)),
+            tasks =>
+            {
+                // The four lookups read independent projections (merge/publish
+                // reachability sets, integration status, test-run evidence) and
+                // are safe to fan out; each is already versioned/cached
+                // internally, so this only shortens wall time on a real cache
+                // miss instead of summing four sequential git-bound calls.
+                var mergeTask = Task.Run(() => mergeStatus.BuildLookup(tasks));
+                var integrationTask = Task.Run(() => integrationStatus.BuildLookup(tasks));
+                var publishTask = Task.Run(() => publishStatus.BuildLookup(tasks));
+                var testRunTask = Task.Run(() => testRuns.BuildLookup(tasks));
+                Task.WhenAll(mergeTask, integrationTask, publishTask, testRunTask)
+                    .GetAwaiter()
+                    .GetResult();
+                return new TaskListGitProjection(
+                    mergeTask.Result,
+                    integrationTask.Result,
+                    publishTask.Result,
+                    testRunTask.Result);
+            },
             logger,
             timeProvider)
     {

@@ -401,7 +401,8 @@ public sealed class TestRunServiceTests : IDisposable
         var scanner = new TaskScannerService(configuration, NullLogger<TaskScannerService>.Instance, summary);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, configuration);
         var store = new TestRunStore(configuration);
-        return new Stack(configuration, storage, repo, project, new TestRunService(store, registry, scanner, git));
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, configuration);
+        return new Stack(configuration, storage, repo, project, new TestRunService(store, registry, scanner, git, settings));
     }
 
     private static CreateTestRunRequest Request(string commit, string state, string? result) => new()
