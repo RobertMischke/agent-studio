@@ -147,6 +147,56 @@ public sealed class CapabilityAdmissionTests
     }
 
     [Fact]
+    public async Task Later_confirmed_auth_probe_clears_drain_without_runner_restart()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        const string runner = "codex";
+        const string instance = "codex-instance";
+        var auth = CapabilityProtocol.ProviderAuthentication("codex");
+        await RegisterAndAdvertiseAsync(
+            store, clock, runner, instance, "host-a",
+            CapabilityProtocol.CodingExecutor, auth);
+        await FailAsync(store, clock, runner, instance, auth, "auth-1");
+        await FailAsync(store, clock, runner, instance, auth, "auth-2");
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        var confirmedAt = clock.GetUtcNow().UtcDateTime;
+        await store.AdvertiseCapabilitiesAsync(
+            Advertisement(clock, runner, instance, 2, CapabilityProtocol.CodingExecutor, auth) with
+            {
+                Capabilities =
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        auth,
+                        "provider-auth",
+                        Condition: "authenticated",
+                        LastConfirmedAt: confirmedAt),
+                ],
+            },
+            runner,
+            default);
+
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        var capability = Assert.Single(snapshot.Capabilities, item => item.Key == auth);
+        Assert.Equal(CapabilityHealthStates.Healthy, capability.HealthState);
+        Assert.Equal(0, capability.ConsecutiveFailures);
+        Assert.Equal(confirmedAt, capability.LastConfirmedAt);
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                runner,
+                instance,
+                RequiredCapabilities: [CapabilityProtocol.CodingExecutor, auth]),
+            runner,
+            default);
+        Assert.Equal("claimed", claim.Status);
+    }
+
+    [Fact]
     public async Task Missing_workflow_push_scope_is_visible_but_does_not_block_coding_claims()
     {
         using var temp = new TempDirectory();

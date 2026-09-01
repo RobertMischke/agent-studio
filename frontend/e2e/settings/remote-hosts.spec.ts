@@ -298,6 +298,7 @@ test.describe('Execution Hosts settings section', () => {
 
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     await expandHost(remote);
+    await expect(remote.getByTestId('remote-host-detail-toggle-capabilities')).toContainText('1 rate-limited');
     await page.reload();
 
     await expect(page.getByTestId('remote-hosts-table').locator('th').first())
@@ -701,7 +702,7 @@ test.describe('Execution Hosts settings section', () => {
     expect(String(createBody?.['promptMarkdown'])).not.toContain(providerSecret);
   });
 
-  test('shows provider auth OK, unavailable, and unknown states with renewal context', async ({ page }) => {
+  test('shows signed-out, limited, and unknown provider auth states with renewal context', async ({ page }) => {
     const now = Date.now();
     const capability = (key: string, advertisedStatus: string, detail?: string) => ({
       key, category: key.split(':')[0], advertisedStatus, healthState: 'healthy',
@@ -719,6 +720,11 @@ test.describe('Execution Hosts settings section', () => {
         toState: 'unavailable', reason: 'Provider probe changed.',
       }],
     };
+    const codex = {
+      ...capability('provider-auth:codex', 'limited', 'rate-limited until 2026-09-01T18:00:00Z'),
+      condition: 'rate-limited',
+      expiresAt: new Date(now + 2 * 60 * 60_000).toISOString(),
+    };
     await page.unroute('**/api/v1/management/remote-hosts');
     await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
       status: 200,
@@ -730,7 +736,7 @@ test.describe('Execution Hosts settings section', () => {
         hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
         capabilities: [
           capability('cli-execution:claude', 'ready'), claude,
-          capability('cli-execution:codex', 'ready'), capability('provider-auth:codex', 'ready', 'Active session confirmed'),
+          capability('cli-execution:codex', 'ready'), codex,
           capability('cli-execution:gemini', 'ready'),
         ],
         telemetry: null,
@@ -741,7 +747,7 @@ test.describe('Execution Hosts settings section', () => {
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     await expandHost(remote);
     await expect(remote.getByTestId('remote-host-provider-auth-claude')).toHaveAttribute('data-state', 'unavailable');
-    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'ok');
+    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'limited');
     await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toHaveAttribute('data-state', 'unknown');
     await expect(remote.getByTestId('remote-host-provider-auth-expiry-claude')).toContainText('Expires in 10 days');
     await expect(remote.getByTestId('remote-host-provider-auth-history-claude')).toContainText('ready → unavailable');

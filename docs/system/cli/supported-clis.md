@@ -144,8 +144,10 @@ Remote hosts use the protected provider-auth provisioning flow. Environment
 credentials live only in `/etc/agent-runner/provider-auth.env` on the selected
 host, owned by `root:agent` with mode `640`. Studio sends a replacement through
 SSH stdin and does not persist it. Both remote units load the file after their
-normal runner EnvironmentFile; the probe reads only the resulting process
-environment and the CLI status, never a credential path.
+normal runner EnvironmentFile. The probe uses the resulting process environment
+and the CLI status for authentication. It separately reads only timestamp
+metadata from host-owned CLI credential files for expiry warning; token values
+never leave the runner process.
 
 **Remote coding hosts.** The standalone host keeps one primary
 `RUNNER_CLI_BIN` plus `RUNNER_CLAUDE_CLI_BIN` and `RUNNER_CODEX_CLI_BIN`.
@@ -163,15 +165,22 @@ worker receives the matching provider path, so a Claude pin on a Codex-primary
 host cannot fall through to `codex -m <claude-model>`. On headless Linux hosts,
 both runner units load `/etc/agent-runner/provider-auth.env`; the Claude worker
 explicitly admits `CLAUDE_CODE_OAUTH_TOKEN` from the process environment after
-clean-context preparation. The probe and worker do not read credential paths.
+clean-context preparation. The worker does not read credential paths. After the
+status command has had an opportunity to refresh non-interactively, the probe
+extracts refresh, age, and expiry timestamps from Codex `auth.json` and Claude
+`.credentials.json`.
 
-Execution Hosts renders `OK`, `Unavailable`, or `Unknown` for each advertised
-CLI and exposes the probe detail as a tooltip. Provider-auth state changes are
-retained in capability recovery history. An `OK -> Unavailable` transition
-notifies the operator; an auth-classified run failure reports unavailability
-immediately. Ready cards assigned to a host without usable matching auth show a
-provider sign-in wait reason. If the runner can advertise a known expiry,
-Studio warns during the final 14 days.
+Execution Hosts renders `OK`, `Retrying`, `Limited`, `Expiring`, `Unavailable`,
+or `Unknown` for each advertised CLI and exposes the probe detail as a tooltip.
+A single explicit auth rejection is `Retrying` and remains claim-eligible. Two
+consecutive explicit rejections become `Unavailable`. Unrelated non-zero exits,
+tool failures, timeouts, token-refresh races, and network failures retain the
+last admission status. Rate-limit output takes precedence over auth-shaped text
+and becomes `Limited` until its parsed reset or bounded retry. Only a genuine
+signed-out transition raises the persistent sign-in notification. A later
+confirmed probe clears server-side auth health without restarting the runner.
+If the runner advertises a known credential expiry, Studio shows `Expiring` and
+warns during the final 14 days.
 
 ### 2.8 Execution context (read-only observability)
 

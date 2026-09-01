@@ -30,13 +30,72 @@ public sealed class ProviderAuthProbeTests
             ttl,
             timeout,
             negativeConfirmations,
-            diagnosticLog);
+            diagnosticLog,
+            _ => null);
+
+    [Fact]
+    public async Task One_explicit_auth_failure_does_not_latch_and_next_success_recovers()
+    {
+        var answers = new Queue<ProcessResult>(
+        [
+            new ProcessResult(1, "", "Not logged in"),
+            new ProcessResult(0, "Logged in", ""),
+        ]);
+        var probe = Probe((_, _, _) => Task.FromResult(answers.Dequeue()));
+
+        var transient = await probe.RefreshAsync("codex", CancellationToken.None);
+        var recovered = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, transient.Status);
+        Assert.Equal(ProviderAuthProbe.TransientError, transient.Condition);
+        Assert.Equal(ProviderAuthProbe.Ready, recovered.Status);
+        Assert.Equal(ProviderAuthProbe.Authenticated, recovered.Condition);
+    }
+
+    [Fact]
+    public async Task Rate_limit_exit_is_limited_not_signed_out()
+    {
+        var now = new DateTimeOffset(2026, 8, 31, 10, 0, 0, TimeSpan.Zero);
+        var probe = Probe(
+            Answers(1, "", "rate limit exceeded; resets at 2026-08-31T12:00:00Z"),
+            clock: () => now);
+
+        var status = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Limited, status.Status);
+        Assert.Equal(ProviderAuthProbe.RateLimited, status.Condition);
+        Assert.Equal(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero), status.ExpiresAt);
+        Assert.DoesNotContain("signed out", status.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Credential_expiry_is_a_quiet_ready_warning_before_hard_failure()
+    {
+        var now = new DateTimeOffset(2026, 8, 31, 10, 0, 0, TimeSpan.Zero);
+        var expires = now.AddDays(10);
+        var probe = new ProviderAuthProbe(
+            Answers(0, "Logged in", ""),
+            _ => true,
+            () => now,
+            freshnessReader: _ => new ProviderCredentialFreshness(
+                expires,
+                now.AddDays(-2),
+                "fixture",
+                NonInteractiveRefreshPossible: true));
+
+        var status = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthProbe.Expiring, status.Condition);
+        Assert.Equal(expires, status.ExpiresAt);
+        Assert.Contains("credentials expiring", status.Detail, StringComparison.OrdinalIgnoreCase);
+    }
 
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]
     [InlineData(1, "Error: login required")]
     [InlineData(1, "HTTP 401 Unauthorized")]
-    [InlineData(1, "OAuth token expired")]
+    [InlineData(1, "Refresh token expired")]
     public async Task Two_explicit_dead_session_answers_are_unavailable_whatever_the_exit_code(
         int exitCode,
         string output)
@@ -106,6 +165,19 @@ public sealed class ProviderAuthProbeTests
         Assert.Contains(logs, line => line.StartsWith(
             "runner-provider-auth-probe-degraded ",
             StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Access_token_refresh_race_is_transient_not_signed_out()
+    {
+        var probe = Probe(Answers(1, "", "access token expired while refresh is already in progress"));
+
+        var first = await probe.RefreshAsync("codex", CancellationToken.None);
+        var second = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, first.Status);
+        Assert.Equal(ProviderAuthProbe.Ready, second.Status);
+        Assert.Equal(ProviderAuthProbe.TransientError, second.Condition);
     }
 
     [Fact]

@@ -54,10 +54,16 @@ export class ProviderAuthStatusService implements OnDestroy {
     if (wasLoaded) {
       for (const [id, current] of next) {
         const prior = this.previous.get(id);
-        if (prior?.state === 'ok' && current.state === 'unavailable') {
+        if (prior && prior.state !== 'unavailable' && current.state === 'unavailable') {
           this.notifications.warning(
-            `${current.providerLabel} authentication changed from OK to unavailable on ${current.hostName}. Ready cards assigned to this host are waiting. ${current.detail}`,
+            `${current.providerLabel} is genuinely signed out on ${current.hostName}; re-auth is needed. Ready cards assigned to this host are waiting. ${current.detail}`,
             `${current.providerLabel} sign-in required`,
+          );
+        }
+        if (prior?.state !== 'limited' && current.state === 'limited') {
+          this.notifications.info(
+            `${current.providerLabel} is ${current.detail} Ready cards for this provider will resume after recovery.`,
+            `${current.providerLabel} rate-limited`,
           );
         }
       }

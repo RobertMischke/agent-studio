@@ -22,6 +22,58 @@ public sealed class RunnerCapabilityProbeTests
             RunnerCapabilityProbe.IsProviderAuthenticationFailure(
                 new ProcessResult(exitCode, stdout, stderr)));
 
+    [Fact]
+    public async Task Codex_apply_patch_tool_error_keeps_capability_available()
+    {
+        const string error = "ERROR codex_core::tools::router: error=apply_patch verification failed: "
+                             + "Failed to find context 'public sealed class V1ReviewExecutorRegistry' in "
+                             + ".../worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs";
+
+        var result = new ProcessResult(1, "", error);
+
+        Assert.False(RunnerCapabilityProbe.IsProviderAuthenticationFailure(result));
+        Assert.Equal(
+            ProviderFailureKind.Indeterminate,
+            RunnerCapabilityProbe.ClassifyProviderFailure(result).Kind);
+
+        var probe = new ProviderAuthProbe(
+            (_, _, _) => Task.FromResult(new ProcessResult(0, "Logged in", "")),
+            _ => true,
+            freshnessReader: _ => null);
+        await probe.RefreshAsync("codex", CancellationToken.None);
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            GitRemote = "https://github.com/example/repo.git",
+            WorkDir = Path.GetTempPath(),
+            BaseBranch = "main",
+            CliBin = "codex",
+            CliArgs = "",
+        };
+        var auth = Assert.Single(
+            RunnerCapabilityProbe.Advertise(options, true, providerAuth: probe),
+            item => item.Key == CapabilityProtocol.ProviderAuthentication("codex"));
+        Assert.Equal(ProviderAuthProbe.Ready, auth.Status);
+    }
+
+    [Fact]
+    public void Rate_limit_takes_precedence_over_authentication_words()
+    {
+        var result = new ProcessResult(
+            1,
+            "",
+            "HTTP 429 unauthorized request: rate_limit_exceeded; resets at 2026-08-31T12:00:00Z");
+
+        Assert.False(RunnerCapabilityProbe.IsProviderAuthenticationFailure(result));
+        Assert.Equal(
+            ProviderFailureKind.Limited,
+            RunnerCapabilityProbe.ClassifyProviderFailure(result).Kind);
+    }
+
     [Theory]
     [InlineData("/usr/local/bin/codex", "codex")]
     [InlineData("claude.exe", "claude")]

@@ -47,7 +47,10 @@ public sealed record AdvertisedCapabilityDto(
     string Status = "ready",
     string? Version = null,
     string? Identity = null,
-    string? Detail = null);
+    string? Detail = null,
+    string? Condition = null,
+    DateTime? ExpiresAt = null,
+    DateTime? LastConfirmedAt = null);
 
 public sealed record CapabilityAdvertisementRequest(
     string RunnerId,
@@ -128,7 +131,10 @@ public sealed record CapabilityHealthDto(
     string? Identity,
     string? Detail,
     IReadOnlyList<string> AffectedClaims,
-    IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory);
+    IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory,
+    string? Condition = null,
+    DateTime? ExpiresAt = null,
+    DateTime? LastConfirmedAt = null);
 
 public sealed record RemoteHostAdmissionDto(
     string HostId,

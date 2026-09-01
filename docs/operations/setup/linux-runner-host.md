@@ -321,17 +321,21 @@ both installed units, verifies the variable name in each daemon's
 the value in the Studio database, repository, task, log, or evidence artifact.
 
 Provider capability snapshots refresh every 60 seconds. Execution Hosts shows
-**OK**, **Unavailable**, or **Unknown** per CLI, with the probe detail in the
+**OK**, **Retrying**, **Limited**, **Expiring**, **Unavailable**, or **Unknown**
+per CLI, with the probe detail in the
 tooltip. Provider auth probes run at most every five minutes, use a 30-second
 timeout, and run at lower CPU priority on Linux. A timeout, empty output, launch
 failure, or unsupported command keeps the last advertised verdict and writes a
 `runner-provider-auth-probe-degraded` journal line. Two consecutive explicit
 logout answers are required for `OK -> Unavailable`; that transition creates an
 operator notification and updates Ready card wait reasons. A later successful
-probe writes `runner-provider-auth-probe-recovered` and advertises **OK** without
-a service restart. A recognized auth failure from a run reports the capability
-failure immediately. When a capability advertises a known expiry, Studio warns
-during the final 14 days. Follow
+probe writes `runner-provider-auth-probe-recovered`, carries a confirmation time,
+clears any auth drain, and advertises **OK** without a service restart. Rate-limit
+output becomes **Limited** rather than a sign-in failure. Tool failures, including
+patch context mismatch, never change provider auth. The probe extracts only
+refresh and expiry timestamps from host-owned CLI credential JSON after giving
+the status command an opportunity to refresh non-interactively. Studio warns
+during the final 14 days of a known credential expiry. Follow
 [cli-relogin-runbook.md](./cli-relogin-runbook.md) for renewal.
 
 Do not create provider-specific files such as `claude.env`.

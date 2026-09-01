@@ -149,14 +149,6 @@ public static class ExecutionOutcomeAdapter
         @"\[\[\s*TASK[\s_-]*(?<keyword>DONE|BLOCKED|NEEDS[\s_-]*INPUT|NOOP)\s*(?::\s*(?<reason>[^\]]*?))?\s*\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static readonly Regex Authentication = new(
-        @"(?:\b401\b|unauthori[sz]ed|authentication\s+(?:failed|required)|missing\s+(?:bearer|basic)\s+authentication|login\s+required|invalid\s+(?:api\s+)?key)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex Quota = new(
-        @"(?:\b429\b|quota\s+(?:exceeded|exhausted)|rate\s*limit(?:ed| exceeded)?|usage\s+limit|insufficient_quota|too\s+many\s+requests)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
     private static readonly Regex InvalidConfiguration = new(
         @"(?:invalid|unknown|unsupported)\s+(?:model|configuration|config)|model\s+(?:not\s+found|does\s+not\s+exist)|configuration\s+error",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -205,6 +197,11 @@ public static class ExecutionOutcomeAdapter
         // Hard facts such as OomKilled, LeaseLost, timeout, and transport loss
         // still win because they are observations rather than text.
         var honestTerminal = facts.ExitCode == 0 && sentinel is not null;
+        var providerFailure = ProviderFailureClassifier.Classify(
+            facts.ExitCode ?? 1,
+            null,
+            diagnostic,
+            DateTime.UtcNow);
 
         if (facts.LeaseLost)
             return Decide(facts, ExecutionOutcomeKind.LeaseLoss, OutcomeConfidence.High,
@@ -221,9 +218,9 @@ public static class ExecutionOutcomeAdapter
             return Decide(facts, ExecutionOutcomeKind.OutOfMemory, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.SessionState == ExecutionSessionState.Invalid || (!honestTerminal && InvalidSession.IsMatch(diagnostic)))
             return Decide(facts, ExecutionOutcomeKind.InvalidSession, OutcomeConfidence.High, null, infrastructure: true);
-        if (!honestTerminal && Authentication.IsMatch(diagnostic))
+        if (!honestTerminal && providerFailure.Kind == ProviderFailureKind.Authentication)
             return Decide(facts, ExecutionOutcomeKind.AuthenticationFailure, OutcomeConfidence.High, null, infrastructure: true);
-        if (!honestTerminal && Quota.IsMatch(diagnostic))
+        if (!honestTerminal && providerFailure.Kind == ProviderFailureKind.Limited)
             return Decide(facts, ExecutionOutcomeKind.QuotaExceeded, OutcomeConfidence.High, null, infrastructure: true);
         if (!honestTerminal && InvalidConfiguration.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.InvalidModelOrConfiguration, OutcomeConfidence.High, null, infrastructure: true);

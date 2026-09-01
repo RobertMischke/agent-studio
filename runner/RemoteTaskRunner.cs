@@ -773,15 +773,24 @@ public sealed class RemoteTaskRunner
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
-                    if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
+                    var providerFailure = RunnerCapabilityProbe.ClassifyProviderFailure(processResult);
+                    var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                   ?? AgentCliProcess.ConfiguredCliType(_options);
+                    if (providerFailure.Kind == ProviderFailureKind.Limited)
                     {
-                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
-                                       ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var binary = AgentCliProcess.Resolve(_options, slot.RunSpec).FileName;
+                        var limit = ProviderAuthProbe.Shared.RecordLimited(binary, providerFailure);
+                        shipper.Add(
+                            "system",
+                            $"[runner] provider-limited provider={provider} detail={limit.Detail}");
+                    }
+                    else if (providerFailure.Kind == ProviderFailureKind.Authentication)
+                    {
                         var claimId = outbox?.Authority.RunId;
-                        var diagnostic = result.StdErr
+                        var diagnostic = $"{result.StdErr}\n{result.StdOut}"
                             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                             .LastOrDefault()
-                            ?? $"{provider} exited {result.ExitCode} with an authentication failure";
+                            ?? $"{provider} reported an explicit authentication rejection";
                         // Diagnosis only: the run's own classification and fenced
                         // completion below must survive a server that rejects or
                         // does not mount the capability route.

@@ -226,8 +226,6 @@ export class RemoteHostCardComponent {
       && capability.healthState === 'healthy'
       && capability.advertisedStatus === 'ready').length;
   });
-  readonly unavailableAuthCount = computed(() =>
-    this.providerAuthBadges().filter(auth => auth.state === 'unavailable').length);
   readonly totalActiveSlots = computed(() => this.roles()
     .reduce((total, role) => total + this.activeSlotsFor(role), 0));
   readonly identitySummary = computed(() => {
@@ -238,9 +236,19 @@ export class RemoteHostCardComponent {
     `${this.daemonLabel()} · Task Server ${this.taskServerRouteLabel()} · ${this.heartbeatLabel()}`);
   readonly capabilitySummary = computed(() => {
     const ok = this.healthyCapabilityCount();
-    const unavailable = this.unavailableAuthCount();
-    if (unavailable) return `${ok} capabilities ok · ${unavailable} auth unavailable`;
-    return `${ok} ${ok === 1 ? 'capability' : 'capabilities'} ok`;
+    const auth = this.providerAuthBadges();
+    const states = [
+      ['unavailable', 're-auth needed'],
+      ['limited', 'rate-limited'],
+      ['retrying', 'auth retrying'],
+      ['expiring', 'credentials expiring'],
+    ] as const;
+    const detail = states
+      .map(([state, label]) => [auth.filter(item => item.state === state).length, label] as const)
+      .filter(([count]) => count > 0)
+      .map(([count, label]) => `${count} ${label}`);
+    const ready = `${ok} ${ok === 1 ? 'capability' : 'capabilities'} ok`;
+    return detail.length > 0 ? `${ready} · ${detail.join(' · ')}` : ready;
   });
   readonly capacitySummary = computed(() => {
     const total = this.roleSlotCapacity();

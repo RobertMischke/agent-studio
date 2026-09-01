@@ -32,7 +32,21 @@ describe('provider auth projection', () => {
     )[0];
 
     expect(badge.expiresSoon).toBe(true);
+    expect(badge.state).toBe('expiring');
     expect(badge.expiryLabel).toBe('Expires in 13 days');
+  });
+
+  it('keeps one auth failure retrying and presents rate limits separately', () => {
+    const retrying = providerAuthBadgesForSnapshot(
+      snapshot('ready', 'suspect', true, 'transient auth error, retrying'),
+      NOW,
+    )[0];
+    const limitedSnapshot = snapshot('limited', 'healthy', true, 'rate-limited until 14:00');
+    limitedSnapshot.capabilities[1].condition = 'rate-limited';
+    const limited = providerAuthBadgesForSnapshot(limitedSnapshot, NOW)[0];
+
+    expect(retrying.state).toBe('retrying');
+    expect(limited.state).toBe('limited');
   });
 
   it('holds a Ready card on its configured host until usable auth is advertised', () => {
@@ -60,6 +74,10 @@ describe('provider auth projection', () => {
     });
     expect(providerAuthWaitReason(task, providerAuthBadgesForSnapshot(snapshot('ready', 'healthy', true), NOW)))
       .toBeNull();
+    expect(providerAuthWaitReason(task, providerAuthBadgesForSnapshot(
+      snapshot('ready', 'suspect', true, 'transient auth error, retrying'),
+      NOW,
+    ))).toBeNull();
     expect(providerAuthWaitReason({ ...task, state: '3-progress' }, unavailable)).toBeNull();
   });
 

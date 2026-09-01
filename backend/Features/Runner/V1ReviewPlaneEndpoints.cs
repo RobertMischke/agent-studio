@@ -1463,7 +1463,10 @@ public sealed class V1ReviewExecutorRegistry
                     capability.Identity,
                     capability.Detail,
                     [],
-                    []);
+                    [],
+                    capability.Condition,
+                    capability.ExpiresAt,
+                    capability.LastConfirmedAt);
             })
             .GroupBy(capability => capability.Key, StringComparer.Ordinal)
             .Select(group => group.Last())
@@ -1523,15 +1526,22 @@ public sealed class V1ReviewExecutorRegistry
                 request.Generation,
                 capabilities,
                 request.Telemetry);
-            // An advertisement refreshes the capability snapshot; it is NOT a
-            // health verdict. The review daemon re-advertises every 60 seconds, so
-            // clearing the drain here meant the cooldown never drained anything: an
-            // executor with a broken capability became claim-eligible again a
-            // minute later, over and over. A pause therefore lifts only by its own
-            // cooldown expiring or by a full re-registration
-            // (PUT /api/v1/runners/{id} - a daemon restart, a genuinely new
-            // instance declaring its health). While a cooldown is active the
-            // failure counters stay untouched, so the backoff keeps escalating.
+            if (_capabilityFailures.TryGetValue(runnerId, out var providerFailures))
+            {
+                foreach (var capability in capabilities.Where(item =>
+                             item.Key.StartsWith("provider-auth:", StringComparison.Ordinal)
+                             && item.LastConfirmedAt is not null))
+                {
+                    if (providerFailures.TryGetValue(capability.Key, out var failure)
+                        && capability.LastConfirmedAt!.Value > failure.LastFailureAt)
+                        providerFailures.Remove(capability.Key);
+                }
+                if (providerFailures.Count == 0) _capabilityFailures.Remove(runnerId);
+            }
+            // An ordinary advertisement is snapshot freshness, not recovery.
+            // Provider auth is the exception only when it carries a confirmation
+            // newer than the last failure. Cached pre-failure success cannot clear
+            // a drain; a later real probe can, without restarting the daemon.
             if (!HasActiveCapabilityCooldownLocked(runnerId, now))
                 ClearCapabilityFailures(runnerId);
             return new Contract.RunnerCapabilitySnapshotDto(

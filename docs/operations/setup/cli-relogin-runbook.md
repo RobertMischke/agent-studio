@@ -4,29 +4,34 @@ Use this runbook when an Execution Hosts provider badge changes from **OK** to
 **Unavailable**, a Ready card says it is waiting for a provider sign-in, or a
 run reports `ProviderUnauthorized`.
 
-The authoritative host secret store is
+The authoritative provisioned host secret store is
 `/etc/agent-runner/provider-auth.env`. It contains all environment-backed
 provider credentials, is owned by `root:agent`, and has mode `640`. Both the
 Coding and Review systemd units load it after their ordinary runner
-EnvironmentFile. A provider probe reads only the daemon process environment. It
-does not read this file or any other credential path.
+EnvironmentFile. A provider probe never reports token values. It uses the daemon
+process environment and CLI status for authentication, then reads timestamp
+metadata from host-owned CLI credential JSON for refresh-age and expiry warning.
 
 ## 1. Confirm the affected provider and host
 
 Open **Workspace Settings > Execution Hosts** and inspect **Provider
-authentication** on the affected host. The badge exposes three states:
+authentication** on the affected host. The badge exposes six states:
 
 - **OK**: a fresh capability snapshot reports usable provider authentication.
-- **Unavailable**: a fresh probe failed. Hover the badge for the runner's probe
-  detail, such as `Not logged in`.
+- **Retrying**: a transient or first explicit auth error retained the last-good
+  admission state and another probe is scheduled.
+- **Limited**: the provider reported an account limit. The detail carries the
+  reset or bounded retry time; sign-in is not required.
+- **Expiring**: authentication is usable, but a known credential expiry is
+  within 14 days.
+- **Unavailable**: consecutive explicit logout evidence requires re-auth.
 - **Unknown**: no current provider-auth advertisement exists, the advertisement
   is stale, or the runner is unreachable.
 
-Provider transitions are retained in the capability recovery history. An
-`OK -> Unavailable` transition creates an operator notification. A run that
-fails with a recognized provider-auth error reports the capability failure at
-once, without waiting for the next 60-second probe cycle. Ready cards assigned
-to that host show the same blocking reason.
+Provider transitions are retained in the capability recovery history. Only a
+genuine transition to **Unavailable** creates a persistent sign-in notification.
+Non-auth run failures and provider limits never do. A later successful probe
+clears capability health and Ready-card waiting reasons without a runner restart.
 
 If the runner advertises a credential expiry, Studio warns once when it enters
 the final 14 days. An absent expiry is reported as unknown and is never guessed
