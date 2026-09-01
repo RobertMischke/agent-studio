@@ -338,6 +338,63 @@ describe('RemoteHostsService client registry hydration', () => {
     http.verify();
   });
 
+  it('projects standalone runner slot telemetry from the management heartbeat', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([{
+      runnerId: 'agent-runner-01',
+      name: 'agent-runner-01',
+      hostId: 'host-a',
+      instanceId: 'host-a:1',
+      runnerVersion: '1.0.0',
+      protocolVersion: 3,
+      status: 'active',
+      registeredAt: now,
+      lastSeenAt: now,
+      hostAdmission: {
+        hostId: 'host-a',
+        admissionState: 'open',
+        automaticDrainReason: null,
+        automaticDrainAt: null,
+        operatorDrainReason: null,
+        operatorDrainAt: null,
+      },
+      capabilities: [],
+      effectiveMaxParallelism: 8,
+      telemetry: {
+        observedAt: now,
+        cpuPercent: 68,
+        load1: 5.2,
+        load5: 4.8,
+        load15: 4.1,
+        memoryUsedBytes: 24_000_000_000,
+        memoryTotalBytes: 64_000_000_000,
+        swapInBytesPerSecond: 0,
+        swapOutBytesPerSecond: 0,
+        cpuStealPercent: 0,
+        ioWaitPercent: 0,
+        cpuCores: 12,
+        activeSlots: 6,
+      },
+    }]);
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      telemetry: {
+        clientId: 'agent-runner-01',
+        points: [{ timestamp: now, activeSlots: 6, load1: 5.2 }],
+      },
+      effectiveMaxParallelism: 8,
+    });
+    http.verify();
+  });
+
   it('persists drain through the lifecycle API before reloading', () => {
     TestBed.configureTestingModule({ providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()] });
     const svc = TestBed.inject(RemoteHostsService);

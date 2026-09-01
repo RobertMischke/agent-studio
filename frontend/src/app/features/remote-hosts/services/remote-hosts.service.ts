@@ -201,6 +201,9 @@ export class RemoteHostsService {
             const stats = telemetryFresh && snapshot.telemetry
               ? telemetryStats(snapshot.telemetry)
               : status === 'offline' ? null : current.stats;
+            const telemetry = telemetryFresh && snapshot.telemetry
+              ? mergeTaskServerTelemetry(current.telemetry ?? null, snapshot.runnerId, snapshot.telemetry)
+              : current.telemetry ?? null;
             const gitPush = snapshot.capabilities.find(capability => capability.key === 'git:push');
             const gitWorkflowPush = snapshot.capabilities.find(
               capability => capability.key === 'git:workflow-push',
@@ -254,6 +257,7 @@ export class RemoteHostsService {
                 ? taskServerConnection(snapshot.telemetry)
                 : current.taskServerConnection ?? null,
               stats,
+              telemetry,
             };
             if (index >= 0) projected[index] = next;
             else projected.push(next);
@@ -295,8 +299,10 @@ export class RemoteHostsService {
                 diskFreeGb: 0,
             }
             : null;
-          const nextTelemetry = preserveLongTelemetry && host.telemetry?.window === '14d'
-            ? mergeRecentTelemetry(host.telemetry, telemetry)
+          const nextTelemetry = host.telemetry
+            ? preserveLongTelemetry && host.telemetry.window === '14d'
+              ? mergeRecentTelemetry(host.telemetry, telemetry)
+              : mergeRecentTelemetry(telemetry, host.telemetry)
             : telemetry;
           return { ...host, stats, telemetry: nextTelemetry, telemetryLoading: false };
         });
@@ -540,6 +546,40 @@ function telemetryStats(telemetry: TaskServerTelemetrySnapshot): NonNullable<Rem
     diskTotalGb: (telemetry.diskTotalBytes ?? 0) / 1024 / 1024 / 1024,
     diskFreeGb: (telemetry.diskFreeBytes ?? 0) / 1024 / 1024 / 1024,
   };
+}
+
+/**
+ * Project the Task Server's latest runner heartbeat into the same telemetry
+ * series used by the Execution Hosts UI. The management endpoint is the live
+ * source for standalone coding and review daemons; `/api/clients` history is
+ * optional and must not be required before active slot use becomes visible.
+ */
+function mergeTaskServerTelemetry(
+  existing: HostTelemetrySeries | null,
+  clientId: string,
+  telemetry: TaskServerTelemetrySnapshot,
+): HostTelemetrySeries {
+  const recent: HostTelemetrySeries = {
+    clientId,
+    window: existing?.window ?? 'live',
+    points: [{
+      timestamp: telemetry.observedAt,
+      cpuPercent: telemetry.cpuPercent,
+      load1: telemetry.load1,
+      load5: telemetry.load5,
+      load15: telemetry.load15,
+      memoryUsedBytes: telemetry.memoryUsedBytes,
+      memoryTotalBytes: telemetry.memoryTotalBytes,
+      swapInBytesPerSecond: telemetry.swapInBytesPerSecond,
+      swapOutBytesPerSecond: telemetry.swapOutBytesPerSecond,
+      cpuStealPercent: telemetry.cpuStealPercent,
+      ioWaitPercent: telemetry.ioWaitPercent,
+      cpuCores: telemetry.cpuCores,
+      activeSlots: telemetry.activeSlots,
+    }],
+    findings: [],
+  };
+  return existing ? mergeRecentTelemetry(existing, recent) : recent;
 }
 
 function taskServerConnection(

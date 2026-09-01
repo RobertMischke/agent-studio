@@ -137,12 +137,20 @@ describe('summarizeStatusBarSlotsByRole', () => {
     const review = { ...remoteHost(1, 8, 3, undefined, { executorRole: 'review', maxParallelism: 6 }), id: 'remote-2', clientId: 'remote-2' };
 
     expect(summarizeStatusBarSlotsByRole([coding, review])).toEqual({
-      coding: { active: 2, ceiling: 8 },
-      review: { active: 3, ceiling: 6 },
+      coding: {
+        active: 2,
+        ceiling: 8,
+        hosts: [{ id: 'remote-1', name: 'remote-1', active: 2, ceiling: 8 }],
+      },
+      review: {
+        active: 3,
+        ceiling: 6,
+        hosts: [{ id: 'remote-2', name: 'remote-1', active: 3, ceiling: 6 }],
+      },
     });
   });
 
-  it('treats the local host as coding-plane since it never advertises an executor capability', () => {
+  it('keeps local execution out of remote coding-plane utilization', () => {
     const local = {
       ...remoteHost(1, 4, 1),
       id: 'local',
@@ -153,8 +161,8 @@ describe('summarizeStatusBarSlotsByRole', () => {
     };
 
     expect(summarizeStatusBarSlotsByRole([local])).toEqual({
-      coding: { active: 1, ceiling: null },
-      review: { active: 0, ceiling: null },
+      coding: { active: null, ceiling: null, hosts: [] },
+      review: { active: null, ceiling: null, hosts: [] },
     });
   });
 
@@ -170,8 +178,36 @@ describe('summarizeStatusBarSlotsByRole', () => {
     const offline = { ...remoteHost(1, 8, 5, undefined, { maxParallelism: 8 }), status: 'offline' as const };
 
     expect(summarizeStatusBarSlotsByRole([offline])).toEqual({
-      coding: { active: 0, ceiling: null },
-      review: { active: 0, ceiling: null },
+      coding: { active: null, ceiling: null, hosts: [] },
+      review: { active: null, ceiling: null, hosts: [] },
     });
+  });
+
+  it('sums several connected coding hosts and exposes each host for tooltip detail', () => {
+    const first = remoteHost(1, 8, 4, undefined, { maxParallelism: 8 });
+    const second = {
+      ...remoteHost(1, 8, 2, undefined, { maxParallelism: 8 }),
+      id: 'remote-2',
+      name: 'remote-2',
+      clientId: 'remote-2',
+    };
+
+    expect(summarizeStatusBarSlotsByRole([first, second]).coding).toEqual({
+      active: 6,
+      ceiling: 16,
+      hosts: [
+        { id: 'remote-1', name: 'remote-1', active: 4, ceiling: 8 },
+        { id: 'remote-2', name: 'remote-2', active: 2, ceiling: 8 },
+      ],
+    });
+  });
+
+  it('uses the review daemon role ceiling instead of the coding host capacity', () => {
+    const review = {
+      ...remoteHost(1, 8, 2, undefined, { executorRole: 'review', maxParallelism: 8 }),
+      roleMaxParallelism: 6,
+    };
+
+    expect(summarizeStatusBarSlotsByRole([review]).review.ceiling).toBe(6);
   });
 });

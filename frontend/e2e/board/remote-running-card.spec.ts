@@ -136,7 +136,46 @@ async function installRoutes(page: Page): Promise<void> {
   await page.route('**/api/agent-rules**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.route('**/api/clients', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        id: 'agent-runner-01@linux-host',
+        displayName: 'agent-runner-01',
+        kind: 'service',
+        registeredAt: HEARTBEAT_AT,
+        lastSeenAt: HEARTBEAT_AT,
+        runnerGitStatus: 'ready',
+        runnerActiveSlots: 8,
+        runnerAvailableSlots: 0,
+        runnerEffectiveMaxParallelism: 8,
+      }]),
+    }));
+  await page.route('**/api/clients/agent-runner-01%40linux-host/telemetry?window=*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        clientId: 'agent-runner-01@linux-host',
+        window: '1h',
+        points: [{
+          timestamp: HEARTBEAT_AT,
+          cpuPercent: 72,
+          load1: 7.1,
+          load5: 6.8,
+          load15: 6.2,
+          memoryUsedBytes: 24_000_000_000,
+          memoryTotalBytes: 64_000_000_000,
+          swapInBytesPerSecond: 0,
+          swapOutBytesPerSecond: 0,
+          cpuStealPercent: 0,
+          ioWaitPercent: 0,
+          cpuCores: 12,
+          activeSlots: 8,
+        }],
+        findings: [],
+      }),
+    }));
   await page.route('**/api/cli/usage**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sessions: [] }) }));
   await page.route('**/api/cli/quota**', (route) =>
@@ -182,7 +221,7 @@ test.describe('Remote lease drives the board running state', () => {
       await expect(card.getByTestId('task-live-status')).toContainText(/Active for 2m\d{2}s/);
       await expect(card.getByTestId('task-live-status')).not.toContainText('No active run');
       await expect(card.getByTestId('task-card-stalled')).toHaveCount(0);
-      await expect(page.getByTestId('status-bar-running')).toContainText('0 local · 8 remote');
+      await expect(page.getByTestId('status-bar-running')).toContainText('remote 8/8');
 
       // Background feeds outside this fixture's board scope may surface a
       // generic error dialog. It is unrelated to the card projection and must

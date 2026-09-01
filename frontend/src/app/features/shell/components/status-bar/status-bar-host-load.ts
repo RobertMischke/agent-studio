@@ -1,5 +1,5 @@
 import type { HostTelemetryPoint, RemoteHost } from '../../../remote-hosts';
-import { hostExecutorRole } from '../../../remote-hosts';
+import { freshHostTelemetry, hostExecutorRole, RUNNING_TELEMETRY_FRESH_MS } from '../../../remote-hosts';
 
 export type StatusBarLoadTone = 'unknown' | 'calm' | 'working' | 'hot' | 'mismatch';
 export type StatusBarLoadCorrelation = 'unknown' | 'consistent' | 'load-without-runs' | 'runs-without-load';
@@ -73,14 +73,24 @@ export function summarizeStatusBarHostLoad(
 }
 
 export interface StatusBarPlaneSlots {
-  active: number;
+  /** Null means at least one connected host has no fresh slot heartbeat. */
+  active: number | null;
   /**
    * Sum of every contributing host's own configured slot ceiling
    * (`runtimeCapacity.maxParallelism`, the daemon-reported
    * `effectiveMaxParallelism`, or the active+available split - same priority
-   * order the host card uses). Null when no host in the plane reports one, so
-   * the footer never fabricates a fleet-wide maximum (AGT-2645).
+   * order the host card uses). Null when any connected host in the plane does
+   * not report one, so the footer never presents a partial fleet maximum as a
+   * complete total (AGT-2645).
    */
+  ceiling: number | null;
+  hosts: readonly StatusBarPlaneHostSlots[];
+}
+
+export interface StatusBarPlaneHostSlots {
+  id: string;
+  name: string;
+  active: number | null;
   ceiling: number | null;
 }
 
@@ -90,14 +100,30 @@ export interface StatusBarSlotsByRole {
 }
 
 function hostSlotCeiling(host: RemoteHost): number | null {
-  if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
+  const role = hostExecutorRole(host);
+  // Review is a separately configured executor plane. Its role-local daemon
+  // ceiling must win over the physical host's coding capacity record.
+  if (role === 'review' && host.roleMaxParallelism !== null && host.roleMaxParallelism !== undefined) {
+    return host.roleMaxParallelism;
+  }
+  if (role === 'coding' && host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
   if (host.effectiveMaxParallelism !== null && host.effectiveMaxParallelism !== undefined) {
     return host.effectiveMaxParallelism;
+  }
+  if (host.roleMaxParallelism !== null && host.roleMaxParallelism !== undefined) {
+    return host.roleMaxParallelism;
   }
   if (host.activeTaskCount !== undefined && host.availableSlots !== undefined) {
     return host.activeTaskCount + host.availableSlots;
   }
+  if (host.runtimeCapacity) return host.runtimeCapacity.maxParallelism;
   return null;
+}
+
+function isConnectedRemoteHost(host: RemoteHost, nowMs: number): boolean {
+  if (host.role !== 'remote' || host.status === 'offline' || host.status === 'retired') return false;
+  const heartbeatAt = host.lastHeartbeatAt ? Date.parse(host.lastHeartbeatAt) : Number.NaN;
+  return Number.isFinite(heartbeatAt) && nowMs - heartbeatAt <= RUNNING_TELEMETRY_FRESH_MS;
 }
 
 /**
@@ -105,25 +131,36 @@ function hostSlotCeiling(host: RemoteHost): number | null {
  * (coding vs review) so the footer can show "coding x/N - review y/M"
  * instead of one merged figure that hides review-plane load (AGT-2645).
  * Coding and review daemons register as separate RunnerIds even on a shared
- * physical host, so each `RemoteHost` belongs to exactly one plane
- * ({@link hostExecutorRole}) and this is a plain filter + reduce over the
- * same host list {@link summarizeStatusBarHostLoad} already consumes.
+ * physical host, so each remote `RemoteHost` belongs to exactly one plane
+ * ({@link hostExecutorRole}). Local execution remains visible separately and
+ * never inflates the remote coding figure.
  */
 export function summarizeStatusBarSlotsByRole(
   hosts: readonly RemoteHost[],
   nowMs = Date.now(),
 ): StatusBarSlotsByRole {
   const result: StatusBarSlotsByRole = {
-    coding: { active: 0, ceiling: null },
-    review: { active: 0, ceiling: null },
+    coding: { active: null, ceiling: null, hosts: [] },
+    review: { active: null, ceiling: null, hosts: [] },
   };
-  for (const host of hosts) {
-    if (!isLiveHost(host)) continue;
-    const plane = result[hostExecutorRole(host)];
-    const point = freshPoint(host, nowMs);
-    if (point) plane.active += point.activeSlots;
-    const ceiling = hostSlotCeiling(host);
-    if (ceiling !== null) plane.ceiling = (plane.ceiling ?? 0) + ceiling;
+  for (const role of ['coding', 'review'] as const) {
+    const details = hosts
+      .filter(host => isConnectedRemoteHost(host, nowMs) && hostExecutorRole(host) === role)
+      .map(host => ({
+        id: host.id,
+        name: host.name,
+        active: freshHostTelemetry(host, nowMs)?.activeSlots ?? null,
+        ceiling: hostSlotCeiling(host),
+      }));
+    result[role] = {
+      active: details.length > 0 && details.every(host => host.active !== null)
+        ? details.reduce((sum, host) => sum + (host.active ?? 0), 0)
+        : null,
+      ceiling: details.length > 0 && details.every(host => host.ceiling !== null)
+        ? details.reduce((sum, host) => sum + (host.ceiling ?? 0), 0)
+        : null,
+      hosts: details,
+    };
   }
   return result;
 }

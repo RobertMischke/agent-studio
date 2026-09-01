@@ -193,9 +193,17 @@ export interface RemoteHostCapabilityHealth {
 export interface TaskServerTelemetrySnapshot {
   observedAt: string;
   cpuPercent: number | null;
+  load1: number | null;
+  load5: number | null;
+  load15: number | null;
   memoryUsedBytes: number | null;
   memoryTotalBytes: number | null;
+  swapInBytesPerSecond: number | null;
+  swapOutBytesPerSecond: number | null;
+  cpuStealPercent: number | null;
+  ioWaitPercent: number | null;
   cpuCores: number;
+  activeSlots: number;
   diskFreeBytes?: number | null;
   diskTotalBytes?: number | null;
   taskServerConnectionStatus?: 'unknown' | 'reachable' | 'unreachable';

@@ -22,14 +22,17 @@ import {
 import { UsageHoverPanelComponent } from '../../../tokens';
 import {
   deriveBoardRunningTruth,
-  freshRemoteTelemetrySlots,
   RemoteHostsService,
   ReviewQueueService,
 } from '../../../remote-hosts';
 
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
-import { summarizeStatusBarHostLoad, summarizeStatusBarSlotsByRole } from './status-bar-host-load';
+import {
+  summarizeStatusBarHostLoad,
+  summarizeStatusBarSlotsByRole,
+  type StatusBarPlaneSlots,
+} from './status-bar-host-load';
 import { withRouteSegment } from '../../../../services/url-hash.util';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
@@ -37,22 +40,28 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 const STORAGE_DEFAULT_THINKING_PREFIX = 'defaultThinkingLevel:';
 const HOST_LOAD_REFRESH_MS = 30_000;
 
-export function formatRunningLabel(
-  local: number,
-  remote: number,
-  reviewActive = 0,
-  codingSlotCeiling: number | null = null,
+export function formatSlotUtilizationLabel(
+  plane: 'remote' | 'review',
+  active: number | null,
+  ceiling: number | null,
 ): string {
-  if (local > 0 && remote > 0) return `${local} local · ${remote} remote`;
-  if (local > 0) return `${local} local`;
-  if (remote > 0) return `${remote} remote`;
-  // "no runners" is forbidden when any plane has active workers (AGT-2645).
-  // Once the coding plane's own slot ceiling is known, show it honestly
-  // ("coding 0/8") instead of the vague "coding idle" placeholder.
-  if (reviewActive > 0) {
-    return codingSlotCeiling !== null ? `coding 0/${codingSlotCeiling}` : 'coding idle';
-  }
-  return 'no runners';
+  if (active === null) return `${plane} unavailable`;
+  if (active === 0) return `${plane} idle`;
+  return ceiling === null ? `${plane} ${active} busy` : `${plane} ${active}/${ceiling}`;
+}
+
+export function formatPlaneHostDetail(
+  plane: 'coding' | 'review',
+  slots: StatusBarPlaneSlots,
+): string {
+  if (slots.hosts.length === 0) return `No connected remote ${plane} hosts.`;
+  const count = slots.hosts.length;
+  const hosts = slots.hosts.map(host => {
+    const active = host.active === null ? '?' : host.active;
+    const ceiling = host.ceiling === null ? '?' : host.ceiling;
+    return `${host.name} (${active}/${ceiling} slots)`;
+  }).join('; ');
+  return `${count} ${count === 1 ? 'host' : 'hosts'} connected: ${hosts}.`;
 }
 
 @Component({
@@ -107,7 +116,6 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   readonly runningTruth = computed(() =>
     deriveBoardRunningTruth(this.jobService.grouped().progress));
-  readonly runningCount = computed(() => this.runningTruth().total);
 
   /**
    * Active execution slots and configured ceilings split by executor plane
@@ -118,24 +126,20 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly slotsByRole = computed(() => summarizeStatusBarSlotsByRole(this.remoteHosts.hosts()));
 
   readonly runningLabel = computed(() => {
-    const truth = this.runningTruth();
-    return formatRunningLabel(
-      truth.local,
-      truth.remote,
-      this.reviewActiveJobs(),
-      this.slotsByRole().coding.ceiling,
-    );
+    const coding = this.slotsByRole().coding;
+    const remote = formatSlotUtilizationLabel('remote', coding.active, coding.ceiling);
+    const local = this.runningTruth().local;
+    return local > 0 ? `${local} local · ${remote}` : remote;
   });
-  readonly remoteTelemetrySlots = computed(() =>
-    freshRemoteTelemetrySlots(this.remoteHosts.hosts()));
+  readonly remoteTelemetrySlots = computed(() => this.slotsByRole().coding.active);
   readonly runningSourcesDiverge = computed(() => {
     const telemetry = this.remoteTelemetrySlots();
     const boardRemote = this.runningTruth().remote;
-    // Only flag when board shows MORE coding runs than telemetry reports active
-    // slots (a runner is working but not advertising). Telemetry > board is
-    // expected when review workers are active and don't appear in the coding lane.
-    return telemetry !== null && telemetry < boardRemote;
+    return telemetry !== null && telemetry !== boardRemote;
   });
+
+  readonly executionActive = computed(() =>
+    this.runningTruth().local > 0 || (this.slotsByRole().coding.active ?? 0) > 0);
 
   readonly hostLoad = computed(() =>
     summarizeStatusBarHostLoad(this.remoteHosts.hosts(), this.runningTruth().remote));
@@ -155,29 +159,25 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   readonly reviewAttention = computed(() =>
     this.reviewWaiting() > 0 && this.reviewActiveJobs() === 0);
 
-  /**
-   * One-line label for the review plane status-bar item. Appends "/ceiling"
-   * (AGT-2645, e.g. "review 2/6") once the review plane's own configured slot
-   * ceiling is known, so utilization reads at a glance next to the coding
-   * plane's figure; falls back to a bare active count when no review host has
-   * reported a ceiling yet.
-   */
+  /** Live review-daemon utilization; queue depth stays in the tooltip. */
   readonly reviewLabel = computed(() => {
-    const active = this.reviewActiveJobs();
-    const waiting = this.reviewWaiting();
-    if (active === 0 && waiting === 0) return 'review idle';
-    const ceiling = this.slotsByRole().review.ceiling;
-    const activeLabel = ceiling !== null ? `${active}/${ceiling}` : `${active}`;
-    if (waiting > 0) return `review ${activeLabel} active · ${waiting} waiting`;
-    return `review ${activeLabel} active`;
+    const review = this.slotsByRole().review;
+    if (review.active === null
+        && review.hosts.length === 0
+        && this.reviewActiveJobs() === 0
+        && this.reviewWaiting() === 0) {
+      return 'review idle';
+    }
+    return formatSlotUtilizationLabel('review', review.active, review.ceiling);
   });
 
   /** Tooltip for the review plane item. */
   readonly reviewTooltip = computed(() => {
     const snap = this.reviewSnapshot();
-    if (!snap) return 'Auto-review post-processing queue. Data unavailable.';
+    const hosts = formatPlaneHostDetail('review', this.slotsByRole().review);
+    if (!snap) return `${hosts} Auto-review post-processing queue data is unavailable.`;
     const { activeJobs, queueDepth, isStagnant, stagnantThresholdMinutes } = snap;
-    const base = `Auto-review: ${activeJobs} processing, ${queueDepth} waiting.`;
+    const base = `${hosts} Auto-review queue: ${activeJobs} processing, ${queueDepth} waiting.`;
     if (isStagnant) return `${base} Warning: queue has not drained for >${stagnantThresholdMinutes} minutes.`;
     return base;
   });
@@ -245,26 +245,33 @@ export class StatusBarComponent implements OnInit, OnDestroy {
 
   runningTooltip(): string {
     const truth = this.runningTruth();
-    const execution = `Running ${truth.total} - ${truth.local} local / ${truth.remote} remote.`;
+    const coding = this.slotsByRole().coding;
+    const slotUse = coding.active === null
+      ? 'Remote coding slot utilization is unavailable.'
+      : coding.ceiling === null
+        ? `Remote coding has ${coding.active} busy slots; the total is unavailable.`
+        : `Remote coding uses ${coding.active}/${coding.ceiling} slots.`;
+    const hosts = formatPlaneHostDetail('coding', coding);
+    const execution = `Board leases report ${truth.local} local and ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
     const telemetrySlots = this.remoteTelemetrySlots();
     const comparison = telemetrySlots === null
       ? ' Fresh remote slot telemetry is unavailable.'
       : this.runningSourcesDiverge()
-        ? ` Warning: Board leases report ${truth.remote} remote but host telemetry only reports ${telemetrySlots} active slots; a runner may not be advertising.`
+        ? ` Warning: Board leases report ${truth.remote} remote, but fresh coding-host telemetry reports ${telemetrySlots} active slots.`
         : ` Board leases and host telemetry agree on ${truth.remote} remote ${truth.remote === 1 ? 'run' : 'runs'}.`;
     const load = this.hostLoad();
-    if (!load) return `Open execution hosts. ${execution}${comparison} Execution host load is unavailable.`;
+    if (!load) return `Open execution hosts. ${slotUse} ${hosts} ${execution}${comparison} Execution host load is unavailable.`;
 
     const loadDetail = `Execution host load ${load.load1.toFixed(1)} / ${load.cpuCores} cores `
       + `(${Math.round(load.ratio * 100)}%); ${load.activeSlots} active execution `
       + `${load.activeSlots === 1 ? 'slot' : 'slots'}.`;
     if (load.correlation === 'load-without-runs') {
-      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
+      return `Open execution hosts. ${slotUse} ${hosts} ${execution}${comparison} ${loadDetail} Quiet consistency hint: host load is elevated without reported runs.`;
     }
     if (load.correlation === 'runs-without-load') {
-      return `Open execution hosts. ${execution}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
+      return `Open execution hosts. ${slotUse} ${hosts} ${execution}${comparison} ${loadDetail} Quiet consistency hint: reported runs and host load may not correspond.`;
     }
-    return `Open execution hosts. ${execution}${comparison} ${loadDetail}`;
+    return `Open execution hosts. ${slotUse} ${hosts} ${execution}${comparison} ${loadDetail}`;
   }
 
   autoTooltip(): string {

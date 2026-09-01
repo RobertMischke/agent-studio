@@ -2,7 +2,7 @@
   <div class="statusbar__group statusbar__group--left">
     <app-statusbar-item
       bullet="●"
-      [pulsing]="runningCount() > 0"
+      [pulsing]="executionActive()"
       [signalTone]="hostLoad()?.tone ?? 'unknown'"
       [signalCorrelation]="hostLoad()?.correlation ?? 'unknown'"
       [label]="runningLabel()"
@@ -12,8 +12,8 @@
       (activated)="navigateToExecutionHosts()" />
     <app-statusbar-item
       bullet="◎"
-      [pulsing]="reviewActiveJobs() > 0"
-      [signalTone]="reviewAttention() ? 'mismatch' : (reviewActiveJobs() > 0 ? 'working' : null)"
+      [pulsing]="(slotsByRole().review.active ?? 0) > 0"
+      [signalTone]="reviewAttention() ? 'mismatch' : ((slotsByRole().review.active ?? 0) > 0 ? 'working' : null)"
       [label]="reviewLabel()"
       [tooltip]="reviewTooltip()"
       [button]="false"
