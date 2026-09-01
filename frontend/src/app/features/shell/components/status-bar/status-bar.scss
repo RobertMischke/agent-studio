@@ -109,6 +109,7 @@ app-status-bar {
   color: inherit;
   font: inherit;
   font-size: var(--statusbar-font-size);
+  font-variant-numeric: tabular-nums;
   line-height: 1;
   white-space: nowrap;
   min-width: 0;

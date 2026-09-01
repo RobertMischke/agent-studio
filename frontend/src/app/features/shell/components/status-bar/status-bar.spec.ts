@@ -4,29 +4,36 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { formatRunningLabel, StatusBarComponent } from './status-bar';
+import { formatPlaneHostDetail, formatSlotLabel, StatusBarComponent } from './status-bar';
 import { TaskService } from '../../../../services/task.service';
 
-describe('formatRunningLabel', () => {
+describe('formatSlotLabel', () => {
   it.each([
-    { local: 2, remote: 3, expected: '2 local · 3 remote' },
-    { local: 2, remote: 0, expected: '2 local' },
-    { local: 0, remote: 1, expected: '1 remote' },
-    { local: 0, remote: 0, expected: 'no runners' },
-  ])('renders $expected for local=$local and remote=$remote', ({ local, remote, expected }) => {
-    expect(formatRunningLabel(local, remote)).toBe(expected);
+    { label: 'remote' as const, active: 6, ceiling: 8, expected: 'remote 6/8' },
+    { label: 'review' as const, active: 2, ceiling: 6, expected: 'review 2/6' },
+    { label: 'remote' as const, active: 3, ceiling: null, expected: 'remote 3' },
+    { label: 'review' as const, active: 0, ceiling: 6, expected: 'review idle' },
+  ])('renders $expected', ({ label, active, ceiling, expected }) => {
+    expect(formatSlotLabel(label, { active, ceiling, hosts: [] })).toBe(expected);
   });
 
-  it('never renders "no runners" while the review plane has active workers (AGT-2645)', () => {
-    expect(formatRunningLabel(0, 0, 3)).not.toContain('no runners');
+  it('keeps the zero state compact even when a ceiling is known', () => {
+    expect(formatSlotLabel('remote', { active: 0, ceiling: 8, hosts: [] })).toBe('remote idle');
   });
+});
 
-  it('falls back to a vague label when the coding slot ceiling is unknown', () => {
-    expect(formatRunningLabel(0, 0, 3)).toBe('coding idle');
-  });
-
-  it('shows the honest coding slot ceiling once it is known', () => {
-    expect(formatRunningLabel(0, 0, 3, 8)).toBe('coding 0/8');
+describe('formatPlaneHostDetail', () => {
+  it('keeps physical host count and per-runner slot detail in the tooltip', () => {
+    expect(formatPlaneHostDetail({
+      active: 6,
+      ceiling: 8,
+      hosts: [
+        { id: 'a', physicalHostId: 'host-a', name: 'runner-a', active: 4, ceiling: 4 },
+        { id: 'b', physicalHostId: 'host-b', name: 'runner-b', active: 2, ceiling: 4 },
+      ],
+    })).toBe(
+      'runner-a, runner-b, 2 hosts connected. Per-host utilization: runner-a 4/4 slots; runner-b 2/4 slots.',
+    );
   });
 });
 

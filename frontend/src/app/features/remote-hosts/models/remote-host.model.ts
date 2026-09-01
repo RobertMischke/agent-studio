@@ -205,6 +205,8 @@ export interface TaskServerTelemetrySnapshot {
   taskServerConnectionEscalatedAt?: string | null;
   taskServerConnectionLastError?: string | null;
   taskServerConnectionLastRecoveredAt?: string | null;
+  /** Runner-process slots occupied when this heartbeat was sampled. */
+  activeSlots: number;
 }
 
 /** Wire shape returned by GET /api/v1/management/remote-hosts. */
@@ -300,6 +302,10 @@ export interface RemoteHost {
   effectiveMaxParallelism?: number | null;
   /** Role-local ceiling advertised from RUNNER_MAX_PARALLELISM. */
   roleMaxParallelism?: number | null;
+  /** Live role-local slot occupancy from the runner capability heartbeat. */
+  executorActiveSlots?: number | null;
+  /** Observation time paired with {@link executorActiveSlots}. */
+  executorSlotsObservedAt?: string | null;
   runtimeCapacityAppliedAt?: string | null;
   /** Exact Task Server policy version confirmed by this daemon. */
   runtimeCapacityAppliedVersion?: number | null;

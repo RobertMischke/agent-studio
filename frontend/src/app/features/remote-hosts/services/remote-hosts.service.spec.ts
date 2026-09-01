@@ -273,7 +273,7 @@ describe('RemoteHostsService client registry hydration', () => {
     http.verify();
   });
 
-  it('projects the versioned workflow-push capability without closing task inflow', () => {
+  it('projects the workflow-push capability and runner slot heartbeat', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
     });
@@ -325,7 +325,15 @@ describe('RemoteHostsService client registry hydration', () => {
         capability('git:push', 'ready', 'contents ready'),
         capability('git:workflow-push', 'ready-no-workflow-scope', 'workflow scope missing'),
       ],
-      telemetry: null,
+      telemetry: {
+        observedAt: now,
+        cpuPercent: 40,
+        memoryUsedBytes: 4_000_000_000,
+        memoryTotalBytes: 16_000_000_000,
+        cpuCores: 8,
+        activeSlots: 3,
+      },
+      roleMaxParallelism: 8,
     }]);
 
     expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
@@ -334,6 +342,9 @@ describe('RemoteHostsService client registry hydration', () => {
       releaseId: '1.0.0',
       runnerInstanceId: 'runner-host:42',
       runnerProtocolVersion: 2,
+      executorActiveSlots: 3,
+      executorSlotsObservedAt: now,
+      roleMaxParallelism: 8,
     });
     http.verify();
   });

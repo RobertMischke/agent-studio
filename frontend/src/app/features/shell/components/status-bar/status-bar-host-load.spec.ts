@@ -137,12 +137,20 @@ describe('summarizeStatusBarSlotsByRole', () => {
     const review = { ...remoteHost(1, 8, 3, undefined, { executorRole: 'review', maxParallelism: 6 }), id: 'remote-2', clientId: 'remote-2' };
 
     expect(summarizeStatusBarSlotsByRole([coding, review])).toEqual({
-      coding: { active: 2, ceiling: 8 },
-      review: { active: 3, ceiling: 6 },
+      remote: {
+        active: 2,
+        ceiling: 8,
+        hosts: [{ id: 'remote-1', physicalHostId: 'remote-1', name: 'remote-1', active: 2, ceiling: 8 }],
+      },
+      review: {
+        active: 3,
+        ceiling: 6,
+        hosts: [{ id: 'remote-2', physicalHostId: 'remote-2', name: 'remote-1', active: 3, ceiling: 6 }],
+      },
     });
   });
 
-  it('treats the local host as coding-plane since it never advertises an executor capability', () => {
+  it('keeps local execution out of the remote coding-plane figure', () => {
     const local = {
       ...remoteHost(1, 4, 1),
       id: 'local',
@@ -153,8 +161,8 @@ describe('summarizeStatusBarSlotsByRole', () => {
     };
 
     expect(summarizeStatusBarSlotsByRole([local])).toEqual({
-      coding: { active: 1, ceiling: null },
-      review: { active: 0, ceiling: null },
+      remote: { active: 0, ceiling: null, hosts: [] },
+      review: { active: 0, ceiling: null, hosts: [] },
     });
   });
 
@@ -170,8 +178,52 @@ describe('summarizeStatusBarSlotsByRole', () => {
     const offline = { ...remoteHost(1, 8, 5, undefined, { maxParallelism: 8 }), status: 'offline' as const };
 
     expect(summarizeStatusBarSlotsByRole([offline])).toEqual({
-      coding: { active: 0, ceiling: null },
-      review: { active: 0, ceiling: null },
+      remote: { active: 0, ceiling: null, hosts: [] },
+      review: { active: 0, ceiling: null, hosts: [] },
+    });
+  });
+
+  it('sums several hosts and retains their individual utilization for the tooltip', () => {
+    const berlin = {
+      ...remoteHost(1, 8, 3, undefined, { maxParallelism: 4 }),
+      id: 'runner-berlin',
+      clientId: 'runner-berlin',
+      name: 'agent-runner-berlin',
+      capacityHostId: 'host-berlin',
+    };
+    const hamburg = {
+      ...remoteHost(1, 8, 3, undefined, { maxParallelism: 4 }),
+      id: 'runner-hamburg',
+      clientId: 'runner-hamburg',
+      name: 'agent-runner-hamburg',
+      capacityHostId: 'host-hamburg',
+    };
+
+    expect(summarizeStatusBarSlotsByRole([berlin, hamburg]).remote).toEqual({
+      active: 6,
+      ceiling: 8,
+      hosts: [
+        {
+          id: 'runner-berlin', physicalHostId: 'host-berlin', name: 'agent-runner-berlin',
+          active: 3, ceiling: 4,
+        },
+        {
+          id: 'runner-hamburg', physicalHostId: 'host-hamburg', name: 'agent-runner-hamburg',
+          active: 3, ceiling: 4,
+        },
+      ],
+    });
+  });
+
+  it('uses the review daemon role ceiling instead of the shared coding capacity', () => {
+    const review = {
+      ...remoteHost(1, 8, 2, undefined, { executorRole: 'review', maxParallelism: 8 }),
+      roleMaxParallelism: 6,
+    };
+
+    expect(summarizeStatusBarSlotsByRole([review]).review).toMatchObject({
+      active: 2,
+      ceiling: 6,
     });
   });
 });

@@ -101,7 +101,21 @@ public sealed class ManagementApiTests : IDisposable
                         "provider-auth",
                         "ready",
                         Identity: "claude"),
-                ]));
+                ],
+                Telemetry: new Contract.HostTelemetrySnapshotDto(
+                    DateTime.UtcNow,
+                    68,
+                    5.4,
+                    5.2,
+                    5.0,
+                    24_000_000_000,
+                    64_000_000_000,
+                    0,
+                    0,
+                    0,
+                    0,
+                    12,
+                    6)));
         registry.ReportCapabilityFailure(
             runnerId,
             new Contract.CapabilityFailureRequest(
@@ -123,6 +137,7 @@ public sealed class ManagementApiTests : IDisposable
         Assert.Equal(runnerId, snapshot.RunnerId);
         Assert.Equal(instanceId, snapshot.InstanceId);
         Assert.Equal(6, snapshot.RoleMaxParallelism);
+        Assert.Equal(6, snapshot.Telemetry!.ActiveSlots);
         Assert.Contains(
             snapshot.Capabilities,
             capability => capability.Key == "cli-execution:claude"

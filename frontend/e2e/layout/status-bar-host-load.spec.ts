@@ -160,7 +160,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('1 local · 3 remote');
+    await expect(running).toContainText('remote 3/8');
     await expect(page.getByTestId('status-bar').getByText('8/16 auto')).toBeVisible();
     await expect(running).toHaveAttribute('data-signal-tone', 'working');
     await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
@@ -212,8 +212,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('2 local');
-    await expect(running).not.toContainText('remote');
+    await expect(running).toContainText('remote idle');
     await running.click();
 
     await expect(page).toHaveURL(/#\/workspace\/settings\/execution-hosts(?:&|$)/);
@@ -227,9 +226,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('no runners');
-    await expect(running).not.toContainText('local');
-    await expect(running).not.toContainText('remote');
+    await expect(running).toContainText('remote idle');
     await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
     await expect(running).toHaveAttribute('data-signal-correlation', 'load-without-runs');
     await running.hover();
@@ -251,8 +248,8 @@ test.describe('Status bar execution-host load companion signal', () => {
     });
   });
 
-  test('review workers own elevated host load and expose both plane ceilings', async ({ page }) => {
-    await stubHostLoad(page, 0, 0, 4, 8.4);
+  test('remote and review show live role-local slot utilization', async ({ page }) => {
+    await stubHostLoad(page, 0, 6, 8, 8.4);
     const now = new Date().toISOString();
     const telemetry = (clientId: string, activeSlots: number) => ({
       clientId,
@@ -308,13 +305,13 @@ test.describe('Status bar execution-host load companion signal', () => {
       {
         id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
         registeredAt: now, lastSeenAt: now, runnerGitStatus: 'ready',
-        runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 8,
+        runnerDaemonState: 'running', runnerActiveSlots: 6, runnerAvailableSlots: 2,
         runnerEffectiveMaxParallelism: 8,
       },
       {
         id: 'agent-runner-review-01', displayName: 'agent-runner-review-01', kind: 'service',
         registeredAt: now, lastSeenAt: now, runnerGitStatus: 'ready',
-        runnerDaemonState: 'running', runnerActiveSlots: 4, runnerAvailableSlots: 2,
+        runnerDaemonState: 'running', runnerActiveSlots: 2, runnerAvailableSlots: 4,
         runnerEffectiveMaxParallelism: 6,
       },
     ]));
@@ -325,21 +322,31 @@ test.describe('Status bar execution-host load companion signal', () => {
         instanceId: 'coding', runnerVersion: '1.2.0', protocolVersion: 2,
         status: 'active', registeredAt: now, lastSeenAt: now, hostAdmission,
         capabilities: [capability('executor:coding')], effectiveMaxParallelism: 8,
+        roleMaxParallelism: 8,
+        telemetry: {
+          observedAt: now, cpuPercent: 72, memoryUsedBytes: 24_000_000_000,
+          memoryTotalBytes: 64_000_000_000, cpuCores: 6, activeSlots: 6,
+        },
       },
       {
         runnerId: 'agent-runner-review-01', name: 'agent-runner-review-01', hostId: 'host-berlin',
         instanceId: 'review', runnerVersion: '1.2.0', protocolVersion: 2,
         status: 'active', registeredAt: now, lastSeenAt: now, hostAdmission,
         capabilities: [capability('executor:review')], effectiveMaxParallelism: 6,
+        roleMaxParallelism: 6,
+        telemetry: {
+          observedAt: now, cpuPercent: 72, memoryUsedBytes: 24_000_000_000,
+          memoryTotalBytes: 64_000_000_000, cpuCores: 6, activeSlots: 2,
+        },
       },
     ]));
     await page.unroute('**/api/clients/agent-runner-01/telemetry?window=1h');
     await page.unroute('**/api/clients/agent-runner-01/telemetry?window=14d');
-    await page.route('**/api/clients/agent-runner-01/telemetry?window=*', json(telemetry('agent-runner-01', 0)));
-    await page.route('**/api/clients/agent-runner-review-01/telemetry?window=*', json(telemetry('agent-runner-review-01', 4)));
+    await page.route('**/api/clients/agent-runner-01/telemetry?window=*', json(telemetry('agent-runner-01', 6)));
+    await page.route('**/api/clients/agent-runner-review-01/telemetry?window=*', json(telemetry('agent-runner-review-01', 2)));
     await page.route('**/api/runner/auto-review-queue', json({
       queueDepth: 7,
-      activeJobs: 4,
+      activeJobs: 2,
       isStagnant: false,
       stagnantSince: null,
       stagnantThresholdMinutes: 20,
@@ -352,14 +359,17 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('coding 0/8');
-    await expect(running).not.toContainText('no runners');
+    await expect(running).toContainText('remote 6/8');
     await expect(running).toHaveAttribute('data-signal-correlation', 'consistent');
+    await running.hover();
+    await expect(page.getByTestId('cac-tooltip')).toContainText('agent-runner-01, 1 host connected');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('agent-runner-01 6/8 slots');
     const review = page.getByTestId('status-bar-review');
-    await expect(review).toContainText('review 4/6 active');
-    await expect(review).toContainText('7 waiting');
+    await expect(review).toContainText('review 2/6');
     await review.hover();
-    await expect(page.getByTestId('cac-tooltip')).toContainText('4 processing, 7 waiting');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('agent-runner-review-01, 1 host connected');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('2 processing, 7 waiting');
+    await expect(page.getByTestId('status-bar').getByText('8/16 auto')).toBeVisible();
 
     await setTheme(page, 'dark');
     await page.getByTestId('status-bar').screenshot({
@@ -376,8 +386,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('5 remote');
-    await expect(running).not.toContainText('local');
+    await expect(running).toContainText('remote 5/8');
     await expect(running).toHaveAttribute('data-signal-tone', 'mismatch');
     await expect(running).toHaveAttribute('data-signal-correlation', 'runs-without-load');
     await running.hover();
@@ -397,7 +406,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     await page.goto('/');
 
     const running = page.getByTestId('status-bar-running');
-    await expect(running).toContainText('2 remote');
+    await expect(running).toContainText('remote 3/8');
     await expect(page.getByTestId('status-bar-running-divergence')).toBeVisible();
     await running.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText(
