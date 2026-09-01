@@ -213,8 +213,6 @@ describe('RemoteHostsService client registry hydration', () => {
       runnerGitDetail: 'push-dry-run failed (128): permission denied',
       runnerActiveSlots: 1,
       runnerAvailableSlots: 19,
-      runnerActiveGateCount: 2,
-      runnerGateCapacity: 4,
     }]);
     http.expectOne('/api/clients/agent-runner-01/telemetry?window=14d').flush({
       clientId: 'agent-runner-01', window: '14d', points: [], findings: [],
@@ -227,8 +225,6 @@ describe('RemoteHostsService client registry hydration', () => {
       gitPushDetail: 'push-dry-run failed (128): permission denied',
       activeTaskCount: 1,
       availableSlots: 19,
-      activeGateCount: 2,
-      gateCapacity: 4,
       liveDataState: 'ready',
     });
 

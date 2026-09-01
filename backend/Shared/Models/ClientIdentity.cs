@@ -227,8 +227,6 @@ public record ClientSummary
     public DateTime? RunnerCapacityUpdatedAt { get; init; }
     public int? RunnerEffectiveMaxParallelism { get; init; }
     public DateTime? RunnerEffectiveMaxParallelismAppliedAt { get; init; }
-    public int RunnerActiveGateCount { get; init; }
-    public int RunnerGateCapacity { get; init; }
     /// <summary>Present only for a synthetic registry row representing an unreadable identity file.</summary>
     public string? IdentityFileError { get; init; }
     public string? IdentityFileName { get; init; }

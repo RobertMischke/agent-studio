@@ -1,0 +1,34 @@
+{
+  "$schema": "https://agent-taskboard.local/schemas/wiki-document-companion.schema.json",
+  "schemaVersion": "wiki-document-companion/v1",
+  "title": "SSH gate shortcut cleanup history",
+  "source": {
+    "path": "docs/operations/remote-gate-cleanup/index.html",
+    "type": "html",
+    "fingerprint": {
+      "algorithm": "sha256",
+      "hash": "836db86f07df041b6756ef9032fc09a5179e07f92361ccdc2363e58a1b2da669",
+      "sizeBytes": 13348,
+      "lineCount": 143,
+      "capturedAt": "2026-09-01T00:00:00.000Z"
+    }
+  },
+  "classification": {
+    "owner": "operations",
+    "documentMode": "documentation",
+    "temporalState": "past",
+    "implementationState": "retired",
+    "status": "archived",
+    "supersededBy": null,
+    "type": "konzept",
+    "analyzedAt": "2026-09-01"
+  },
+  "relatedTasks": [
+    {
+      "key": "AGT-2262",
+      "title": "Remove the SSH gate bridge after replacement",
+      "linkedAt": "2026-09-01T00:00:00.000Z",
+      "source": "manual"
+    }
+  ]
+}

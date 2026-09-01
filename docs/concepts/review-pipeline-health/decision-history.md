@@ -67,6 +67,17 @@ remote vs 15–27 min local. Explicitly a self-contained bridge: superseded by
 claimable remote gate steps (AGT-2229), then removed wholesale (cleanup card
 `ssh-gate-shortcut-cleanup`). → AGT-2222 tranche 2.
 
+## 2026-09-01: SSH gate shortcut retired after Remote Review replacement
+Canonical Remote review now freezes deterministic build and test commands into
+the immutable ReviewSubject. A Review Executor claims the ReviewAttempt through
+the Task Server lease and fence contract, materializes the exact Result-SHA,
+executes each command as a projected pipeline step, and returns fenced evidence.
+AGT-2262 therefore removed `RemoteSshHost`, direct SSH process dispatch, the
+process-local host semaphore, the `$HOME/gate-work` convention, alias-based gate
+activity projection, and remote-to-local fallback. Local exact-subject execution
+remains only for local compatibility and integration-owner gates. It is not a
+fallback from canonical Remote review.
+
 ## 2026-07-23 — Host slots 5 → 20 (operator-directed)
 The remote host idled at load 0.34 with 12 CPUs/62 GB while 5 slots capped the
 fleet; runs are LLM-bound. Raised `RUNNER_MAX_PARALLELISM` to 20; watch host

@@ -290,8 +290,6 @@ export interface RemoteHost {
   lastClaimAt?: string | null;
   activeTaskCount?: number;
   availableSlots?: number;
-  activeGateCount?: number;
-  gateCapacity?: number;
   retireRequestedAt?: string | null;
   capabilityHealth?: readonly RemoteHostCapabilityHealth[];
   hostAdmission?: RemoteHostAdmission | null;
