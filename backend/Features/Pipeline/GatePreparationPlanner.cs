@@ -148,8 +148,12 @@ public static partial class GatePreparationPlanner
         var installRoot = Path.GetFullPath(Path.Combine(
             repositoryPath,
             workingSubdir.Replace('/', Path.DirectorySeparatorChar)));
+        var trackedFiles = TrackedRepositoryFiles.Read(repositoryPath);
         var lockfiles = new[] { "package-lock.json", "npm-shrinkwrap.json" }
             .Where(name => File.Exists(Path.Combine(installRoot, name)))
+            .Where(name => TrackedRepositoryFiles.Contains(
+                trackedFiles,
+                string.IsNullOrWhiteSpace(workingSubdir) ? name : $"{workingSubdir}/{name}"))
             .ToArray();
         return lockfiles.Length == 0
             ? []
@@ -195,9 +199,16 @@ public static partial class GatePreparationPlanner
             if (!candidate.Equals(root, StringComparison.OrdinalIgnoreCase)
                 && !candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 return null;
-            if (!File.Exists(Path.Combine(candidate, "package.json"))) return null;
             var relative = Path.GetRelativePath(root, candidate);
-            return relative == "." ? "" : relative;
+            var normalized = relative == "." ? "" : relative.Replace('\\', '/');
+            var manifest = string.IsNullOrWhiteSpace(normalized)
+                ? "package.json"
+                : $"{normalized}/package.json";
+            if (!File.Exists(Path.Combine(candidate, "package.json"))
+                || !TrackedRepositoryFiles.Contains(
+                    TrackedRepositoryFiles.Read(repositoryPath), manifest))
+                return null;
+            return normalized;
         }
         catch
         {

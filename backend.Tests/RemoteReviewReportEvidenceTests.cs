@@ -44,7 +44,7 @@ public sealed class RemoteReviewReportEvidenceTests : IDisposable
             "report-key",
             "ReviewInfra",
             "PreparationFailed",
-            "Dependency preparation failed.",
+            "Dependency preparation directory is missing: /review/repository/stale-salvage",
             new ReviewWorkspaceProofDto(
                 "repo", new string('a', 40), new string('a', 40), new string('b', 40),
                 false, false, "workspace", "review-attempt-f1"),
@@ -75,6 +75,10 @@ public sealed class RemoteReviewReportEvidenceTests : IDisposable
             report,
             StringComparison.Ordinal);
         Assert.Contains("review-command: 3000/120000 ms", report, StringComparison.Ordinal);
+        Assert.Contains(
+            "**Detail:** Dependency preparation directory is missing: /review/repository/stale-salvage",
+            report,
+            StringComparison.Ordinal);
         Assert.Contains("[stdout](remote-review-attempt-1-candidate_prepare-dependencies_stdout_log)", report, StringComparison.Ordinal);
         Assert.Contains("[stderr](remote-review-attempt-1-candidate_prepare-dependencies_stderr_log)", report, StringComparison.Ordinal);
         Assert.Equal(

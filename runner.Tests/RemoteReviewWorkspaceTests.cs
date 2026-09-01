@@ -441,6 +441,34 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
     }
 
     [Fact]
+    public async Task Missing_preparation_directory_is_named_in_failure_detail()
+    {
+        var sha = await SeedOriginAsync();
+        var preparation = new ReviewPreparationCommandDto(
+            "prepare-missing",
+            PosixShell.RequirePath(),
+            ["-c", "npm ci"],
+            "stale-salvage");
+        var (workspace, _) = Workspace(
+            "attempt-prepare-missing",
+            sha,
+            [new ReviewCommandDto("must-not-run", "build-tests", "git", ["status"])],
+            24013,
+            preparation: [preparation]);
+        await workspace.PrepareAsync(null!, default);
+
+        var exception = await Assert.ThrowsAsync<ReviewInfrastructureException>(
+            () => workspace.ExecutePlanAsync(default));
+
+        var missingPath = Path.Combine(workspace.RepositoryPath, "stale-salvage");
+        Assert.Equal("PreparationFailed", exception.Classification);
+        Assert.Contains(
+            $"Dependency preparation directory is missing: {missingPath}",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Missing_toolchain_exit_127_is_never_a_product_failure()
     {
         var sha = await SeedOriginAsync();

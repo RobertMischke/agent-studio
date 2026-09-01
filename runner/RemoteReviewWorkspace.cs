@@ -558,6 +558,7 @@ public sealed class RemoteReviewWorkspace
                 var summary =
                     $"Dependency preparation '{command.StepId}' failed: " +
                     $"command={CommandLine(command)}; exit={execution.Process.ExitCode}; " +
+                    $"detail={FailureDetail(execution.Process)}; " +
                     $"budget={BudgetSummary(command.TimeoutSeconds, execution)}; " +
                     $"stdout={ArtifactName(workspaceRole, command.StepId, "stdout")}; " +
                     $"stderr={ArtifactName(workspaceRole, command.StepId, "stderr")}.";
@@ -705,6 +706,22 @@ public sealed class RemoteReviewWorkspace
                && (process.StdOut + "\n" + process.StdErr).Contains(
                    "node_modules/@angular/cli/bin/ng.js",
                    StringComparison.OrdinalIgnoreCase));
+
+    private static string FailureDetail(ProcessResult process)
+    {
+        var source = !string.IsNullOrWhiteSpace(process.StdErr)
+            ? process.StdErr
+            : process.StdOut;
+        if (string.IsNullOrWhiteSpace(source)) return "no process detail";
+        var detail = string.Join(' ', source
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (detail.StartsWith(
+                "Dependency preparation directory is missing:",
+                StringComparison.Ordinal))
+            return detail;
+        const int maximumLength = 1_000;
+        return detail.Length <= maximumLength ? detail : detail[..maximumLength];
+    }
 
     private static string BudgetSummary(int timeoutSeconds, CommandExecution execution)
     {

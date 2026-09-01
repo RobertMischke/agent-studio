@@ -297,6 +297,48 @@ public sealed class AttemptAuthorityServiceTests : IDisposable
     }
 
     [Fact]
+    public void Preparation_failure_retry_uses_rebuilt_plan_for_the_current_source()
+    {
+        var service = NewService();
+        var run = service.AcquireRun(
+            "AGT-1", "PROJ-1", null, "runner", "host", 60, "run-create").RunAttempt!;
+        service.SettleRun(new SettleRunAttemptRequest
+        {
+            Write = new AttemptWriteReference(
+                run.AttemptId, run.LastFence, run.AuthorityEpoch, "run-complete"),
+            Outcome = "done",
+            ResultSha = "sha-a",
+        });
+        var stalePlan = new AgentStudio.TaskServer.Contracts.ReviewPlanDto(
+            [], [], Preparation:
+            [
+                new AgentStudio.TaskServer.Contracts.ReviewPreparationCommandDto(
+                    "prepare-1", "bash", ["-lc", "npm ci"], "stale-salvage"),
+            ]);
+        var firstReview = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-1", "PROJ-1", "sha-a", run.AttemptId, "req", "policy", [],
+            "review-create-a", Plan: stalePlan)).ReviewAttempt!;
+        var claimed = service.ClaimReview(
+            firstReview.AttemptId, "reviewer", "host", 60, "review-claim").ReviewAttempt!;
+        service.SettleReview(new SettleReviewAttemptRequest(
+            new AttemptWriteReference(
+                claimed.AttemptId, claimed.LastFence, claimed.AuthorityEpoch, "review-settle"),
+            "sha-a",
+            ReviewTerminalOutcome.InfrastructureFailure,
+            "PreparationFailed",
+            "preparation directory is missing"));
+        var rebuiltPlan = new AgentStudio.TaskServer.Contracts.ReviewPlanDto([], []);
+
+        var retry = service.CreateReviewAttempt(new CreateReviewAttemptRequest(
+            "AGT-1", "PROJ-1", "sha-a", run.AttemptId, "req", "policy", [],
+            "review-create-b", firstReview.AttemptId, Plan: rebuiltPlan)).ReviewAttempt!;
+
+        Assert.Same(rebuiltPlan, retry.Subject.Plan);
+        Assert.Empty(retry.Subject.Plan!.Preparation ?? []);
+        Assert.NotEqual(firstReview.Subject.Plan, retry.Subject.Plan);
+    }
+
+    [Fact]
     public void Living_process_reclaim_of_its_own_dead_lease_keeps_answering_LeaseExpired()
     {
         var now = new DateTime(2026, 7, 28, 0, 0, 0, DateTimeKind.Utc);
