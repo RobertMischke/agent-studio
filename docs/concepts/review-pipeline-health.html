@@ -205,11 +205,12 @@ starves, however many cards are ready.</p>
       <li>After lock acquisition there is <strong>no watchdog</strong>: a hung spawn held the lock
           for 2.5&nbsp;h on 23.07.; ~12 queued gates died at the 62-min queue SLA.</li>
       <li>Queue-SLA victims count as card failures and consume anti-churn budget.</li>
-      <li><strong>Since 23.07.:</strong> the <strong>ssh-gate bridge</strong> runs gates on the
-          remote host first (2 in parallel, full suite ≈ 2&nbsp;min, disposable worktree at the
-          exact SHA, remote-side timeout); the local path remains only as fallback.</li>
+      <li><strong>Since 01.09.:</strong> canonical Remote review freezes deterministic build
+          and test commands into an immutable ReviewSubject. A remote Review Executor claims
+          the ReviewAttempt with a lease and fence, runs the commands in an exact-SHA workspace,
+          and reports per-step evidence. The former SSH dispatch and local fallback are removed.</li>
     </ul>
-    <div class="cards">containment: MachineBound traits + build-profile filter · bridge: AGT-2222 T2 (cleanup card tracks its removal)</div>
+    <div class="cards">current Remote path: immutable ReviewSubject · claimed ReviewAttempt · exact-SHA evidence</div>
   </div>
   <div class="panel soll"><span class="tag">SOLL</span>
     <h3>Merged subject, watchdog, distributed</h3>
@@ -218,9 +219,10 @@ starves, however many cards are ready.</p>
           green today?”; merge conflict is its own honest outcome.</li>
       <li>Hard wall-clock watchdog from lock acquisition; a hung gate frees the lock and reports
           an <strong>infrastructure failure</strong>, which never consumes card budget.</li>
-      <li>Gates run on remote hosts in parallel; the local lock stops being the global bottleneck.</li>
+      <li>Review build/test commands run remotely through claimable steps. A future dedicated
+          GateAttempt can apply the same authority model to integration and release gates.</li>
     </ul>
-    <div class="cards">AGT-2258 · AGT-2257 · AGT-2229</div>
+    <div class="cards">AGT-2258 · AGT-2257 · W18 Remote Gate target</div>
   </div>
 </div>
 

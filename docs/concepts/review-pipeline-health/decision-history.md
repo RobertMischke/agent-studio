@@ -2,6 +2,16 @@
 
 Newest first. Every entry: date · decision · reasoning · card/commit reference.
 
+## 2026-09-01: SSH gate shortcut retired after Remote Review replacement
+Canonical Remote review now freezes deterministic build and test commands into
+the immutable ReviewSubject. A Review Executor claims the ReviewAttempt through
+the Task Server lease and fence contract, materializes the exact Result-SHA,
+executes each command as a projected pipeline step, and returns fenced evidence.
+AGT-2262 therefore removed `RemoteSshHost`, direct SSH process dispatch, the
+process-local host semaphore, `$HOME/gate-work`, alias projection, and local
+fallback. Local exact-subject execution remains only for local compatibility
+and integration-owner gates. It is not a fallback from canonical Remote review.
+
 ## 2026-08-18: Review-plane restart is loss-free; adaptive parallelism and plane priority ship as recommendations, not auto-executors
 The critical unknown blocking AGT-2645's auto-scaling proposal, whether
 `sudo agent-runner-deploy config review RUNNER_MAX_PARALLELISM <n>` (the

@@ -538,13 +538,14 @@ state.
   the chain reaches a terminal lane and the pickup queue is empty, the normal
   revert applies.
 
-- Remote host capacity is reported as distinct workload classes. RUN occupancy
-  comes from every daemon claim poll (`ActiveSlots` plus `AvailableSlots`, whose
-  sum is the configured host maximum). Remote SSH build/test GATE occupancy
-  comes from gate start/completion events and runs outside RUN slots. Host CPU
-  and load include both pools and unrelated processes, so neither is inferred
-  from lane membership or from CPU percentage. This keeps claim/lane drift
-  visible instead of silently folding it into a slot count.
+- Remote host capacity reports centrally admitted workload and lease truth. RUN
+  occupancy comes from every daemon claim poll (`ActiveSlots` plus
+  `AvailableSlots`, whose sum is the configured host maximum). Canonical Remote
+  review commands use Review Executor admission and ReviewAttempt authority;
+  there is no process-local SSH gate workload class. Host CPU and load include
+  both executor planes and unrelated processes, so neither is inferred from
+  lane membership or CPU percentage. This keeps claim/lane drift visible
+  instead of silently folding it into a slot count.
 
 - `RuntimeCapacitySettingsService` in the Task Server owns the versioned host
   ceiling, target load, and ramp strategy. The first Runner registration seeds
@@ -552,8 +553,9 @@ state.
   inherit it. Admission counts active Coding RUN authority across every Runner
   process on that host. Capacity changes take effect without a daemon restart
   and never cancel already-running work. Projects consume the shared host
-  ceiling and do not own independent capacity settings. Review GATE work
-  remains governed by its separate pool and does not consume a RUN slot.
+  ceiling and do not own independent capacity settings. Canonical Remote review
+  work is admitted by the Review Executor and does not consume a Coding RUN
+  slot.
 
 - Linux host resource enforcement belongs to agent-host-managed systemd units,
   separately for Coding and Review. Host-level cgroups are the hard CPU and I/O

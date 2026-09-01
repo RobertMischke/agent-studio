@@ -31,8 +31,6 @@ const HOST: RemoteHost = {
   activeTaskCount: 1,
   availableSlots: 19,
   releaseId: 'release-20260811.1',
-  activeGateCount: 2,
-  gateCapacity: 4,
   telemetry: {
     clientId: 'agent-runner',
     window: '1h',
@@ -110,8 +108,7 @@ describe('RemoteHostCardComponent', () => {
     // RAM 24/62 GB used => 39%
     expect(el.querySelector('[data-meter="ram"] .meter__pct')?.textContent).toContain('39%');
     expect(el.querySelector('[data-testid="remote-host-run-pool"]')?.textContent).toContain('1 active');
-    expect(el.querySelector('[data-testid="remote-host-gate-pool"]')?.textContent).toContain('2 running · pool 4');
-    expect(el.querySelector('[data-testid="remote-host-cpu-context"]')?.textContent).toContain('does not consume a RUN slot');
+    expect(el.querySelector('[data-testid="remote-host-gate-pool"]')).toBeNull();
   });
 
   it('shows a neutral live-loading state instead of cached stopped data', () => {

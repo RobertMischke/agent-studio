@@ -15,5 +15,4 @@ export class HostWorkloadSummaryComponent {
   readonly runSlotsStale = input(false);
   readonly runSlotsDiverge = input(false);
   readonly runSlotsTooltip = input('');
-  readonly gateWork = input.required<string>();
 }

@@ -192,13 +192,6 @@ export class RemoteHostCardComponent {
     }
     return `Telemetry and board leases agree on ${telemetry.activeSlots} active ${telemetry.activeSlots === 1 ? 'slot' : 'slots'}.`;
   });
-  readonly gateWorkLabel = computed(() => {
-    if (this.liveLoading()) return 'Loading gate events…';
-    if (this.liveError()) return 'Live count unavailable';
-    const active = this.host().activeGateCount ?? 0;
-    const capacity = this.host().gateCapacity ?? 0;
-    return capacity > 0 ? `${active} running · pool ${capacity}` : `${active} running`;
-  });
   readonly failedProjectPreflights = computed(() =>
     (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
   );
@@ -255,7 +248,7 @@ export class RemoteHostCardComponent {
     if (!policy || policy.allowAllProjects) return 'All registered projects allowed';
     return `${policy.allowedProjectIds.length} selected projects allowed`;
   });
-  readonly hostWorkSummary = computed(() => `${this.runSlotsLabel()} · ${this.gateWorkLabel()}`);
+  readonly hostWorkSummary = computed(() => this.runSlotsLabel());
   readonly systemLoadSummary = computed(() => this.loadLabel() ?? 'System load not reported');
 
   latestAuthTransition(badge: ProviderAuthBadge) {

@@ -575,7 +575,6 @@ function projectClient(host: RemoteHost, client: ClientSummary, status: RemoteHo
     daemonState: status === 'offline' || status === 'retired' ? 'stopped' : client.runnerDaemonState ?? 'running',
     lastClaimAt: client.runnerLastClaimAt ?? null, activeTaskCount: client.runnerActiveSlots ?? 0,
     availableSlots: client.runnerAvailableSlots ?? 0, retireRequestedAt: client.retireRequestedAt ?? null,
-    activeGateCount: client.runnerActiveGateCount ?? 0, gateCapacity: client.runnerGateCapacity ?? 0,
     ...clientCapacity(host, client),
   };
 }

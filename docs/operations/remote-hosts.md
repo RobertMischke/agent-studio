@@ -132,8 +132,9 @@ new admission stops. The card distinguishes the central ceiling from the last
 version explicitly confirmed by the daemon. A matching value alone is not an
 acknowledgement. The Task Server records `runtime-capacity.updated` and the
 first matching runner poll records `runtime-capacity.applied`, both with actor
-and timestamp in the audit ledger. Review GATE work remains a separate pool and
-does not consume a RUN slot.
+and timestamp in the audit ledger. Canonical Remote review commands are
+admitted by the Review Executor and do not consume a Coding RUN slot. The host
+card no longer projects a separate process-local GATE pool.
 
 `RUNNER_MAX_PARALLELISM` is no longer the live operator control for a versioned
 Task Server. It seeds the first registration and remains a compatibility
