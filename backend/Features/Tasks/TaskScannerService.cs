@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using AgentStudio.Runner;
@@ -126,9 +127,14 @@ public class TaskScannerService : ITaskScanner
     /// the FileSystemWatcher's debounce window. No-op when no cache is
     /// registered (test fixtures that build the scanner directly).
     /// </summary>
-    public void InvalidateCache()
+    public void InvalidateCache(
+        [CallerMemberName] string callerMemberName = "",
+        [CallerFilePath] string callerFilePath = "")
     {
-        _indexCache?.Invalidate(TaskIndexCache.InvalidationSource.Mutation);
+        _indexCache?.Invalidate(
+            TaskIndexCache.InvalidationSource.Mutation,
+            callerMemberName,
+            callerFilePath);
         _statsMetadataCache?.Invalidate();
     }
 

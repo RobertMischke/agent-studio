@@ -72,11 +72,45 @@ internal static class TaskJsonFile
     }
 
     /// <summary>
-    /// Remove a top-level key from <c>task.json</c> if present. No-op when the
-    /// file or key is absent. Used to clean up obsolete fields after a feature
-    /// is removed (e.g. the operator-override <c>excludedCommits</c> array).
+    /// Reads a top-level string field. A missing field is a successful read
+    /// with a <see langword="null"/> value; a missing or unreadable file is a
+    /// failed read so callers can preserve their existing write path.
     /// </summary>
-    internal static void RemoveField(string jobDir, string fieldName, ILogger logger)
+    internal static bool TryReadStringField(
+        string jobDir,
+        string fieldName,
+        ILogger logger,
+        out string? value)
+    {
+        value = null;
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
+        if (!File.Exists(jobJsonPath)) return false;
+
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+            if (!doc.TryGetValue(fieldName, out var field) || field.ValueKind == JsonValueKind.Null)
+                return true;
+            if (field.ValueKind != JsonValueKind.String) return false;
+            value = field.GetString();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to read field {Field} from task.json at {Dir}", fieldName, jobDir);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Replaces or adds multiple top-level fields in one atomic rewrite.
+    /// </summary>
+    internal static void UpdateFields(
+        string jobDir,
+        IReadOnlyDictionary<string, object> values,
+        ILogger logger)
     {
         var jobJsonPath = Path.Combine(jobDir, "task.json");
         if (!File.Exists(jobJsonPath)) return;
@@ -86,7 +120,42 @@ internal static class TaskJsonFile
             var json = File.ReadAllText(jobJsonPath);
             var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
                       ?? new Dictionary<string, JsonElement>();
-            if (!doc.ContainsKey(fieldName)) return;
+            var updated = new Dictionary<string, object>();
+            foreach (var kv in doc)
+            {
+                updated[kv.Key] = values.TryGetValue(kv.Key, out var replacement)
+                    ? replacement
+                    : kv.Value;
+            }
+            foreach (var kv in values)
+            {
+                if (!updated.ContainsKey(kv.Key)) updated[kv.Key] = kv.Value;
+            }
+
+            Write(jobJsonPath, updated);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to update fields in task.json at {Dir}", jobDir);
+        }
+    }
+
+    /// <summary>
+    /// Remove a top-level key from <c>task.json</c> if present. No-op when the
+    /// file or key is absent. Used to clean up obsolete fields after a feature
+    /// is removed (e.g. the operator-override <c>excludedCommits</c> array).
+    /// </summary>
+    internal static bool RemoveField(string jobDir, string fieldName, ILogger logger)
+    {
+        var jobJsonPath = Path.Combine(jobDir, "task.json");
+        if (!File.Exists(jobJsonPath)) return false;
+
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+            if (!doc.ContainsKey(fieldName)) return false;
 
             var updated = new Dictionary<string, object>();
             foreach (var kv in doc)
@@ -96,10 +165,12 @@ internal static class TaskJsonFile
             }
 
             Write(jobJsonPath, updated);
+            return true;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to remove field {Field} from task.json at {Dir}", fieldName, jobDir);
+            return false;
         }
     }
 
