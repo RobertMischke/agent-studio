@@ -83,6 +83,14 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     public void SetIndexCache(TaskIndexCache cache) => _indexCache = cache;
 
+    /// <summary>
+    /// Version stamp of the currently published index snapshot, or 0 when no
+    /// cache is wired (test fixtures on the direct disk-walk path). Read it
+    /// after a scan so request-scoped projections can memoize against it. It
+    /// never triggers a refresh on its own.
+    /// </summary>
+    public long SnapshotGeneration => _indexCache?.Generation ?? 0;
+
     public void SetStatsMetadataCache(JobStatsMetadataCache cache) => _statsMetadataCache = cache;
 
     /// <summary>

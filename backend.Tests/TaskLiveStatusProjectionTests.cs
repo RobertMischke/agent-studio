@@ -39,7 +39,7 @@ public sealed class TaskLiveStatusProjectionTests
         };
 
         var result = TaskLiveStatusProjection.Build(
-            Job(), pipeline, execution, new ProjectSettings(), prompts, queue: null);
+            Job(), pipeline, execution, new ProjectSettings(), () => prompts, queue: null);
 
         Assert.Equal(3, result.Attempt);
         Assert.Equal("aspect-tests", result.ActiveStep?.StepId);
@@ -72,7 +72,7 @@ public sealed class TaskLiveStatusProjectionTests
         };
 
         var result = TaskLiveStatusProjection.Build(
-            Job(), Pipeline(), current, new ProjectSettings(), [], queue: null);
+            Job(), Pipeline(), current, new ProjectSettings(), () => [], queue: null);
 
         Assert.Equal(7, result.Attempt);
         Assert.Null(result.ActiveStep);
@@ -101,7 +101,7 @@ public sealed class TaskLiveStatusProjectionTests
             Pipeline(),
             completed,
             new ProjectSettings(),
-            [],
+            () => [],
             new TaskLiveQueue { Kind = "runner", Position = 2 });
 
         Assert.Equal(5, result.Attempt);

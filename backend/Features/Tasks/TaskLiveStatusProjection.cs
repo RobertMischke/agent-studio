@@ -40,9 +40,16 @@ public sealed class TaskLiveStatusProjection(
             var pipeline = ProjectPipelineOrder.Apply(
                 UiTaskPipelineRouter.Select(job, settings),
                 settings);
-            IReadOnlyList<StepPromptEntry> prompts =
-                execution is null ? Array.Empty<StepPromptEntry>() : promptLog.ReadForJob(job.FolderPath);
-            result[job.TaskKey] = Build(job, pipeline, execution, settings, prompts, queue);
+            // The prompt log (.metadata/prompts.jsonl) holds full prompt texts
+            // and is only consulted when a running step actually exists. Pass it
+            // as a lazy factory so a poll over Ready/idle cards never parses it.
+            result[job.TaskKey] = Build(
+                job,
+                pipeline,
+                execution,
+                settings,
+                () => promptLog.ReadForJob(job.FolderPath),
+                queue);
         }
 
         return result;
@@ -53,7 +60,7 @@ public sealed class TaskLiveStatusProjection(
         TaskPipeline pipeline,
         PipelineExecutionRecord? execution,
         ProjectSettings settings,
-        IReadOnlyList<StepPromptEntry> prompts,
+        Func<IReadOnlyList<StepPromptEntry>> prompts,
         TaskLiveQueue? queue)
     {
         var definitions = pipeline.AllSteps
@@ -78,7 +85,7 @@ public sealed class TaskLiveStatusProjection(
         if (running is not null)
         {
             var definition = byId[running.StepId];
-            var prompt = prompts
+            var prompt = prompts()
                 .Where(entry => string.Equals(entry.StepId, running.StepId, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(entry => entry.At)
                 .FirstOrDefault();
