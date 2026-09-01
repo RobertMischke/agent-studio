@@ -31,7 +31,7 @@ describe('ProviderAuthStatusService', () => {
 
     expect(notifications.notifications()).toHaveLength(1);
     expect(notifications.notifications()[0].title).toBe('Claude sign-in required');
-    expect(notifications.notifications()[0].message).toContain('changed from OK to unavailable');
+    expect(notifications.notifications()[0].message).toContain('genuinely signed out');
     expect(notifications.notifications()[0].message).toContain('runner-berlin');
   });
 
@@ -44,12 +44,36 @@ describe('ProviderAuthStatusService', () => {
     expect(notifications.notifications()).toHaveLength(1);
     expect(notifications.notifications()[0].title).toBe('Claude authentication expires soon');
     expect(notifications.notifications()[0].message).toContain('expires in 10 days');
+    expect(notifications.notifications()[0].kind).toBe('info');
+  });
+
+  it('reports transient and limited states quietly without a sign-in alarm', () => {
+    service.ingest([snapshot('ready')]);
+    service.ingest([snapshot('ready', null, 'transient-error')]);
+    service.ingest([snapshot('limited', null, 'rate-limited')]);
+
+    expect(notifications.notifications().map(item => item.title)).toEqual([
+      'Claude auth retrying',
+      'Claude rate-limited',
+    ]);
+    expect(notifications.notifications().every(item => item.kind === 'info')).toBe(true);
+  });
+
+  it('announces automatic recovery from confirmed sign-out', () => {
+    service.ingest([snapshot('ready')]);
+    service.ingest([snapshot('unavailable', null, 'signed-out')]);
+    service.ingest([snapshot('ready', null, 'authenticated')]);
+
+    expect(notifications.notifications().at(-1)?.title).toBe('Claude authentication recovered');
+    expect(notifications.notifications().at(-1)?.kind).toBe('success');
   });
 });
 
 function snapshot(
-  status: 'ready' | 'unavailable',
+  status: 'ready' | 'limited' | 'unavailable',
   expiresAt: string | null = null,
+  condition: 'authenticated' | 'transient-error' | 'rate-limited' | 'credentials-expiring'
+    | 'signed-out' | 'unverified' | 'binary-missing' | null = null,
 ): TaskServerRunnerCapabilitySnapshot {
   const now = new Date().toISOString();
   return {
@@ -73,7 +97,9 @@ function snapshot(
       healthState: 'healthy', advertisedAt: now,
       freshUntil: new Date(Date.now() + 120_000).toISOString(), isFresh: true,
       consecutiveFailures: 0, detail: status === 'ready' ? 'Active session confirmed' : 'Not logged in',
-      expiresAt, affectedClaims: [], recoveryHistory: [],
+      expiresAt, condition,
+      retryAt: condition === 'rate-limited' ? new Date(Date.now() + 60_000).toISOString() : null,
+      affectedClaims: [], recoveryHistory: [],
     }],
   };
 }

@@ -54,10 +54,26 @@ export class ProviderAuthStatusService implements OnDestroy {
     if (wasLoaded) {
       for (const [id, current] of next) {
         const prior = this.previous.get(id);
-        if (prior?.state === 'ok' && current.state === 'unavailable') {
+        if (prior?.state !== 'signed-out' && current.state === 'signed-out') {
           this.notifications.warning(
-            `${current.providerLabel} authentication changed from OK to unavailable on ${current.hostName}. Ready cards assigned to this host are waiting. ${current.detail}`,
+            `${current.providerLabel} is genuinely signed out on ${current.hostName}. Ready cards assigned to this host are waiting for re-authentication. ${current.detail}`,
             `${current.providerLabel} sign-in required`,
+          );
+        } else if (prior?.state !== 'transient' && current.state === 'transient') {
+          this.notifications.info(
+            `${current.providerLabel} reported a transient authentication error on ${current.hostName}; the runner is retrying and remains available. ${current.detail}`,
+            `${current.providerLabel} auth retrying`,
+          );
+        } else if (prior?.state !== 'limited' && current.state === 'limited') {
+          const until = current.retryAt ? ` until ${new Date(current.retryAt).toLocaleString()}` : '';
+          this.notifications.info(
+            `${current.providerLabel} is rate-limited${until} on ${current.hostName}. Matching work will resume automatically.`,
+            `${current.providerLabel} rate-limited`,
+          );
+        } else if (prior?.state === 'signed-out' && current.state === 'ok') {
+          this.notifications.success(
+            `${current.providerLabel} authentication recovered on ${current.hostName}; the runner re-advertised itself without a restart.`,
+            `${current.providerLabel} authentication recovered`,
           );
         }
       }
@@ -67,7 +83,7 @@ export class ProviderAuthStatusService implements OnDestroy {
       const warningKey = `${current.id}:${current.expiresAt}`;
       if (this.expiryWarnings.has(warningKey)) continue;
       this.expiryWarnings.add(warningKey);
-      this.notifications.warning(
+      this.notifications.info(
         `${current.providerLabel} authentication on ${current.hostName} ${current.expiryLabel.toLowerCase()}. Renew it before Ready cards are held.`,
         `${current.providerLabel} authentication expires soon`,
       );

@@ -1463,7 +1463,12 @@ public sealed class V1ReviewExecutorRegistry
                     capability.Identity,
                     capability.Detail,
                     [],
-                    []);
+                    [],
+                    capability.Condition,
+                    capability.EvidenceObservedAt,
+                    capability.ExpiresAt,
+                    capability.RetryAt,
+                    capability.CredentialUpdatedAt);
             })
             .GroupBy(capability => capability.Key, StringComparer.Ordinal)
             .Select(group => group.Last())
@@ -1516,6 +1521,38 @@ public sealed class V1ReviewExecutorRegistry
                     .ToArray();
             }
 
+            if (_capabilityFailures.TryGetValue(runnerId, out var providerFailures))
+            {
+                capabilities = capabilities.Select(capability =>
+                {
+                    if (!capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal)
+                        || capability.AdvertisedStatus != "ready"
+                        || capability.Condition is not (Contract.ProviderAuthConditions.Authenticated
+                            or Contract.ProviderAuthConditions.CredentialsExpiring)
+                        || capability.EvidenceObservedAt is null
+                        || !providerFailures.TryGetValue(capability.Key, out var failure)
+                        || capability.EvidenceObservedAt <= failure.LastFailureAt)
+                    {
+                        return capability;
+                    }
+
+                    providerFailures.Remove(capability.Key);
+                    return capability with
+                    {
+                        RecoveryHistory = capability.RecoveryHistory
+                            .Append(new Contract.CapabilityRecoveryEventDto(
+                                advertisedAt,
+                                failure.HealthState,
+                                Contract.CapabilityHealthStates.Healthy,
+                                "A later provider authentication probe confirmed recovery."))
+                            .TakeLast(20)
+                            .ToArray(),
+                    };
+                }).ToArray();
+                if (providerFailures.Count == 0)
+                    _capabilityFailures.Remove(runnerId);
+            }
+
             registration = registration with { LastSeenAt = now };
             _registrations[runnerId] = registration;
             _capabilityStates[runnerId] = new CapabilityState(
@@ -1523,15 +1560,10 @@ public sealed class V1ReviewExecutorRegistry
                 request.Generation,
                 capabilities,
                 request.Telemetry);
-            // An advertisement refreshes the capability snapshot; it is NOT a
-            // health verdict. The review daemon re-advertises every 60 seconds, so
-            // clearing the drain here meant the cooldown never drained anything: an
-            // executor with a broken capability became claim-eligible again a
-            // minute later, over and over. A pause therefore lifts only by its own
-            // cooldown expiring or by a full re-registration
-            // (PUT /api/v1/runners/{id} - a daemon restart, a genuinely new
-            // instance declaring its health). While a cooldown is active the
-            // failure counters stay untouched, so the backoff keeps escalating.
+            // A routine advertisement is not a health verdict. Only a provider
+            // auth advertisement with newer successful probe evidence may clear
+            // that provider's old failure. Other drains still need cooldown or a
+            // full re-registration.
             if (!HasActiveCapabilityCooldownLocked(runnerId, now))
                 ClearCapabilityFailures(runnerId);
             return new Contract.RunnerCapabilitySnapshotDto(
@@ -1688,10 +1720,10 @@ public sealed class V1ReviewExecutorRegistry
 
     /// <summary>
     /// True while a drained capability holds this runner's claims. The pause is
-    /// self-healing but not free: it lifts when the cooldown expires, or when the
-    /// runner re-registers (a restarted daemon). A capability advertisement alone
-    /// does not lift it - the daemon repeats that every minute and would otherwise
-    /// never actually be drained.
+    /// self-healing but not free: it lifts when the cooldown expires, when the
+    /// runner re-registers, or when a newer successful provider-auth probe proves
+    /// that the specific authentication failure recovered. Routine repeated
+    /// advertisements do not lift it.
     /// </summary>
     public bool TryGetCapabilityPause(string runnerId, out CapabilityPause pause)
     {

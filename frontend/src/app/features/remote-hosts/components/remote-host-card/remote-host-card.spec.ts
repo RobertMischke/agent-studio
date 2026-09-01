@@ -177,8 +177,8 @@ describe('RemoteHostCardComponent', () => {
     ) as HTMLElement;
 
     expect(badge.textContent).toContain('Claude');
-    expect(badge.textContent).toContain('unavailable');
-    expect(badge.getAttribute('data-state')).toBe('unavailable');
+    expect(badge.getAttribute('data-state')).toBe('signed-out');
+    expect(badge.textContent).toContain('genuinely signed out, re-auth needed');
     expect(fixture.debugElement
       .query(By.css('[data-testid="remote-host-provider-auth-claude"]'))
       .injector.get(AppTooltipDirective).appTooltip()).toContain('Not logged in');

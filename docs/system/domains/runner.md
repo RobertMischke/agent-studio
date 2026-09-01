@@ -506,10 +506,20 @@ state.
   assembly package version.
 - Provider-auth advertisement changes are appended to the same bounded recovery
   history exposed by the management snapshot. Execution Hosts turns that data
-  into per-CLI `OK`, `Unavailable`, and `Unknown` badges, transition
-  notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
-  A recognized provider-auth run failure reports unavailability immediately so
-  revocation between periodic probes is visible.
+  into per-CLI authenticated, transient-retry, rate-limited, expiring,
+  signed-out, unavailable, and unknown badges. Probe and run-exit classification
+  use only provider-owned terminal evidence; authored prompts, tool failures,
+  ordinary nonzero exits, timeouts, and network races cannot become sign-in
+  failures. Two consecutive explicit auth failures are required before
+  `provider-auth:<cliType>` becomes unavailable. Rate limits advertise a retry
+  deadline and pause only the matching provider. A newer successful probe clears
+  an old auth drain and re-advertises ready without a runner restart.
+- Provider probes read only secret-free credential metadata from the host-local
+  Claude and Codex stores after the CLI status command has had its bounded
+  non-interactive refresh opportunity. Known hard expiry and file-update times
+  travel with the capability; token values never do. An approaching expiry is a
+  quiet 14-day warning and remains claim-ready until authentication is actually
+  confirmed gone.
 - Account-level provider session, usage, and rate limits are CLI capability
   state, not task outcomes. The local runner records `claude: limited until
   <time>` in runner status, persists the current card in provider-scoped

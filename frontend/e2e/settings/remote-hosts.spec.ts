@@ -701,7 +701,7 @@ test.describe('Execution Hosts settings section', () => {
     expect(String(createBody?.['promptMarkdown'])).not.toContain(providerSecret);
   });
 
-  test('shows provider auth OK, unavailable, and unknown states with renewal context', async ({ page }) => {
+  test('distinguishes provider auth retry, limit, expiry, sign-out, and unknown states', async ({ page }) => {
     const now = Date.now();
     const capability = (key: string, advertisedStatus: string, detail?: string) => ({
       key, category: key.split(':')[0], advertisedStatus, healthState: 'healthy',
@@ -713,7 +713,7 @@ test.describe('Execution Hosts settings section', () => {
     });
     const claude = {
       ...capability('provider-auth:claude', 'unavailable', 'Not logged in'),
-      expiresAt: new Date(now + 10 * 24 * 60 * 60_000).toISOString(),
+      condition: 'signed-out',
       recoveryHistory: [{
         occurredAt: new Date(now - 30_000).toISOString(), fromState: 'ready',
         toState: 'unavailable', reason: 'Provider probe changed.',
@@ -730,8 +730,20 @@ test.describe('Execution Hosts settings section', () => {
         hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
         capabilities: [
           capability('cli-execution:claude', 'ready'), claude,
-          capability('cli-execution:codex', 'ready'), capability('provider-auth:codex', 'ready', 'Active session confirmed'),
-          capability('cli-execution:gemini', 'ready'),
+          capability('cli-execution:codex', 'ready'), {
+            ...capability('provider-auth:codex', 'limited', 'rate limit exceeded'),
+            condition: 'rate-limited', retryAt: new Date(now + 5 * 60 * 60_000).toISOString(),
+          },
+          capability('cli-execution:gemini', 'ready'), {
+            ...capability('provider-auth:gemini', 'ready', 'temporary token refresh race'),
+            condition: 'transient-error',
+          },
+          capability('cli-execution:copilot', 'ready'), {
+            ...capability('provider-auth:copilot', 'ready', 'Credential renewal needed soon'),
+            condition: 'credentials-expiring',
+            expiresAt: new Date(now + 10 * 24 * 60 * 60_000).toISOString(),
+          },
+          capability('cli-execution:kimi', 'ready'),
         ],
         telemetry: null,
       }]),
@@ -740,10 +752,15 @@ test.describe('Execution Hosts settings section', () => {
     await page.goto('/#/workspace/settings/remote-hosts');
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     await expandHost(remote);
-    await expect(remote.getByTestId('remote-host-provider-auth-claude')).toHaveAttribute('data-state', 'unavailable');
-    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'ok');
-    await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toHaveAttribute('data-state', 'unknown');
-    await expect(remote.getByTestId('remote-host-provider-auth-expiry-claude')).toContainText('Expires in 10 days');
+    await expect(remote.getByTestId('remote-host-provider-auth-claude')).toHaveAttribute('data-state', 'signed-out');
+    await expect(remote.getByTestId('remote-host-provider-auth-claude')).toContainText('genuinely signed out, re-auth needed');
+    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'limited');
+    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toContainText('rate-limited');
+    await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toHaveAttribute('data-state', 'transient');
+    await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toContainText('transient auth error, retrying');
+    await expect(remote.getByTestId('remote-host-provider-auth-copilot')).toHaveAttribute('data-state', 'expiring');
+    await expect(remote.getByTestId('remote-host-provider-auth-expiry-copilot')).toContainText('Expires in 10 days');
+    await expect(remote.getByTestId('remote-host-provider-auth-kimi')).toHaveAttribute('data-state', 'unknown');
     await expect(remote.getByTestId('remote-host-provider-auth-history-claude')).toContainText('ready → unavailable');
     await remote.getByTestId('remote-host-provider-auth-claude').hover();
     await expect(page.getByRole('tooltip')).toContainText('Not logged in');

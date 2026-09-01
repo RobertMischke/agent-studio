@@ -820,7 +820,7 @@ public sealed class TaskServerStoreTests
             request with
             {
                 OutcomeDecision = ExecutionOutcomeAdapter.Classify(
-                    decision.RawFacts with { StdErr = "HTTP 401 different replay facts" }),
+                    decision.RawFacts with { StdErr = "HTTP 401 Missing bearer authentication with different replay facts" }),
             },
             "runner-a",
             default));

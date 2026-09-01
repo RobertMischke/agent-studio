@@ -150,8 +150,8 @@ public static class ExecutionOutcomeAdapter
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex Authentication = new(
-        @"(?:\b401\b|unauthori[sz]ed|authentication\s+(?:failed|required)|missing\s+(?:bearer|basic)\s+authentication|login\s+required|invalid\s+(?:api\s+)?key)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"(?:unauthori[sz]ed|(?:^|\n)\s*(?:error:\s*)?authentication\s+(?:failed|required)|missing\s+(?:bearer(?:\s+or\s+basic)?|basic(?:\s+or\s+bearer)?)\s+authentication|not\s+(?:logged|signed)\s+in|login\s+required|please\s+log\s*in|no\s+credentials|invalid\s+(?:(?:api\s+)?key|credentials)|(?:oauth|access|refresh)\s+token\s+(?:has\s+)?expired)",
+        RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled);
 
     private static readonly Regex Quota = new(
         @"(?:\b429\b|quota\s+(?:exceeded|exhausted)|rate\s*limit(?:ed| exceeded)?|usage\s+limit|insufficient_quota|too\s+many\s+requests)",
@@ -187,11 +187,11 @@ public static class ExecutionOutcomeAdapter
         var providerFailureEvent = providerFailed
             ? facts.ProviderTerminalEvent
             : null;
-        var failedStdOut = (providerFailed || facts.ExitCode is < 0 or > 0)
-                           && string.IsNullOrWhiteSpace(facts.FinalAssistantOutput)
-            ? facts.StdOut
-            : null;
-        var diagnostic = Join(providerFailureEvent, facts.StdErr, failedStdOut);
+        // Only provider-owned terminal frames and stderr are failure evidence.
+        // Raw stdout can contain the authored prompt and assistant discussion;
+        // scanning it let words such as "authentication failure" in a task body
+        // turn an unrelated tool error into a fleet-wide auth outage (AGT-2694).
+        var diagnostic = Join(providerFailureEvent, facts.StdErr);
         var allOutput = Join(diagnostic, facts.FinalAssistantOutput, facts.StdOut);
         var sentinel = LastSentinel(
             string.IsNullOrWhiteSpace(facts.FinalAssistantOutput)
@@ -221,10 +221,10 @@ public static class ExecutionOutcomeAdapter
             return Decide(facts, ExecutionOutcomeKind.OutOfMemory, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.SessionState == ExecutionSessionState.Invalid || (!honestTerminal && InvalidSession.IsMatch(diagnostic)))
             return Decide(facts, ExecutionOutcomeKind.InvalidSession, OutcomeConfidence.High, null, infrastructure: true);
-        if (!honestTerminal && Authentication.IsMatch(diagnostic))
-            return Decide(facts, ExecutionOutcomeKind.AuthenticationFailure, OutcomeConfidence.High, null, infrastructure: true);
         if (!honestTerminal && Quota.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.QuotaExceeded, OutcomeConfidence.High, null, infrastructure: true);
+        if (!honestTerminal && Authentication.IsMatch(diagnostic))
+            return Decide(facts, ExecutionOutcomeKind.AuthenticationFailure, OutcomeConfidence.High, null, infrastructure: true);
         if (!honestTerminal && InvalidConfiguration.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.InvalidModelOrConfiguration, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.LaunchFailed)

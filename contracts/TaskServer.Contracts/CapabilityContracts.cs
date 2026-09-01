@@ -41,13 +41,34 @@ public static class CapabilityHealthStates
     public const string HalfOpen = "half-open";
 }
 
+/// <summary>
+/// Diagnostic provider-auth condition. Admission still uses the capability
+/// status: transient and expiring conditions stay ready, limited pauses only
+/// the matching provider, and signed-out is unavailable.
+/// </summary>
+public static class ProviderAuthConditions
+{
+    public const string Authenticated = "authenticated";
+    public const string TransientError = "transient-error";
+    public const string RateLimited = "rate-limited";
+    public const string CredentialsExpiring = "credentials-expiring";
+    public const string SignedOut = "signed-out";
+    public const string Unverified = "unverified";
+    public const string BinaryMissing = "binary-missing";
+}
+
 public sealed record AdvertisedCapabilityDto(
     string Key,
     string Category,
     string Status = "ready",
     string? Version = null,
     string? Identity = null,
-    string? Detail = null);
+    string? Detail = null,
+    string? Condition = null,
+    DateTime? EvidenceObservedAt = null,
+    DateTime? ExpiresAt = null,
+    DateTime? RetryAt = null,
+    DateTime? CredentialUpdatedAt = null);
 
 public sealed record CapabilityAdvertisementRequest(
     string RunnerId,
@@ -128,7 +149,12 @@ public sealed record CapabilityHealthDto(
     string? Identity,
     string? Detail,
     IReadOnlyList<string> AffectedClaims,
-    IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory);
+    IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory,
+    string? Condition = null,
+    DateTime? EvidenceObservedAt = null,
+    DateTime? ExpiresAt = null,
+    DateTime? RetryAt = null,
+    DateTime? CredentialUpdatedAt = null);
 
 public sealed record RemoteHostAdmissionDto(
     string HostId,

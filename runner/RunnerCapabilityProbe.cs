@@ -210,12 +210,11 @@ internal static class RunnerCapabilityProbe
     public static bool IsProviderAuthenticationFailure(ProcessResult result)
     {
         if (result.ExitCode == 0) return false;
-        var text = $"{result.StdErr}\n{result.StdOut}";
-        return text.Contains("401", StringComparison.OrdinalIgnoreCase)
-               || text.Contains("unauthorized", StringComparison.OrdinalIgnoreCase)
-               || text.Contains("authentication failed", StringComparison.OrdinalIgnoreCase)
-               || text.Contains("not logged in", StringComparison.OrdinalIgnoreCase)
-               || text.Contains("login required", StringComparison.OrdinalIgnoreCase);
+        var provider = ProviderOutputEvidenceExtractor.Extract(result.StdOut);
+        var evidence = $"{provider.TerminalEvent}\n{result.StdErr}";
+        if (ProviderLimitEvidenceParser.Detect([evidence], DateTimeOffset.UtcNow) is not null)
+            return false;
+        return ProviderAuthProbe.IndicatesNoUsableSession(evidence);
     }
 
     private static void AddToolchain(
@@ -251,7 +250,12 @@ internal static class RunnerCapabilityProbe
                 binaryAvailable ? "available" : null,
                 cliType,
                 auth.Status,
-                auth.Detail));
+                auth.Detail,
+                auth.Condition,
+                auth.EvidenceObservedAt?.UtcDateTime,
+                auth.ExpiresAt?.UtcDateTime,
+                auth.RetryAt?.UtcDateTime,
+                auth.CredentialUpdatedAt?.UtcDateTime));
         }
     }
 
@@ -282,8 +286,24 @@ internal static class RunnerCapabilityProbe
         string? version,
         string? identity,
         string status = "ready",
-        string? detail = null)
-        => new(key, category, status, version, identity, detail);
+        string? detail = null,
+        string? condition = null,
+        DateTime? evidenceObservedAt = null,
+        DateTime? expiresAt = null,
+        DateTime? retryAt = null,
+        DateTime? credentialUpdatedAt = null)
+        => new(
+            key,
+            category,
+            status,
+            version,
+            identity,
+            detail,
+            condition,
+            evidenceObservedAt,
+            expiresAt,
+            retryAt,
+            credentialUpdatedAt);
 
     private static string Platform()
         => $"{(OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsLinux() ? "linux" : "other")}:{RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()}";
@@ -324,7 +344,12 @@ public sealed record ProviderAuthStatus(
     string Status,
     string Detail,
     DateTimeOffset ObservedAt,
-    bool ProbeDegraded = false)
+    bool ProbeDegraded = false,
+    string Condition = ProviderAuthConditions.Unverified,
+    DateTimeOffset? EvidenceObservedAt = null,
+    DateTimeOffset? ExpiresAt = null,
+    DateTimeOffset? RetryAt = null,
+    DateTimeOffset? CredentialUpdatedAt = null)
 {
     public bool IsReady => Status == ProviderAuthProbe.Ready;
 }
@@ -372,18 +397,18 @@ public delegate Task<ProcessResult> ProviderAuthLauncher(
 public sealed class ProviderAuthProbe
 {
     public const string Ready = "ready";
+    public const string Limited = "limited";
     public const string Unavailable = "unavailable";
     public const string ConceptPath = "docs/operations/token-refresh-ohne-tunnel.md";
 
-    // TODO (stage S1 "Vorwarnung", concept section 3.3): a third status
-    // "expiring", read from the credential file's expiry field, is deliberately
-    // NOT built here. The on-disk format of both CLIs is unverified (concept
-    // section 6, open point 1) and no code in this repo reads those files today.
-    // Add it only once a fixture proves the field - guessing it would produce
-    // exactly the blind status this class exists to remove.
-
     /// <summary>Idle cost is one child process per host per five minutes.</summary>
     public static readonly TimeSpan DefaultTtl = TimeSpan.FromMinutes(5);
+
+    /// <summary>Degraded and signed-out providers are retried on each minute advertisement.</summary>
+    public static readonly TimeSpan DefaultRecoveryRetry = TimeSpan.FromMinutes(1);
+
+    /// <summary>Quiet credential warning window shared with the frontend.</summary>
+    public static readonly TimeSpan DefaultExpiryWarning = TimeSpan.FromDays(14);
 
     /// <summary>Node-based CLIs may need this long to start on a saturated review host.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
@@ -401,6 +426,7 @@ public sealed class ProviderAuthProbe
     private readonly TimeSpan _timeout;
     private readonly int _negativeConfirmations;
     private ProviderAuthLauncher? _launcher;
+    private ProviderCredentialInspector? _credentialInspector;
     private Action<string>? _diagnosticLog;
     private readonly Dictionary<string, ProviderAuthCacheEntry> _observed =
         new(StringComparer.Ordinal);
@@ -414,7 +440,8 @@ public sealed class ProviderAuthProbe
         TimeSpan? ttl = null,
         TimeSpan? timeout = null,
         int negativeConfirmations = DefaultNegativeConfirmations,
-        Action<string>? diagnosticLog = null)
+        Action<string>? diagnosticLog = null,
+        ProviderCredentialInspector? credentialInspector = null)
     {
         if (negativeConfirmations < 1)
             throw new ArgumentOutOfRangeException(nameof(negativeConfirmations));
@@ -425,6 +452,7 @@ public sealed class ProviderAuthProbe
         _timeout = timeout ?? DefaultTimeout;
         _negativeConfirmations = negativeConfirmations;
         _diagnosticLog = diagnosticLog;
+        _credentialInspector = credentialInspector;
     }
 
     /// <summary>
@@ -444,6 +472,18 @@ public sealed class ProviderAuthProbe
         }
     }
 
+    /// <summary>Wires secret-free credential metadata inspection in production.</summary>
+    public void UseCredentialInspector(ProviderCredentialInspector inspector)
+    {
+        ArgumentNullException.ThrowIfNull(inspector);
+        lock (_sync)
+        {
+            _credentialInspector = inspector;
+            _observed.Clear();
+            _refreshInFlight.Clear();
+        }
+    }
+
     /// <summary>
     /// The status to advertise right now. Never blocks: a fresh verdict is
     /// returned as is, a stale one is served while a refresh runs behind it, and
@@ -455,7 +495,15 @@ public sealed class ProviderAuthProbe
         lock (_sync)
         {
             _observed.TryGetValue(cliBinary, out var known);
-            if (known is not null && _clock() - known.Status.ObservedAt < _ttl) return known.Status;
+            var now = _clock();
+            var retryDue = known?.Status.Condition == ProviderAuthConditions.RateLimited
+                ? known.Status.RetryAt <= now
+                : known is not null
+                  && known.Status.Condition != ProviderAuthConditions.Authenticated
+                  && known.Status.Condition != ProviderAuthConditions.CredentialsExpiring
+                  && now - known.Status.ObservedAt >= DefaultRecoveryRetry;
+            if (known is not null && !retryDue && now - known.Status.ObservedAt < _ttl)
+                return known.Status;
 
             if (_launcher is not null && _refreshInFlight.Add(cliBinary))
             {
@@ -484,21 +532,63 @@ public sealed class ProviderAuthProbe
         try
         {
             var observation = await ObserveAsync(cliBinary, ct);
-            ProviderAuthCacheEntry decision;
-            ProviderAuthCacheEntry? previous;
-            lock (_sync)
-            {
-                _observed.TryGetValue(cliBinary, out previous);
-                decision = Decide(previous, observation, _negativeConfirmations, _clock());
-                _observed[cliBinary] = decision;
-            }
-            LogTransition(cliBinary, previous, decision, observation);
-            return decision.Status;
+            return ApplyObservation(cliBinary, observation);
         }
         finally
         {
             lock (_sync) _refreshInFlight.Remove(cliBinary);
         }
+    }
+
+    /// <summary>
+    /// Feeds a provider-owned terminal rejection back into the same state
+    /// machine as the idle probe. Ordinary CLI/tool crashes never call this
+    /// path. Authentication failures receive an immediate independent status
+    /// probe; quota failures open a provider-limited window instead.
+    /// </summary>
+    public async Task<ProviderAuthStatus> RecordExecutionOutcomeAsync(
+        string cliBinary,
+        ExecutionOutcomeDecision decision,
+        CancellationToken ct)
+    {
+        var facts = decision.RawFacts;
+        var evidenceText = $"{facts.ProviderTerminalEvent}\n{facts.StdErr}";
+        if (decision.Outcome == ExecutionOutcomeKind.QuotaExceeded)
+        {
+            var limit = ProviderLimitEvidenceParser.Detect([evidenceText], _clock());
+            if (limit is null) return Current(cliBinary);
+            return ApplyObservation(
+                cliBinary,
+                new ProviderAuthObservation(
+                    ProviderAuthObservationKind.RateLimited,
+                    $"rate-limited until {limit.RetryAt:O}: {Excerpt(limit.Detail)}",
+                    RetryAt: limit.RetryAt));
+        }
+        if (decision.Outcome != ExecutionOutcomeKind.AuthenticationFailure)
+            return Current(cliBinary);
+
+        _ = ApplyObservation(
+            cliBinary,
+            new ProviderAuthObservation(
+                ProviderAuthObservationKind.LoggedOut,
+                $"provider terminal reports no usable session: {Excerpt(evidenceText)}"));
+        return await RefreshAsync(cliBinary, ct);
+    }
+
+    private ProviderAuthStatus ApplyObservation(
+        string cliBinary,
+        ProviderAuthObservation observation)
+    {
+        ProviderAuthCacheEntry decision;
+        ProviderAuthCacheEntry? previous;
+        lock (_sync)
+        {
+            _observed.TryGetValue(cliBinary, out previous);
+            decision = Decide(previous, observation, _negativeConfirmations, _clock());
+            _observed[cliBinary] = decision;
+        }
+        LogTransition(cliBinary, previous, decision, observation);
+        return decision.Status;
     }
 
     /// <summary>
@@ -538,7 +628,12 @@ public sealed class ProviderAuthProbe
     private async Task<ProviderAuthObservation> ObserveAsync(string cliBinary, CancellationToken ct)
     {
         ProviderAuthLauncher? launcher;
-        lock (_sync) launcher = _launcher;
+        ProviderCredentialInspector? credentialInspector;
+        lock (_sync)
+        {
+            launcher = _launcher;
+            credentialInspector = _credentialInspector;
+        }
         if (launcher is null)
             return Indeterminate("no auth probe launcher is wired");
 
@@ -573,20 +668,35 @@ public sealed class ProviderAuthProbe
                 + Excerpt($"{exception.GetType().Name}: {exception.Message}"));
         }
 
-        return Interpret(command, result);
+        ProviderCredentialFreshness? freshness = null;
+        try { freshness = credentialInspector?.Invoke(provider); }
+        catch { /* credential metadata is advisory; the CLI verdict remains authoritative */ }
+        return Interpret(command, result, freshness);
     }
 
-    private ProviderAuthObservation Interpret(string command, ProcessResult result)
+    private ProviderAuthObservation Interpret(
+        string command,
+        ProcessResult result,
+        ProviderCredentialFreshness? freshness)
     {
         var text = $"{result.StdOut}\n{result.StdErr}";
+        var limit = ProviderLimitEvidenceParser.Detect([text], _clock());
+        if (limit is not null)
+            return new ProviderAuthObservation(
+                ProviderAuthObservationKind.RateLimited,
+                $"rate-limited until {limit.RetryAt:O}: {Excerpt(limit.Detail)}",
+                RetryAt: limit.RetryAt,
+                Credential: freshness);
         if (IndicatesNoUsableSession(text))
             return new ProviderAuthObservation(
                 ProviderAuthObservationKind.LoggedOut,
-                $"'{command}' reports no usable session (exit {result.ExitCode}): {Excerpt(text)}");
+                $"'{command}' reports no usable session (exit {result.ExitCode}): {Excerpt(text)}",
+                Credential: freshness);
         if (result.Success && !string.IsNullOrWhiteSpace(text))
             return new ProviderAuthObservation(
                 ProviderAuthObservationKind.Authenticated,
-                $"'{command}' confirmed an active session.");
+                $"'{command}' confirmed an active session.",
+                Credential: freshness);
         if (IndicatesUnsupportedCommand(text))
             return Indeterminate(
                 $"unverified: '{command}' is not supported by the installed CLI (exit {result.ExitCode}): "
@@ -606,19 +716,53 @@ public sealed class ProviderAuthProbe
         DateTimeOffset observedAt)
     {
         if (observation.Kind == ProviderAuthObservationKind.Authenticated)
+        {
+            var expiresAt = observation.Credential?.ExpiresAt;
+            var expiring = expiresAt is not null
+                           && expiresAt <= observedAt.Add(DefaultExpiryWarning);
+            var detail = expiring
+                ? $"{observation.Detail} Credentials expire at {expiresAt:O}; re-authenticate before this deadline."
+                : observation.Detail;
             return new ProviderAuthCacheEntry(
-                new ProviderAuthStatus(Ready, observation.Detail, observedAt),
+                new ProviderAuthStatus(
+                    Ready,
+                    detail,
+                    observedAt,
+                    Condition: expiring
+                        ? ProviderAuthConditions.CredentialsExpiring
+                        : ProviderAuthConditions.Authenticated,
+                    EvidenceObservedAt: observedAt,
+                    ExpiresAt: expiresAt,
+                    CredentialUpdatedAt: observation.Credential?.UpdatedAt),
                 0);
+        }
         if (observation.Kind == ProviderAuthObservationKind.BinaryMissing)
             return new ProviderAuthCacheEntry(
-                new ProviderAuthStatus(Unavailable, observation.Detail, observedAt),
+                new ProviderAuthStatus(
+                    Unavailable,
+                    observation.Detail,
+                    observedAt,
+                    Condition: ProviderAuthConditions.BinaryMissing,
+                    EvidenceObservedAt: observedAt),
                 0);
 
         var retained = previous?.Status
             ?? new ProviderAuthStatus(
                 Ready,
                 "unverified: the auth probe has not confirmed a session yet; binary presence only.",
-                observedAt);
+                observedAt,
+                Condition: ProviderAuthConditions.Unverified);
+        if (observation.Kind == ProviderAuthObservationKind.RateLimited)
+            return new ProviderAuthCacheEntry(
+                new ProviderAuthStatus(
+                    Limited,
+                    observation.Detail,
+                    observedAt,
+                    Condition: ProviderAuthConditions.RateLimited,
+                    EvidenceObservedAt: observedAt,
+                    RetryAt: observation.RetryAt,
+                    CredentialUpdatedAt: observation.Credential?.UpdatedAt),
+                0);
         if (observation.Kind == ProviderAuthObservationKind.Indeterminate)
             return new ProviderAuthCacheEntry(
                 retained with
@@ -626,6 +770,9 @@ public sealed class ProviderAuthProbe
                     Detail = $"probe degraded: {observation.Detail} Retaining last status '{retained.Status}'.",
                     ObservedAt = observedAt,
                     ProbeDegraded = true,
+                    Condition = retained.Status == Unavailable
+                        ? retained.Condition
+                        : ProviderAuthConditions.TransientError,
                 },
                 0);
 
@@ -638,10 +785,19 @@ public sealed class ProviderAuthProbe
                              + $"retaining last status '{retained.Status}'. {observation.Detail}",
                     ObservedAt = observedAt,
                     ProbeDegraded = true,
+                    Condition = retained.Status == Unavailable
+                        ? retained.Condition
+                        : ProviderAuthConditions.TransientError,
                 },
                 failures);
         return new ProviderAuthCacheEntry(
-            new ProviderAuthStatus(Unavailable, observation.Detail, observedAt),
+            new ProviderAuthStatus(
+                Unavailable,
+                observation.Detail,
+                observedAt,
+                Condition: ProviderAuthConditions.SignedOut,
+                EvidenceObservedAt: observedAt,
+                CredentialUpdatedAt: observation.Credential?.UpdatedAt),
             failures);
     }
 
@@ -686,7 +842,9 @@ public sealed class ProviderAuthProbe
         => new(
             Unavailable,
             $"CLI binary '{cliBinary}' was not found; provider '{provider}' cannot authenticate a run.",
-            _clock());
+            _clock(),
+            Condition: ProviderAuthConditions.BinaryMissing,
+            EvidenceObservedAt: _clock());
 
     /// <summary>Phrases that mean the session is gone, whatever the exit code says.</summary>
     private static readonly string[] NoUsableSessionSignals =
@@ -695,7 +853,8 @@ public sealed class ProviderAuthProbe
         "not authenticated", "no credentials", "login required", "please log in",
         "please login", "re-authenticate", "reauthenticate", "oauth token expired",
         "access token expired", "refresh token expired", "token has expired",
-        "authentication failed", "invalid api key", "unauthorized", "401",
+        "authentication failed", "invalid api key", "unauthorized",
+        "401 missing bearer", "401 missing basic", "401 unauthorized",
     ];
 
     /// <summary>
@@ -753,11 +912,16 @@ internal enum ProviderAuthObservationKind
 {
     Authenticated,
     LoggedOut,
+    RateLimited,
     Indeterminate,
     BinaryMissing,
 }
 
-internal sealed record ProviderAuthObservation(ProviderAuthObservationKind Kind, string Detail);
+internal sealed record ProviderAuthObservation(
+    ProviderAuthObservationKind Kind,
+    string Detail,
+    DateTimeOffset? RetryAt = null,
+    ProviderCredentialFreshness? Credential = null);
 
 internal sealed record ProviderAuthCacheEntry(
     ProviderAuthStatus Status,

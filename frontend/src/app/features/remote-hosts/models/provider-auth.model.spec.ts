@@ -18,10 +18,25 @@ describe('provider auth projection', () => {
     const unknown = providerAuthBadgesForSnapshot(snapshot('ready', 'healthy', false), NOW)[0];
 
     expect(ok.state).toBe('ok');
-    expect(unavailable.state).toBe('unavailable');
+    expect(unavailable.state).toBe('signed-out');
     expect(unavailable.detail).toContain('Not logged in');
     expect(unknown.state).toBe('unknown');
     expect(unknown.detail).toContain('expired');
+  });
+
+  it('distinguishes transient, limited, expiring, and confirmed sign-out states', () => {
+    expect(providerAuthBadgesForSnapshot(
+      snapshot('ready', 'healthy', true, 'retrying', null, 'transient-error'), NOW,
+    )[0].stateLabel).toBe('transient auth error, retrying');
+    expect(providerAuthBadgesForSnapshot(
+      snapshot('limited', 'healthy', true, 'limit', null, 'rate-limited'), NOW,
+    )[0].state).toBe('limited');
+    expect(providerAuthBadgesForSnapshot(
+      snapshot('ready', 'healthy', true, 'expiry', null, 'credentials-expiring'), NOW,
+    )[0].state).toBe('expiring');
+    expect(providerAuthBadgesForSnapshot(
+      snapshot('unavailable', 'healthy', true, 'logout', null, 'signed-out'), NOW,
+    )[0].stateLabel).toBe('genuinely signed out, re-auth needed');
   });
 
   it('warns fourteen days before a known credential expiry', () => {
@@ -81,6 +96,26 @@ describe('provider auth projection', () => {
       NOW,
     ))).toBeNull();
   });
+
+  it('labels provider limits without asking the operator to sign in', () => {
+    const task = { state: '2-ready', cliType: 'codex' } as TaskInfo;
+    const statuses = providerAuthBadgesForSnapshot(
+      snapshot('limited', 'healthy', true, 'rate limit exceeded', null, 'rate-limited'),
+      NOW,
+    ).map(status => ({
+      ...status,
+      provider: 'codex',
+      providerLabel: 'Codex',
+      retryAt: '2026-08-31T17:00:00Z',
+    }));
+
+    const wait = providerAuthWaitReason(task, statuses);
+
+    expect(wait?.state).toBe('limited');
+    expect(wait?.label).toContain('Codex rate-limited');
+    expect(wait?.label).not.toContain('sign-in');
+    expect(wait?.tooltip).toContain('resumes automatically');
+  });
 });
 
 function snapshot(
@@ -89,6 +124,8 @@ function snapshot(
   isFresh: boolean,
   detail = 'Active session confirmed',
   expiresAt: string | null = null,
+  condition: 'authenticated' | 'transient-error' | 'rate-limited' | 'credentials-expiring'
+    | 'signed-out' | 'unverified' | 'binary-missing' | null = null,
 ): TaskServerRunnerCapabilitySnapshot {
   return {
     runnerId: 'agent-runner-01',
@@ -123,6 +160,7 @@ function snapshot(
       consecutiveFailures: healthState === 'healthy' ? 0 : 1,
       detail,
       expiresAt,
+      condition,
       affectedClaims: [],
       recoveryHistory: [],
     }],

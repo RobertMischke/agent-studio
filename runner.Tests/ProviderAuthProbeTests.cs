@@ -22,7 +22,8 @@ public sealed class ProviderAuthProbeTests
         TimeSpan? ttl = null,
         TimeSpan? timeout = null,
         int negativeConfirmations = ProviderAuthProbe.DefaultNegativeConfirmations,
-        Action<string>? diagnosticLog = null)
+        Action<string>? diagnosticLog = null,
+        ProviderCredentialInspector? credentialInspector = null)
         => new(
             launcher,
             _ => binaryExists,
@@ -30,7 +31,29 @@ public sealed class ProviderAuthProbeTests
             ttl,
             timeout,
             negativeConfirmations,
-            diagnosticLog);
+            diagnosticLog,
+            credentialInspector);
+
+    [Fact]
+    public async Task A_single_transient_exit_does_not_latch_and_the_next_success_recovers()
+    {
+        var answers = new Queue<ProcessResult>(
+        [
+            new ProcessResult(1, "", "temporary network failure during token refresh"),
+            new ProcessResult(0, "Logged in", ""),
+        ]);
+        var probe = Probe((_, _, _) => Task.FromResult(answers.Dequeue()));
+
+        var transient = await probe.RefreshAsync("codex", CancellationToken.None);
+        var recovered = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, transient.Status);
+        Assert.Equal(ProviderAuthConditions.TransientError, transient.Condition);
+        Assert.True(transient.ProbeDegraded);
+        Assert.Equal(ProviderAuthProbe.Ready, recovered.Status);
+        Assert.Equal(ProviderAuthConditions.Authenticated, recovered.Condition);
+        Assert.False(recovered.ProbeDegraded);
+    }
 
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]
@@ -49,6 +72,7 @@ public sealed class ProviderAuthProbeTests
         Assert.Equal(ProviderAuthProbe.Ready, first.Status);
         Assert.True(first.ProbeDegraded);
         Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
+        Assert.Equal(ProviderAuthConditions.SignedOut, status.Condition);
         Assert.Contains("no usable session", status.Detail, StringComparison.Ordinal);
         Assert.Contains("claude auth status --text", status.Detail, StringComparison.Ordinal);
     }
@@ -63,6 +87,69 @@ public sealed class ProviderAuthProbeTests
         Assert.True(status.IsReady);
         Assert.Contains("codex login status", status.Detail, StringComparison.Ordinal);
         Assert.DoesNotContain("unverified", status.Detail, StringComparison.Ordinal);
+        Assert.Equal(ProviderAuthConditions.Authenticated, status.Condition);
+    }
+
+    [Fact]
+    public async Task Rate_limit_exit_one_is_limited_and_never_signed_out()
+    {
+        var now = new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
+        var probe = Probe(
+            Answers(1, "", "rate limit exceeded; retry after 5h"),
+            clock: () => now);
+
+        var first = await probe.RefreshAsync("codex", CancellationToken.None);
+        var second = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Limited, first.Status);
+        Assert.Equal(ProviderAuthConditions.RateLimited, first.Condition);
+        Assert.Equal(now.AddHours(5), first.RetryAt);
+        Assert.Equal(ProviderAuthProbe.Limited, second.Status);
+        Assert.DoesNotContain("sign", second.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Credential_expiry_is_advertised_as_a_quiet_ready_warning()
+    {
+        var now = new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
+        var expires = now.AddDays(10);
+        var updated = now.AddDays(-20);
+        var probe = Probe(
+            Answers(0, "Logged in", ""),
+            clock: () => now,
+            credentialInspector: _ => new ProviderCredentialFreshness(updated, expires, false));
+
+        var status = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthConditions.CredentialsExpiring, status.Condition);
+        Assert.Equal(expires, status.ExpiresAt);
+        Assert.Equal(updated, status.CredentialUpdatedAt);
+        Assert.Contains("re-authenticate before", status.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Credential_store_reads_expiry_and_age_without_returning_token_material()
+    {
+        using var temp = new TempDirectory();
+        var path = Path.Combine(temp.Path, "auth.json");
+        File.WriteAllText(path, """
+            {
+              "access_token": "secret-value-that-must-not-escape",
+              "expires_at": "2026-09-10T12:00:00Z"
+            }
+            """);
+        File.SetLastWriteTimeUtc(path, new DateTime(2026, 8, 20, 10, 0, 0, DateTimeKind.Utc));
+
+        var freshness = ProviderCredentialStore.InspectFile(path);
+
+        Assert.NotNull(freshness);
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero),
+            freshness!.ExpiresAt);
+        Assert.Equal(new DateTime(2026, 8, 20, 10, 0, 0, DateTimeKind.Utc), freshness.UpdatedAt.UtcDateTime);
+        Assert.False(freshness.HasRefreshMaterial);
+        Assert.DoesNotContain("secret-value", freshness.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -416,6 +503,25 @@ public sealed class ProviderAuthProbeTests
         {
             Assert.True(DateTime.UtcNow < deadline, "The background refresh did not run within 5s.");
             await Task.Delay(10);
+        }
+    }
+
+    private sealed class TempDirectory : IDisposable
+    {
+        public TempDirectory()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"provider-credential-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(Path, recursive: true); }
+            catch { /* best effort */ }
         }
     }
 }

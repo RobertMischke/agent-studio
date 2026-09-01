@@ -320,18 +320,22 @@ both installed units, verifies the variable name in each daemon's
 `/proc/<MainPID>/environ`, and waits for a fresh runner probe. It never persists
 the value in the Studio database, repository, task, log, or evidence artifact.
 
-Provider capability snapshots refresh every 60 seconds. Execution Hosts shows
-**OK**, **Unavailable**, or **Unknown** per CLI, with the probe detail in the
-tooltip. Provider auth probes run at most every five minutes, use a 30-second
-timeout, and run at lower CPU priority on Linux. A timeout, empty output, launch
-failure, or unsupported command keeps the last advertised verdict and writes a
+Provider capability snapshots refresh every 60 seconds. Execution Hosts
+distinguishes authenticated, transient retry, rate-limited, expiring,
+genuinely signed out, unavailable, and unknown per CLI. Provider auth probes
+normally run at most every five minutes, retry degraded or signed-out states
+every minute, use a 30-second timeout, and run at lower CPU priority on Linux. A
+timeout, empty output, launch failure, or unsupported command keeps the
+last-good admission verdict and writes a
 `runner-provider-auth-probe-degraded` journal line. Two consecutive explicit
-logout answers are required for `OK -> Unavailable`; that transition creates an
-operator notification and updates Ready card wait reasons. A later successful
-probe writes `runner-provider-auth-probe-recovered` and advertises **OK** without
-a service restart. A recognized auth failure from a run reports the capability
-failure immediately. When a capability advertises a known expiry, Studio warns
-during the final 14 days. Follow
+logout answers are required before sign-out blocks Ready cards. Run-exit
+classification reads only provider terminal frames and stderr, so tool errors,
+prompt text, rate limits, and generic nonzero exits do not count. Rate limits
+pause only that CLI until their advertised retry time. A later successful probe
+writes `runner-provider-auth-probe-recovered`, clears any older auth drain, and
+advertises authenticated without a service restart. The probe advertises known
+hard credential expiry and file-update metadata without exposing token values;
+Studio gives a quiet warning during the final 14 days. Follow
 [cli-relogin-runbook.md](./cli-relogin-runbook.md) for renewal.
 
 Do not create provider-specific files such as `claude.env`.

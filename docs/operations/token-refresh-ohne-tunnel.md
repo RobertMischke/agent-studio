@@ -5,7 +5,10 @@
 > recommendations. Current operations use
 > `/etc/agent-runner/provider-auth.env`, SSH-stdin provisioning, process-only
 > probes, and the renewal flow in
-> [setup/cli-relogin-runbook.md](setup/cli-relogin-runbook.md).
+> [setup/cli-relogin-runbook.md](setup/cli-relogin-runbook.md). Since AGT-2694,
+> the probe also reads secret-free expiry and last-update metadata from the
+> host-local credential stores. Token values remain outside advertisements and
+> logs.
 
 **Stand:** 2026-07-28 · **Phase:** P3-Vorlauf (Umsetzungsplan-Zielbild §3.3 / §5) · **Modus:** Konzept, keine Code-Änderung
 **Bezug:** AGT-2262 (SSH-Brücke abreißen), `execution-model-shift` E1/E2, `car-migration-plan` §2.2 (CAR-B) und §5

@@ -144,8 +144,10 @@ Remote hosts use the protected provider-auth provisioning flow. Environment
 credentials live only in `/etc/agent-runner/provider-auth.env` on the selected
 host, owned by `root:agent` with mode `640`. Studio sends a replacement through
 SSH stdin and does not persist it. Both remote units load the file after their
-normal runner EnvironmentFile; the probe reads only the resulting process
-environment and the CLI status, never a credential path.
+normal runner EnvironmentFile. The probe uses the process environment and CLI
+status for validity. It also reads expiry and last-update metadata from the
+host-local Claude and Codex credential stores, but never advertises or logs a
+token value.
 
 **Remote coding hosts.** The standalone host keeps one primary
 `RUNNER_CLI_BIN` plus `RUNNER_CLAUDE_CLI_BIN` and `RUNNER_CODEX_CLI_BIN`.
@@ -163,15 +165,22 @@ worker receives the matching provider path, so a Claude pin on a Codex-primary
 host cannot fall through to `codex -m <claude-model>`. On headless Linux hosts,
 both runner units load `/etc/agent-runner/provider-auth.env`; the Claude worker
 explicitly admits `CLAUDE_CODE_OAUTH_TOKEN` from the process environment after
-clean-context preparation. The probe and worker do not read credential paths.
+clean-context preparation.
 
-Execution Hosts renders `OK`, `Unavailable`, or `Unknown` for each advertised
-CLI and exposes the probe detail as a tooltip. Provider-auth state changes are
-retained in capability recovery history. An `OK -> Unavailable` transition
-notifies the operator; an auth-classified run failure reports unavailability
-immediately. Ready cards assigned to a host without usable matching auth show a
-provider sign-in wait reason. If the runner can advertise a known expiry,
-Studio warns during the final 14 days.
+Run exits use the same typed boundary. Only provider terminal frames and stderr
+with a distinguishable authentication signature count. Prompt text and normal
+tool failures, including patch context failures, are excluded. Rate-limit output
+opens the existing provider-limited state with a retry deadline instead of a
+sign-in state. A single explicit auth failure opens a transient retry; the
+independent status probe supplies the required second confirmation or clears the
+signal immediately.
+
+Execution Hosts distinguishes authenticated, transient auth retry, rate-limited,
+credentials expiring, genuinely signed out, unavailable, and unknown. Only
+confirmed sign-out raises the persistent sign-in alarm. A rate limit gives Ready
+cards a provider-limit wait reason and recovers automatically; an expiry warning
+is quiet and non-blocking. Provider-auth state changes and successful recovery
+remain in capability recovery history.
 
 ### 2.8 Execution context (read-only observability)
 

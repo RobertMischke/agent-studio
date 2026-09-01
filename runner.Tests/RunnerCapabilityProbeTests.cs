@@ -22,6 +22,67 @@ public sealed class RunnerCapabilityProbeTests
             RunnerCapabilityProbe.IsProviderAuthenticationFailure(
                 new ProcessResult(exitCode, stdout, stderr)));
 
+    [Fact]
+    public async Task Apply_patch_verification_failure_never_changes_provider_auth_capability()
+    {
+        const string exactToolError =
+            "ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find context "
+            + "'public sealed class V1ReviewExecutorRegistry' in "
+            + "/home/agent/runner-work/PROJ-002/worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs";
+        const string authoredPromptEcho =
+            "A single authentication failure must not latch unavailable; not logged in is a real signal.";
+        var stdout = authoredPromptEcho + "\n"
+            + "{\"type\":\"turn.failed\",\"error\":{\"message\":\"apply_patch verification failed\"}}";
+
+        Assert.False(RunnerCapabilityProbe.IsProviderAuthenticationFailure(
+            new ProcessResult(1, stdout, exactToolError)));
+
+        var decision = ExecutionOutcomeAdapter.Classify(new ExecutionRawFacts(
+            "run-apply-patch",
+            ExecutionAttemptKind.Coding,
+            ProviderTerminalEvent: "{\"type\":\"turn.failed\",\"error\":{\"message\":\"apply_patch verification failed\"}}",
+            StdOut: stdout,
+            StdErr: exactToolError,
+            ExitCode: 1));
+        Assert.Equal(ExecutionOutcomeKind.CliCrash, decision.Outcome);
+
+        using var temp = new TempDirectory();
+        var codex = Path.Combine(temp.Path, "codex");
+        await File.WriteAllTextAsync(codex, string.Empty);
+        var probe = new ProviderAuthProbe(
+            (_, _, _) => Task.FromResult(new ProcessResult(0, "Logged in", "")),
+            File.Exists);
+        await probe.RefreshAsync(codex, CancellationToken.None);
+        await probe.RecordExecutionOutcomeAsync(codex, decision, CancellationToken.None);
+        var options = new RunnerOptions
+        {
+            ServerUrl = "http://task-server",
+            RunnerId = "runner-test",
+            RunnerName = "runner-test",
+            Hostname = "test-host",
+            BackendName = "test",
+            WorkDir = temp.Path,
+            BaseBranch = "main",
+            CliBin = codex,
+            CodexCliBin = codex,
+            CliArgs = "",
+        };
+
+        var auth = Assert.Single(
+            RunnerCapabilityProbe.Advertise(options, gitPushReady: true, providerAuth: probe),
+            capability => capability.Key == CapabilityProtocol.ProviderAuthentication("codex"));
+        Assert.Equal(ProviderAuthProbe.Ready, auth.Status);
+        Assert.Equal(ProviderAuthConditions.Authenticated, auth.Condition);
+    }
+
+    [Fact]
+    public void Rate_limit_exit_one_is_not_an_authentication_failure()
+        => Assert.False(RunnerCapabilityProbe.IsProviderAuthenticationFailure(
+            new ProcessResult(
+                1,
+                "{\"type\":\"turn.failed\",\"error\":{\"message\":\"rate limit exceeded; retry after 5h\"}}",
+                "codex: stream error: rate limit exceeded")));
+
     [Theory]
     [InlineData("/usr/local/bin/codex", "codex")]
     [InlineData("claude.exe", "claude")]

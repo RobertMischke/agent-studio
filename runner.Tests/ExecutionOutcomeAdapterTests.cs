@@ -165,6 +165,17 @@ public sealed class ExecutionOutcomeAdapterTests
     }
 
     [Fact]
+    public void Bare_http_401_without_authentication_signature_is_not_signed_out()
+    {
+        var result = ExecutionOutcomeAdapter.Classify(Coding(
+            ExitCode: 1,
+            StdErr: "HTTP 401 request failed while calling a tool endpoint"));
+
+        Assert.Equal(ExecutionOutcomeKind.CliCrash, result.Outcome);
+        Assert.Equal(ExecutionRecoveryAction.StartFreshAttemptFromSalvage, result.RecoveryAction);
+    }
+
+    [Fact]
     public void Real_oom_kill_still_wins_even_with_blocked_sentinel()
     {
         var result = ExecutionOutcomeAdapter.Classify(Coding(

@@ -227,7 +227,8 @@ export class RemoteHostCardComponent {
       && capability.advertisedStatus === 'ready').length;
   });
   readonly unavailableAuthCount = computed(() =>
-    this.providerAuthBadges().filter(auth => auth.state === 'unavailable').length);
+    this.providerAuthBadges().filter(auth =>
+      auth.state === 'unavailable' || auth.state === 'signed-out').length);
   readonly totalActiveSlots = computed(() => this.roles()
     .reduce((total, role) => total + this.activeSlotsFor(role), 0));
   readonly identitySummary = computed(() => {
@@ -239,7 +240,13 @@ export class RemoteHostCardComponent {
   readonly capabilitySummary = computed(() => {
     const ok = this.healthyCapabilityCount();
     const unavailable = this.unavailableAuthCount();
-    if (unavailable) return `${ok} capabilities ok · ${unavailable} auth unavailable`;
+    const limited = this.providerAuthBadges().filter(auth => auth.state === 'limited').length;
+    const transient = this.providerAuthBadges().filter(auth => auth.state === 'transient').length;
+    const expiring = this.providerAuthBadges().filter(auth => auth.state === 'expiring').length;
+    if (unavailable) return `${ok} capabilities ok · ${unavailable} re-auth needed`;
+    if (limited) return `${ok} capabilities ok · ${limited} rate-limited`;
+    if (transient) return `${ok} capabilities ok · ${transient} auth retrying`;
+    if (expiring) return `${ok} capabilities ok · ${expiring} credentials expiring`;
     return `${ok} ${ok === 1 ? 'capability' : 'capabilities'} ok`;
   });
   readonly capacitySummary = computed(() => {

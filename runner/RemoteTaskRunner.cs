@@ -773,33 +773,6 @@ public sealed class RemoteTaskRunner
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
-                    if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
-                    {
-                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
-                                       ?? AgentCliProcess.ConfiguredCliType(_options);
-                        var claimId = outbox?.Authority.RunId;
-                        var diagnostic = result.StdErr
-                            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
-                            .LastOrDefault()
-                            ?? $"{provider} exited {result.ExitCode} with an authentication failure";
-                        // Diagnosis only: the run's own classification and fenced
-                        // completion below must survive a server that rejects or
-                        // does not mount the capability route.
-                        await CapabilityFailureReporter.TryReportAsync(
-                            _client,
-                            _log,
-                            CapabilityProtocol.ProviderAuthentication(provider),
-                            "ProviderUnauthorized",
-                            diagnostic.Length <= 500 ? diagnostic : diagnostic[..500],
-                            $"provider-auth:{claimId ?? slot.Lease.LeaseId}:{slot.Lease.FencingToken}",
-                            "run",
-                            claimId,
-                            slot.Lease.FencingToken,
-                            stopRun);
-                        shipper.Add(
-                            "system",
-                            $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized");
-                    }
                     var classified = result.TimedOut
                         ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)
                         : ClassifyProcessResult(
@@ -808,6 +781,36 @@ public sealed class RemoteTaskRunner
                             processResult,
                             result.LaunchFailed,
                             sameSessionResumeAttempts);
+                    if (classified.Decision.Outcome is ExecutionOutcomeKind.AuthenticationFailure
+                        or ExecutionOutcomeKind.QuotaExceeded)
+                    {
+                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                       ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var binary = RunnerCapabilityProbe.CodingCliBinaries(_options)
+                                         .FirstOrDefault(item => item.CliType == provider)
+                                         .Binary
+                                     ?? provider;
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var auth = await ProviderAuthProbe.Shared.RecordExecutionOutcomeAsync(
+                                    binary,
+                                    classified.Decision,
+                                    CancellationToken.None);
+                                _log(
+                                    $"runner-provider-auth execution-signal provider={provider} "
+                                    + $"outcome={classified.Decision.Outcome} status={auth.Status} "
+                                    + $"condition={auth.Condition}");
+                            }
+                            catch (Exception ex)
+                            {
+                                _log(
+                                    $"runner-provider-auth execution-signal-deferred provider={provider} "
+                                    + $"error={ex.GetType().Name} message={ex.Message}");
+                            }
+                        });
+                    }
                     if (classified.Decision.RecoveryAction == ExecutionRecoveryAction.ResumeSameSession
                         && sameSessionResumeAttempts < ExecutionOutcomeAdapter.MaxSameSessionResumeAttempts)
                     {

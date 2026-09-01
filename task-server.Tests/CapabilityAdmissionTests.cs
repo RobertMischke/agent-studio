@@ -401,6 +401,66 @@ public sealed class CapabilityAdmissionTests
     }
 
     [Fact]
+    public async Task Newer_successful_provider_probe_clears_auth_drain_without_runner_restart()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        const string runner = "codex";
+        const string instance = "codex-instance";
+        var auth = CapabilityProtocol.ProviderAuthentication("codex");
+        await RegisterAndAdvertiseAsync(
+            store,
+            clock,
+            runner,
+            instance,
+            "host-a",
+            CapabilityProtocol.CodingExecutor,
+            auth);
+        await FailAsync(store, clock, runner, instance, auth, "auth-fail-1");
+        var drained = await FailAsync(store, clock, runner, instance, auth, "auth-fail-2");
+        Assert.Equal(CapabilityHealthStates.Draining, drained.HealthState);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await store.AdvertiseCapabilitiesAsync(
+            new CapabilityAdvertisementRequest(
+                runner,
+                instance,
+                CapabilityProtocol.CurrentSchemaVersion,
+                clock.GetUtcNow().UtcDateTime,
+                300,
+                2,
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        auth,
+                        "provider-auth",
+                        Condition: ProviderAuthConditions.Authenticated,
+                        EvidenceObservedAt: clock.GetUtcNow().UtcDateTime),
+                ]),
+            runner,
+            default);
+
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                runner,
+                instance,
+                RequiredCapabilities: [CapabilityProtocol.CodingExecutor, auth]),
+            runner,
+            default);
+        Assert.Equal("claimed", claim.Status);
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        var recovered = Assert.Single(snapshot.Capabilities, capability => capability.Key == auth);
+        Assert.Equal(CapabilityHealthStates.Healthy, recovered.HealthState);
+        Assert.Equal(0, recovered.ConsecutiveFailures);
+        Assert.Contains(
+            recovered.RecoveryHistory,
+            item => item.Reason.Contains("confirmed recovery", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Capability_drain_does_not_revoke_running_work_and_restart_preserves_the_drain()
     {
         using var temp = new TempDirectory();

@@ -31,6 +31,10 @@ ProviderAuthProbe.Shared.UseLauncher(
         return ProcessRunner.RunAsync(invocation.FileName, invocation.Arguments, ct: ct);
     },
     Log);
+// The status command is also the provider-owned non-interactive refresh
+// opportunity. Inspect only secret-free file metadata after it runs so an
+// approaching hard expiry can be advertised without copying token material.
+ProviderAuthProbe.Shared.UseCredentialInspector(ProviderCredentialStore.Inspect);
 
 if (help)
 {

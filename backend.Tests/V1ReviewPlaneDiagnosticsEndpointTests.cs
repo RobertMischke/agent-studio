@@ -146,6 +146,68 @@ public sealed class V1ReviewPlaneDiagnosticsEndpointTests : IDisposable
     }
 
     [Fact]
+    public void Newer_successful_auth_probe_clears_provider_drain_without_registration()
+    {
+        var registry = new V1ReviewExecutorRegistry();
+        registry.Register(
+            RunnerId,
+            new Contract.RegisterRunnerRequest(
+                RunnerId,
+                "review-host",
+                Instance,
+                "1.0.0",
+                Contract.TaskServerProtocol.Current,
+                [Contract.ReviewCapabilities.ReviewExecutor]));
+        var auth = Contract.CapabilityProtocol.ProviderAuthentication("codex");
+        var now = DateTime.UtcNow;
+        registry.AdvertiseCapabilities(
+            RunnerId,
+            new Contract.CapabilityAdvertisementRequest(
+                RunnerId,
+                Instance,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                now,
+                180,
+                1,
+                [new Contract.AdvertisedCapabilityDto(
+                    auth,
+                    "provider-auth",
+                    Condition: Contract.ProviderAuthConditions.Authenticated,
+                    EvidenceObservedAt: now)]));
+        registry.ReportCapabilityFailure(
+            RunnerId,
+            Failure(auth, "ProviderUnauthorized", "provider-auth-1", now));
+        registry.ReportCapabilityFailure(
+            RunnerId,
+            Failure(auth, "ProviderUnauthorized", "provider-auth-2", now));
+        Assert.True(registry.TryGetCapabilityPause(RunnerId, out _));
+
+        registry.AdvertiseCapabilities(
+            RunnerId,
+            new Contract.CapabilityAdvertisementRequest(
+                RunnerId,
+                Instance,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                now.AddSeconds(1),
+                180,
+                2,
+                [new Contract.AdvertisedCapabilityDto(
+                    auth,
+                    "provider-auth",
+                    Condition: Contract.ProviderAuthConditions.Authenticated,
+                    EvidenceObservedAt: now.AddSeconds(1))]));
+
+        Assert.False(registry.TryGetCapabilityPause(RunnerId, out _));
+        var recovered = Assert.Single(
+            Assert.Single(registry.ListCapabilitySnapshots()).Capabilities,
+            capability => capability.Key == auth);
+        Assert.Equal(Contract.CapabilityHealthStates.Healthy, recovered.HealthState);
+        Assert.Contains(
+            recovered.RecoveryHistory,
+            item => item.Reason.Contains("confirmed recovery", StringComparison.Ordinal));
+    }
+
+    [Fact]
     [Trait("Category", "MachineBound")]
     public async Task Concurrent_registration_and_advertisement_never_hold_the_registry_gate()
     {

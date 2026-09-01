@@ -2178,6 +2178,31 @@
             every matching wait and resumes the card automatically.
           </td>
         </tr>
+        <tr id="case-agt-2694">
+          <td>2026-08-31</td>
+          <td><code>AGT-2694</code><br><span class="small">Codex tool failure latched provider authentication unavailable</span></td>
+          <td>
+            Codex exited 1 after <code>apply_patch</code> could not find stale context in
+            <code>V1ReviewPlaneEndpoints.cs</code>. The runner announced that Codex authentication changed from OK to
+            unavailable and held Ready cards, although <code>codex login status</code> returned Logged in seconds later.
+            Recovery required a manual runner restart. The run's true terminal class was an ordinary CLI/tool failure,
+            not an authentication terminal.
+          </td>
+          <td>
+            The run-exit capability path scanned the complete retained stdout and stderr transcript for broad auth words.
+            The authored task prompt itself contained phrases such as authentication failure and not logged in, so those
+            user-controlled words overrode the provider's actual terminal patch error. The immediate capability-failure
+            report bypassed the existing AGT-2660 consecutive-probe policy, and routine advertisements could not clear an
+            active capability drain.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> one typed provider-auth state machine now consumes provider-owned
+            terminal evidence only. Tool failures and other indeterminate exits stay on the run's retry path; rate limits
+            enter the AGT-2680 provider-limited state; two explicit auth failures are required for signed-out. A newer
+            successful probe clears the old drain and re-advertises recovery without restart. Credential expiry metadata
+            supplies a quiet early warning without exposing tokens.
+          </td>
+        </tr>
         <tr id="case-agt-2687">
           <td>2026-08-27</td>
           <td><code>AGT-2687</code><br><span class="small">requirement-fit open-scope review carousel</span></td>

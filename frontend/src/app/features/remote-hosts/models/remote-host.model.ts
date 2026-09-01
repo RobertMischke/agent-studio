@@ -161,8 +161,8 @@ export type CapabilityHealthState = 'healthy' | 'suspect' | 'draining' | 'half-o
 
 export interface CapabilityRecoveryEvent {
   occurredAt: string;
-  fromState: CapabilityHealthState | 'ready' | 'unavailable' | 'unknown';
-  toState: CapabilityHealthState | 'ready' | 'unavailable' | 'unknown';
+  fromState: CapabilityHealthState | 'ready' | 'limited' | 'unavailable' | 'unknown';
+  toState: CapabilityHealthState | 'ready' | 'limited' | 'unavailable' | 'unknown';
   reason: string;
   claimId?: string | null;
 }
@@ -186,6 +186,12 @@ export interface RemoteHostCapabilityHealth {
   detail?: string | null;
   /** Optional provider-reported credential expiry. Older runners omit it. */
   expiresAt?: string | null;
+  /** Typed provider-auth condition. Older runners omit it. */
+  condition?: 'authenticated' | 'transient-error' | 'rate-limited' | 'credentials-expiring'
+    | 'signed-out' | 'unverified' | 'binary-missing' | null;
+  evidenceObservedAt?: string | null;
+  retryAt?: string | null;
+  credentialUpdatedAt?: string | null;
   affectedClaims: readonly string[];
   recoveryHistory: readonly CapabilityRecoveryEvent[];
 }
