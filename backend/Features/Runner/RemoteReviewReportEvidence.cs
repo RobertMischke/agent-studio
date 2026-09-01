@@ -61,11 +61,14 @@ internal static class RemoteReviewReportEvidence
         text.AppendLine();
         text.AppendLine("# Remote Review Grade");
         text.AppendLine();
-        text.AppendLine($"**Outcome:** {request.Outcome}");
+        var status = string.IsNullOrWhiteSpace(request.FailureClassification)
+            ? request.Outcome
+            : $"{request.Outcome} / {request.FailureClassification}";
+        text.AppendLine($"**Outcome:** {status}");
         text.AppendLine();
         if (!string.IsNullOrWhiteSpace(request.Summary))
         {
-            text.AppendLine(request.Summary.Trim());
+            text.AppendLine($"**Detail:** {request.Summary.Trim()}");
             text.AppendLine();
         }
 

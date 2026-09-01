@@ -448,23 +448,37 @@ public sealed class AttemptAuthorityService
             if (sourceReview is not null && !Same(sourceReview.Subject.SubjectId, subjectId))
             {
                 return new AttemptWriteResult(AttemptWriteStatus.SubjectMismatch, sourceReview.AttemptId,
-                    "A review infrastructure retry must retain the exact immutable ReviewSubject.",
+                    "A review infrastructure retry must retain the exact immutable ReviewSubject identity.",
                     ReviewAttempt: ToDto(sourceReview));
             }
-            var subject = sourceReview?.Subject ?? new ReviewSubjectRecord
+            ReviewSubjectRecord subject;
+            if (sourceReview is null)
             {
-                SubjectId = subjectId,
-                RepositoryId = Normalize(request.RepositoryId),
-                ExpectedResultSha = expectedSha,
-                SourceRunAttemptId = run.AttemptId,
-                TaskRequirementsHash = Normalize(request.TaskRequirementsHash),
-                ReviewPolicyHash = Normalize(request.ReviewPolicyHash),
-                EvidenceDigestInputs = evidence,
-                RepositoryUrl = NormalizeNull(request.RepositoryUrl),
-                ResultRef = NormalizeNull(request.ResultRef),
-                Plan = request.Plan,
-                CreatedAt = now,
-            };
+                subject = new ReviewSubjectRecord
+                {
+                    SubjectId = subjectId,
+                    RepositoryId = Normalize(request.RepositoryId),
+                    ExpectedResultSha = expectedSha,
+                    SourceRunAttemptId = run.AttemptId,
+                    TaskRequirementsHash = Normalize(request.TaskRequirementsHash),
+                    ReviewPolicyHash = Normalize(request.ReviewPolicyHash),
+                    EvidenceDigestInputs = evidence,
+                    RepositoryUrl = NormalizeNull(request.RepositoryUrl),
+                    ResultRef = NormalizeNull(request.ResultRef),
+                    Plan = request.Plan,
+                    CreatedAt = now,
+                };
+            }
+            else if (ReviewInfrastructureRetryPlanPolicy.RequiresRebuild(
+                         sourceReview.FailureClassification)
+                     && request.Plan is not null)
+            {
+                subject = CopySubjectWithPlan(sourceReview.Subject, request.Plan);
+            }
+            else
+            {
+                subject = sourceReview.Subject;
+            }
 
             var current = CurrentReview(request.TaskKey);
             if (current is not null && !Terminal(current.State))
@@ -1679,6 +1693,24 @@ public sealed class AttemptAuthorityService
         RepositoryUrl: subject.RepositoryUrl,
         ResultRef: subject.ResultRef,
         Plan: subject.Plan);
+
+    private static ReviewSubjectRecord CopySubjectWithPlan(
+        ReviewSubjectRecord subject,
+        AgentStudio.TaskServer.Contracts.ReviewPlanDto plan)
+        => new()
+        {
+            SubjectId = subject.SubjectId,
+            RepositoryId = subject.RepositoryId,
+            ExpectedResultSha = subject.ExpectedResultSha,
+            SourceRunAttemptId = subject.SourceRunAttemptId,
+            TaskRequirementsHash = subject.TaskRequirementsHash,
+            ReviewPolicyHash = subject.ReviewPolicyHash,
+            EvidenceDigestInputs = [.. subject.EvidenceDigestInputs],
+            RepositoryUrl = subject.RepositoryUrl,
+            ResultRef = subject.ResultRef,
+            Plan = plan,
+            CreatedAt = subject.CreatedAt,
+        };
     private static RunAttemptDto ToDto(RunAttemptRecord run) => new(
         AttemptId: run.AttemptId,
         TaskKey: run.TaskKey,

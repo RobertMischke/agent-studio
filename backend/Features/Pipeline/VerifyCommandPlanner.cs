@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace AgentStudio.Pipeline;
@@ -180,12 +181,13 @@ public static class VerifyCommandPlanner
         var cmds = new List<VerifyCommand>();
         if (string.IsNullOrWhiteSpace(repositoryPath) || !Directory.Exists(repositoryPath))
             return cmds;
+        var trackedFiles = TrackedRepositoryFiles.Read(repositoryPath);
 
         // .NET: a solution or project file at the repo root means a bare,
         // auto-discovering `dotnet build` / `dotnet test` resolves the whole
         // stack. Root-only on purpose - if the only project lives a level down,
         // a root `dotnet build` cannot pick it and we must not pretend it can.
-        if (HasDotNetEntryPoint(repositoryPath))
+        if (HasDotNetEntryPoint(repositoryPath, trackedFiles))
         {
             cmds.Add(new VerifyCommand(VerifyEcosystem.DotNet, VerifyCommandKind.Build, "", "dotnet build"));
             cmds.Add(new VerifyCommand(VerifyEcosystem.DotNet, VerifyCommandKind.Test, "", "dotnet test"));
@@ -193,7 +195,7 @@ public static class VerifyCommandPlanner
 
         // Node: derive whichever of build / test / lint scripts the manifest
         // actually declares - never invent a script the repo does not define.
-        foreach (var subdir in NodePackageDirs(repositoryPath))
+        foreach (var subdir in NodePackageDirs(repositoryPath, trackedFiles))
         {
             var manifest = Path.Combine(repositoryPath, subdir, "package.json");
             var scripts = ReadNpmScripts(manifest);
@@ -216,7 +218,24 @@ public static class VerifyCommandPlanner
     /// <c>*.sln</c>-also-matches-<c>*.slnx</c> search-pattern quirk.
     /// </summary>
     internal static bool HasDotNetEntryPoint(string repoRoot)
+        => HasDotNetEntryPoint(repoRoot, TrackedRepositoryFiles.Read(repoRoot));
+
+    private static bool HasDotNetEntryPoint(
+        string repoRoot,
+        IReadOnlySet<string>? trackedFiles)
     {
+        if (trackedFiles is not null)
+        {
+            return trackedFiles.Any(path =>
+            {
+                if (path.Contains('/')) return false;
+                var ext = Path.GetExtension(path);
+                return ext.Equals(".sln", StringComparison.OrdinalIgnoreCase)
+                       || ext.Equals(".slnx", StringComparison.OrdinalIgnoreCase)
+                       || ext.Equals(".csproj", StringComparison.OrdinalIgnoreCase);
+            });
+        }
+
         try
         {
             foreach (var file in Directory.EnumerateFiles(repoRoot))
@@ -241,10 +260,28 @@ public static class VerifyCommandPlanner
     /// and skips dependency / build-output folders.
     /// </summary>
     internal static IReadOnlyList<string> NodePackageDirs(string repoRoot)
+        => NodePackageDirs(repoRoot, TrackedRepositoryFiles.Read(repoRoot));
+
+    private static IReadOnlyList<string> NodePackageDirs(
+        string repoRoot,
+        IReadOnlySet<string>? trackedFiles)
     {
         var dirs = new List<string>();
-        if (File.Exists(Path.Combine(repoRoot, "package.json")))
+        if (TrackedRepositoryFiles.Contains(trackedFiles, "package.json")
+            && File.Exists(Path.Combine(repoRoot, "package.json")))
             dirs.Add("");
+
+        if (trackedFiles is not null)
+        {
+            dirs.AddRange(trackedFiles
+                .Where(path => path.EndsWith("/package.json", StringComparison.OrdinalIgnoreCase))
+                .Select(path => path[..^"/package.json".Length])
+                .Where(path => !path.Contains('/'))
+                .Where(path => !path.StartsWith('.') && !IgnoredScanDirs.Contains(path))
+                .Where(path => File.Exists(Path.Combine(repoRoot, path, "package.json")))
+                .Order(StringComparer.OrdinalIgnoreCase));
+            return dirs;
+        }
 
         IEnumerable<string> children;
         try { children = Directory.EnumerateDirectories(repoRoot); }
@@ -298,5 +335,86 @@ public static class VerifyCommandPlanner
         if (body.Contains(NpmDefaultTestMarker, StringComparison.OrdinalIgnoreCase))
             return false;
         return true;
+    }
+}
+
+/// <summary>
+/// Reads the Git index inventory used by plan discovery. A non-Git directory
+/// keeps the legacy filesystem behavior for standalone dry runs and fixtures;
+/// a Git checkout fails closed to tracked files so working-tree debris can
+/// never enter an immutable review plan.
+/// </summary>
+internal static class TrackedRepositoryFiles
+{
+    public static IReadOnlySet<string>? Read(string repositoryPath)
+    {
+        if (string.IsNullOrWhiteSpace(repositoryPath) || !Directory.Exists(repositoryPath))
+            return null;
+
+        if (!RunGit(repositoryPath, ["rev-parse", "--is-inside-work-tree"], out var inside)
+            || !string.Equals(inside.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+            return HasGitMetadataAncestor(repositoryPath)
+                ? new HashSet<string>(PathComparer)
+                : null;
+
+        if (!RunGit(repositoryPath, ["ls-files", "-z", "--cached"], out var output))
+            return new HashSet<string>(PathComparer);
+
+        return output
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Select(Normalize)
+            .Where(path => path.Length > 0)
+            .ToHashSet(PathComparer);
+    }
+
+    public static bool Contains(IReadOnlySet<string>? trackedFiles, string relativePath)
+        => trackedFiles is null || trackedFiles.Contains(Normalize(relativePath));
+
+    private static StringComparer PathComparer
+        => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static string Normalize(string path) => path.Replace('\\', '/').TrimStart('/');
+
+    private static bool HasGitMetadataAncestor(string repositoryPath)
+    {
+        for (var directory = new DirectoryInfo(Path.GetFullPath(repositoryPath));
+             directory is not null;
+             directory = directory.Parent)
+        {
+            var marker = Path.Combine(directory.FullName, ".git");
+            if (Directory.Exists(marker) || File.Exists(marker)) return true;
+        }
+        return false;
+    }
+
+    private static bool RunGit(
+        string repositoryPath,
+        IReadOnlyList<string> arguments,
+        out string output)
+    {
+        output = string.Empty;
+        try
+        {
+            var start = new ProcessStartInfo("git")
+            {
+                WorkingDirectory = repositoryPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (var argument in arguments) start.ArgumentList.Add(argument);
+            using var process = Process.Start(start);
+            if (process is null) return false;
+            output = process.StandardOutput.ReadToEnd();
+            _ = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return process.ExitCode == 0;
+        }
+        catch (Exception exception)
+        {
+            SilentCatch.Note(exception, "VerifyCommandPlanner: tracked Git inventory");
+            return false;
+        }
     }
 }

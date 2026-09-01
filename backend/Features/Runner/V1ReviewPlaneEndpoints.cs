@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AgentStudio.Git;
 using AgentStudio.Pipeline;
 using AgentStudio.Security;
 using AgentStudio.Tasks;
@@ -372,6 +373,7 @@ public static class V1ReviewPlaneEndpoints
             AgentStudio.Registry.ProjectRegistry projects,
             AgentStudio.Projects.ProjectSettingsService settings,
             RemoteReviewPlanBuilder remoteReviewPlans,
+            GitService git,
             TaskTransitionService transitions,
             HumanReviewEscalation escalation,
             RemoteDeliveryIntegrationCoordinator remoteIntegration,
@@ -537,6 +539,26 @@ public static class V1ReviewPlaneEndpoints
             if (retry)
             {
                 var review = settled.ReviewAttempt;
+                var retryPlan = ReviewPlanForInfrastructureRetry(
+                    request.FailureClassification,
+                    review.Subject.Plan,
+                    () =>
+                    {
+                        var project = projects.FindByStorageLocation(task.WatchPath)
+                                      ?? projects.FindByIdOrDisplayName(task.ProjectName);
+                        var taskSettings = settings.Get(task.ProjectName);
+                        var integrationRef = ResolveBaselineBranch(
+                            task,
+                            project,
+                            settings).IntegrationRef;
+                        var repositoryPath = git.ResolveRepoRootForWatchPath(task.WatchPath)
+                                             ?? project?.RepositoryPath;
+                        return remoteReviewPlans.Build(
+                            task,
+                            repositoryPath,
+                            taskSettings,
+                            integrationRef);
+                    });
                 var created = authority.CreateReviewAttempt(new CreateReviewAttemptRequest(
                     review.TaskKey,
                     review.RepositoryId,
@@ -549,7 +571,7 @@ public static class V1ReviewPlaneEndpoints
                     review.AttemptId,
                     review.Subject.RepositoryUrl,
                     review.Subject.ResultRef,
-                    review.Subject.Plan));
+                    retryPlan));
                 if (!created.Accepted)
                     return AttemptError(created);
             }
@@ -994,6 +1016,14 @@ public static class V1ReviewPlaneEndpoints
             PreserveGlobs: profile?.PreserveGlobs,
             BuildProfileFingerprint: BuildProfileValidationFingerprint.Create(profile));
     }
+
+    internal static Contract.ReviewPlanDto? ReviewPlanForInfrastructureRetry(
+        string? failureClassification,
+        Contract.ReviewPlanDto? inheritedPlan,
+        Func<Contract.ReviewPlanDto> rebuild)
+        => ReviewInfrastructureRetryPlanPolicy.RequiresRebuild(failureClassification)
+            ? rebuild()
+            : inheritedPlan;
 
     /// <summary>
     /// Writes the resolved integration line back onto a card whose recorded

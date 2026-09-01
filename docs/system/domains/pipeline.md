@@ -225,7 +225,12 @@ steer the pipeline in this policy version.
   command hash. Only failures still new after one subject retry block the
   review.
 - `backend/Features/Runner/RemoteReviewPlanBuilder.cs` freezes the effective
-  build profile and enabled pipeline aspects into the immutable ReviewSubject.
+  build profile and enabled pipeline aspects into the initial ReviewSubject.
+  Auto-discovery reads only Git-tracked entry points, manifests, and
+  conventional lockfiles, never working-tree-only folders. A
+  `ReviewInfra / PreparationFailed` retry rebuilds the plan from the current
+  registered source instead of inheriting the failed preparation layout; other
+  infrastructure retries retain the frozen plan.
   `backend/Features/Runner/RemotePipelineReviewEvidenceProjector.cs` projects
   accepted, fenced command evidence back into the ordinary
   `pipeline-execution.json`, aspect Markdown/JSON, file provenance, and
@@ -487,6 +492,8 @@ steer the pipeline in this policy version.
   preparation, including a missing toolchain, is `ReviewInfra / PreparationFailed`;
   it is never a product verdict. Its exact command, exit code, named budget, and
   complete stdout and stderr artifacts are retained in the Remote Review grade.
+  A missing preparation directory is also copied into the grade Detail line so
+  the path is visible without opening stderr.
 - Dependency preparation and verification consume one shared `gate-run` budget.
   Machine-gate queue wait, exact workspace materialization, and exact workspace
   cleanup have separate named budgets. Local Git operations receive the remaining

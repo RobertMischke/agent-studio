@@ -2198,6 +2198,28 @@
             one-slice review and a passing-build repeated-block escalation to <span class="lane">5e-escalated</span>.
           </td>
         </tr>
+        <tr id="case-cac-18-review-preparation-plan-loop">
+          <td>2026-09-01</td>
+          <td><code>CAC-18</code><br><span class="small">untracked review preparation plan loop</span></td>
+          <td>
+            CAC-18 review attempts repeatedly failed <code>prepare-3</code> with exit 127 and zero consumed
+            milliseconds. The selected working directory named a stale local salvage folder that did not exist in the
+            runner's Git-materialized review checkout. Removing the local debris did not heal later ReviewInfra attempts,
+            and the card eventually self-escalated to Human Review after exhausting its retry budget.
+          </td>
+          <td>
+            Build and review-plan discovery scanned the registered checkout's working tree, so untracked folders containing
+            npm manifests and lockfiles became preparation steps. <code>AttemptAuthorityService</code> then reused the first
+            attempt's frozen ReviewSubject plan for every infrastructure retry. The preparation summary named only exit 127
+            and linked stderr, hiding the missing directory from the grade status line.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> Git checkout discovery now admits only tracked manifests, entry points,
+            and conventional lockfiles. A <code>ReviewInfra / PreparationFailed</code> retry rebuilds its plan from the current
+            registered source and stores that plan on the new attempt. Missing preparation directories are copied from
+            process stderr into the failure detail and the durable grade's explicit Detail line, including the full path.
+          </td>
+        </tr>
       </tbody>
     </table>
 

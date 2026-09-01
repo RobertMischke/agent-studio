@@ -35,6 +35,25 @@ public sealed class VerifyCommandPlannerTests : IDisposable
         File.WriteAllText(full, content);
     }
 
+    private string RunGit(params string[] args)
+    {
+        var start = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = _root,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (var arg in args) start.ArgumentList.Add(arg);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("git did not start");
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)} failed: {stderr}");
+        return stdout;
+    }
+
     // ---- Fixture: .NET only ------------------------------------------------
 
     [Fact]
@@ -159,6 +178,55 @@ public sealed class VerifyCommandPlannerTests : IDisposable
 
         Assert.Equal(VerifyPlan.SourceNone, plan.Source);
         Assert.True(plan.IsEmpty);
+    }
+
+    [Fact]
+    public void Npm_UntrackedChildPackage_IsExcludedFromVerificationAndPreparation()
+    {
+        Write("tracked-app/package.json", """{ "scripts": { "build": "tsc" } }""");
+        Write("tracked-app/package-lock.json", """{ "lockfileVersion": 3 }""");
+        RunGit("init", "-q", "-b", "main");
+        RunGit("config", "user.email", "test@example.invalid");
+        RunGit("config", "user.name", "Verify Planner Test");
+        RunGit("add", "tracked-app/package.json", "tracked-app/package-lock.json");
+        RunGit("commit", "-q", "-m", "tracked package");
+
+        Write("stale-salvage/package.json", """{ "scripts": { "build": "tsc" } }""");
+        Write("stale-salvage/package-lock.json", """{ "lockfileVersion": 3 }""");
+
+        var verify = VerifyCommandPlanner.Plan(_root, profile: null);
+        var preparation = GatePreparationPlanner.Plan(_root, profile: null, verify.Commands);
+
+        Assert.DoesNotContain(verify.Commands, command => command.WorkingSubdir == "stale-salvage");
+        Assert.DoesNotContain(preparation, command => command.WorkingSubdir == "stale-salvage");
+        Assert.Contains(preparation, command => command.WorkingSubdir == "tracked-app");
+    }
+
+    [Fact]
+    public void Preparation_failure_retry_rebuilds_plan_after_tracked_source_changes()
+    {
+        Write("removed-app/package.json", """{ "scripts": { "build": "tsc" } }""");
+        Write("removed-app/package-lock.json", """{ "lockfileVersion": 3 }""");
+        RunGit("init", "-q", "-b", "main");
+        RunGit("config", "user.email", "test@example.invalid");
+        RunGit("config", "user.name", "Verify Planner Test");
+        RunGit("add", "removed-app/package.json", "removed-app/package-lock.json");
+        RunGit("commit", "-q", "-m", "package before repair");
+        var firstPlan = V1ReviewPlaneEndpoints.FallbackPlan(
+            _root, profile: null, integrationRef: "refs/heads/main");
+        Assert.Contains(firstPlan.Preparation!, command => command.WorkingSubdir == "removed-app");
+
+        RunGit("rm", "-q", "removed-app/package.json", "removed-app/package-lock.json");
+        RunGit("commit", "-q", "-m", "remove stale package");
+
+        var retryPlan = V1ReviewPlaneEndpoints.ReviewPlanForInfrastructureRetry(
+            "PreparationFailed",
+            firstPlan,
+            () => V1ReviewPlaneEndpoints.FallbackPlan(
+                _root, profile: null, integrationRef: "refs/heads/main"));
+
+        Assert.NotEqual(firstPlan, retryPlan);
+        Assert.Empty(retryPlan!.Preparation ?? []);
     }
 
     // ---- Fixture: mixed (.NET + npm) --------------------------------------

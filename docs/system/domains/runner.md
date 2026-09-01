@@ -457,6 +457,8 @@ state.
   changes invalidate the cached dependency state. Preparation failure and a
   verification exit 127 are typed `ReviewInfra`; the report retains the exact
   failed command, exit code, budget, and complete stdout and stderr artifacts.
+  `PreparationFailed` retries rebuild the plan from the current Git-tracked
+  source, and a missing preparation directory is surfaced as the grade Detail.
 - Draining closes review admission but not active renew, report, or cleanup.
   Safe shutdown and restore include unresolved ReviewAttempt authority, and
   a positively proven planned-restart adoption retains the ReviewAttempt,
