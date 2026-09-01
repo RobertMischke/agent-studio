@@ -22,7 +22,8 @@ public sealed class ProviderAuthProbeTests
         TimeSpan? ttl = null,
         TimeSpan? timeout = null,
         int negativeConfirmations = ProviderAuthProbe.DefaultNegativeConfirmations,
-        Action<string>? diagnosticLog = null)
+        Action<string>? diagnosticLog = null,
+        Func<string, DateTimeOffset, ProviderCredentialFreshness>? credentialFreshness = null)
         => new(
             launcher,
             _ => binaryExists,
@@ -30,7 +31,158 @@ public sealed class ProviderAuthProbeTests
             ttl,
             timeout,
             negativeConfirmations,
-            diagnosticLog);
+            diagnosticLog,
+            credentialFreshness);
+
+    [Fact]
+    public async Task A_single_run_auth_failure_followed_by_logged_in_does_not_latch_unavailable()
+    {
+        var probe = Probe(Answers(0, "Logged in"));
+
+        var status = await probe.ConfirmRunFailureAsync(
+            "codex",
+            new ProcessResult(1, "", "401 authentication failed; refresh may be in progress"),
+            CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionOk, status.Condition);
+        Assert.False(status.ProbeDegraded);
+    }
+
+    [Fact]
+    public void Initial_presence_only_status_cannot_masquerade_as_a_successful_auth_probe()
+    {
+        var probe = Probe(Answers(0, "Logged in"));
+
+        var status = probe.Current("codex");
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionTransient, status.Condition);
+        Assert.Contains("unverified", status.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_transient_refresh_error_stays_ready_and_is_labeled_retrying()
+    {
+        var probe = Probe(Answers(1, "", "failed to refresh token; retry later"));
+
+        var status = await probe.ObserveTransientRunFailureAsync(
+            "codex",
+            new ProcessResult(1, "", "failed to refresh token"),
+            CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionTransient, status.Condition);
+        Assert.True(status.ProbeDegraded);
+        Assert.Contains("retrying", status.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Exact_apply_patch_tool_failure_leaves_confirmed_capability_available()
+    {
+        const string toolFailure =
+            "ERROR codex_core::tools::router: error=apply_patch verification failed: "
+            + "Failed to find context 'public sealed class V1ReviewExecutorRegistry' in "
+            + "/worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs";
+        var probe = Probe(Answers(0, "Logged in"));
+        await probe.RefreshAsync("codex", CancellationToken.None);
+
+        var classification = RunnerCapabilityProbe.ClassifyProviderAuthenticationFailure(
+            new ProcessResult(1, "", toolFailure));
+
+        Assert.Equal(ProviderAuthFailureKind.None, classification);
+        Assert.Equal(ProviderAuthProbe.Ready, probe.Current("codex").Status);
+        Assert.Equal(ProviderAuthProbe.ConditionOk, probe.Current("codex").Condition);
+    }
+
+    [Fact]
+    public async Task Run_auth_failure_and_status_confirmation_are_genuinely_signed_out()
+    {
+        var probe = Probe(Answers(1, "", "Not logged in. Run codex login."));
+
+        var status = await probe.ConfirmRunFailureAsync(
+            "codex",
+            new ProcessResult(1, "", "401 authentication failed; bearer credential invalid"),
+            CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionSignedOut, status.Condition);
+        Assert.Contains("genuinely signed out, re-auth needed", status.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Credential_expiry_warning_is_quiet_and_does_not_close_claim_admission()
+    {
+        var expiresAt = new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero);
+        var probe = Probe(
+            Answers(0, "Logged in"),
+            clock: () => new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero),
+            credentialFreshness: (_, _) => new ProviderCredentialFreshness(
+                new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero),
+                expiresAt,
+                $"credentials expire at {expiresAt:O}; renew them before Ready cards are held."));
+
+        var status = await probe.RefreshAsync("claude", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthProbe.ConditionExpiring, status.Condition);
+        Assert.Equal(expiresAt, status.ExpiresAt);
+        Assert.Contains("Credential warning", status.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Credential_reader_uses_claude_refresh_expiry_and_codex_refresh_age_without_tokens()
+    {
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var claudeExpiry = now.AddDays(10);
+        var claude = ProviderCredentialFreshnessReader.Parse(
+            "claude",
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                claudeAiOauth = new
+                {
+                    accessToken = "secret",
+                    refreshToken = "secret",
+                    expiresAt = now.AddHours(1).ToUnixTimeMilliseconds(),
+                    refreshTokenExpiresAt = claudeExpiry.ToUnixTimeMilliseconds(),
+                },
+            }),
+            now.AddDays(-1),
+            now);
+        var codex = ProviderCredentialFreshnessReader.Parse(
+            "codex",
+            """{"auth_mode":"chatgpt","last_refresh":"2026-07-01T12:00:00Z","tokens":{"access_token":"secret","refresh_token":"secret"}}""",
+            now,
+            now);
+
+        Assert.Equal(claudeExpiry, claude.ExpiresAt);
+        Assert.Contains("expire", claude.Warning!, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(codex.ExpiresAt);
+        Assert.Contains("have not refreshed", codex.Warning!, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", claude.Warning ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", codex.Warning ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Claude_access_token_expiry_does_not_create_a_reauthentication_warning()
+    {
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+
+        var freshness = ProviderCredentialFreshnessReader.Parse(
+            "claude",
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                claudeAiOauth = new
+                {
+                    expiresAt = now.AddMinutes(30).ToUnixTimeMilliseconds(),
+                },
+            }),
+            now.AddDays(-1),
+            now);
+
+        Assert.Null(freshness.ExpiresAt);
+        Assert.False(freshness.NeedsAttention);
+    }
 
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]

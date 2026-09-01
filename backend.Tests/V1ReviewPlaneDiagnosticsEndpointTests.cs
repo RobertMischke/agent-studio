@@ -32,6 +32,67 @@ public sealed class V1ReviewPlaneDiagnosticsEndpointTests : IDisposable
     private readonly string _workspace;
     private readonly string _watchPath;
 
+    [Fact]
+    public void Fresh_provider_auth_probe_clears_in_memory_drain_without_registration()
+    {
+        var registry = new V1ReviewExecutorRegistry();
+        registry.Register(
+            RunnerId,
+            new Contract.RegisterRunnerRequest(
+                RunnerId,
+                "review-host",
+                Instance,
+                "1.0.0",
+                Contract.TaskServerProtocol.Current,
+                [Contract.ReviewCapabilities.ReviewExecutor]));
+        var capability = Contract.CapabilityProtocol.ProviderAuthentication("codex");
+        registry.AdvertiseCapabilities(
+            RunnerId,
+            new Contract.CapabilityAdvertisementRequest(
+                RunnerId,
+                Instance,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                DateTime.UtcNow,
+                180,
+                1,
+                [new Contract.AdvertisedCapabilityDto(
+                    capability,
+                    "provider-auth",
+                    "unavailable",
+                    Condition: Contract.ProviderAuthProbeConditions.SignedOut)]));
+        registry.ReportCapabilityFailure(RunnerId, Failure(
+            capability,
+            "ProviderUnauthorized",
+            "provider-auth-1",
+            DateTime.UtcNow.AddSeconds(-1)));
+        registry.ReportCapabilityFailure(RunnerId, Failure(
+            capability,
+            "ProviderUnauthorized",
+            "provider-auth-2",
+            DateTime.UtcNow));
+        Assert.True(registry.TryGetCapabilityPause(RunnerId, out _));
+
+        var snapshot = registry.AdvertiseCapabilities(
+            RunnerId,
+            new Contract.CapabilityAdvertisementRequest(
+                RunnerId,
+                Instance,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                DateTime.UtcNow,
+                180,
+                2,
+                [new Contract.AdvertisedCapabilityDto(
+                    capability,
+                    "provider-auth",
+                    Condition: Contract.ProviderAuthProbeConditions.Ok)]));
+
+        Assert.False(registry.TryGetCapabilityPause(RunnerId, out _));
+        var recovered = Assert.Single(snapshot.Capabilities);
+        Assert.Equal(Contract.CapabilityHealthStates.Healthy, recovered.HealthState);
+        Assert.Contains(recovered.RecoveryHistory, item =>
+            item.Reason.Contains("without a runner restart", StringComparison.Ordinal));
+    }
+
     public V1ReviewPlaneDiagnosticsEndpointTests()
     {
         _workspace = Path.Combine(Path.GetTempPath(), "atp-v1-diagnostics-" + Guid.NewGuid().ToString("N"));

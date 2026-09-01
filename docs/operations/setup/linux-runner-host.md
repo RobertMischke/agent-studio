@@ -321,17 +321,23 @@ both installed units, verifies the variable name in each daemon's
 the value in the Studio database, repository, task, log, or evidence artifact.
 
 Provider capability snapshots refresh every 60 seconds. Execution Hosts shows
-**OK**, **Unavailable**, or **Unknown** per CLI, with the probe detail in the
-tooltip. Provider auth probes run at most every five minutes, use a 30-second
+**OK**, **transient auth error, retrying**, **credentials expiring**,
+**genuinely signed out, re-auth needed**, **Unavailable**, or **Unknown** per
+CLI, with the probe detail in the tooltip. Provider auth probes run at most every five minutes, use a 30-second
 timeout, and run at lower CPU priority on Linux. A timeout, empty output, launch
 failure, or unsupported command keeps the last advertised verdict and writes a
 `runner-provider-auth-probe-degraded` journal line. Two consecutive explicit
 logout answers are required for `OK -> Unavailable`; that transition creates an
-operator notification and updates Ready card wait reasons. A later successful
-probe writes `runner-provider-auth-probe-recovered` and advertises **OK** without
-a service restart. A recognized auth failure from a run reports the capability
-failure immediately. When a capability advertises a known expiry, Studio warns
-during the final 14 days. Follow
+operator notification and updates Ready card wait reasons. A single failure,
+including a shared-account token-refresh race, stays claimable as a transient
+retry. Rate limits use the provider-limit circuit, and ordinary CLI tool errors
+never affect provider auth. A later successful probe writes
+`runner-provider-auth-probe-recovered`, clears the server-side auth drain, and
+advertises **OK** without a service restart. A distinguishable auth failure from
+a run is reported only after the CLI status probe independently confirms it.
+For provider-owned OAuth files, the runner reads only refresh/expiry timestamps;
+Studio warns during the final 14 days of a known Claude refresh-token lifetime
+or when Codex credentials have not refreshed for 30 days. Follow
 [cli-relogin-runbook.md](./cli-relogin-runbook.md) for renewal.
 
 Do not create provider-specific files such as `claude.env`.

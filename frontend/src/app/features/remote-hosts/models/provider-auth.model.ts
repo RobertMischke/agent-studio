@@ -6,7 +6,13 @@ import type {
   TaskServerRunnerCapabilitySnapshot,
 } from './remote-host.model';
 
-export type ProviderAuthDisplayState = 'ok' | 'unavailable' | 'unknown';
+export type ProviderAuthDisplayState =
+  | 'ok'
+  | 'retrying'
+  | 'expiring'
+  | 'signed-out'
+  | 'unavailable'
+  | 'unknown';
 
 export interface ProviderAuthBadge {
   id: string;
@@ -24,6 +30,7 @@ export interface ProviderAuthBadge {
   expiresSoon: boolean;
   expiryLabel: string | null;
   history: readonly CapabilityRecoveryEvent[];
+  credentialUpdatedAt: string | null;
 }
 
 export interface ProviderAuthWaitReason {
@@ -103,14 +110,17 @@ export function providerAuthWaitReason(
     status.provider === provider
     && (!configuredRunner
       || status.aliases.some(alias => alias.toLowerCase() === configuredRunner.toLowerCase())));
-  if (candidates.some(status => status.state === 'ok' && status.reachable)) return null;
+  if (candidates.some(status =>
+    status.reachable
+    && (status.state === 'ok' || status.state === 'retrying' || status.state === 'expiring'))) return null;
 
   const providerLabel = label(provider);
   const hostNames = [...new Set(candidates.map(status => status.hostName).filter(Boolean))];
   const target = hostNames.length > 0
     ? hostNames.join(', ')
     : configuredRunner ?? 'an execution host';
-  const unavailable = candidates.filter(status => status.state === 'unavailable');
+  const unavailable = candidates.filter(status =>
+    status.state === 'signed-out' || status.state === 'unavailable');
   const detail = unavailable.length > 0
     ? unavailable.map(status => `${status.hostName}: ${status.detail}`).join('\n')
     : candidates.length > 0
@@ -120,8 +130,10 @@ export function providerAuthWaitReason(
         : `No reachable runner capability snapshot advertises provider-auth:${provider}.`;
   return {
     provider,
-    label: `Waiting for ${providerLabel} sign-in on ${target}`,
-    tooltip: `${detail}\nThe task stays Ready until a fresh provider probe reports OK.`,
+    label: unavailable.some(status => status.state === 'signed-out')
+      ? `${providerLabel} genuinely signed out on ${target}; re-auth needed`
+      : `Waiting for ${providerLabel} availability on ${target}`,
+    tooltip: `${detail}\nOnly a confirmed signed-out or unavailable capability holds the task. A fresh successful probe reopens claims automatically.`,
     hostNames: hostNames.length > 0 ? hostNames : configuredRunner ? [configuredRunner] : [],
   };
 }
@@ -155,9 +167,14 @@ function badgeFromCapability(
     && expiryMs - nowMs <= PROVIDER_AUTH_EXPIRY_WARNING_MS;
   let state: ProviderAuthDisplayState;
   if (!capability || !capability.isFresh || !runnerReachable) state = 'unknown';
-  else if (expired
-    || capability.advertisedStatus !== 'ready'
-    || capability.healthState !== 'healthy') state = 'unavailable';
+  else if (capability.condition === 'signed-out') state = 'signed-out';
+  else if (expired || capability.condition === 'binary-missing') state = 'unavailable';
+  else if (capability.advertisedStatus !== 'ready') state = 'unavailable';
+  else if (capability.condition === 'transient-error'
+    || capability.healthState === 'suspect'
+    || capability.healthState === 'half-open') state = 'retrying';
+  else if (capability.condition === 'expiring' || expiresSoon) state = 'expiring';
+  else if (capability.healthState === 'draining') state = 'unavailable';
   else state = 'ok';
 
   const detail = capability
@@ -183,7 +200,19 @@ function badgeFromCapability(
     expiresSoon,
     expiryLabel: Number.isFinite(expiryMs) ? expiryDistance(expiryMs - nowMs) : null,
     history: capability?.recoveryHistory ?? [],
+    credentialUpdatedAt: capability?.credentialUpdatedAt ?? null,
   };
+}
+
+export function providerAuthStateLabel(state: ProviderAuthDisplayState): string {
+  switch (state) {
+    case 'retrying': return 'transient auth error, retrying';
+    case 'expiring': return 'credentials expiring';
+    case 'signed-out': return 'genuinely signed out, re-auth needed';
+    case 'unavailable': return 'unavailable';
+    case 'unknown': return 'unknown';
+    default: return 'ok';
+  }
 }
 
 function isRecent(value: string | null | undefined, nowMs: number): boolean {

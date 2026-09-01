@@ -773,32 +773,73 @@ public sealed class RemoteTaskRunner
                 {
                     _state.Save(slot with { Phase = "finalizing", LastOutputSequence = sequence });
                     var processResult = new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
-                    if (RunnerCapabilityProbe.IsProviderAuthenticationFailure(processResult))
+                    var authFailure = RunnerCapabilityProbe.ClassifyProviderAuthenticationFailure(processResult);
+                    if (authFailure == ProviderAuthFailureKind.SignedOut)
                     {
                         var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
                                        ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var cliBinary = RunnerCapabilityProbe.CodingCliBinaries(_options)
+                            .FirstOrDefault(item => string.Equals(
+                                item.CliType,
+                                provider,
+                                StringComparison.Ordinal))
+                            .Binary
+                            ?? _options.CliBin;
+                        var authStatus = await ProviderAuthProbe.Shared.ConfirmRunFailureAsync(
+                            cliBinary,
+                            processResult,
+                            stopRun);
                         var claimId = outbox?.Authority.RunId;
                         var diagnostic = result.StdErr
                             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                             .LastOrDefault()
                             ?? $"{provider} exited {result.ExitCode} with an authentication failure";
-                        // Diagnosis only: the run's own classification and fenced
-                        // completion below must survive a server that rejects or
-                        // does not mount the capability route.
-                        await CapabilityFailureReporter.TryReportAsync(
-                            _client,
-                            _log,
-                            CapabilityProtocol.ProviderAuthentication(provider),
-                            "ProviderUnauthorized",
-                            diagnostic.Length <= 500 ? diagnostic : diagnostic[..500],
-                            $"provider-auth:{claimId ?? slot.Lease.LeaseId}:{slot.Lease.FencingToken}",
-                            "run",
-                            claimId,
-                            slot.Lease.FencingToken,
+                        if (authStatus.Condition == ProviderAuthProbe.ConditionSignedOut)
+                        {
+                            // Diagnosis only: the run's own classification and fenced
+                            // completion below must survive a server that rejects or
+                            // does not mount the capability route. The local probe has
+                            // already supplied the required independent confirmation.
+                            await CapabilityFailureReporter.TryReportAsync(
+                                _client,
+                                _log,
+                                CapabilityProtocol.ProviderAuthentication(provider),
+                                "ProviderUnauthorized",
+                                diagnostic.Length <= 500 ? diagnostic : diagnostic[..500],
+                                $"provider-auth:{claimId ?? slot.Lease.LeaseId}:{slot.Lease.FencingToken}",
+                                "run",
+                                claimId,
+                                slot.Lease.FencingToken,
+                                stopRun);
+                            shipper.Add(
+                                "system",
+                                $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized confirmed=true");
+                        }
+                        else
+                        {
+                            shipper.Add(
+                                "system",
+                                $"[runner] transient auth error, retrying capability={CapabilityProtocol.ProviderAuthentication(provider)} detail={authStatus.Detail}");
+                        }
+                    }
+                    else if (authFailure == ProviderAuthFailureKind.Transient)
+                    {
+                        var provider = AgentCliProcess.NormalizeCliType(slot.RunSpec?.CliType)
+                                       ?? AgentCliProcess.ConfiguredCliType(_options);
+                        var cliBinary = RunnerCapabilityProbe.CodingCliBinaries(_options)
+                            .FirstOrDefault(item => string.Equals(
+                                item.CliType,
+                                provider,
+                                StringComparison.Ordinal))
+                            .Binary
+                            ?? _options.CliBin;
+                        var authStatus = await ProviderAuthProbe.Shared.ObserveTransientRunFailureAsync(
+                            cliBinary,
+                            processResult,
                             stopRun);
                         shipper.Add(
                             "system",
-                            $"[runner] capability-failure capability={CapabilityProtocol.ProviderAuthentication(provider)} classification=ProviderUnauthorized");
+                            $"[runner] transient auth error, retrying capability={CapabilityProtocol.ProviderAuthentication(provider)} status={authStatus.Condition} detail={authStatus.Detail}");
                     }
                     var classified = result.TimedOut
                         ? ClassifyTimedOutResult(slot.Lease, workspace, result, sameSessionResumeAttempts)

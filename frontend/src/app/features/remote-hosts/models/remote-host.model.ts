@@ -184,8 +184,12 @@ export interface RemoteHostCapabilityHealth {
   version?: string | null;
   identity?: string | null;
   detail?: string | null;
+  /** Runner-auth probe condition. Claim admission still uses advertisedStatus. */
+  condition?: 'ok' | 'transient-error' | 'signed-out' | 'expiring' | 'binary-missing' | null;
   /** Optional provider-reported credential expiry. Older runners omit it. */
   expiresAt?: string | null;
+  /** Last non-secret credential refresh or credential-file update observed by the runner. */
+  credentialUpdatedAt?: string | null;
   affectedClaims: readonly string[];
   recoveryHistory: readonly CapabilityRecoveryEvent[];
 }

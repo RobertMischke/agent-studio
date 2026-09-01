@@ -1322,7 +1322,8 @@ describe('TaskCardComponent (smoke)', () => {
         key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: 'unavailable',
         healthState: 'healthy', advertisedAt: now.toISOString(),
         freshUntil: new Date(now.getTime() + 120_000).toISOString(), isFresh: true,
-        consecutiveFailures: 0, detail: 'Not logged in', affectedClaims: [], recoveryHistory: [],
+        consecutiveFailures: 0, detail: 'Not logged in', condition: 'signed-out',
+        affectedClaims: [], recoveryHistory: [],
       }],
     }]);
     fixture.detectChanges();
@@ -1330,7 +1331,7 @@ describe('TaskCardComponent (smoke)', () => {
     const wait = fixture.nativeElement.querySelector(
       '[data-testid="task-card-provider-auth-wait"]',
     ) as HTMLElement | null;
-    expect(wait?.textContent).toContain('Waiting for Claude sign-in on linux-host');
+    expect(wait?.textContent).toContain('Claude genuinely signed out on linux-host; re-auth needed');
     expect(fixture.componentInstance.providerAuthWait()?.tooltip).toContain('Not logged in');
   });
 

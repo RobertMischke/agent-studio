@@ -151,9 +151,11 @@ state.
   `/etc/agent-runner/provider-auth.env`, for every provider. It is installed as
   `root:agent` mode `640`, loaded by both Coding and Review units after their
   existing EnvironmentFile, and provisioned only through SSH stdin. Studio
-  never stores the value. Provider probes inspect only the process environment
-  and CLI status. Provider-specific files, including `claude.env`, are outside
-  the contract.
+  never stores the value. Provider probes inspect the process environment and
+  CLI status. For provider-owned OAuth logins, the probe also reads only
+  non-secret timestamps from `~/.claude/.credentials.json` and
+  `~/.codex/auth.json`; token values never leave the host. Provider-specific
+  EnvironmentFiles, including `claude.env`, are outside the contract.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task
@@ -506,10 +508,14 @@ state.
   assembly package version.
 - Provider-auth advertisement changes are appended to the same bounded recovery
   history exposed by the management snapshot. Execution Hosts turns that data
-  into per-CLI `OK`, `Unavailable`, and `Unknown` badges, transition
-  notifications, optional 14-day expiry warnings, and Ready-card wait reasons.
-  A recognized provider-auth run failure reports unavailability immediately so
-  revocation between periodic probes is visible.
+  into per-CLI `OK`, `transient auth error, retrying`, `credentials expiring`,
+  `genuinely signed out, re-auth needed`, `Unavailable`, and `Unknown` badges,
+  optional quiet expiry warnings, and Ready-card wait reasons. A run-level
+  nonzero exit is never itself an auth verdict. Rate limits enter the shared
+  provider-limit circuit, tool and patch failures remain run-local, and an
+  auth-shaped exit must be independently confirmed by the active CLI status
+  command before the runner reports `ProviderUnauthorized`. A later successful
+  probe clears provider-auth health and reopens claims without a runner restart.
 - Account-level provider session, usage, and rate limits are CLI capability
   state, not task outcomes. The local runner records `claude: limited until
   <time>` in runner status, persists the current card in provider-scoped

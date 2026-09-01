@@ -31,7 +31,7 @@ describe('ProviderAuthStatusService', () => {
 
     expect(notifications.notifications()).toHaveLength(1);
     expect(notifications.notifications()[0].title).toBe('Claude sign-in required');
-    expect(notifications.notifications()[0].message).toContain('changed from OK to unavailable');
+    expect(notifications.notifications()[0].message).toContain('genuinely signed out');
     expect(notifications.notifications()[0].message).toContain('runner-berlin');
   });
 
@@ -45,11 +45,20 @@ describe('ProviderAuthStatusService', () => {
     expect(notifications.notifications()[0].title).toBe('Claude authentication expires soon');
     expect(notifications.notifications()[0].message).toContain('expires in 10 days');
   });
+
+  it('does not alarm or require sign-in for a transient auth retry', () => {
+    service.ingest([snapshot('ready')]);
+    service.ingest([snapshot('ready', null, 'transient-error')]);
+
+    expect(service.statuses()[0].state).toBe('retrying');
+    expect(notifications.notifications()).toHaveLength(0);
+  });
 });
 
 function snapshot(
   status: 'ready' | 'unavailable',
   expiresAt: string | null = null,
+  condition: 'ok' | 'transient-error' | 'signed-out' = status === 'ready' ? 'ok' : 'signed-out',
 ): TaskServerRunnerCapabilitySnapshot {
   const now = new Date().toISOString();
   return {
@@ -73,6 +82,7 @@ function snapshot(
       healthState: 'healthy', advertisedAt: now,
       freshUntil: new Date(Date.now() + 120_000).toISOString(), isFresh: true,
       consecutiveFailures: 0, detail: status === 'ready' ? 'Active session confirmed' : 'Not logged in',
+      condition,
       expiresAt, affectedClaims: [], recoveryHistory: [],
     }],
   };

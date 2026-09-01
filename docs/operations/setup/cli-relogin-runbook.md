@@ -1,36 +1,56 @@
 # Runbook: renew provider authentication on an execution host
 
-Use this runbook when an Execution Hosts provider badge changes from **OK** to
-**Unavailable**, a Ready card says it is waiting for a provider sign-in, or a
-run reports `ProviderUnauthorized`.
+Use this runbook only when an Execution Hosts provider badge says **genuinely
+signed out, re-auth needed**, a Ready card carries that confirmed reason, or a
+run reports a probe-confirmed `ProviderUnauthorized`. A transient retry or rate
+limit does not require re-authentication.
 
 The authoritative host secret store is
 `/etc/agent-runner/provider-auth.env`. It contains all environment-backed
 provider credentials, is owned by `root:agent`, and has mode `640`. Both the
 Coding and Review systemd units load it after their ordinary runner
-EnvironmentFile. A provider probe reads only the daemon process environment. It
-does not read this file or any other credential path.
+EnvironmentFile. The probe never reads that protected EnvironmentFile. For
+provider-owned OAuth logins it reads only non-secret refresh and expiry
+timestamps from the CLI's home-directory credential file; token values are
+never returned, logged, advertised, or stored by Studio.
 
 ## 1. Confirm the affected provider and host
 
 Open **Workspace Settings > Execution Hosts** and inspect **Provider
-authentication** on the affected host. The badge exposes three states:
+authentication** on the affected host. The badge exposes these states:
 
 - **OK**: a fresh capability snapshot reports usable provider authentication.
-- **Unavailable**: a fresh probe failed. Hover the badge for the runner's probe
-  detail, such as `Not logged in`.
+- **transient auth error, retrying**: the latest observation was indeterminate
+  or is the first explicit logout response. Claims remain open while the runner
+  retries and retains the last good state.
+- **credentials expiring**: authentication works, but a known Claude refresh
+  expiry is within 14 days or Codex has not refreshed for 30 days. This is a
+  quiet warning and does not block claims.
+- **genuinely signed out, re-auth needed**: consecutive distinguishable logout
+  observations were confirmed. This is the only provider-auth state that raises
+  the sign-in alarm and holds Ready cards.
+- **Unavailable**: the CLI binary is missing or another non-auth capability is
+  unusable. Hover the badge for detail; do not assume re-auth is the fix.
 - **Unknown**: no current provider-auth advertisement exists, the advertisement
   is stale, or the runner is unreachable.
 
 Provider transitions are retained in the capability recovery history. An
-`OK -> Unavailable` transition creates an operator notification. A run that
-fails with a recognized provider-auth error reports the capability failure at
-once, without waiting for the next 60-second probe cycle. Ready cards assigned
-to that host show the same blocking reason.
+`OK -> genuinely signed out` transition creates an operator notification. A
+run-level nonzero exit is only evidence: rate-limit output enters the limited
+state, tool and patch errors stay with the run, and an auth signature triggers
+an immediate status probe. The runner reports the capability failure only when
+that probe supplies the required consecutive confirmation.
 
 If the runner advertises a credential expiry, Studio warns once when it enters
 the final 14 days. An absent expiry is reported as unknown and is never guessed
 from the secret.
+
+The installed Codex and Claude command surfaces expose non-interactive status
+checks but no explicit non-interactive OAuth refresh command. The runner uses
+those status checks as the safe validation point; if the CLI refreshes as part
+of that check, the next metadata read observes it. Token rotation otherwise
+remains owned by the CLI. The runner never starts a billable prompt or an
+interactive login as a background freshness action.
 
 ## 2. Renew through Studio
 
@@ -54,11 +74,12 @@ preserving entries for future providers in the shared file.
 
 ## 3. Verify recovery
 
-The next provider probe normally arrives within 60 seconds. Recovery is
+The next capability advertisement normally arrives within 60 seconds. Recovery is
 complete when all of these statements are true:
 
 1. The host badge is **OK** and its timestamp is fresh.
-2. The newest recovery-history entry records `unavailable -> ready`.
+2. The newest recovery-history entry records the successful provider probe and
+   server-side health recovery.
 3. Ready cards no longer show the provider sign-in wait reason.
 4. A normal probe card can be claimed and completed on that host.
 

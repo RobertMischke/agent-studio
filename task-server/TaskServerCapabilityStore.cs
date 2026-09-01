@@ -76,15 +76,33 @@ public sealed partial class TaskServerStore
                             advertisedStatus,
                             $"Provider authentication probe changed from {previous.AdvertisedStatus} to {advertisedStatus}."));
                 }
+                var providerRecovered = tracksProbeHistory
+                                        && string.Equals(advertisedStatus, "ready", StringComparison.Ordinal)
+                                        && capability.Condition is ProviderAuthProbeConditions.Ok
+                                            or ProviderAuthProbeConditions.Expiring;
+                if (providerRecovered
+                    && previous is not null
+                    && previous.HealthState != CapabilityHealthStates.Healthy)
+                {
+                    probeHistory = AppendHistory(
+                        probeHistory,
+                        new CapabilityRecoveryEventDto(
+                            advertisedAt,
+                            previous.HealthState,
+                            CapabilityHealthStates.Healthy,
+                            "A fresh provider login probe confirmed recovery; claims reopened without a runner restart."));
+                }
                 await ExecuteAsync(connection, """
                     INSERT INTO runner_capabilities(
                         runner_id, capability_key, category, schema_version,
                         advertised_status, health_state, reason, version,
-                        identity_value, detail, advertised_at, fresh_until,
+                        identity_value, detail, condition, credential_expires_at,
+                        credential_updated_at, advertised_at, fresh_until,
                         generation, recovery_history_json, updated_at)
                     VALUES (
                         $runner, $key, $category, $schema, $status, 'healthy',
-                        NULL, $version, $identity, $detail, $advertised,
+                        NULL, $version, $identity, $detail, $condition, $credential_expiry,
+                        $credential_updated, $advertised,
                         $fresh, $generation, $history, $updated)
                     ON CONFLICT(runner_id, capability_key) DO UPDATE SET
                         category = excluded.category,
@@ -93,6 +111,16 @@ public sealed partial class TaskServerStore
                         version = excluded.version,
                         identity_value = excluded.identity_value,
                         detail = excluded.detail,
+                        condition = excluded.condition,
+                        credential_expires_at = excluded.credential_expires_at,
+                        credential_updated_at = excluded.credential_updated_at,
+                        health_state = CASE WHEN $provider_recovered = 1 THEN 'healthy' ELSE runner_capabilities.health_state END,
+                        reason = CASE WHEN $provider_recovered = 1 THEN NULL ELSE runner_capabilities.reason END,
+                        first_failure_at = CASE WHEN $provider_recovered = 1 THEN NULL ELSE runner_capabilities.first_failure_at END,
+                        last_failure_at = CASE WHEN $provider_recovered = 1 THEN NULL ELSE runner_capabilities.last_failure_at END,
+                        cooldown_until = CASE WHEN $provider_recovered = 1 THEN NULL ELSE runner_capabilities.cooldown_until END,
+                        canary_claim_id = CASE WHEN $provider_recovered = 1 THEN NULL ELSE runner_capabilities.canary_claim_id END,
+                        consecutive_failures = CASE WHEN $provider_recovered = 1 THEN 0 ELSE runner_capabilities.consecutive_failures END,
                         advertised_at = excluded.advertised_at,
                         fresh_until = excluded.fresh_until,
                         generation = excluded.generation,
@@ -110,11 +138,15 @@ public sealed partial class TaskServerStore
                     ("$version", capability.Version),
                     ("$identity", capability.Identity),
                     ("$detail", capability.Detail),
+                    ("$condition", capability.Condition),
+                    ("$credential_expiry", capability.ExpiresAt is null ? null : Iso(capability.ExpiresAt.Value.ToUniversalTime())),
+                    ("$credential_updated", capability.CredentialUpdatedAt is null ? null : Iso(capability.CredentialUpdatedAt.Value.ToUniversalTime())),
                     ("$advertised", Iso(advertisedAt)),
                     ("$fresh", Iso(freshUntil)),
                     ("$generation", request.Generation),
                     ("$history", JsonSerializer.Serialize(probeHistory)),
                     ("$tracks_history", tracksProbeHistory ? 1 : 0),
+                    ("$provider_recovered", providerRecovered ? 1 : 0),
                     ("$updated", now));
             }
             if (request.Telemetry is not null)
@@ -371,7 +403,8 @@ public sealed partial class TaskServerStore
                        reason, advertised_at, fresh_until, first_failure_at,
                        last_failure_at, cooldown_until, canary_claim_id,
                        consecutive_failures, version, identity_value, detail,
-                       recovery_history_json
+                       recovery_history_json, condition, credential_expires_at,
+                       credential_updated_at
                   FROM runner_capabilities
                  WHERE runner_id = $runner
                  ORDER BY category, capability_key;
@@ -400,7 +433,10 @@ public sealed partial class TaskServerStore
                         reader.IsDBNull(13) ? null : reader.GetString(13),
                         reader.IsDBNull(14) ? null : reader.GetString(14),
                         await AffectedClaimsAsync(connection, runner.Id, key, ct),
-                        DeserializeHistory(reader.GetString(15))));
+                        DeserializeHistory(reader.GetString(15)),
+                        reader.IsDBNull(16) ? null : reader.GetString(16),
+                        reader.IsDBNull(17) ? null : Parse(reader.GetString(17)),
+                        reader.IsDBNull(18) ? null : Parse(reader.GetString(18))));
                 }
             }
             HostTelemetrySnapshotDto? telemetry = null;

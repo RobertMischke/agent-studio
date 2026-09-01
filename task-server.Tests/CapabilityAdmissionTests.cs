@@ -11,6 +11,62 @@ public sealed class CapabilityAdmissionTests
         new(2026, 7, 25, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task Fresh_successful_provider_probe_clears_auth_drain_without_runner_restart()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        const string runner = "codex";
+        const string instance = "codex-instance";
+        var capability = CapabilityProtocol.ProviderAuthentication("codex");
+        await RegisterAndAdvertiseAsync(
+            store,
+            clock,
+            runner,
+            instance,
+            "host-a",
+            CapabilityProtocol.CodingExecutor,
+            capability);
+        await FailAsync(store, clock, runner, instance, capability, "failure-1");
+        await FailAsync(store, clock, runner, instance, capability, "failure-2");
+
+        await store.AdvertiseCapabilitiesAsync(
+            new CapabilityAdvertisementRequest(
+                runner,
+                instance,
+                CapabilityProtocol.CurrentSchemaVersion,
+                clock.GetUtcNow().UtcDateTime,
+                300,
+                2,
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        capability,
+                        "provider-auth",
+                        Condition: ProviderAuthProbeConditions.Ok),
+                ]),
+            runner,
+            default);
+
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        var recovered = Assert.Single(snapshot.Capabilities, item => item.Key == capability);
+        Assert.Equal(CapabilityHealthStates.Healthy, recovered.HealthState);
+        Assert.Equal(0, recovered.ConsecutiveFailures);
+        Assert.Contains(recovered.RecoveryHistory, item =>
+            item.Reason.Contains("without a runner restart", StringComparison.Ordinal));
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                runner,
+                instance,
+                RequiredCapabilities: [CapabilityProtocol.CodingExecutor, capability]),
+            runner,
+            default);
+        Assert.Equal("claimed", claim.Status);
+    }
+
+    [Fact]
     public async Task Repeated_codex_auth_failure_drains_only_codex_while_claude_and_review_continue()
     {
         using var temp = new TempDirectory();

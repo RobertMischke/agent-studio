@@ -36,7 +36,11 @@ import {
   type RemoteHost,
 } from '../../models/remote-host.model';
 import { freshHostTelemetry, latestHostTelemetry } from '../../models/running-truth';
-import { providerAuthBadgesForHost, type ProviderAuthBadge } from '../../models/provider-auth.model';
+import {
+  providerAuthBadgesForHost,
+  providerAuthStateLabel,
+  type ProviderAuthBadge,
+} from '../../models/provider-auth.model';
 
 /** One meter row (RAM / CPU / Disk) resolved for the template. */
 interface Meter {
@@ -227,7 +231,12 @@ export class RemoteHostCardComponent {
       && capability.advertisedStatus === 'ready').length;
   });
   readonly unavailableAuthCount = computed(() =>
-    this.providerAuthBadges().filter(auth => auth.state === 'unavailable').length);
+    this.providerAuthBadges().filter(auth =>
+      auth.state === 'unavailable' || auth.state === 'signed-out').length);
+
+  authStateLabel(auth: ProviderAuthBadge): string {
+    return providerAuthStateLabel(auth.state);
+  }
   readonly totalActiveSlots = computed(() => this.roles()
     .reduce((total, role) => total + this.activeSlotsFor(role), 0));
   readonly identitySummary = computed(() => {

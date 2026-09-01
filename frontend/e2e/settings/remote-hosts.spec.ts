@@ -944,6 +944,75 @@ test.describe('Execution Hosts settings section', () => {
     await page.screenshot({ path: join(SHOT_DIR, 'remote-host-capability-drain--mocked.png'), fullPage: false });
   });
 
+  test('distinguishes transient auth, credential warning, and confirmed sign-out in both themes', async ({ page }) => {
+    const now = Date.now();
+    const capability = (
+      provider: string,
+      advertisedStatus: 'ready' | 'unavailable',
+      condition: 'transient-error' | 'expiring' | 'signed-out',
+      detail: string,
+      expiresAt: string | null = null,
+    ) => ({
+      key: `provider-auth:${provider}`,
+      category: 'provider-auth',
+      advertisedStatus,
+      healthState: 'healthy',
+      condition,
+      detail,
+      expiresAt,
+      advertisedAt: new Date(now - 5_000).toISOString(),
+      freshUntil: new Date(now + 120_000).toISOString(),
+      isFresh: true,
+      consecutiveFailures: condition === 'signed-out' ? 2 : 0,
+      affectedClaims: [],
+      recoveryHistory: [],
+    });
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{
+        runnerId: 'agent-runner-01',
+        name: 'agent-runner-01',
+        hostId: 'host-berlin',
+        instanceId: 'coding-auth',
+        runnerVersion: '1.2.0',
+        protocolVersion: 2,
+        status: 'active',
+        registeredAt: new Date(now - 86_400_000).toISOString(),
+        lastSeenAt: new Date(now - 5_000).toISOString(),
+        hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
+        capabilities: [
+          capability('codex', 'ready', 'transient-error', 'Token refresh race; retaining last-good.'),
+          capability(
+            'claude',
+            'ready',
+            'expiring',
+            'Refresh credentials expire soon.',
+            new Date(now + 10 * 86_400_000).toISOString(),
+          ),
+          capability('agentapi', 'unavailable', 'signed-out', 'Not logged in after two confirmations.'),
+        ],
+      }]),
+    }));
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const card = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expandHost(card);
+    await expect(card.getByTestId('remote-host-provider-auth-codex'))
+      .toContainText('transient auth error, retrying');
+    await expect(card.getByTestId('remote-host-provider-auth-claude'))
+      .toContainText('credentials expiring');
+    await expect(card.getByTestId('remote-host-provider-auth-agentapi'))
+      .toContainText('genuinely signed out, re-auth needed');
+    const authStates = card.getByTestId('remote-host-provider-auth');
+
+    await setTheme(page, 'light');
+    await authStates.screenshot({ path: join(SHOT_DIR, 'provider-auth-states-light--mocked.png') });
+    await setTheme(page, 'dark');
+    await authStates.screenshot({ path: join(SHOT_DIR, 'provider-auth-states-dark--mocked.png') });
+  });
+
   test('labels automatic whole-host drain separately from operator-requested drain', async ({ page }) => {
     const now = new Date().toISOString();
     await page.unroute('**/api/v1/management/remote-hosts');

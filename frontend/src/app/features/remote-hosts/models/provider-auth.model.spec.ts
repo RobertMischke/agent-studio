@@ -18,7 +18,7 @@ describe('provider auth projection', () => {
     const unknown = providerAuthBadgesForSnapshot(snapshot('ready', 'healthy', false), NOW)[0];
 
     expect(ok.state).toBe('ok');
-    expect(unavailable.state).toBe('unavailable');
+    expect(unavailable.state).toBe('signed-out');
     expect(unavailable.detail).toContain('Not logged in');
     expect(unknown.state).toBe('unknown');
     expect(unknown.detail).toContain('expired');
@@ -33,6 +33,27 @@ describe('provider auth projection', () => {
 
     expect(badge.expiresSoon).toBe(true);
     expect(badge.expiryLabel).toBe('Expires in 13 days');
+  });
+
+  it('shows transient and expiry conditions without treating either as signed out', () => {
+    const retrying = providerAuthBadgesForSnapshot(
+      snapshot('ready', 'healthy', true, 'refresh already in progress', null, 'transient-error'),
+      NOW,
+    )[0];
+    const expiring = providerAuthBadgesForSnapshot(
+      snapshot(
+        'ready',
+        'healthy',
+        true,
+        'credentials expire soon',
+        new Date(NOW + 10 * 86_400_000).toISOString(),
+        'expiring',
+      ),
+      NOW,
+    )[0];
+
+    expect(retrying.state).toBe('retrying');
+    expect(expiring.state).toBe('expiring');
   });
 
   it('holds a Ready card on its configured host until usable auth is advertised', () => {
@@ -55,7 +76,7 @@ describe('provider auth projection', () => {
     );
 
     expect(providerAuthWaitReason(task, unavailable)).toMatchObject({
-      label: 'Waiting for Claude sign-in on runner-berlin',
+      label: 'Claude genuinely signed out on runner-berlin; re-auth needed',
       hostNames: ['runner-berlin'],
     });
     expect(providerAuthWaitReason(task, providerAuthBadgesForSnapshot(snapshot('ready', 'healthy', true), NOW)))
@@ -74,7 +95,7 @@ describe('provider auth projection', () => {
     );
 
     expect(providerAuthWaitReason(task, unavailable)).toMatchObject({
-      label: 'Waiting for Claude sign-in on runner-berlin',
+      label: 'Claude genuinely signed out on runner-berlin; re-auth needed',
     });
     expect(providerAuthWaitReason(task, providerAuthBadgesForSnapshot(
       snapshot('ready', 'healthy', true),
@@ -89,6 +110,8 @@ function snapshot(
   isFresh: boolean,
   detail = 'Active session confirmed',
   expiresAt: string | null = null,
+  condition: 'ok' | 'transient-error' | 'signed-out' | 'expiring' | 'binary-missing' =
+    advertisedStatus === 'unavailable' ? 'signed-out' : 'ok',
 ): TaskServerRunnerCapabilitySnapshot {
   return {
     runnerId: 'agent-runner-01',
@@ -122,6 +145,7 @@ function snapshot(
       isFresh,
       consecutiveFailures: healthState === 'healthy' ? 0 : 1,
       detail,
+      condition,
       expiresAt,
       affectedClaims: [],
       recoveryHistory: [],

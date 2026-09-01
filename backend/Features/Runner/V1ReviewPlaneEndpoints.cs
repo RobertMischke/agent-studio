@@ -1463,7 +1463,10 @@ public sealed class V1ReviewExecutorRegistry
                     capability.Identity,
                     capability.Detail,
                     [],
-                    []);
+                    [],
+                    capability.Condition,
+                    capability.ExpiresAt,
+                    capability.CredentialUpdatedAt);
             })
             .GroupBy(capability => capability.Key, StringComparer.Ordinal)
             .Select(group => group.Last())
@@ -1516,6 +1519,33 @@ public sealed class V1ReviewExecutorRegistry
                     .ToArray();
             }
 
+            if (_capabilityFailures.TryGetValue(runnerId, out var runnerFailures))
+            {
+                capabilities = capabilities
+                    .Select(capability =>
+                    {
+                        var recovered = capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal)
+                                        && capability.AdvertisedStatus == "ready"
+                                        && capability.Condition is Contract.ProviderAuthProbeConditions.Ok
+                                            or Contract.ProviderAuthProbeConditions.Expiring;
+                        if (!recovered || !runnerFailures.Remove(capability.Key, out var failure))
+                            return capability;
+                        return capability with
+                        {
+                            RecoveryHistory = capability.RecoveryHistory
+                                .Append(new Contract.CapabilityRecoveryEventDto(
+                                    advertisedAt,
+                                    failure.HealthState,
+                                    Contract.CapabilityHealthStates.Healthy,
+                                    "A fresh provider login probe confirmed recovery; claims reopened without a runner restart."))
+                                .TakeLast(20)
+                                .ToArray(),
+                        };
+                    })
+                    .ToArray();
+                if (runnerFailures.Count == 0) _capabilityFailures.Remove(runnerId);
+            }
+
             registration = registration with { LastSeenAt = now };
             _registrations[runnerId] = registration;
             _capabilityStates[runnerId] = new CapabilityState(
@@ -1523,15 +1553,10 @@ public sealed class V1ReviewExecutorRegistry
                 request.Generation,
                 capabilities,
                 request.Telemetry);
-            // An advertisement refreshes the capability snapshot; it is NOT a
-            // health verdict. The review daemon re-advertises every 60 seconds, so
-            // clearing the drain here meant the cooldown never drained anything: an
-            // executor with a broken capability became claim-eligible again a
-            // minute later, over and over. A pause therefore lifts only by its own
-            // cooldown expiring or by a full re-registration
-            // (PUT /api/v1/runners/{id} - a daemon restart, a genuinely new
-            // instance declaring its health). While a cooldown is active the
-            // failure counters stay untouched, so the backoff keeps escalating.
+            // Generic advertisements are freshness updates, not recovery verdicts.
+            // Provider auth is the deliberate exception: condition=ok/expiring is
+            // emitted only after the runner's active CLI status command succeeds,
+            // so that later proof clears an auth drain without a daemon restart.
             if (!HasActiveCapabilityCooldownLocked(runnerId, now))
                 ClearCapabilityFailures(runnerId);
             return new Contract.RunnerCapabilitySnapshotDto(

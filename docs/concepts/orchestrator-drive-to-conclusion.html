@@ -2178,6 +2178,32 @@
             every matching wait and resumes the card automatically.
           </td>
         </tr>
+        <tr id="case-agt-2694">
+          <td>2026-08-31</td>
+          <td><code>AGT-2694</code><br><span class="small">CLI sign-in probe latch and false Codex auth classification</span></td>
+          <td>
+            Codex exited nonzero after an ordinary <code>apply_patch verification failed</code> tool error. The host banner
+            nevertheless announced that Codex authentication had changed from OK to unavailable and Ready cards waited,
+            while <code>codex login status</code> returned <code>Logged in</code> seconds later. Similar shared-account token
+            refresh windows had affected Claude. Recovery required a manual credential refresh and runner restart.
+          </td>
+          <td>
+            Run-level nonzero output could bypass the active provider probe and report a capability auth failure directly.
+            The classifier accepted broad authentication-shaped text, the UI rendered the first server-side suspect report
+            as sign-in required, and a later successful capability advertisement did not clear an active provider-auth drain.
+            Credential expiry fields existed in the frontend contract but the runner never populated them.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the shared Claude/Codex classifier now separates confirmed sign-out,
+            transient refresh errors, provider limits, and non-auth run failures. A run auth signature counts as one
+            observation and must be independently confirmed by the CLI status command before
+            <code>ProviderUnauthorized</code> is reported. Two real logout observations close admission; one transient or
+            indeterminate result retains last-good. Rate limits stay in the AGT-2680 provider circuit, and the exact patch
+            verification error remains run-local. Fresh successful provider probes clear auth drains and re-advertise
+            recovery without restart. Non-secret Claude expiry and Codex refresh-age metadata drive quiet early warnings;
+            only <em>genuinely signed out, re-auth needed</em> blocks and alarms.
+          </td>
+        </tr>
         <tr id="case-agt-2687">
           <td>2026-08-27</td>
           <td><code>AGT-2687</code><br><span class="small">requirement-fit open-scope review carousel</span></td>

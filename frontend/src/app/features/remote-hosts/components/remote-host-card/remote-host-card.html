@@ -126,7 +126,7 @@
                       [appTooltip]="auth.detail">
                   <span class="provider-auth__dot" aria-hidden="true"></span>
                   <strong>{{ auth.providerLabel }}</strong>
-                  <span>{{ auth.state }}</span>
+                  <span>{{ authStateLabel(auth) }}</span>
                 </span>
                 @if (auth.expiresSoon && auth.expiryLabel) {
                   <span class="provider-auth__expiry"
