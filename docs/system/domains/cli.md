@@ -81,8 +81,13 @@ CLI execution tests.
   package version still regenerates bin shims. Custom executable paths and
   present-but-broken command shims remain outside this policy. Repair verifies
   both the `.cmd` shim and `--version`, and is limited to one persisted attempt
-  per CLI per hour. Successful repair is informational; failure is the alarm
-  boundary and names the observed package/shim state and attempted action.
+  per CLI per hour. npm resolution prefers the active Node installation, then
+  verified APPDATA and PATH candidates; every candidate must pass an npm
+  `--version` preflight before installation. A missing or broken npm boundary
+  is classified as `npm-unavailable`. The runner-status projection contains
+  only active failures: a successful repair or any later healthy CLI probe
+  clears the provider, and the healthy journal marker prevents a restart from
+  resurrecting an out-of-band-resolved failure.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

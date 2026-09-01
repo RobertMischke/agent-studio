@@ -88,8 +88,17 @@ public sealed class LocalCliRepairService
         _journalPath = journalPath;
         foreach (var entry in ReadJournal())
         {
-            if (entry.Outcome is not ("repaired" or "failed")) continue;
-            _latest[entry.CliType] = ToStatus(entry);
+            switch (entry.Outcome)
+            {
+                case "failed":
+                    _latest[entry.CliType] = ToStatus(entry);
+                    break;
+                case "repaired":
+                case "healthy":
+                case "resolved":
+                    _latest.Remove(entry.CliType);
+                    break;
+            }
         }
     }
 
@@ -115,7 +124,12 @@ public sealed class LocalCliRepairService
         CancellationToken ct)
     {
         var before = probe();
-        if (before.Available || !_isWindows()) return before;
+        if (before.Available)
+        {
+            ReconcileHealthyStatus(cliType, before);
+            return before;
+        }
+        if (!_isWindows()) return before;
 
         var appData = _appData();
         if (string.IsNullOrWhiteSpace(appData)) return before;
@@ -208,8 +222,16 @@ public sealed class LocalCliRepairService
                 evidence);
             AppendJournal(entry);
 
-            var status = ToStatus(entry);
-            lock (_sync) _latest[cliType] = status;
+            if (after.Available)
+            {
+                lock (_sync) _latest.Remove(cliType);
+                if (!succeeded) AppendHealthyJournalEntry(cliType, after);
+            }
+            else
+            {
+                var status = ToStatus(entry);
+                lock (_sync) _latest[cliType] = status;
+            }
             if (succeeded)
             {
                 _logger.LogInformation(
@@ -326,6 +348,7 @@ public sealed class LocalCliRepairService
             if (!_inFlight.Add(cliType)) return false;
             var previous = ReadJournal()
                 .Where(entry => string.Equals(entry.CliType, cliType, StringComparison.OrdinalIgnoreCase))
+                .Where(entry => entry.Outcome == "attempting")
                 .Select(entry => (DateTimeOffset?)entry.Timestamp)
                 .LastOrDefault();
             if (AttemptAllowed(now, previous)) return true;
@@ -452,6 +475,13 @@ public sealed class LocalCliRepairService
         NpmCliRepairPlan repairPlan,
         string shimStateBefore)
     {
+        if (install.FailureKind == NpmGlobalInstallFailureKind.NpmUnavailable)
+        {
+            var reason = install.StandardError.StartsWith("npm unavailable", StringComparison.OrdinalIgnoreCase)
+                ? install.StandardError
+                : $"npm unavailable: {install.StandardError}";
+            return $"{cliType} CLI repair failed: {reason}";
+        }
         if (!install.Succeeded)
             return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} attempted, but npm exited {install.ExitCode?.ToString() ?? "without an exit code"}.";
         if (!packagePresentAfter)
@@ -471,6 +501,43 @@ public sealed class LocalCliRepairService
             VersionAfter = entry.VersionAfter,
             Detail = entry.Detail,
         };
+
+    private void ReconcileHealthyStatus(
+        string cliType,
+        (bool Available, string? Version, string Path) probe)
+    {
+        bool removed;
+        lock (_sync) removed = _latest.Remove(cliType);
+        if (!removed) return;
+
+        AppendHealthyJournalEntry(cliType, probe);
+        _logger.LogInformation(
+            "Cleared local CLI repair failure after healthy probe cli={Cli} version={Version} path={Path}",
+            cliType,
+            probe.Version ?? "unknown",
+            probe.Path);
+    }
+
+    private void AppendHealthyJournalEntry(
+        string cliType,
+        (bool Available, string? Version, string Path) probe)
+        => AppendJournal(new LocalCliRepairJournalEntry(
+            _clock(),
+            cliType,
+            "healthy",
+            "probe-available",
+            "",
+            "",
+            null,
+            probe.Path,
+            [],
+            null,
+            probe.Version,
+            null,
+            $"{cliType} CLI probe is healthy; cleared the active repair failure.",
+            "",
+            "",
+            []));
 
     private static bool IsGlobalCommandPath(string cliType, string probedPath, string npmBin)
     {

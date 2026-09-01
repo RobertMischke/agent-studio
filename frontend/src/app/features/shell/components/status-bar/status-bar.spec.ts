@@ -57,7 +57,7 @@ describe('StatusBarComponent (smoke)', () => {
 });
 
 describe('StatusBarComponent CLI repair note', () => {
-  it('surfaces a successful repair as a note without an alarm tone', async () => {
+  it('hides repaired outcomes and renders only an active failure', async () => {
     await TestBed.configureTestingModule({
       imports: [StatusBarComponent],
       providers: [
@@ -83,9 +83,7 @@ describe('StatusBarComponent CLI repair note', () => {
 
     fixture.detectChanges();
 
-    const note = fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair"]');
-    expect(note?.textContent).toContain('CLI repaired at');
-    expect(note?.getAttribute('data-signal-tone')).not.toBe('mismatch');
+    expect(fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair"]')).toBeNull();
 
     service.runnerStatus.set({
       projects: {},
@@ -98,8 +96,13 @@ describe('StatusBarComponent CLI repair note', () => {
     });
     fixture.detectChanges();
 
+    const note = fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair"]');
     expect(note?.textContent).toContain('CLI repair failed at');
     expect(note?.getAttribute('data-signal-tone')).toBe('mismatch');
     expect(note?.querySelector('[aria-label="CLI repair failed"]')).not.toBeNull();
+
+    service.runnerStatus.set({ projects: {}, cliRepairs: [] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="status-bar-cli-repair"]')).toBeNull();
   });
 });
