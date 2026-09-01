@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace AgentStudio.Tests;
@@ -63,6 +64,52 @@ public sealed class TestRunServiceTests : IDisposable
         Assert.Null(evidence[jobs[3].TaskKey].RunId);
         Assert.Equal("unassigned", evidence[jobs[3].TaskKey].EvidenceState);
         Assert.Contains("No matching test run", evidence[jobs[3].TaskKey].Summary);
+    }
+
+    [Fact]
+    public void BuildLookup_WarmHeartbeatBeyondFormerTtl_DoesNotRecomputeUntilRefMoves()
+    {
+        var time = new FakeTimeProvider(DateTimeOffset.Parse("2026-09-01T10:00:00Z"));
+        var stack = BuildStack(time);
+        var commit = RevParse(stack.Repo, "HEAD");
+        stack.Service.Create("Demo", Request(commit, "completed", "passed"));
+        var job = Task("warm-cache", stack.Storage, commit);
+
+        stack.Service.BuildLookup([job]);
+        time.Advance(TimeSpan.FromSeconds(6));
+        stack.Service.BuildLookup([job]);
+
+        Assert.Equal(1, stack.Service.ComputationCount);
+
+        Commit(stack.Repo, "ref-move.txt", "changed", "Move tracked ref");
+        stack.Service.BuildLookup([job]);
+
+        Assert.Equal(2, stack.Service.ComputationCount);
+    }
+
+    [Fact]
+    public void BuildLookup_NewTestRunCommitInvalidatesAndUpdatesCardEvidence()
+    {
+        var stack = BuildStack();
+        var olderRunCommit = RevParse(stack.Repo, "HEAD");
+        stack.Service.Create("Demo", Request(olderRunCommit, "completed", "passed"));
+        Commit(stack.Repo, "card.txt", "card", "Add card change");
+        var cardCommit = RevParse(stack.Repo, "HEAD");
+        var job = Task("new-run", stack.Storage, cardCommit);
+
+        var before = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal("not-proven", before.EvidenceState);
+
+        Commit(stack.Repo, "tested.txt", "tested", "Test integrated card");
+        var newRunCommit = RevParse(stack.Repo, "HEAD");
+        var newRun = stack.Service.Create("Demo", Request(newRunCommit, "completed", "passed"))!;
+        var after = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(newRun.Id, after.RunId);
+        Assert.Equal("proven", after.EvidenceState);
+        Assert.Equal("contains-diff", after.MatchQuality);
+        Assert.Equal(2, stack.Service.ComputationCount);
     }
 
     [Fact]
@@ -375,7 +422,7 @@ public sealed class TestRunServiceTests : IDisposable
         Assert.Equal("head-ahead", evidence.HeadDirection);
     }
 
-    private Stack BuildStack()
+    private Stack BuildStack(TimeProvider? timeProvider = null)
     {
         var workspace = Path.Combine(_root, Guid.NewGuid().ToString("N"), "workspace");
         var storage = Path.Combine(workspace, "projects", "demo", "tasks");
@@ -401,7 +448,12 @@ public sealed class TestRunServiceTests : IDisposable
         var scanner = new TaskScannerService(configuration, NullLogger<TaskScannerService>.Instance, summary);
         var git = new GitService(NullLogger<GitService>.Instance, scanner, configuration);
         var store = new TestRunStore(configuration);
-        return new Stack(configuration, storage, repo, project, new TestRunService(store, registry, scanner, git));
+        return new Stack(
+            configuration,
+            storage,
+            repo,
+            project,
+            new TestRunService(store, registry, scanner, git, timeProvider ?? TimeProvider.System));
     }
 
     private static CreateTestRunRequest Request(string commit, string state, string? result) => new()

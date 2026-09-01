@@ -133,6 +133,44 @@ public sealed class TaskListGitProjectionCacheTests
         }
     }
 
+    [Fact]
+    public async Task BuildProjectionAsync_StartsAllLookupsBeforeWaitingForResults()
+    {
+        using var started = new CountdownEvent(4);
+        using var release = new ManualResetEventSlim();
+        var task = Job("parallel");
+
+        Dictionary<string, TValue> Lookup<TValue>()
+        {
+            started.Signal();
+            release.Wait(TimeSpan.FromSeconds(5));
+            GitProcessTelemetry.Record("rev-list", 25, 0);
+            return new Dictionary<string, TValue>(StringComparer.Ordinal);
+        }
+
+        Task<TaskListGitProjection> projectionTask;
+        using (GitProcessTelemetry.BeginRequest(
+                   "tasks/list-refresh-test",
+                   NullLogger.Instance,
+                   includeNested: true))
+        {
+            projectionTask = TaskListGitProjectionCache.BuildProjectionAsync(
+                [task],
+                _ => Lookup<TaskMergeSignal>(),
+                _ => Lookup<TaskIntegrationStatus>(),
+                _ => Lookup<TaskPublishSignal>(),
+                _ => Lookup<TaskTestRunEvidence>());
+
+            var allStarted = started.Wait(TimeSpan.FromSeconds(5));
+            release.Set();
+            var projection = await projectionTask;
+
+            Assert.True(allStarted, "All four lookup projections should start concurrently.");
+            Assert.NotNull(projection);
+            Assert.Equal(4, GitProcessTelemetry.CurrentTally()!.Value.Spawns);
+        }
+    }
+
     private static TaskInfo Job(string id)
         => new()
         {

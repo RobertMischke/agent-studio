@@ -221,7 +221,7 @@ public class JobsEndpointPerfTests : IDisposable
     }
 
     [Fact]
-    public async Task TaskListEndpoints_ColdAndHeadChurn_StartNoGitProcessAndReturnUnderOneSecond()
+    public async Task TaskListEndpoints_WarmRefsSpawnNoGitAndHeadChurnRecomputesOffRequestPath()
     {
         var root = Path.Combine(Path.GetTempPath(), "task-list-git-perf-" + Guid.NewGuid().ToString("N"));
         var repo = Path.Combine(root, "repo");
@@ -306,6 +306,15 @@ public class JobsEndpointPerfTests : IDisposable
                 timeout.Token);
             Assert.True(initialRefresh[0].Spawns > 0);
 
+            await Task.Delay(TaskListGitProjectionCache.RefreshInterval + TimeSpan.FromMilliseconds(250), timeout.Token);
+            using var warmResponse = await client.GetAsync("/api/tasks", timeout.Token);
+            warmResponse.EnsureSuccessStatusCode();
+            var warmRefreshes = await telemetry.WaitForRollupAsync(
+                "tasks/list-refresh",
+                expectedCount: 2,
+                timeout.Token);
+            Assert.Equal(0, warmRefreshes[1].Spawns);
+
             File.WriteAllText(Path.Combine(repo, "head-churn.txt"), "new HEAD\n");
             RunGit(repo, "add", "head-churn.txt");
             RunGit(repo, "commit", "-q", "-m", "test: move HEAD");
@@ -316,7 +325,7 @@ public class JobsEndpointPerfTests : IDisposable
             stopwatch.Stop();
             churnResponse.EnsureSuccessStatusCode();
             var listRollups = telemetry.Rollups("tasks/list");
-            Assert.Equal(2, listRollups.Count);
+            Assert.Equal(3, listRollups.Count);
             Assert.All(listRollups, item => Assert.Equal(0, item.Spawns));
             Assert.True(
                 stopwatch.Elapsed < TimeSpan.FromSeconds(1),
@@ -328,9 +337,9 @@ public class JobsEndpointPerfTests : IDisposable
 
             var refreshes = await telemetry.WaitForRollupAsync(
                 "tasks/list-refresh",
-                expectedCount: 2,
+                expectedCount: 3,
                 timeout.Token);
-            Assert.True(refreshes[1].Spawns > 0);
+            Assert.True(refreshes[2].Spawns > 0);
         }
         finally
         {
