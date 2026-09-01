@@ -460,8 +460,8 @@
     <li>A bounded canary proves remote pass, product failure, host loss, Task Server restart, Engine restart, no eligible host, and cleanup failure before the bridge is disabled.</li>
   </ul>
 
-  <h3>AGT-2262 teardown entry condition</h3>
-  <p>Only after the new path is the default and the canary/restart matrix is green: remove <code>RemoteSshHost</code>, <code>ResolveRemoteGateSshHost</code>, the complete SSH bridge region in <code>BuildTestGateRunner</code>, its process-local remote gate semaphore and scripts, <code>RemoteGateActivityStore</code>, and the backend alias-based gate-count projection. Remove obsolete SSH/config documentation in the same teardown. The local in-process compatibility path is removed or explicitly retained by a separate decision; it must not survive accidentally as a silent target fallback.</p>
+  <h3>AGT-2262 teardown outcome</h3>
+  <p>Completed on 2026-09-01 after canonical Remote Review became the default remote verification path. The implementation uses a separately claimable ReviewAttempt rather than a dedicated GateAttempt: tool gates and semantic aspects share one immutable ReviewSubject, while the executor reports ordinary pipeline-step evidence under lease, fence, authority epoch, capability, and idempotency checks. AGT-2262 removed <code>RemoteSshHost</code>, <code>ResolveRemoteGateSshHost</code>, the complete SSH bridge region in <code>BuildTestGateRunner</code>, its process-local remote gate semaphore and scripts, <code>RemoteGateActivityStore</code>, and the backend alias-based gate-count projection. The local in-process gate remains only for legacy local review and is not a fallback for canonical Remote Review.</p>
 </section>
 
 <section id="open-decisions" data-concept-section="open-decisions">
@@ -485,7 +485,7 @@
   </div>
 </section>
 
-<p class="footer-note">Sources inspected: <code>BuildTestGateRunner.cs</code>, <code>ReviewDecisionOrchestrator.cs</code>, <code>RemoteGateActivityStore.cs</code>, Task Server runner/review/capability/orchestration contracts, Remote Review Executor, Orchestrator Engine GateDispatch, pipeline and task domain maps, and the distributed-execution Tranche 0 target architecture. This Dossier recommends a target; it does not change runtime behavior.</p>
+<p class="footer-note">Sources inspected: <code>BuildTestGateRunner.cs</code>, <code>ReviewDecisionOrchestrator.cs</code>, Task Server runner/review/capability/orchestration contracts, Remote Review Executor, pipeline and task domain maps, and the distributed-execution Tranche 0 target architecture. This Dossier records the target decision and the implemented ReviewAttempt outcome.</p>
 </main>
 <script>
   (() => {

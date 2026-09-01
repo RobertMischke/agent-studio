@@ -558,7 +558,7 @@ public sealed class WorktreeTaskLifecycleTests : IDisposable
         // collision and NOT a throw — so the runner defers to the next tick.
         // The "busy" semantics are Windows-specific: POSIX happily removes a
         // directory whose files are open, so the reject this test asserts can
-        // never occur there (surfaced by the remote ssh-gate on Linux).
+        // never occur there (surfaced by exact-subject Remote Review on Linux).
         if (!OperatingSystem.IsWindows()) return;
         var (repo, life) = SeedWithDevelop("por-busy");
         var wtRoot = WorktreeRoot();

@@ -32,9 +32,9 @@ function settingsHome(page: Page) {
 }
 
 async function expandHost(host: Locator, summaryOnly = false) {
-  const toggle = host.getByTestId('remote-host-disclosure');
+  const toggle = host.getByTestId('remote-host-disclosure').first();
   if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
-  await expect(host.getByTestId('remote-host-detail-row')).toBeVisible();
+  await expect(host.getByTestId('remote-host-detail-row').first()).toBeVisible();
   if (!summaryOnly) {
     const sectionToggles = host.locator('[data-testid^="remote-host-detail-toggle-"]');
     for (let index = 0; index < await sectionToggles.count(); index++) {
@@ -68,8 +68,7 @@ async function stubBackgroundApis(page: Page) {
   await page.route('**/api/clients', json([
     { id: 'local-default', displayName: 'operator-workstation', kind: 'human', registeredAt: now, lastSeenAt: now },
     { id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service', registeredAt: now, lastSeenAt: now,
-      runnerGitStatus: 'ready', runnerGitCheckedAt: now, runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 2,
-      runnerActiveGateCount: 0, runnerGateCapacity: 4 },
+      runnerGitStatus: 'ready', runnerGitCheckedAt: now, runnerDaemonState: 'running', runnerActiveSlots: 0, runnerAvailableSlots: 2 },
   ]));
   await page.route('**/api/v1/management/remote-hosts', json([]));
   await page.route('**/api/clients/*/telemetry?window=*', json({ clientId: 'mock', window: '14d', points: [{
@@ -447,7 +446,6 @@ test.describe('Execution Hosts settings section', () => {
         id: 'agent-runner-01', displayName: 'agent-runner-01', kind: 'service',
         registeredAt: now, lastSeenAt: now, runnerGitStatus: 'ready',
         runnerDaemonState: 'running', runnerActiveSlots: 1, runnerAvailableSlots: 19,
-        runnerActiveGateCount: 2, runnerGateCapacity: 4,
       }]) });
     });
     await page.route('**/api/clients/agent-runner-01/telemetry?window=*', route => route.fulfill({
@@ -472,8 +470,7 @@ test.describe('Execution Hosts settings section', () => {
     await expandHost(remote);
     await expect(remote.getByTestId('remote-host-activity')).toContainText('Daemonrunning');
     await expect(remote.getByTestId('remote-host-run-pool')).toContainText('1 active');
-    await expect(remote.getByTestId('remote-host-gate-pool')).toContainText('2 running · pool 4');
-    await expect(remote.getByTestId('remote-host-cpu-context')).toContainText('GATE work does not consume a RUN slot');
+    await expect(remote.getByTestId('remote-host-gate-pool')).toHaveCount(0);
     await expect(remote.getByTestId('remote-host-vitals')).toContainText('53%');
     await expect(remote.getByTestId('remote-host-slots-context')).toContainText('1 RUN active · host load 7.7 of 12 cores');
     await remote.scrollIntoViewIfNeeded();

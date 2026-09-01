@@ -197,30 +197,30 @@ starves, however many cards are ready.</p>
 <h2>Build/test gate</h2>
 <div class="duo">
   <div class="panel ist"><span class="tag">IST</span>
-    <h3>Serial lock, branch-tip subject, no watchdog</h3>
+    <h3>Canonical remote review steps</h3>
     <ul>
-      <li>One machine-wide lock; every project queues behind every other.</li>
-      <li>The gate tests the <strong>branch tip</strong> — develop-side suite fixes never reach
-          in-flight branches (<em>stale-branch trap</em>).</li>
-      <li>After lock acquisition there is <strong>no watchdog</strong>: a hung spawn held the lock
-          for 2.5&nbsp;h on 23.07.; ~12 queued gates died at the 62-min queue SLA.</li>
-      <li>Queue-SLA victims count as card failures and consume anti-churn budget.</li>
-      <li><strong>Since 23.07.:</strong> the <strong>ssh-gate bridge</strong> runs gates on the
-          remote host first (2 in parallel, full suite ≈ 2&nbsp;min, disposable worktree at the
-          exact SHA, remote-side timeout); the local path remains only as fallback.</li>
+      <li>Canonical Remote runs mint an immutable <strong>ReviewSubject</strong> at the Result-SHA.</li>
+      <li>A Review Host claims the separate <strong>ReviewAttempt</strong> under lease, fence,
+          authority epoch, capability, and idempotency checks.</li>
+      <li>Tool gates and semantic aspects execute in a disposable exact-subject workspace.
+          Their reports project into the ordinary pipeline and timeline evidence formats.</li>
+      <li>Infrastructure-only failures use the bounded ReviewAttempt retry chain. Stale reports
+          and cleanup writes are rejected by the active fence.</li>
+      <li>The direct SSH gate bridge and its local fallback were removed by AGT-2262 on
+          01.09.2026 after the claimable path became canonical.</li>
     </ul>
-    <div class="cards">containment: MachineBound traits + build-profile filter · bridge: AGT-2222 T2 (cleanup card tracks its removal)</div>
+    <div class="cards">delivered: AGT-2182 · AGT-2229 replacement line · AGT-2262 teardown</div>
   </div>
   <div class="panel soll"><span class="tag">SOLL</span>
-    <h3>Merged subject, watchdog, distributed</h3>
+    <h3>Current operating invariants</h3>
     <ul>
-      <li>Gate tests the subject <strong>merged onto current develop</strong> — “would this land
-          green today?”; merge conflict is its own honest outcome.</li>
-      <li>Hard wall-clock watchdog from lock acquisition; a hung gate frees the lock and reports
-          an <strong>infrastructure failure</strong>, which never consumes card budget.</li>
-      <li>Gates run on remote hosts in parallel; the local lock stops being the global bottleneck.</li>
+      <li>Every remote gate command names its expected Result-SHA and reports its actual HEAD.</li>
+      <li>Remote tool execution is visible through ReviewAttempt and pipeline-step facts, never
+          inferred from an SSH alias or a process-local gate counter.</li>
+      <li>The local in-process gate remains only for legacy local review. It does not dispatch
+          work to a remote host and is not a fallback for canonical Remote Review.</li>
     </ul>
-    <div class="cards">AGT-2258 · AGT-2257 · AGT-2229</div>
+    <div class="cards">contract: ReviewContracts · RemoteReviewExecutor · RemotePipelineReviewEvidenceProjector</div>
   </div>
 </div>
 

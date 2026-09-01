@@ -206,10 +206,6 @@ steer the pipeline in this policy version.
   unavailable, recovery also fails closed without releasing a push. This closes
   the BP-02 merge-commit-before-gate crash window without treating Git ancestry
   as a verdict.
-- `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
-  read model fed by the SSH gate start/completion events. The Execution Hosts view
-  uses it to show GATE work separately from daemon RUN slots; the store is
-  visibility-only and never admits, cancels, or reorders a gate.
 - `runner/RemoteReviewWorkspace.cs` and
   `contracts/TaskServer.Contracts/ReviewContracts.cs`: exact-subject remote
   verification. A frozen command is either a deterministic tool command or a

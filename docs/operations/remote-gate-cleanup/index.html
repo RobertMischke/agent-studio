@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AGT-2262: SSH-Gate-Aufräumen - warum erst das saubere Remote-Gate | Konzept-Dossier</title>
+<title>AGT-2262: SSH gate bridge cleanup | Archived decision record</title>
 <style>
   :root {
     color-scheme: light;
@@ -58,21 +58,26 @@
 <body>
 <main>
 <header class="page">
-  <p class="kicker">Konzept-Dossier · Betrieb / Remote-Gates</p>
-  <h1>AGT-2262 — SSH-Gate aufräumen: warum erst das saubere Remote-Gate</h1>
-  <p class="lede">Diese Karte entfernt eine bewusste Abkürzung im Gate-Betrieb. Sie kann aber nicht als Erstes laufen — sie ist der <em>letzte</em> Schritt einer Kette. Hier steht, was die Abkürzung ist, warum sie hilft, was „sauber" bedeuten würde, und warum das Aufräumen auf den Ersatz warten muss.</p>
+  <p class="kicker">Archived decision record · Operations / Remote gates</p>
+  <h1>AGT-2262: SSH gate bridge cleanup</h1>
+  <p class="lede">This page records why the temporary SSH shortcut had to remain until a claimable replacement existed, and the final teardown after canonical Remote Review became that replacement.</p>
   <div class="meta">
     <span><b>Karte</b> AGT-2262 · <code>ssh-gate-shortcut-cleanup</code></span>
-    <span><b>Blockiert durch</b> AGT-2229</span>
-    <span><b>Kontext</b> Tranche-2 / Remote-Ausführung</span>
+    <span><b>Status</b> Completed and archived 01.09.2026</span>
+    <span><b>Replacement</b> Fenced ReviewAttempt execution</span>
   </div>
 </header>
+
+<div class="box ok">
+  <h4>Teardown completed</h4>
+  <p>Canonical Remote Review now claims exact-subject tool gates and semantic aspects through Task Server authority. AGT-2262 removed the direct SSH dispatch, remote host semaphore, <code>gate-work</code> convention, SSH-specific log path, and alias-based activity projection. The local gate remains only for legacy local review and is not a fallback for Remote Review.</p>
+</div>
 
 <h2 id="gate"><span class="no">A</span>Was ein „Gate" ist — und warum es der Engpass war</h2>
 <p>Ein <b>Gate</b> ist die Qualitätsprüfung vor der Abnahme: Bevor eine Karte akzeptiert wird, fährt der Orchestrator Build + Testsuite gegen den Karten-Stand. Fällt das Gate durch, geht die Karte nicht durch.</p>
 <p>Lange lief das <b>lokal und seriell</b>: jedes Gate 15–27 Minuten, dazu Repo-Contention (mehrere Gates am selben Arbeitsverzeichnis) und Last-Flakes. Das war der Durchsatz-Boden — der Betrieb wartete auf Gates, nicht auf die Agenten.</p>
 
-<h2 id="bridge"><span class="no">B</span>Die Abkürzung: die SSH-Gate-Brücke (23.07.)</h2>
+<h2 id="bridge"><span class="no">B</span>Historical shortcut: the SSH gate bridge (23.07.)</h2>
 <p>Um den Engpass sofort aufzulösen, wurde eine <b>bewusste Brücke</b> gebaut — schnell, funktional, aber ausdrücklich als Provisorium deklariert:</p>
 <ul>
   <li>Das Gate lokalisiert den geprüften SHA in den <b>Per-Projekt-Repos auf dem Host</b>.</li>
@@ -96,20 +101,20 @@
     <path d="M770 126 L 828 126" class="s-flow" marker-end="url(#a)"/>
     <rect x="832" y="96" width="104" height="60" rx="11" class="s-cut"/>
     <text x="852" y="122" class="s-label">Abriss</text><text x="852" y="140" class="s-sub">AGT-2262</text>
-    <text x="290" y="200" class="s-sub" style="fill:var(--warn)">▲ läuft heute</text>
-    <text x="556" y="200" class="s-sub" style="fill:var(--ok)">▲ muss zuerst existieren</text>
-    <text x="832" y="200" class="s-sub" style="fill:var(--blue)">▲ diese Karte, zuletzt</text>
+    <text x="290" y="200" class="s-sub" style="fill:var(--warn)">historical bridge</text>
+    <text x="556" y="200" class="s-sub" style="fill:var(--ok)">replacement delivered</text>
+    <text x="832" y="200" class="s-sub" style="fill:var(--blue)">teardown complete</text>
     <defs><marker id="a" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M1,1 L8,4.5 L1,8" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/></marker></defs>
   </svg>
-  <figcaption><b>Vier Schritte, feste Reihenfolge.</b> Die Brücke (heute live) wird nicht ersatzlos entfernt — sie wird durch <b>claimbare Remote-Gate-Schritte (AGT-2229)</b> ersetzt, und <em>erst danach</em> reißt AGT-2262 die Brücke ab. Ersatz-zuerst-dann-Abriss verhindert, dass der schnelle Gate-Weg für ein Zeitfenster ganz wegfällt.</figcaption>
+  <figcaption><b>Four steps in a fixed order.</b> The bridge remained until canonical Remote Review provided claimable, fenced execution at the immutable Result-SHA. AGT-2262 then removed the bridge without reopening the local throughput bottleneck.</figcaption>
 </figure>
 
 <table>
   <thead><tr><th>Schritt</th><th>Karte</th><th>Rolle</th><th>Status</th></tr></thead>
   <tbody>
-    <tr><td class="k">SSH-Brücke</td><td>—</td><td>Provisorischer schneller Remote-Gate-Weg über SSH</td><td><span class="badge hack">live</span></td></tr>
-    <tr><td class="k">Sauberer Ersatz</td><td>Konzept + Impl<br><span style="color:var(--ink-3);font-weight:400">(AGT-2229 leer)</span></td><td>Gates &amp; Post-Steps als <b>claimbare Remote-Schritte</b> im Ausführungsmodell. Zielbild noch zu entwerfen.</td><td><span class="badge clean">zu bauen</span></td></tr>
-    <tr><td class="k">Abriss</td><td><b>AGT-2262</b></td><td>Entfernt die SSH-Brücke <b>wholesale</b>, nachdem der Ersatz steht</td><td><span class="badge cut">geparkt</span></td></tr>
+    <tr><td class="k">SSH bridge</td><td>AGT-2222 T2</td><td>Temporary remote gate path over SSH</td><td><span class="badge hack">historical</span></td></tr>
+    <tr><td class="k">Claimable replacement</td><td>AGT-2229 replacement line</td><td>Tool gates and aspects in a leased and fenced ReviewAttempt</td><td><span class="badge clean">delivered</span></td></tr>
+    <tr><td class="k">Teardown</td><td><b>AGT-2262</b></td><td>Removed the SSH bridge after replacement acceptance</td><td><span class="badge cut">complete</span></td></tr>
   </tbody>
 </table>
 
@@ -118,7 +123,7 @@
   <p>Zwei Dinge geprüft: (1) Die Gates laufen <b>heute weiterhin über die SSH-Brücke</b> — <code>BuildTestGateRunner</code> versucht zuerst den Remote-Weg über <code>RemoteSshHost</code>, mit Fallback auf lokal. Der claimbare Remote-Gate-Weg ist im Code nicht vorhanden. (2) Die alte Karte <b>AGT-2229 steht zwar auf „completed", wurde aber nie umgesetzt</b> — sie wurde vor Einführung des Eskalations-Trichters ohne Review geparkt (leere Karte, kein Deliverable). <b>Folge:</b> Der saubere Ersatz existiert wirklich nicht. AGT-2262 bleibt korrekt geparkt; der Vorlauf ist eine <em>frische</em> Konzept-Karte, nicht die Reaktivierung von AGT-2229.</p>
 </div>
 
-<h2 id="why"><span class="no">D</span>Warum AGT-2262 nicht vorgezogen werden kann</h2>
+<h2 id="why"><span class="no">D</span>Historical reason AGT-2262 could not run early</h2>
 <p>Der Kern in einem Satz: <b>Man kann eine Abkürzung erst wegräumen, wenn der ordentliche Weg existiert.</b> Zöge man AGT-2262 vor, gäbe es zwei schlechte Ausgänge:</p>
 <ul>
   <li><b>Abriss ohne Ersatz</b> → der schnelle Remote-Gate-Weg fällt weg, der Betrieb kippt zurück auf 15–27-Minuten-Gates. Das ist der Engpass, der überhaupt erst zur Brücke führte.</li>
@@ -129,14 +134,14 @@
   <p>AGT-2262 ist technisch klein — „SSH-Brücke entfernen" ist wenig Code. Blockiert wird sie nicht durch Aufwand, sondern durch eine <b>offene Entscheidung</b>: wie Remote-Gates im Zielmodell aussehen. Diese Entscheidung lebt in AGT-2229 / der Tranche-0-Richtung. Solange die nicht steht, hat der Abriss kein Ziel, auf das er aufsetzt.</p>
 </div>
 
-<h2 id="do"><span class="no">E</span>Empfehlung — von Robert bestätigt (26.07.)</h2>
+<h2 id="do"><span class="no">E</span>Historical hold instruction, confirmed 26.07.</h2>
 <ul>
   <li><b>AGT-2262 bleibt geparkt</b> (0-backlog), bis der saubere Remote-Gate-Weg existiert. Nicht vorziehen, nicht dispatchen.</li>
   <li><b>Erster Schritt = Konzept-Karte:</b> das Remote-Gate-Zielbild als Konzept schneiden (Konzept-Pipeline → Dossier-Doc + Sichtblick-Gate), damit die Zielform - claimbare Remote-Schritte vs. Review-Plane vs. Host-Capability, gekoppelt an die Tranche-0-Richtung - bewusst entschieden ist, bevor gebaut und abgerissen wird. Danach eine Implementierungs-Karte (Gates auf den neuen Weg umziehen), <em>dann</em> AGT-2262 (Brücke abreißen).</li>
   <li><b>Die Brücke darf bis dahin bleiben.</b> Sie ist als Provisorium markiert, hat einen Fallback auf lokal, und hält den Durchsatz oben. Kein Druck, sie voreilig zu entfernen.</li>
 </ul>
 <p class="dim">Zusammengefasst: AGT-2262 ist das Aufräumen am Ende einer Kette, kein eigenständiger Start. Zielbild entscheiden → Ersatz bauen → Abriss. Nur so tauscht man den Hack gegen etwas Besseres statt gegen den nächsten Hack.</p>
-<div class="box"><h4>Lebenszyklus dieses Dokuments</h4><p>Dieses Doc begleitet die Kette. Sobald <b>AGT-2262 abgeschlossen</b> ist (Brücke entfernt), hat es seinen Zweck erfüllt und wird ins <b>Archiv</b> klassifiziert (Wiki-Klassifikation „archived") — es bleibt lesbar und verlinkbar, verschwindet aber aus der aktuellen Ansicht.</p></div>
+<div class="box"><h4>Document lifecycle</h4><p>AGT-2262 is complete and this record is classified as <b>archived</b>. It remains readable and linkable as the history behind the replacement-first teardown.</p></div>
 
 </main>
 </body>

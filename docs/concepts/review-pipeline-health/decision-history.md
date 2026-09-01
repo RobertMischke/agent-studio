@@ -2,6 +2,16 @@
 
 Newest first. Every entry: date · decision · reasoning · card/commit reference.
 
+## 2026-09-01: Canonical Remote Review replaces the SSH gate bridge
+Remote tool gates now execute as commands in a separately claimed ReviewAttempt
+against an immutable ReviewSubject Result-SHA. Review claims, renewals, reports,
+and cleanup carry lease, fence, authority epoch, capability, and idempotency
+authority. Pipeline and timeline views project the fenced report directly.
+Decision: remove the direct SSH dispatch, its remote worktree discovery and
+`gate-work` convention, the process-local remote semaphore, and the alias-based
+gate activity projection. The local BuildTestGateRunner remains a legacy local
+review implementation only and never falls back from Remote Review. -> AGT-2262.
+
 ## 2026-08-18: Review-plane restart is loss-free; adaptive parallelism and plane priority ship as recommendations, not auto-executors
 The critical unknown blocking AGT-2645's auto-scaling proposal, whether
 `sudo agent-runner-deploy config review RUNNER_MAX_PARALLELISM <n>` (the
@@ -57,7 +67,7 @@ never counted as this cycle's verdict. Automatic moves never bump the epoch, so
 loop protection stays intact. → AGT-2260 (full scope: artifact rotation,
 attempt-epoch UI), delivered core in `fix: operator requeue opens a fresh review cycle`.
 
-## 2026-07-23 — SSH-gate bridge: gates run on the remote host (shortcut)
+## 2026-07-23: SSH-gate bridge ran gates on the remote host (historical shortcut)
 Serial local gates (15–27 min each, repo contention, load flakes) were the
 throughput floor. Decision: bridge now, clean solution after — the gate locates
 the subject SHA in the host's per-project repos, runs the build-profile commands
@@ -65,7 +75,8 @@ over ssh in a disposable worktree (2 in parallel, remote-side timeout), falls
 back to local on any remote infrastructure problem. Full suite: **2 min 11 s**
 remote vs 15–27 min local. Explicitly a self-contained bridge: superseded by
 claimable remote gate steps (AGT-2229), then removed wholesale (cleanup card
-`ssh-gate-shortcut-cleanup`). → AGT-2222 tranche 2.
+`ssh-gate-shortcut-cleanup`). Removed on 2026-09-01 by AGT-2262 after the
+claimable Remote Review path became canonical. -> AGT-2222 tranche 2.
 
 ## 2026-07-23 — Host slots 5 → 20 (operator-directed)
 The remote host idled at load 0.34 with 12 CPUs/62 GB while 5 slots capped the
