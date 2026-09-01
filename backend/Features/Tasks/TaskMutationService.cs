@@ -919,14 +919,41 @@ public class TaskMutationService
     /// state. Pass <see cref="LifecyclePhases.IsAllowed"/> values; an empty
     /// string clears the field. Validation against the state happens at the
     /// scanner so a corrupt write is rendered inert rather than fatal.
+    /// Several callers (lane-move cleanup, re-entrant intake ticks) call this
+    /// with the phase the card is already in; skip the write and invalidation
+    /// entirely when nothing would change, and otherwise write both fields in
+    /// one rewrite so the watcher/cache only see a single event.
     /// </summary>
     public bool SetJobPhase(string folderPath, string? phase)
     {
         if (!Directory.Exists(folderPath)) return false;
-        TaskJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
-        TaskJsonFile.UpdateField(folderPath, "phaseEnteredAt",
-            string.IsNullOrWhiteSpace(phase) ? "" : DateTime.UtcNow.ToString("o"), _logger);
+        var next = phase ?? "";
+        if (string.Equals(ReadCurrentPhase(folderPath), next, StringComparison.Ordinal)) return false;
+
+        TaskJsonFile.UpdateFields(folderPath, new Dictionary<string, object>
+        {
+            ["phase"] = next,
+            ["phaseEnteredAt"] = string.IsNullOrWhiteSpace(next) ? "" : DateTime.UtcNow.ToString("o"),
+        }, _logger);
         return Updated();
+    }
+
+    private static string ReadCurrentPhase(string folderPath)
+    {
+        var path = Path.Combine(folderPath, "task.json");
+        if (!File.Exists(path)) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.TryGetProperty("phase", out var phaseEl)
+                && phaseEl.ValueKind == JsonValueKind.String
+                    ? phaseEl.GetString() ?? ""
+                    : "";
+        }
+        catch (JsonException)
+        {
+            return "";
+        }
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 
 namespace AgentStudio.Tasks;
 
@@ -35,6 +36,7 @@ public sealed class TaskIndexCache
     private readonly TimeSpan _safetyTtl;
     private readonly Func<List<TaskInfo>> _scanAllJobsRaw;
     private readonly Action? _beforeRefreshGenerationCapture;
+    private readonly ILogger _logger;
 
     // Cache slot: snapshot + when it was taken + whether a mutation/watcher
     // event marked it stale before the next read got there.
@@ -97,6 +99,7 @@ public sealed class TaskIndexCache
     {
         _scanAllJobsRaw = scanAllJobsRaw;
         _beforeRefreshGenerationCapture = beforeRefreshGenerationCapture;
+        _logger = logger;
         var ttlSec = int.TryParse(config["TaskIndexCache:SafetyTtlSeconds"], out var v) ? v : 30;
         _safetyTtl = TimeSpan.FromSeconds(Math.Max(1, ttlSec));
     }
@@ -305,9 +308,16 @@ public sealed class TaskIndexCache
     /// Marks the cache stale so the next <see cref="GetSnapshot"/> call
     /// rescans from disk. Called from TaskWatcherService (external changes)
     /// and from mutation services (API-driven changes) so a write is always
-    /// visible on the next read.
+    /// visible on the next read. The caller-info parameters are captured
+    /// automatically by the compiler and only logged at Debug level, so this
+    /// is the cheapest way to see which concrete call site is driving churn
+    /// (e.g. a tick-path guard that still invalidates unconditionally)
+    /// without instrumenting every callsite by hand.
     /// </summary>
-    public void Invalidate(InvalidationSource source = InvalidationSource.Mutation)
+    public void Invalidate(
+        InvalidationSource source = InvalidationSource.Mutation,
+        [CallerMemberName] string callerMember = "",
+        [CallerFilePath] string callerFile = "")
     {
         // Publish the required mutation generation, general invalidation
         // generation and dirty bit under the same lock. A reader can therefore
@@ -327,7 +337,27 @@ public sealed class TaskIndexCache
             Interlocked.Increment(ref ExternalInvalidations);
         else
             Interlocked.Increment(ref MutationInvalidations);
+
+        if (_logger.IsEnabled(LogLevel.Debug))
+            _logger.LogDebug(
+                "task-index-cache-invalidate source={Source} caller={Caller} file={File}",
+                source,
+                callerMember,
+                Path.GetFileNameWithoutExtension(callerFile));
     }
+
+    /// <summary>
+    /// Point-in-time counter rollup for the periodic stats log
+    /// (<see cref="TaskIndexCacheStatsHostedService"/>) and any future debug
+    /// endpoint. Snapshotting here keeps the six-field read a single call
+    /// instead of six separate racy field reads at the log site.
+    /// </summary>
+    public TaskIndexCacheStats GetStats() => new(
+        Volatile.Read(ref Hits),
+        Volatile.Read(ref Misses),
+        Volatile.Read(ref StaleHits),
+        Volatile.Read(ref ExternalInvalidations),
+        Volatile.Read(ref MutationInvalidations));
 
     /// <summary>
     /// Test / debug hook: forces a synchronous rescan and returns the new
@@ -348,3 +378,11 @@ public sealed class TaskIndexCache
         Mutation,
     }
 }
+
+/// <summary>Point-in-time snapshot of <see cref="TaskIndexCache"/>'s counters.</summary>
+public readonly record struct TaskIndexCacheStats(
+    long Hits,
+    long Misses,
+    long StaleHits,
+    long ExternalInvalidations,
+    long MutationInvalidations);

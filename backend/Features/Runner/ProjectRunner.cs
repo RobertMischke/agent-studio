@@ -820,11 +820,13 @@ public class ProjectRunner
 
     private void ClearQuotaWait(TaskInfo info)
     {
-        QuotaWaitMarker.Clear(info.FolderPath, _logger);
-        // quota-wait.json participates in the indexed TaskInfo projection.
-        // Make deletion visible synchronously so a recovered provider wait
-        // cannot be re-read from a stale task snapshot on the next tick.
-        _scanner.InvalidateCache();
+        // Most ticks call this defensively on tasks that never had a marker.
+        // Only invalidate when a file was actually deleted: quota-wait.json
+        // participates in the indexed TaskInfo projection, and deletion must
+        // stay visible synchronously so a recovered provider wait cannot be
+        // re-read from a stale task snapshot on the next tick.
+        if (QuotaWaitMarker.Clear(info.FolderPath, _logger))
+            _scanner.InvalidateCache();
     }
 
     private ProviderLimitStatus? ActiveProviderLimit(string? cliType, DateTime utcNow)
