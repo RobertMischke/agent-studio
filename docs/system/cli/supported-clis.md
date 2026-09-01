@@ -163,15 +163,22 @@ worker receives the matching provider path, so a Claude pin on a Codex-primary
 host cannot fall through to `codex -m <claude-model>`. On headless Linux hosts,
 both runner units load `/etc/agent-runner/provider-auth.env`; the Claude worker
 explicitly admits `CLAUDE_CODE_OAUTH_TOKEN` from the process environment after
-clean-context preparation. The probe and worker do not read credential paths.
+clean-context preparation. When provider-owned files exist, the probe reads
+only their non-secret timing metadata: Claude refresh-token expiry and Codex
+last-refresh age. Codex access-token JWT expiry is treated as refreshable, not
+as a forced re-auth deadline. The status command remains the only provider-owned
+non-interactive refresh opportunity; Studio never rewrites token material.
 
-Execution Hosts renders `OK`, `Unavailable`, or `Unknown` for each advertised
-CLI and exposes the probe detail as a tooltip. Provider-auth state changes are
-retained in capability recovery history. An `OK -> Unavailable` transition
-notifies the operator; an auth-classified run failure reports unavailability
-immediately. Ready cards assigned to a host without usable matching auth show a
-provider sign-in wait reason. If the runner can advertise a known expiry,
-Studio warns during the final 14 days.
+Execution Hosts renders `OK`, `Retrying`, `Expiring`, `Signed out`,
+`Unavailable`, or `Unknown` for each advertised CLI and exposes the probe
+detail as a tooltip.
+Run output and status probes share one classifier. Rate limits route to the
+provider-limit circuit; timeouts, token-refresh races, network errors, and
+ordinary tool failures keep last-good auth. One distinguishable auth failure
+shows `Retrying`; the configured consecutive threshold is required before
+`Unavailable` and a blocking re-auth prompt. If a later probe confirms the
+login, its advertisement clears the failure circuit without a restart. Known
+re-auth expiry warns during the final 14 days while claims remain eligible.
 
 ### 2.8 Execution context (read-only observability)
 

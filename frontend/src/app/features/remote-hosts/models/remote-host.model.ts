@@ -186,6 +186,9 @@ export interface RemoteHostCapabilityHealth {
   detail?: string | null;
   /** Optional provider-reported credential expiry. Older runners omit it. */
   expiresAt?: string | null;
+  /** Non-blocking provider-auth condition. Claim admission still reads advertisedStatus. */
+  condition?: 'ok' | 'transient-auth-error' | 'credentials-expiring' | 'signed-out' | null;
+  credentialRefreshedAt?: string | null;
   affectedClaims: readonly string[];
   recoveryHistory: readonly CapabilityRecoveryEvent[];
 }

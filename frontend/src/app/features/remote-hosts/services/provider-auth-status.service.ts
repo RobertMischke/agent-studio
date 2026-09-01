@@ -54,20 +54,26 @@ export class ProviderAuthStatusService implements OnDestroy {
     if (wasLoaded) {
       for (const [id, current] of next) {
         const prior = this.previous.get(id);
-        if (prior?.state === 'ok' && current.state === 'unavailable') {
+        if (prior && prior.state !== 'signed-out' && current.state === 'signed-out') {
           this.notifications.warning(
-            `${current.providerLabel} authentication changed from OK to unavailable on ${current.hostName}. Ready cards assigned to this host are waiting. ${current.detail}`,
-            `${current.providerLabel} sign-in required`,
+            `${current.providerLabel} is genuinely signed out on ${current.hostName}. Ready cards assigned to this host are waiting. ${current.detail}`,
+            `${current.providerLabel} re-auth needed`,
+          );
+        } else if (prior?.state === 'ok' && current.state === 'retrying') {
+          this.notifications.info(
+            `${current.providerLabel} had a transient auth error on ${current.hostName}. The last good capability is retained and a fresh probe will retry automatically.`,
+            `${current.providerLabel} transient auth error, retrying`,
           );
         }
       }
     }
     for (const current of next.values()) {
+      if (current.state !== 'ok' && current.state !== 'expiring') continue;
       if (!current.expiresSoon || !current.expiresAt || !current.expiryLabel) continue;
       const warningKey = `${current.id}:${current.expiresAt}`;
       if (this.expiryWarnings.has(warningKey)) continue;
       this.expiryWarnings.add(warningKey);
-      this.notifications.warning(
+      this.notifications.info(
         `${current.providerLabel} authentication on ${current.hostName} ${current.expiryLabel.toLowerCase()}. Renew it before Ready cards are held.`,
         `${current.providerLabel} authentication expires soon`,
       );

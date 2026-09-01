@@ -1463,7 +1463,10 @@ public sealed class V1ReviewExecutorRegistry
                     capability.Identity,
                     capability.Detail,
                     [],
-                    []);
+                    [],
+                    capability.Condition,
+                    capability.ExpiresAt,
+                    capability.CredentialRefreshedAt);
             })
             .GroupBy(capability => capability.Key, StringComparer.Ordinal)
             .Select(group => group.Last())
@@ -1523,9 +1526,18 @@ public sealed class V1ReviewExecutorRegistry
                 request.Generation,
                 capabilities,
                 request.Telemetry);
-            // An advertisement refreshes the capability snapshot; it is NOT a
-            // health verdict. The review daemon re-advertises every 60 seconds, so
-            // clearing the drain here meant the cooldown never drained anything: an
+            foreach (var recovered in capabilities.Where(capability =>
+                         capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal)
+                         && capability.AdvertisedStatus == "ready"
+                         && capability.Condition == "ok"))
+            {
+                ClearCapabilityFailure(runnerId, recovered.Key);
+            }
+            // A generic advertisement refreshes the capability snapshot; it is NOT
+            // a health verdict. Only provider-auth ready/ok above represents a fresh
+            // successful login probe. The review daemon re-advertises every 60
+            // seconds, so clearing other drains here meant the cooldown never
+            // drained anything: an
             // executor with a broken capability became claim-eligible again a
             // minute later, over and over. A pause therefore lifts only by its own
             // cooldown expiring or by a full re-registration
@@ -1972,6 +1984,23 @@ public sealed class V1ReviewExecutorRegistry
         var prefix = DiagnosticKey(runnerId, string.Empty);
         foreach (var key in _capabilityFailureDeliveries.Keys
                      .Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
+                     .ToList())
+        {
+            _capabilityFailureDeliveries.Remove(key);
+        }
+    }
+
+    /// <summary>Caller must hold <see cref="_gate"/>.</summary>
+    private void ClearCapabilityFailure(string runnerId, string capabilityKey)
+    {
+        if (_capabilityFailures.TryGetValue(runnerId, out var failures))
+        {
+            failures.Remove(capabilityKey);
+            if (failures.Count == 0) _capabilityFailures.Remove(runnerId);
+        }
+        var deliveryPrefix = DiagnosticKey(runnerId, "provider-auth:");
+        foreach (var key in _capabilityFailureDeliveries.Keys
+                     .Where(key => key.StartsWith(deliveryPrefix, StringComparison.Ordinal))
                      .ToList())
         {
             _capabilityFailureDeliveries.Remove(key);

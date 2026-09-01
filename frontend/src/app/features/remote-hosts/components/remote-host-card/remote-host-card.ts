@@ -227,7 +227,8 @@ export class RemoteHostCardComponent {
       && capability.advertisedStatus === 'ready').length;
   });
   readonly unavailableAuthCount = computed(() =>
-    this.providerAuthBadges().filter(auth => auth.state === 'unavailable').length);
+    this.providerAuthBadges().filter(auth =>
+      auth.state === 'unavailable' || auth.state === 'signed-out').length);
   readonly totalActiveSlots = computed(() => this.roles()
     .reduce((total, role) => total + this.activeSlotsFor(role), 0));
   readonly identitySummary = computed(() => {

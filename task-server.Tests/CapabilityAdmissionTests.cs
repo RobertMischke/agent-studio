@@ -292,6 +292,76 @@ public sealed class CapabilityAdmissionTests
             });
     }
 
+    [Fact]
+    public async Task Confirmed_provider_probe_recovers_a_drained_capability_without_runner_restart()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        const string runner = "codex";
+        const string instance = "codex-instance";
+        var capability = CapabilityProtocol.ProviderAuthentication("codex");
+        await RegisterAndAdvertiseAsync(
+            store,
+            clock,
+            runner,
+            instance,
+            "host-a",
+            CapabilityProtocol.CodingExecutor,
+            capability);
+        await FailAsync(store, clock, runner, instance, capability, "auth-1");
+        await FailAsync(store, clock, runner, instance, capability, "auth-2");
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        var refreshedAt = clock.GetUtcNow().UtcDateTime.AddMinutes(-2);
+        await store.AdvertiseCapabilitiesAsync(
+            Advertisement(
+                clock,
+                runner,
+                instance,
+                2,
+                CapabilityProtocol.CodingExecutor,
+                capability) with
+            {
+                Capabilities =
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        capability,
+                        "provider-auth",
+                        "ready",
+                        Identity: "codex",
+                        Detail: "A fresh login status probe confirmed an active session.",
+                        Condition: "ok",
+                        CredentialRefreshedAt: refreshedAt),
+                ],
+            },
+            runner,
+            default);
+
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        var recovered = Assert.Single(snapshot.Capabilities, item => item.Key == capability);
+        Assert.Equal(CapabilityHealthStates.Healthy, recovered.HealthState);
+        Assert.Equal(0, recovered.ConsecutiveFailures);
+        Assert.Equal("ok", recovered.Condition);
+        Assert.Equal(refreshedAt, recovered.CredentialRefreshedAt);
+        Assert.Contains(
+            recovered.RecoveryHistory,
+            item => item.ToState == CapabilityHealthStates.Healthy
+                    && item.Reason.Contains("confirmed recovery", StringComparison.Ordinal));
+
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                runner,
+                instance,
+                RequiredCapabilities: [CapabilityProtocol.CodingExecutor, capability]),
+            runner,
+            default);
+        Assert.Equal("claimed", claim.Status);
+    }
+
     [Theory]
     [InlineData(CapabilityProtocol.Disk)]
     [InlineData(CapabilityProtocol.LeaseAuthority)]

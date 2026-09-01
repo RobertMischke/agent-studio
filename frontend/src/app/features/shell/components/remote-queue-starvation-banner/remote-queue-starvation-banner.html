@@ -5,8 +5,8 @@
     ariaLive="polite"
     testid="remote-queue-starvation-banner">
     @if (providerLimits()[0]; as limit) {
-      <strong data-testid="notice-bar-headline">{{ cliLabel(limit.cliType) }} claims limited until <span class="notification__number">{{ formatLimitTime(limit.limitedUntil) }}</span>.</strong>
-      <span class="notification__detail" data-testid="notice-bar-detail">The account-level provider limit is waiting for its reset and will resume automatically after a fresh quota probe. Codex and other CLI claims remain eligible.</span>
+      <strong data-testid="notice-bar-headline">{{ cliLabel(limit.cliType) }} rate-limited until <span class="notification__number">{{ formatLimitTime(limit.limitedUntil) }}</span>.</strong>
+      <span class="notification__detail" data-testid="notice-bar-detail">The account-level provider limit is waiting for its reset and will resume automatically after a fresh quota probe. Other CLI claims remain eligible.</span>
     } @else if (pickupPauses()[0]; as pause) {
       <strong data-testid="notice-bar-headline">Pickup paused: infra breaker.</strong>
       <span class="notification__detail" data-testid="notice-bar-detail">{{ pause.projectName }}: {{ pause.reason }} @if (pause.autoResumeAt) { Auto-resume is scheduled for <span class="notification__number">{{ formatLimitTime(pause.autoResumeAt) }}</span>. } @else { This breaker requires an operator resume after the infrastructure recovers. }</span>
