@@ -113,6 +113,32 @@ public sealed class TaskIntegrationRecordEndpointTests : IDisposable
         Assert.Empty(invalidDetail.RootElement.GetProperty("info").GetProperty("integrationRecords").EnumerateArray());
     }
 
+    [Fact]
+    public async Task AppendIntegrationRecord_DuplicateIdsRequireAKeyOrFolderAddress()
+    {
+        const string duplicateId = "human-decision-needed-die-zeilen-sind-nicht-aussichtlichen-verteilt";
+        var firstFolder = WriteFlatTask(TaskStates.Archive, "ASS-324", duplicateId);
+        var secondFolder = WriteFlatTask(TaskStates.Archive, "ASS-1309", duplicateId);
+        await using var factory = BuildFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Client-Id", "local-default");
+
+        using var ambiguous = await client.PostAsJsonAsync(
+            $"/api/tasks/{duplicateId}/integration-records?watchPath={Uri.EscapeDataString(_watchPath)}",
+            Request());
+        Assert.Equal(HttpStatusCode.Conflict, ambiguous.StatusCode);
+
+        using var addressed = await client.PostAsJsonAsync(
+            $"/api/tasks/ASS-1309/integration-records?watchPath={Uri.EscapeDataString(_watchPath)}",
+            Request());
+        addressed.EnsureSuccessStatusCode();
+
+        using var first = JsonDocument.Parse(File.ReadAllText(Path.Combine(firstFolder, "task.json")));
+        Assert.False(first.RootElement.TryGetProperty("integrationRecords", out _));
+        using var second = JsonDocument.Parse(File.ReadAllText(Path.Combine(secondFolder, "task.json")));
+        Assert.Single(second.RootElement.GetProperty("integrationRecords").EnumerateArray());
+    }
+
     private AppendTaskIntegrationRecordRequest Request() => new()
     {
         Id = "operator-gpt-verification-2026-08-11",
@@ -156,6 +182,30 @@ public sealed class TaskIntegrationRecordEndpointTests : IDisposable
             enteredLaneAt = "2026-08-11T10:00:00Z",
         }));
         File.WriteAllText(Path.Combine(folder, "prompt.md"), "Verify integration bookkeeping.");
+    }
+
+    private string WriteFlatTask(string state, string key, string id)
+    {
+        Assert.True(TaskStorageLayout.TryParseKeyNumber(key, out var number));
+        var folder = TaskStorageLayout.JobDir(_watchPath, number, key);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "task.json"), JsonSerializer.Serialize(new
+        {
+            id,
+            key,
+            title = $"Integration record endpoint fixture {key}",
+            state,
+            order = 1,
+            agent = "codex",
+            cliType = "codex",
+            taskType = "feature",
+            mode = TaskModes.Coding,
+            fixture = true,
+            createdAt = "2026-06-09T09:00:00Z",
+            enteredLaneAt = "2026-06-09T10:00:00Z",
+        }));
+        File.WriteAllText(Path.Combine(folder, "prompt.md"), "Verify integration bookkeeping.");
+        return folder;
     }
 
 }

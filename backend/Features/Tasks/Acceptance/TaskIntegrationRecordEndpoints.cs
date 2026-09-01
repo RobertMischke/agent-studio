@@ -23,7 +23,15 @@ public static class TaskIntegrationRecordEndpoints
             AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
-            var task = scanner.FindJob(jobId, watchPath);
+            var resolution = TaskIntegrationRecordAddressResolver.Resolve(scanner, jobId, watchPath);
+            if (resolution.Ambiguous)
+            {
+                return Results.Conflict(new
+                {
+                    error = "The task id is not unique. Address the record by the task key or folder name within the project.",
+                });
+            }
+            var task = resolution.Task;
             if (task is null) return Results.NotFound(new { error = "Task not found." });
 
             var validation = TaskIntegrationRecordAppendPolicy.Validate(task.State, request);
@@ -58,7 +66,7 @@ public static class TaskIntegrationRecordEndpoints
                     statusCode: StatusCodes.Status500InternalServerError);
             }
 
-            var persisted = scanner.FindJob(task.Id, task.WatchPath)?.IntegrationRecords
+            var persisted = TaskIntegrationRecordAddressResolver.RefreshFolder(scanner, task)?.IntegrationRecords
                 .FirstOrDefault(item => string.Equals(item.Id, record.Id, StringComparison.OrdinalIgnoreCase))
                 ?? record;
             return Results.Ok(new { appended = write.Appended, record = persisted });
@@ -127,7 +135,7 @@ public static class TaskIntegrationRecordAppendPolicy
 
         var classification = request.Classification.Trim().ToLowerInvariant();
         if (!IntegrationRecordClasses.All.Contains(classification, StringComparer.Ordinal))
-            return new(false, false, "classification must use the historical integration five-class schema.");
+            return new(false, false, "classification must use the historical integration six-class schema.");
 
         var evidence = request.Evidence.Trim();
         if (evidence.Length is < 8 or > 4000)
@@ -178,3 +186,52 @@ public static class TaskIntegrationRecordAppendPolicy
 }
 
 public sealed record IntegrationRecordAppendValidation(bool Allowed, bool InFlight, string? Error);
+
+internal static class TaskIntegrationRecordAddressResolver
+{
+    public static TaskIntegrationRecordAddressResolution Resolve(
+        TaskScannerService scanner,
+        string address,
+        string? watchPath)
+    {
+        var candidates = scanner.ScanAllJobsRaw()
+            .Where(task => string.IsNullOrWhiteSpace(watchPath)
+                || WatchPathComparison.PathsEqual(task.WatchPath, watchPath))
+            .ToList();
+        var folderOrKeyMatches = candidates
+            .Where(task => string.Equals(task.Key, address, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(task.TaskKey, address, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(
+                    Path.GetFileName(task.FolderPath),
+                    address,
+                    StringComparison.OrdinalIgnoreCase))
+            .DistinctBy(task => task.FolderPath, FolderPathComparer)
+            .ToList();
+        if (folderOrKeyMatches.Count == 1)
+            return new(folderOrKeyMatches[0], false);
+        if (folderOrKeyMatches.Count > 1)
+            return new(null, true);
+
+        var idMatches = candidates
+            .Where(task => string.Equals(task.Id, address, StringComparison.OrdinalIgnoreCase))
+            .DistinctBy(task => task.FolderPath, FolderPathComparer)
+            .ToList();
+        return idMatches.Count switch
+        {
+            0 => new(null, false),
+            1 => new(idMatches[0], false),
+            _ => new(null, true),
+        };
+    }
+
+    public static TaskInfo? RefreshFolder(TaskScannerService scanner, TaskInfo task)
+        => scanner.ScanAllJobsRaw().FirstOrDefault(candidate => FolderPathComparer.Equals(
+            candidate.FolderPath,
+            task.FolderPath));
+
+    private static StringComparer FolderPathComparer { get; } = OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase
+        : StringComparer.Ordinal;
+}
+
+internal sealed record TaskIntegrationRecordAddressResolution(TaskInfo? Task, bool Ambiguous);

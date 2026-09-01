@@ -9,15 +9,17 @@ namespace AgentStudio.Tests;
 public sealed class HistoricalIntegrationVerificationSweepTests
 {
     [Theory]
-    [InlineData(true, true, false, false, false, false, IntegrationRecordClasses.IntegratedVerified)]
-    [InlineData(true, true, true, false, false, false, IntegrationRecordClasses.IntegratedHistorical)]
-    [InlineData(false, false, true, true, true, false, IntegrationRecordClasses.NoCodeExpected)]
-    [InlineData(true, false, true, false, false, true, IntegrationRecordClasses.ContentOnFence)]
-    [InlineData(false, false, true, false, true, false, IntegrationRecordClasses.GenuinelyMissing)]
-    public void Policy_ClassifiesFiveWayMatrix(
+    [InlineData(true, true, false, true, false, false, false, IntegrationRecordClasses.IntegratedVerified)]
+    [InlineData(true, true, true, true, false, false, false, IntegrationRecordClasses.IntegratedHistorical)]
+    [InlineData(false, false, true, false, true, true, false, IntegrationRecordClasses.NoCodeExpected)]
+    [InlineData(true, false, true, true, false, false, true, IntegrationRecordClasses.ContentOnFence)]
+    [InlineData(false, false, true, false, false, false, false, IntegrationRecordClasses.NoAttributionLegacy)]
+    [InlineData(false, false, true, true, false, true, false, IntegrationRecordClasses.GenuinelyMissing)]
+    public void Policy_ClassifiesSixWayMatrix(
         bool hasCommits,
         bool allIntegrated,
         bool historical,
+        bool hasCommitAttributionField,
         bool noCodeExpected,
         bool hasDeliverables,
         bool hasFence,
@@ -29,6 +31,7 @@ public sealed class HistoricalIntegrationVerificationSweepTests
                 hasCommits,
                 allIntegrated,
                 historical,
+                hasCommitAttributionField,
                 noCodeExpected,
                 hasDeliverables,
                 hasFence)));
@@ -38,6 +41,7 @@ public sealed class HistoricalIntegrationVerificationSweepTests
     [InlineData(IntegrationRecordClasses.IntegratedVerified, false)]
     [InlineData(IntegrationRecordClasses.IntegratedHistorical, false)]
     [InlineData(IntegrationRecordClasses.NoCodeExpected, false)]
+    [InlineData(IntegrationRecordClasses.NoAttributionLegacy, false)]
     [InlineData(IntegrationRecordClasses.ContentOnFence, true)]
     [InlineData(IntegrationRecordClasses.GenuinelyMissing, true)]
     public void OperatorVisibleDetector_OnlyReturnsActionableHistoricalClasses(
@@ -60,6 +64,134 @@ public sealed class HistoricalIntegrationVerificationSweepTests
         Assert.Equal(
             expected,
             TaskIntegrationRecordDetector.LatestOperatorVisibleVerification(task) is not null);
+    }
+
+    [Fact]
+    public void CandidateSelection_ExtendsLegacyScopeToAcceptanceStartedAlertPopulation()
+    {
+        var task = new TaskInfo
+        {
+            Id = "legacy-alert-card",
+            Key = "ASS-859",
+            State = TaskStates.Archive,
+            Mode = TaskModes.Coding,
+        };
+        var acceptanceStarted = new TimelineEvent
+        {
+            Kind = TimelineEventKinds.IntegrationStarted,
+            Ts = new DateTime(2026, 6, 9, 10, 0, 0, DateTimeKind.Utc),
+        };
+
+        Assert.True(TaskIntegrationRecordDetector.HasNativeRecord(null, [acceptanceStarted]));
+        Assert.True(HistoricalIntegrationVerificationPolicy.ShouldEvaluate(
+            task,
+            mergeStep: null,
+            [acceptanceStarted]));
+        Assert.False(HistoricalIntegrationVerificationPolicy.ShouldEvaluate(
+            task with
+            {
+                IntegrationRecords =
+                [
+                    new TaskIntegrationRecord
+                    {
+                        Id = HistoricalIntegrationVerificationSweep.PreviousRecordId,
+                        Classification = IntegrationRecordClasses.IntegratedHistorical,
+                    },
+                ],
+            },
+            mergeStep: null,
+            [acceptanceStarted]));
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_V2AddressesDuplicateIdsByFolder_AndPreservesV1Record()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "historical-integration-duplicate-id-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var reportPath = Path.Combine(root, ".metadata", "migrations", HistoricalIntegrationVerificationSweep.ReportFileName);
+            var firstFolder = SeedFlatTask(
+                root,
+                "ASS-324",
+                "human-decision-needed-die-zeilen-sind-nicht-aussichtlichen-verteilt",
+                existingRecord: new TaskIntegrationRecord
+                {
+                    Id = HistoricalIntegrationVerificationSweep.PreviousRecordId,
+                    Classification = IntegrationRecordClasses.IntegratedHistorical,
+                    RecordedAtUtc = new DateTime(2026, 8, 10, 10, 0, 0, DateTimeKind.Utc),
+                    Evidence = "Existing v1 verification.",
+                });
+            var secondFolder = SeedFlatTask(
+                root,
+                "ASS-1309",
+                "human-decision-needed-die-zeilen-sind-nicht-aussichtlichen-verteilt");
+            var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["TaskRepository"] = root,
+                    ["WatchPaths:0:Name"] = "Fixture",
+                    ["WatchPaths:0:Path"] = root,
+                    ["WatchPaths:0:RootPath"] = root,
+                    ["WatchPaths:0:RepositoryPath"] = root,
+                }).Build();
+            var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
+            timeline.Append(firstFolder, new TimelineEvent
+            {
+                Kind = TimelineEventKinds.IntegrationStarted,
+                Ts = new DateTime(2026, 6, 9, 10, 0, 0, DateTimeKind.Utc),
+            });
+            timeline.Append(secondFolder, new TimelineEvent
+            {
+                Kind = TimelineEventKinds.IntegrationStarted,
+                Ts = new DateTime(2026, 6, 9, 10, 0, 0, DateTimeKind.Utc),
+            });
+            var scanner = new TaskScannerService(
+                configuration,
+                NullLogger<TaskScannerService>.Instance,
+                new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, configuration));
+            var git = new GitService(NullLogger<GitService>.Instance, scanner, configuration);
+            var mutations = new TaskMutationService(
+                scanner,
+                new ClientIdentityStore(configuration, NullLogger<ClientIdentityStore>.Instance),
+                new AgentStudio.Registry.ProjectRegistry(
+                    configuration,
+                    NullLogger<AgentStudio.Registry.ProjectRegistry>.Instance),
+                new TaskChangeNotifier(NullLogger<TaskChangeNotifier>.Instance),
+                NullLogger<TaskMutationService>.Instance,
+                git: git);
+            var sweep = new HistoricalIntegrationVerificationSweep(
+                scanner,
+                mutations,
+                git,
+                new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, configuration),
+                new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance),
+                timeline,
+                reportPath,
+                batchSize: 10,
+                new FixedTimeProvider(new DateTimeOffset(2026, 9, 1, 10, 0, 0, TimeSpan.Zero)),
+                NullLogger<HistoricalIntegrationVerificationSweep>.Instance);
+
+            var report = await sweep.RunOnceAsync();
+
+            Assert.True(report.Completed);
+            Assert.Equal(2, report.CandidateCards);
+            Assert.Equal(1, report.RecordsWritten);
+            Assert.Equal(1, report.Counts[IntegrationRecordClasses.IntegratedHistorical]);
+            Assert.Equal(1, report.Counts[IntegrationRecordClasses.NoAttributionLegacy]);
+            Assert.Equal(
+                [HistoricalIntegrationVerificationSweep.PreviousRecordId],
+                ReadRecords(firstFolder).Select(record => record.Id));
+            var secondRecord = Assert.Single(ReadRecords(secondFolder));
+            Assert.Equal(HistoricalIntegrationVerificationSweep.RecordId, secondRecord.Id);
+            Assert.Equal(IntegrationRecordClasses.NoAttributionLegacy, secondRecord.Classification);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); }
+            catch (Exception ex) { SilentCatch.Note(ex, "HistoricalIntegrationVerificationSweepTests duplicate-id cleanup"); }
+        }
     }
 
     [Fact]
@@ -248,6 +380,43 @@ public sealed class HistoricalIntegrationVerificationSweepTests
         }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
         File.WriteAllText(Path.Combine(folder, "prompt.md"), "Fixture task.");
         return folder;
+    }
+
+    private static string SeedFlatTask(
+        string root,
+        string key,
+        string id,
+        TaskIntegrationRecord? existingRecord = null)
+    {
+        Assert.True(TaskStorageLayout.TryParseKeyNumber(key, out var number));
+        var folder = TaskStorageLayout.JobDir(root, number, key);
+        Directory.CreateDirectory(folder);
+        var task = new Dictionary<string, object?>
+        {
+            ["id"] = id,
+            ["key"] = key,
+            ["title"] = $"Fixture {key}",
+            ["state"] = TaskStates.Archive,
+            ["order"] = 1,
+            ["agent"] = "codex",
+            ["mode"] = TaskModes.Coding,
+            ["createdAt"] = "2026-06-09T09:00:00Z",
+            ["enteredLaneAt"] = "2026-06-09T10:00:00Z",
+        };
+        if (existingRecord is not null)
+            task["integrationRecords"] = new[] { existingRecord };
+        File.WriteAllText(
+            Path.Combine(folder, "task.json"),
+            JsonSerializer.Serialize(task, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(folder, "prompt.md"), "Fixture task.");
+        return folder;
+    }
+
+    private static IReadOnlyList<TaskIntegrationRecord> ReadRecords(string folder)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "task.json")));
+        return document.RootElement.GetProperty("integrationRecords")
+            .Deserialize<List<TaskIntegrationRecord>>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
     }
 
     private static object Commit(

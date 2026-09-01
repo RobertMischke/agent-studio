@@ -44,6 +44,7 @@ public static class IntegrationRecordClasses
     public const string IntegratedVerified = "integrated-verified";
     public const string IntegratedHistorical = "integrated-historical";
     public const string NoCodeExpected = "no-code-expected";
+    public const string NoAttributionLegacy = "no-attribution-legacy";
     public const string ContentOnFence = "content-on-fence";
     public const string GenuinelyMissing = "genuinely-missing";
 
@@ -52,6 +53,7 @@ public static class IntegrationRecordClasses
         IntegratedVerified,
         IntegratedHistorical,
         NoCodeExpected,
+        NoAttributionLegacy,
         ContentOnFence,
         GenuinelyMissing,
     ];

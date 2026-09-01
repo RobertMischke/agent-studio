@@ -152,9 +152,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   task key. The operation appends or refreshes that SHA in `commits[]`, mirrors
   it as the final singular `commit`, and never creates or rewrites Git history.
 - Operator- or GPT-reviewed historical classifications can be appended through
-  `POST /api/tasks/{id}/integration-records?watchPath=...`. The request uses
-  the five classes owned by `HistoricalIntegrationVerificationSweep`, a stable
-  caller-supplied record id, and explicit evidence. The server owns
+  `POST /api/tasks/{address}/integration-records?watchPath=...`. The address may
+  be a stable task key or the task folder name within the selected project. A
+  duplicated legacy `id` returns `409` rather than selecting an arbitrary card.
+  The request uses the six classes owned by
+  `HistoricalIntegrationVerificationSweep`, a stable caller-supplied record id,
+  and explicit evidence. The server owns
   `recordedAtUtc`, rejects non-schema classes, and refuses cards in Preparation,
   Ready, Progress, or Post Processing so an in-flight delivery cannot be sealed
   by bookkeeping. Repeating a record id is an idempotent no-op. This mutation
@@ -262,11 +265,17 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   no-branch cards are exempt through their mode, kind, `taskType=concept|decision`,
   or the explicit `noBranchExpected: true` card field.
 - `HistoricalIntegrationVerificationSweep` runs once off the startup request
-  path before the accepted integration inventory. It groups Git reads by
-  repository and processes card writes in bounded batches. Cards without a
-  native integration fact receive one append-only `integrationRecords[]` row:
+  path before the accepted integration inventory. The V2 pass reads every task
+  folder directly, groups Git reads by repository, and processes card writes in
+  bounded batches. It preserves every V1 row and extends the original
+  missing-record population to terminal acceptance-start cards inspected by the
+  acute alert. Each uncovered card receives one append-only
+  `integrationRecords[]` row:
   `integrated-verified`, `integrated-historical`, `no-code-expected`,
-  `content-on-fence`, or `genuinely-missing`. Target-branch ancestry uses the
+  `no-attribution-legacy`, `content-on-fence`, or `genuinely-missing`.
+  `no-attribution-legacy` is reserved for pre-recording cards whose task JSON
+  has no `commits[]` attribution field and whose branch, result, and salvage
+  evidence cannot prove delivery. Target-branch ancestry uses the
   same abbreviated-SHA and superseded-generation rules as the card projection;
   report-only classification requires both a no-code expectation and a task
   result artifact. The durable migration report contains aggregate counts and
@@ -274,7 +283,8 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   the accepted integration recovery loop starts after the sweep and excludes
   every card carrying one. `AcceptedIntegrationInventorySweep` then lists only
   `content-on-fence`, `genuinely-missing`, or current recorded Error and
-  NoTaskBranch outcomes.
+  NoTaskBranch outcomes. The acute alert still detects a new acceptance stall
+  after the one-time pass.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`

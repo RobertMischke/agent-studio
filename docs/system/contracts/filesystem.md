@@ -14,6 +14,7 @@ canonical layout:
     migrations/
       superseded-commits-v1.json
       historical-integration-verification-v1.json
+      historical-integration-verification-v2.json
     test-runs/
       PROJ-023.json
   projects/
@@ -79,13 +80,16 @@ repair. It lists both marked commits and ambiguous cards left untouched. The
 backend writes it atomically after scanning delivered and archived cards; an
 unreadable existing report fails that repair rather than silently rerunning it.
 
-`<TaskRepository>/.metadata/migrations/historical-integration-verification-v1.json`
-is the durable count report and completion marker for accepted and archived
-cards that predate acceptance integration recording. It contains counts for
-all five verification classes and task rows only for `content-on-fence` and
-`genuinely-missing`. The related `task.json.integrationRecords[]` rows are
-append-only and use a stable id, so an interrupted or repeated sweep cannot
-duplicate card bookkeeping.
+`<TaskRepository>/.metadata/migrations/historical-integration-verification-v2.json`
+is the current durable count report and completion marker for accepted and
+archived cards that predate acceptance integration recording. V2 extends the
+scan to every terminal acceptance-start card that the acute alert can inspect.
+It reads folders directly, preserves records written by V1, and contains counts
+for all six verification classes. Task rows remain limited to
+`content-on-fence` and `genuinely-missing`. The V1 report remains as historical
+evidence and is never overwritten. Related `task.json.integrationRecords[]`
+rows are append-only and use stable versioned ids, so an interrupted or repeated
+sweep cannot duplicate card bookkeeping.
 
 ## Operational Boundary
 
@@ -203,12 +207,14 @@ excludes that rotation path, including when a legacy rotation was once tracked.
 - `integrationRecords` - append-only application bookkeeping for historical
   integration verification. Each row carries a stable id, one of
   `integrated-verified`, `integrated-historical`, `no-code-expected`,
-  `content-on-fence`, or `genuinely-missing`, the integration branch, and the
-  Git or artifact evidence used. Agents and ordinary task mutations never
-  replace these rows. The historical startup sweep and the guarded
-  `POST /api/tasks/{id}/integration-records` operator-verification endpoint are
-  the only writers; the endpoint rejects in-flight lanes and is idempotent by
-  record id.
+  `no-attribution-legacy`, `content-on-fence`, or `genuinely-missing`, the
+  integration branch, and the Git or artifact evidence used. Agents and
+  ordinary task mutations never replace these rows. The historical startup
+  sweep and the guarded `POST /api/tasks/{address}/integration-records`
+  operator-verification endpoint are the only writers. The address may be a
+  stable task key or the folder name within the selected project. A duplicated
+  legacy `id` returns `409` instead of selecting one card. The endpoint rejects
+  in-flight lanes and is idempotent by record id.
 
 The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`, whose visible label is Post Processing; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (forward to `5e-escalated` with a `[supervisor]` chat-note and an escalation verdict). The user always confirms accepted work before it moves from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
 

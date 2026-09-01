@@ -94,6 +94,7 @@ public sealed class AcceptanceIntegrationPolicyTests
     [InlineData(IntegrationRecordClasses.IntegratedVerified, null)]
     [InlineData(IntegrationRecordClasses.IntegratedHistorical, null)]
     [InlineData(IntegrationRecordClasses.NoCodeExpected, null)]
+    [InlineData(IntegrationRecordClasses.NoAttributionLegacy, null)]
     [InlineData(IntegrationRecordClasses.ContentOnFence, IntegrationRecordClasses.ContentOnFence)]
     [InlineData(IntegrationRecordClasses.GenuinelyMissing, IntegrationRecordClasses.GenuinelyMissing)]
     public void AcceptedInventory_OnlyKeepsActionableHistoricalClasses(
