@@ -1,6 +1,6 @@
 # CLI Domain Map
 
-Version: 2026-06-09
+Version: 2026-09-01
 Status: System-of-record map for CLI adapter and quota changes.
 
 Use this when a change touches Claude, Codex, Copilot, Gemini, prompt handoff,
@@ -38,7 +38,10 @@ CLI execution tests.
   package is absent or its required `.cmd` command shim disappeared. It selects
   a plain install or forced relink from that state and persists repair and
   nearby npm-activity evidence to
-  `<TaskRepository>/logs/cli-self-heal.jsonl`.
+  `<TaskRepository>/logs/cli-self-heal.jsonl`. The installer resolves absolute
+  npm candidates from the active Node installation, `%APPDATA%`, and `PATH`,
+  then requires an `npm --version` preflight from an explicit working directory
+  before starting the repair.
 - `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
   endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
   (lazy single-transcript parse: model, thinking, message count, first prompt)
@@ -81,8 +84,12 @@ CLI execution tests.
   package version still regenerates bin shims. Custom executable paths and
   present-but-broken command shims remain outside this policy. Repair verifies
   both the `.cmd` shim and `--version`, and is limited to one persisted attempt
-  per CLI per hour. Successful repair is informational; failure is the alarm
-  boundary and names the observed package/shim state and attempted action.
+  per CLI per hour. Live runner status contains only an active attempt or an
+  unresolved failure. A successful repair or later healthy probe clears the
+  entry, and the durable healthy journal row prevents an earlier failure from
+  returning after restart. Npm resolution or preflight failure is recorded as
+  `npm-unavailable`; other failures name the observed package/shim state and
+  attempted action.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

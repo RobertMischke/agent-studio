@@ -198,7 +198,8 @@ export class StatusBarComponent implements OnInit, OnDestroy {
   });
 
   readonly latestCliRepair = computed(() => {
-    const repairs = this.jobService.runnerStatus().cliRepairs ?? [];
+    const repairs = (this.jobService.runnerStatus().cliRepairs ?? [])
+      .filter(item => item.outcome === 'attempting' || item.outcome === 'failed');
     return repairs.reduce<(typeof repairs)[number] | null>((latest, item) =>
       latest === null || Date.parse(item.occurredAt) > Date.parse(latest.occurredAt) ? item : latest,
     null);
@@ -212,8 +213,8 @@ export class StatusBarComponent implements OnInit, OnDestroy {
       ? new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
         .format(new Date(parsed))
       : 'unknown time';
-    return repair.outcome === 'repaired'
-      ? `CLI repaired at ${time}`
+    return repair.outcome === 'attempting'
+      ? `CLI repair in progress since ${time}`
       : `CLI repair failed at ${time}`;
   });
 

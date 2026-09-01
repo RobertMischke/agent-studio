@@ -88,8 +88,14 @@ public sealed class LocalCliRepairService
         _journalPath = journalPath;
         foreach (var entry in ReadJournal())
         {
-            if (entry.Outcome is not ("repaired" or "failed")) continue;
-            _latest[entry.CliType] = ToStatus(entry);
+            if (entry.Outcome == "failed")
+            {
+                _latest[entry.CliType] = ToStatus(entry);
+            }
+            else if (entry.Outcome is "repaired" or "healthy" or "resolved")
+            {
+                _latest.Remove(entry.CliType);
+            }
         }
     }
 
@@ -115,7 +121,12 @@ public sealed class LocalCliRepairService
         CancellationToken ct)
     {
         var before = probe();
-        if (before.Available || !_isWindows()) return before;
+        if (before.Available)
+        {
+            ReconcileHealthy(cliType, before);
+            return before;
+        }
+        if (!_isWindows()) return before;
 
         var appData = _appData();
         if (string.IsNullOrWhiteSpace(appData)) return before;
@@ -139,7 +150,7 @@ public sealed class LocalCliRepairService
         {
             var evidence = CaptureNpmActivity(inspection.PackageName, detectedAt);
             var beforeVersion = lastObservedVersion ?? inspection.PackageVersion;
-            AppendJournal(new LocalCliRepairJournalEntry(
+            var attempting = new LocalCliRepairJournalEntry(
                 detectedAt,
                 cliType,
                 "attempting",
@@ -155,7 +166,9 @@ public sealed class LocalCliRepairService
                 $"Starting bounded {cliType} CLI repair: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction}.",
                 "",
                 "",
-                evidence));
+                evidence);
+            AppendJournal(attempting);
+            lock (_sync) _latest[cliType] = ToStatus(attempting);
             _logger.LogInformation(
                 "Starting bounded local CLI repair cli={Cli} package={Package} packageVersion={Version} packageState={PackageState} shimStateBefore={ShimStateBefore} repairAction={RepairAction}",
                 cliType,
@@ -205,13 +218,13 @@ public sealed class LocalCliRepairService
                 detail,
                 Truncate(LogRedactor.Scrub(install.StandardOutput), 4000),
                 Truncate(LogRedactor.Scrub(install.StandardError), 4000),
-                evidence);
+                evidence,
+                install.FailureKind);
             AppendJournal(entry);
 
-            var status = ToStatus(entry);
-            lock (_sync) _latest[cliType] = status;
             if (succeeded)
             {
+                lock (_sync) _latest.Remove(cliType);
                 _logger.LogInformation(
                     "Local CLI repaired cli={Cli} packageStateBefore={PackageStateBefore} packageStateAfter=present shimStateBefore={ShimStateBefore} shimStateAfter=present repairAction={RepairAction} repairedAt={RepairedAt:o} previousVersion={PreviousVersion} currentVersion={CurrentVersion}",
                     cliType,
@@ -224,6 +237,7 @@ public sealed class LocalCliRepairService
             }
             else
             {
+                lock (_sync) _latest[cliType] = ToStatus(entry);
                 _logger.LogError(
                     "Local CLI repair failed cli={Cli} packageStateBefore={PackageStateBefore} packageStateAfter={PackageStateAfter} shimStateBefore={ShimStateBefore} shimStateAfter={ShimStateAfter} repairAction={RepairAction} postInstallState={PostInstallState} attemptedAt={AttemptedAt:o} npmExitCode={ExitCode} detail={Detail}",
                     cliType,
@@ -452,6 +466,8 @@ public sealed class LocalCliRepairService
         NpmCliRepairPlan repairPlan,
         string shimStateBefore)
     {
+        if (install.FailureKind == NpmGlobalInstaller.NpmUnavailableFailureKind)
+            return $"{cliType} CLI repair failed: npm is unavailable because no resolved npm command passed the 'npm --version' preflight.";
         if (!install.Succeeded)
             return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} attempted, but npm exited {install.ExitCode?.ToString() ?? "without an exit code"}.";
         if (!packagePresentAfter)
@@ -471,6 +487,46 @@ public sealed class LocalCliRepairService
             VersionAfter = entry.VersionAfter,
             Detail = entry.Detail,
         };
+
+    private void ReconcileHealthy(
+        string cliType,
+        (bool Available, string? Version, string Path) probe)
+    {
+        LocalCliRepairStatus? stale;
+        lock (_sync)
+        {
+            if (!_latest.TryGetValue(cliType, out stale)) return;
+        }
+
+        AppendJournal(new LocalCliRepairJournalEntry(
+            _clock(),
+            cliType,
+            "healthy",
+            "healthy-probe",
+            "",
+            "",
+            null,
+            probe.Path,
+            [],
+            stale.VersionAfter ?? stale.VersionBefore,
+            probe.Version,
+            null,
+            $"{cliType} CLI probe is healthy; cleared the prior {stale.Outcome} repair status.",
+            "",
+            "",
+            []));
+
+        lock (_sync)
+        {
+            if (_latest.TryGetValue(cliType, out var current) && current == stale)
+                _latest.Remove(cliType);
+        }
+        _logger.LogInformation(
+            "Cleared resolved local CLI repair status cli={Cli} previousOutcome={PreviousOutcome} currentVersion={CurrentVersion}",
+            cliType,
+            stale.Outcome,
+            probe.Version ?? "unknown");
+    }
 
     private static bool IsGlobalCommandPath(string cliType, string probedPath, string npmBin)
     {
@@ -537,4 +593,5 @@ public sealed record LocalCliRepairJournalEntry(
     string Detail,
     string NpmStandardOutput,
     string NpmStandardError,
-    IReadOnlyList<NpmLogEvidence> RecentNpmActivity);
+    IReadOnlyList<NpmLogEvidence> RecentNpmActivity,
+    string? NpmFailureKind = null);

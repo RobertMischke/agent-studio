@@ -63,6 +63,72 @@ public sealed class LocalCliRepairServiceTests
         Assert.Equal("@openai/codex", arguments[2]);
     }
 
+    [Fact]
+    public void Installer_resolution_prefers_npm_cli_from_the_active_node_install()
+    {
+        using var temp = new TempDirectory();
+        var nodeDirectory = Path.Combine(temp.Path, "node");
+        var npmCli = Path.Combine(nodeDirectory, "node_modules", "npm", "bin", "npm-cli.js");
+        var systemDirectory = Path.Combine(temp.Path, "system");
+        var appData = Path.Combine(temp.Path, "appdata");
+        var workingDirectory = Path.Combine(temp.Path, "work");
+        Directory.CreateDirectory(Path.GetDirectoryName(npmCli)!);
+        Directory.CreateDirectory(systemDirectory);
+        Directory.CreateDirectory(Path.Combine(appData, "npm"));
+        Directory.CreateDirectory(workingDirectory);
+        File.WriteAllText(Path.Combine(nodeDirectory, "node.exe"), "node");
+        File.WriteAllText(npmCli, "npm cli");
+        File.WriteAllText(Path.Combine(nodeDirectory, "npm.cmd"), "node npm");
+        File.WriteAllText(Path.Combine(appData, "npm", "npm.cmd"), "appdata npm");
+        File.WriteAllText(Path.Combine(systemDirectory, "cmd.exe"), "command host");
+
+        var candidates = NpmGlobalInstaller.ResolveNpmInvocations(
+            true,
+            nodeDirectory,
+            appData,
+            systemDirectory,
+            workingDirectory);
+
+        var preferred = Assert.IsType<NpmInvocation>(candidates[0]);
+        Assert.Equal(Path.GetFullPath(npmCli), preferred.NpmPath);
+        Assert.Equal(Path.GetFullPath(Path.Combine(nodeDirectory, "node.exe")), preferred.ExecutablePath);
+        Assert.Equal(Path.GetFullPath(workingDirectory), preferred.WorkingDirectory);
+        var commandFallback = Assert.Single(candidates, candidate =>
+            string.Equals(candidate.NpmPath, Path.Combine(nodeDirectory, "npm.cmd"), StringComparison.Ordinal));
+        Assert.True(commandFallback.UsesWindowsCommandHost);
+        Assert.Equal(
+            $"/d /s /c \"\"{commandFallback.NpmPath}\" --version\"",
+            NpmGlobalInstaller.BuildWindowsCommandArguments(commandFallback.NpmPath, ["--version"]));
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task Installer_resolution_returns_an_npm_that_passes_version_preflight()
+    {
+        var availability = await new NpmGlobalInstaller()
+            .ResolveAvailableNpmAsync(CancellationToken.None);
+
+        Assert.NotNull(availability.Invocation);
+        Assert.False(string.IsNullOrWhiteSpace(availability.Version));
+        Assert.True(Path.IsPathRooted(availability.Invocation.NpmPath));
+    }
+
+    [Fact]
+    public async Task Installer_classifies_missing_npm_as_unavailable_before_install()
+    {
+        var installer = new NpmGlobalInstaller(() => []);
+
+        var result = await installer.InstallAsync(
+            "@openai/codex",
+            NpmGlobalInstallMode.ForceRelink,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(NpmGlobalInstaller.NpmUnavailableFailureKind, result.FailureKind);
+        Assert.Contains("npm unavailable", result.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MODULE_NOT_FOUND", result.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(NpmCliInstallState.TrulyUninstalled, NpmGlobalInstallMode.Install)]
     [InlineData(NpmCliInstallState.MissingShimWithPackagePresent, NpmGlobalInstallMode.ForceRelink)]
@@ -149,6 +215,7 @@ public sealed class LocalCliRepairServiceTests
         Assert.True(File.Exists(shim));
         Assert.Equal(1, installer.Calls);
         Assert.Equal(NpmGlobalInstallMode.Install, installer.LastMode);
+        Assert.Empty(service.Current());
     }
 
     [Fact]
@@ -198,6 +265,7 @@ public sealed class LocalCliRepairServiceTests
         Assert.True(healthy.Available);
         Assert.Equal(1, installer.Calls);
         Assert.Equal(3, versionProbeCalls);
+        Assert.Empty(service.Current());
     }
 
     [Fact]
@@ -245,11 +313,9 @@ public sealed class LocalCliRepairServiceTests
         Assert.True(File.Exists(shim));
         Assert.Equal(1, installer.Calls);
         Assert.Equal(NpmGlobalInstallMode.ForceRelink, installer.LastMode);
-        var status = Assert.Single(service.Current());
-        Assert.Equal("repaired", status.Outcome);
-        Assert.Equal("2.1.231", status.VersionBefore);
-        Assert.Equal("2.1.234", status.VersionAfter);
+        Assert.Empty(service.Current());
         var journalText = File.ReadAllText(journal);
+        Assert.Contains("\"outcome\":\"repaired\"", journalText, StringComparison.Ordinal);
         Assert.Contains("missing-shim-with-package-present", journalText, StringComparison.Ordinal);
         Assert.Contains("2.1.231", journalText, StringComparison.Ordinal);
         Assert.Contains("2.1.234", journalText, StringComparison.Ordinal);
@@ -270,10 +336,92 @@ public sealed class LocalCliRepairServiceTests
             () => appData,
             () => localAppData,
             journal);
-        Assert.Equal("repaired", Assert.Single(restartedService.Current()).Outcome);
+        Assert.Empty(restartedService.Current());
         await restartedService.ProbeAndRepairAsync(
             "claude", "2.1.234", Probe, CancellationToken.None);
         Assert.Equal(1, installer.Calls);
+    }
+
+    [Fact]
+    public async Task Healthy_probe_clears_failed_status_and_journal_prevents_boot_resurrection()
+    {
+        using var temp = new TempDirectory();
+        var appData = Path.Combine(temp.Path, "appdata");
+        var packageDir = Path.Combine(appData, "npm", "node_modules", "@openai", "codex");
+        Directory.CreateDirectory(packageDir);
+        File.WriteAllText(Path.Combine(packageDir, "package.json"), "{\"version\":\"0.151.0\"}");
+        var journal = Path.Combine(temp.Path, "cli-self-heal.jsonl");
+        var available = false;
+        var service = new LocalCliRepairService(
+            new FakeInstaller((_, _) => { }),
+            NullLogger<LocalCliRepairService>.Instance,
+            () => new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero),
+            () => true,
+            () => appData,
+            () => null,
+            journal);
+
+        (bool Available, string? Version, string Path) Probe()
+            => available
+                ? (true, "codex-cli 0.151.0", "codex")
+                : (false, null, "codex");
+
+        await service.ProbeAndRepairAsync("codex", "0.151.0", Probe, CancellationToken.None);
+        Assert.Equal("failed", Assert.Single(service.Current()).Outcome);
+
+        available = true;
+        await service.ProbeAndRepairAsync("codex", "0.151.0", Probe, CancellationToken.None);
+
+        Assert.Empty(service.Current());
+        Assert.Contains("\"outcome\":\"healthy\"", File.ReadAllText(journal), StringComparison.Ordinal);
+
+        var restartedService = new LocalCliRepairService(
+            new FakeInstaller((_, _) => { }),
+            NullLogger<LocalCliRepairService>.Instance,
+            () => new DateTimeOffset(2026, 8, 31, 12, 1, 0, TimeSpan.Zero),
+            () => true,
+            () => appData,
+            () => null,
+            journal);
+
+        Assert.Empty(restartedService.Current());
+    }
+
+    [Fact]
+    public async Task Probe_journals_typed_npm_unavailable_failure_without_module_stack()
+    {
+        using var temp = new TempDirectory();
+        var appData = Path.Combine(temp.Path, "appdata");
+        var packageDir = Path.Combine(appData, "npm", "node_modules", "@openai", "codex");
+        Directory.CreateDirectory(packageDir);
+        File.WriteAllText(Path.Combine(packageDir, "package.json"), "{\"version\":\"0.151.0\"}");
+        var journal = Path.Combine(temp.Path, "cli-self-heal.jsonl");
+        var service = new LocalCliRepairService(
+            new ResultInstaller(new NpmGlobalInstallResult(
+                false,
+                null,
+                "",
+                "npm unavailable: no resolved npm command passed the 'npm --version' preflight.",
+                NpmGlobalInstaller.NpmUnavailableFailureKind)),
+            NullLogger<LocalCliRepairService>.Instance,
+            () => new DateTimeOffset(2026, 8, 31, 11, 40, 0, TimeSpan.Zero),
+            () => true,
+            () => appData,
+            () => null,
+            journal);
+
+        await service.ProbeAndRepairAsync(
+            "codex",
+            "0.151.0",
+            () => (false, null, "codex"),
+            CancellationToken.None);
+
+        var status = Assert.Single(service.Current());
+        Assert.Equal("failed", status.Outcome);
+        Assert.Contains("npm is unavailable", status.Detail, StringComparison.OrdinalIgnoreCase);
+        var journalText = File.ReadAllText(journal);
+        Assert.Contains("\"npmFailureKind\":\"npm-unavailable\"", journalText, StringComparison.Ordinal);
+        Assert.DoesNotContain("MODULE_NOT_FOUND", journalText, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -327,6 +475,15 @@ public sealed class LocalCliRepairServiceTests
             onInstall(packageName, mode);
             return Task.FromResult(new NpmGlobalInstallResult(true, 0, "installed", ""));
         }
+    }
+
+    private sealed class ResultInstaller(NpmGlobalInstallResult result) : NpmGlobalInstaller
+    {
+        public override Task<NpmGlobalInstallResult> InstallAsync(
+            string packageName,
+            NpmGlobalInstallMode mode,
+            CancellationToken ct)
+            => Task.FromResult(result);
     }
 
     private sealed class CollectingLogger<T>(List<string> entries) : Microsoft.Extensions.Logging.ILogger<T>

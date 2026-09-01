@@ -161,17 +161,17 @@ public record RunnerStatus
 {
     public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
     /// <summary>
-    /// Latest local control-plane CLI repair outcome per provider. Successful
-    /// repairs are informational; failed repairs are operator alarms.
+    /// Active local control-plane CLI repair state per provider. Healthy and
+    /// successfully repaired CLIs are omitted.
     /// </summary>
     public IReadOnlyList<LocalCliRepairStatus> CliRepairs { get; init; } = [];
 }
 
-/// <summary>Latest bounded npm-shim self-heal outcome for one local CLI.</summary>
+/// <summary>Active bounded npm-shim self-heal state for one local CLI.</summary>
 public sealed record LocalCliRepairStatus
 {
     public string CliType { get; init; } = "";
-    /// <summary>Either <c>repaired</c> or <c>failed</c>.</summary>
+    /// <summary>Either <c>attempting</c> or <c>failed</c>.</summary>
     public string Outcome { get; init; } = "";
     public DateTimeOffset OccurredAt { get; init; }
     public string? VersionBefore { get; init; }

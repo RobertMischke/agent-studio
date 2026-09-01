@@ -1692,13 +1692,13 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
-  /** Latest bounded local npm-shim repair outcome for each CLI. */
+  /** Active local npm-shim repair state. Healthy CLIs are omitted. */
   cliRepairs?: LocalCliRepairStatus[];
 }
 
 export interface LocalCliRepairStatus {
   cliType: string;
-  outcome: 'repaired' | 'failed' | string;
+  outcome: 'attempting' | 'failed' | string;
   occurredAt: string;
   versionBefore?: string | null;
   versionAfter?: string | null;
