@@ -16,7 +16,7 @@ public sealed class TaskListGitProjectionCache
 
     private readonly ILogger<TaskListGitProjectionCache> _logger;
     private readonly TimeProvider _timeProvider;
-    private readonly Func<IReadOnlyCollection<TaskInfo>, TaskListGitProjection> _refreshProjection;
+    private readonly Func<IReadOnlyCollection<TaskInfo>, Task<TaskListGitProjection>> _refreshProjection;
     private readonly ConcurrentDictionary<string, CacheEntry> _entries =
         new(StringComparer.Ordinal);
 
@@ -44,11 +44,12 @@ public sealed class TaskListGitProjectionCache
         ILogger<TaskListGitProjectionCache> logger,
         TimeProvider timeProvider)
         : this(
-            tasks => new TaskListGitProjection(
-                mergeStatus.BuildLookup(tasks),
-                integrationStatus.BuildLookup(tasks),
-                publishStatus.BuildLookup(tasks),
-                testRuns.BuildLookup(tasks)),
+            tasks => BuildProjectionAsync(
+                tasks,
+                mergeStatus.BuildLookup,
+                integrationStatus.BuildLookup,
+                publishStatus.BuildLookup,
+                testRuns.BuildLookup),
             logger,
             timeProvider)
     {
@@ -56,6 +57,14 @@ public sealed class TaskListGitProjectionCache
 
     internal TaskListGitProjectionCache(
         Func<IReadOnlyCollection<TaskInfo>, TaskListGitProjection> refreshProjection,
+        ILogger<TaskListGitProjectionCache> logger,
+        TimeProvider timeProvider)
+        : this(tasks => Task.FromResult(refreshProjection(tasks)), logger, timeProvider)
+    {
+    }
+
+    internal TaskListGitProjectionCache(
+        Func<IReadOnlyCollection<TaskInfo>, Task<TaskListGitProjection>> refreshProjection,
         ILogger<TaskListGitProjectionCache> logger,
         TimeProvider timeProvider)
     {
@@ -132,7 +141,7 @@ public sealed class TaskListGitProjectionCache
         }
     }
 
-    private void Refresh(
+    private async Task Refresh(
         string scopeKey,
         CacheEntry entry,
         IReadOnlyCollection<TaskInfo> tasks,
@@ -146,7 +155,7 @@ public sealed class TaskListGitProjectionCache
                 "tasks/list-refresh",
                 _logger,
                 includeNested: true);
-            refreshed = _refreshProjection(tasks);
+            refreshed = await _refreshProjection(tasks);
         }
         catch (Exception ex)
         {
@@ -177,6 +186,39 @@ public sealed class TaskListGitProjectionCache
                 tasks.Count,
                 stopwatch.ElapsedMilliseconds);
         }
+    }
+
+    internal static async Task<TaskListGitProjection> BuildProjectionAsync(
+        IReadOnlyCollection<TaskInfo> tasks,
+        Func<IReadOnlyCollection<TaskInfo>, Dictionary<string, TaskMergeSignal>> mergeLookup,
+        Func<IReadOnlyCollection<TaskInfo>, Dictionary<string, TaskIntegrationStatus>> integrationLookup,
+        Func<IReadOnlyCollection<TaskInfo>, Dictionary<string, TaskPublishSignal>> publishLookup,
+        Func<IReadOnlyCollection<TaskInfo>, Dictionary<string, TaskTestRunEvidence>> testRunLookup)
+        => await BuildProjectionAsync(
+            tasks,
+            captured => Task.Run(() => mergeLookup(captured)),
+            captured => Task.Run(() => integrationLookup(captured)),
+            captured => Task.Run(() => publishLookup(captured)),
+            captured => Task.Run(() => testRunLookup(captured)));
+
+    internal static async Task<TaskListGitProjection> BuildProjectionAsync(
+        IReadOnlyCollection<TaskInfo> tasks,
+        Func<IReadOnlyCollection<TaskInfo>, Task<Dictionary<string, TaskMergeSignal>>> mergeLookup,
+        Func<IReadOnlyCollection<TaskInfo>, Task<Dictionary<string, TaskIntegrationStatus>>> integrationLookup,
+        Func<IReadOnlyCollection<TaskInfo>, Task<Dictionary<string, TaskPublishSignal>>> publishLookup,
+        Func<IReadOnlyCollection<TaskInfo>, Task<Dictionary<string, TaskTestRunEvidence>>> testRunLookup)
+    {
+        var mergeTask = mergeLookup(tasks);
+        var integrationTask = integrationLookup(tasks);
+        var publishTask = publishLookup(tasks);
+        var testRunTask = testRunLookup(tasks);
+
+        await Task.WhenAll(mergeTask, integrationTask, publishTask, testRunTask);
+        return new TaskListGitProjection(
+            await mergeTask,
+            await integrationTask,
+            await publishTask,
+            await testRunTask);
     }
 
     private static string ScopeKey(IEnumerable<TaskInfo> tasks)

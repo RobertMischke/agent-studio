@@ -133,6 +133,47 @@ public sealed class TaskListGitProjectionCacheTests
         }
     }
 
+    [Fact]
+    public async Task BuildProjectionAsync_StartsAllLookupsBeforeWaitingForCompletion()
+    {
+        var task = Job("task-1");
+        var started = 0;
+        var merge = new TaskCompletionSource<Dictionary<string, TaskMergeSignal>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var integration = new TaskCompletionSource<Dictionary<string, TaskIntegrationStatus>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var publish = new TaskCompletionSource<Dictionary<string, TaskPublishSignal>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var testRuns = new TaskCompletionSource<Dictionary<string, TaskTestRunEvidence>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Task<T> Start<T>(TaskCompletionSource<T> completion)
+        {
+            started++;
+            return completion.Task;
+        }
+
+        var projectionTask = TaskListGitProjectionCache.BuildProjectionAsync(
+            [task],
+            _ => Start(merge),
+            _ => Start(integration),
+            _ => Start(publish),
+            _ => Start(testRuns));
+
+        Assert.Equal(4, started);
+        Assert.False(projectionTask.IsCompleted);
+        merge.SetResult(new Dictionary<string, TaskMergeSignal>(StringComparer.Ordinal));
+        integration.SetResult(new Dictionary<string, TaskIntegrationStatus>(StringComparer.Ordinal));
+        publish.SetResult(new Dictionary<string, TaskPublishSignal>(StringComparer.Ordinal));
+        testRuns.SetResult(new Dictionary<string, TaskTestRunEvidence>(StringComparer.Ordinal));
+        var projection = await projectionTask;
+
+        Assert.Empty(projection.Merge);
+        Assert.Empty(projection.Integration);
+        Assert.Empty(projection.Publish);
+        Assert.Empty(projection.TestRuns);
+    }
+
     private static TaskInfo Job(string id)
         => new()
         {
