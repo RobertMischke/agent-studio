@@ -153,7 +153,7 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   it as the final singular `commit`, and never creates or rewrites Git history.
 - Operator- or GPT-reviewed historical classifications can be appended through
   `POST /api/tasks/{id}/integration-records?watchPath=...`. The request uses
-  the five classes owned by `HistoricalIntegrationVerificationSweep`, a stable
+  the six classes owned by `HistoricalIntegrationVerificationSweep`, a stable
   caller-supplied record id, and explicit evidence. The server owns
   `recordedAtUtc`, rejects non-schema classes, and refuses cards in Preparation,
   Ready, Progress, or Post Processing so an in-flight delivery cannot be sealed
@@ -261,20 +261,27 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   history and `status.md` retain the override and reason. Concept and other
   no-branch cards are exempt through their mode, kind, `taskType=concept|decision`,
   or the explicit `noBranchExpected: true` card field.
-- `HistoricalIntegrationVerificationSweep` runs once off the startup request
+- `HistoricalIntegrationVerificationSweep` v2 runs once off the startup request
   path before the accepted integration inventory. It groups Git reads by
-  repository and processes card writes in bounded batches. Cards without a
-  native integration fact receive one append-only `integrationRecords[]` row:
+  repository and processes card writes in bounded batches. It preserves every
+  existing v1 or operator record, then classifies both the original v1
+  population and pre-recording terminal cards with acceptance-stage integration
+  events. Cards receive one append-only `integrationRecords[]` row:
   `integrated-verified`, `integrated-historical`, `no-code-expected`,
-  `content-on-fence`, or `genuinely-missing`. Target-branch ancestry uses the
-  same abbreviated-SHA and superseded-generation rules as the card projection;
-  report-only classification requires both a no-code expectation and a task
-  result artifact. The durable migration report contains aggregate counts and
-  lists only the two operator-facing classes. These rows are bookkeeping only:
-  the accepted integration recovery loop starts after the sweep and excludes
-  every card carrying one. `AcceptedIntegrationInventorySweep` then lists only
-  `content-on-fence`, `genuinely-missing`, or current recorded Error and
-  NoTaskBranch outcomes.
+  `no-attribution-legacy`, `content-on-fence`, or `genuinely-missing`.
+  Target-branch ancestry uses the same abbreviated-SHA and
+  superseded-generation rules as the card projection. When pre-attribution
+  cards have no `commits[]`, matching task, result, runner, and salvage ref tips
+  provide fallback ancestry evidence. Report-only classification requires both
+  a no-code expectation and a task result artifact. A pre-recording card with
+  no surviving attribution becomes non-alarming `no-attribution-legacy` rather
+  than remaining uncovered. The durable v2 migration report contains aggregate
+  counts and lists only the two operator-facing classes. These rows are
+  bookkeeping only: the accepted integration recovery loop starts after the
+  sweep and excludes every card carrying one. Cards accepted after the recording
+  boundary remain live-alert candidates. `AcceptedIntegrationInventorySweep`
+  then lists only `content-on-fence`, `genuinely-missing`, or current recorded
+  Error and NoTaskBranch outcomes.
 
 Task creation can carry a structured `routing` request with the observed
 surface, affected component, and navigation project. `ComponentRoutingService`

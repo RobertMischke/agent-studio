@@ -280,20 +280,25 @@ steer the pipeline in this policy version.
   the existing `merged` and `integrated` counters. The same sweep evaluates the
   30-minute accepted delivery invariant. The alert evaluates only accepted
   terminal cards in Completed or Archive, never cards still in Human Review,
-  whose acceptance has a native integration record or an operator-facing
-  historical verification record. Verified legacy integration and explicit
-  no-code delivery records never become acute alerts. Accepted cards without
-  Git-proven integration publish a project-filtered snapshot at
+  whose acceptance has a native integration record and no historical
+  verification of any class. Verified legacy integration, explicit no-code
+  delivery records, and reconciled historical records never become acute
+  alerts. Accepted cards without Git-proven integration publish a
+  project-filtered snapshot at
   `GET /api/pipeline/accepted-integration-alert`, render a persistent board
   banner capped at ten task keys with a link to the exact filtered board list,
   and emit a warning event containing the affected task keys.
-  Startup first classifies missing historical records in bounded background
-  batches, then inventories only `content-on-fence`, `genuinely-missing`, and
-  current recorded `Error` or `NoTaskBranch` outcomes. The historical report
-  retains counts for all five classes but includes task keys only for its two
-  operator-facing classes. Recovery starts only after this bookkeeping pass;
-  its records are never merge authority and their cards are never moved by the
-  recovery backstop.
+  Startup first runs historical verification v2 in bounded background batches.
+  V2 covers the original population plus pre-recording terminal cards carrying
+  acceptance-stage integration events, while preserving existing v1 rows and
+  leaving post-recording stalls live. It then inventories only
+  `content-on-fence`, `genuinely-missing`, and current recorded `Error` or
+  `NoTaskBranch` outcomes. The historical report retains counts for all six
+  classes, including non-alarming `no-attribution-legacy`, but includes task
+  keys only for its two operator-facing classes. The acute alert counts only
+  terminal cards that still have no historical verification of any class.
+  Recovery starts only after this bookkeeping pass; its records are never merge
+  authority and their cards are never moved by the recovery backstop.
 - `IntegrationPushBackstopHostedService` reconstructs lost
   `IntegrationPushQueue` work from durable passed-merge and pending-push
   pipeline facts. The channel is a latency optimization, not the durability

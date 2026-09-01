@@ -14,6 +14,7 @@ canonical layout:
     migrations/
       superseded-commits-v1.json
       historical-integration-verification-v1.json
+      historical-integration-verification-v2.json
     test-runs/
       PROJ-023.json
   projects/
@@ -79,13 +80,23 @@ repair. It lists both marked commits and ambiguous cards left untouched. The
 backend writes it atomically after scanning delivered and archived cards; an
 unreadable existing report fails that repair rather than silently rerunning it.
 
-`<TaskRepository>/.metadata/migrations/historical-integration-verification-v1.json`
-is the durable count report and completion marker for accepted and archived
-cards that predate acceptance integration recording. It contains counts for
-all five verification classes and task rows only for `content-on-fence` and
-`genuinely-missing`. The related `task.json.integrationRecords[]` rows are
-append-only and use a stable id, so an interrupted or repeated sweep cannot
-duplicate card bookkeeping.
+`<TaskRepository>/.metadata/migrations/historical-integration-verification-v2.json`
+is the current durable count report and completion marker for accepted and
+archived cards that predate acceptance integration recording. V2 extends the
+population to legacy cards whose acceptance-stage `integration_started` event
+caused v1 to treat them as already recorded. It contains counts for all six
+verification classes and task rows only for `content-on-fence` and
+`genuinely-missing`. `no-attribution-legacy` closes pre-attribution cards for
+which no commit, qualifying no-code artifact, or task-associated Git ref
+survives. Matching task, result, runner, and salvage ref tips are checked
+against integration ancestry before that fallback is used.
+
+The v1 report remains as historical evidence and its existing
+`task.json.integrationRecords[]` rows remain authoritative. V2 never replaces
+or reclassifies them. All integration-record rows are append-only and use a
+stable versioned id, so an interrupted or repeated sweep cannot duplicate card
+bookkeeping. Cards accepted after the integration-recording boundary are not
+absorbed by this migration and remain eligible for the live stall alert.
 
 ## Operational Boundary
 

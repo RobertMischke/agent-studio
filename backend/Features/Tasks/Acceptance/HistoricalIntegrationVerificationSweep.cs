@@ -11,13 +11,32 @@ public sealed record HistoricalIntegrationVerificationFacts(
     bool HasDeliverables,
     bool HasFenceContent);
 
+/// <summary>Pure population facts for deciding whether v2 must classify a terminal card.</summary>
+public sealed record HistoricalIntegrationSweepCandidateFacts(
+    bool IsTerminal,
+    bool HasVerification,
+    bool HasNativeRecord,
+    bool IntegrationRequired,
+    bool AcceptedBeforeRecordingEra);
+
 /// <summary>
-/// Conservative five-way policy. Positive Git ancestry is the only code
+/// Conservative six-way policy. Positive Git ancestry is the only code
 /// integration proof; no-code classification requires both intent and an
 /// artifact; a surviving recovery ref outranks the missing bucket.
 /// </summary>
 public static class HistoricalIntegrationVerificationPolicy
 {
+    public static bool IsSweepCandidate(HistoricalIntegrationSweepCandidateFacts facts)
+    {
+        if (!facts.IsTerminal || facts.HasVerification) return false;
+
+        // Preserve the v1 population, then add the legacy acceptance population
+        // whose integration_started row caused v1 to mistake it for a native
+        // verification. The recording-era boundary keeps new stalls live.
+        if (!facts.HasNativeRecord) return true;
+        return facts.IntegrationRequired && facts.AcceptedBeforeRecordingEra;
+    }
+
     public static string Classify(HistoricalIntegrationVerificationFacts facts)
     {
         if (facts.HasEffectiveCommits && facts.AllEffectiveCommitsIntegrated)
@@ -30,8 +49,10 @@ public static class HistoricalIntegrationVerificationPolicy
         if (!facts.HasEffectiveCommits && facts.NoCodeExpected && facts.HasDeliverables)
             return IntegrationRecordClasses.NoCodeExpected;
 
-        return facts.HasFenceContent
-            ? IntegrationRecordClasses.ContentOnFence
+        if (facts.HasFenceContent) return IntegrationRecordClasses.ContentOnFence;
+
+        return !facts.HasEffectiveCommits && facts.AcceptedBeforeRecordingEra
+            ? IntegrationRecordClasses.NoAttributionLegacy
             : IntegrationRecordClasses.GenuinelyMissing;
     }
 }
@@ -82,8 +103,9 @@ public static class TaskIntegrationRecordDetector
 /// </summary>
 public sealed class HistoricalIntegrationVerificationSweep
 {
-    public const string RecordId = "historical-integration-verification-v1";
-    public const string ReportFileName = "historical-integration-verification-v1.json";
+    public const string PreviousRecordId = "historical-integration-verification-v1";
+    public const string RecordId = "historical-integration-verification-v2";
+    public const string ReportFileName = "historical-integration-verification-v2.json";
 
     // AGT-2543 entered develop at 2026-08-10T00:22:56Z. Cards accepted before
     // this boundary could not have emitted the transactional integration facts.
@@ -189,14 +211,24 @@ public sealed class HistoricalIntegrationVerificationSweep
             cancellationToken.ThrowIfCancellationRequested();
             if (TaskIntegrationRecordDetector.LatestVerification(task) is { } existing)
             {
-                if (string.Equals(existing.Id, RecordId, StringComparison.OrdinalIgnoreCase))
-                    alreadyClassified.Add((task, existing));
+                // v1 rows and operator-reviewed rows are append-only facts. The
+                // v2 migration reports them but never replaces or reclassifies them.
+                alreadyClassified.Add((task, existing));
                 continue;
             }
             var mergeStep = ReadLatestMergeStep(task.FolderPath);
             var timeline = _timeline.ReadAll(task.FolderPath);
-            if (TaskIntegrationRecordDetector.HasNativeRecord(mergeStep, timeline)) continue;
-            candidates.Add(new VerificationCandidate(task, timeline));
+            var acceptedAt = ResolveAcceptedAt(task, timeline);
+            if (!HistoricalIntegrationVerificationPolicy.IsSweepCandidate(new(
+                    IsTerminal: true,
+                    HasVerification: false,
+                    HasNativeRecord: TaskIntegrationRecordDetector.HasNativeRecord(mergeStep, timeline),
+                    IntegrationRequired: AcceptanceIntegrationPolicy.IsIntegrationRequired(task),
+                    AcceptedBeforeRecordingEra: acceptedAt < RecordingEraStartedAtUtc)))
+            {
+                continue;
+            }
+            candidates.Add(new VerificationCandidate(task, timeline, acceptedAt));
         }
 
         var repoEvidence = BuildRepoEvidence(candidates.Select(candidate => candidate.Task));
@@ -271,7 +303,7 @@ public sealed class HistoricalIntegrationVerificationSweep
         }
 
         var report = new HistoricalIntegrationVerificationReport(
-            Version: 1,
+            Version: 2,
             CompletedAtUtc: recordedAt,
             Completed: writeFailures == 0,
             AlreadyCompleted: false,
@@ -285,7 +317,7 @@ public sealed class HistoricalIntegrationVerificationSweep
             OperatorItems: operatorItems);
         WriteReport(report);
         _logger.LogInformation(
-            "historical-integration-verification completed={Completed} scanned={Scanned} candidates={Candidates} writes={Writes} failures={Failures} integratedVerified={Verified} integratedHistorical={Historical} noCodeExpected={NoCode} contentOnFence={Fence} genuinelyMissing={Missing} report={Report}",
+            "historical-integration-verification completed={Completed} scanned={Scanned} candidates={Candidates} writes={Writes} failures={Failures} integratedVerified={Verified} integratedHistorical={Historical} noCodeExpected={NoCode} noAttributionLegacy={NoAttribution} contentOnFence={Fence} genuinelyMissing={Missing} report={Report}",
             report.Completed,
             report.ScannedCards,
             report.CandidateCards,
@@ -294,6 +326,7 @@ public sealed class HistoricalIntegrationVerificationSweep
             counts[IntegrationRecordClasses.IntegratedVerified],
             counts[IntegrationRecordClasses.IntegratedHistorical],
             counts[IntegrationRecordClasses.NoCodeExpected],
+            counts[IntegrationRecordClasses.NoAttributionLegacy],
             counts[IntegrationRecordClasses.ContentOnFence],
             counts[IntegrationRecordClasses.GenuinelyMissing],
             _reportPath);
@@ -327,20 +360,28 @@ public sealed class HistoricalIntegrationVerificationSweep
                     ? commit with { SupersededByAttempt = RecordId }
                     : commit).ToList(),
             };
-        var effectiveCommits = TaskIntegrationStatusService.AttributedCommits(
+        var attributedCommits = TaskIntegrationStatusService.AttributedCommits(
             effectiveTask,
             repo.Ancestors);
+        var matchingRefs = FindFenceRefs(task, repo);
+        var evidenceCommits = attributedCommits.Count > 0
+            ? attributedCommits
+            : matchingRefs
+                .Select(reference => reference.Sha)
+                .Where(ReviewSubjectStore.IsValidResultSha)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         var allIntegrated = repo.AncestryReadable
-            && effectiveCommits.Count > 0
-            && effectiveCommits.All(sha =>
+            && evidenceCommits.Count > 0
+            && evidenceCommits.All(sha =>
                 TaskIntegrationStatusService.AncestorSetContains(repo.Ancestors, sha));
-        var acceptedAt = ResolveAcceptedAt(task, candidate.Timeline);
+        var acceptedAt = candidate.AcceptedAt;
         var hasDeliverables = ResultsInventory.HasActiveArtifacts(task.FolderPath);
         var noCodeExpected = !AcceptanceIntegrationPolicy.IsIntegrationRequired(task)
             || hasDeliverables && HasExplicitNoCodeClaim(task);
-        var fenceRefs = FindFenceRefs(task, repo);
+        var fenceRefs = matchingRefs.Select(reference => reference.FullName).ToList();
         var classification = HistoricalIntegrationVerificationPolicy.Classify(new(
-            HasEffectiveCommits: effectiveCommits.Count > 0,
+            HasEffectiveCommits: evidenceCommits.Count > 0,
             AllEffectiveCommitsIntegrated: allIntegrated,
             AcceptedBeforeRecordingEra: acceptedAt < RecordingEraStartedAtUtc,
             NoCodeExpected: noCodeExpected,
@@ -350,19 +391,19 @@ public sealed class HistoricalIntegrationVerificationSweep
         var evidence = BuildEvidence(
             classification,
             repo,
-            effectiveCommits.Count,
+            evidenceCommits.Count,
             virtualSuperseded.Count,
             hasDeliverables,
             fenceRefs.Count);
         return new EvaluatedRecord(new TaskIntegrationRecord
         {
             Id = RecordId,
-            Version = 1,
+            Version = 2,
             Classification = classification,
             RecordedAtUtc = recordedAt,
             AcceptedAtUtc = acceptedAt,
             IntegrationBranch = repo.IntegrationBranch,
-            CommitShas = effectiveCommits.ToList(),
+            CommitShas = evidenceCommits.ToList(),
             FenceRefs = fenceRefs,
             Evidence = evidence,
         });
@@ -404,7 +445,7 @@ public sealed class HistoricalIntegrationVerificationSweep
             _git.ResolveRepoRootForWatchPath(task.WatchPath) ?? string.Empty,
             _settings.Get(task.ProjectName).IntegrationBranch);
 
-    private static List<string> FindFenceRefs(TaskInfo task, RepoEvidence repo)
+    private static List<GitRefLine> FindFenceRefs(TaskInfo task, RepoEvidence repo)
     {
         if (repo.Refs.Count == 0) return [];
         var exact = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -424,8 +465,7 @@ public sealed class HistoricalIntegrationVerificationSweep
             .Where(reference => IsFenceOrResultRef(reference.FullName))
             .Where(reference => exact.Any(expected => RefNamesEqual(expected, reference))
                 || identities.Any(identity => RefContainsIdentity(reference.FullName, identity)))
-            .Select(reference => reference.FullName)
-            .OrderBy(value => value, StringComparer.Ordinal)
+            .OrderBy(reference => reference.FullName, StringComparer.Ordinal)
             .ToList();
     }
 
@@ -579,6 +619,8 @@ public sealed class HistoricalIntegrationVerificationSweep
                 $"Acceptance predates integration recording; all {commitCount} effective commit(s) are ancestors of '{repo.IntegrationBranch}'.{superseded}",
             IntegrationRecordClasses.NoCodeExpected =>
                 $"The card explicitly expects no code integration and has task deliverables (artifacts present: {hasDeliverables.ToString().ToLowerInvariant()}).",
+            IntegrationRecordClasses.NoAttributionLegacy =>
+                "Acceptance predates integration attribution; no attributed commit, qualifying no-code deliverable, or surviving task-associated ref remains.",
             IntegrationRecordClasses.ContentOnFence =>
                 $"Git content remains on {fenceCount} task-associated result or salvage ref(s); no integration ancestry was proven.{superseded}",
             _ when !repo.AncestryReadable =>
@@ -620,7 +662,8 @@ public sealed class HistoricalIntegrationVerificationSweep
 
     private sealed record VerificationCandidate(
         TaskInfo Task,
-        IReadOnlyCollection<TimelineEvent> Timeline);
+        IReadOnlyCollection<TimelineEvent> Timeline,
+        DateTime AcceptedAt);
 
     private sealed record EvaluatedRecord(TaskIntegrationRecord Record);
 
