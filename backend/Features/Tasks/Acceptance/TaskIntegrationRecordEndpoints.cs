@@ -127,7 +127,7 @@ public static class TaskIntegrationRecordAppendPolicy
 
         var classification = request.Classification.Trim().ToLowerInvariant();
         if (!IntegrationRecordClasses.All.Contains(classification, StringComparer.Ordinal))
-            return new(false, false, "classification must use the historical integration five-class schema.");
+            return new(false, false, "classification must use the historical integration six-class schema.");
 
         var evidence = request.Evidence.Trim();
         if (evidence.Length is < 8 or > 4000)

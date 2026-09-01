@@ -214,17 +214,8 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
         // Only an acceptance-stage start counts as the acceptance record; the
         // integrate-on-delivery start (stage pre-human-review) precedes Human
         // Review and would make a later acceptance look older than it is.
-        var integrationStarted = _timeline?.ReadAll(job.FolderPath)
-            .Where(item => string.Equals(
-                item.Kind,
-                TimelineEventKinds.IntegrationStarted,
-                StringComparison.Ordinal))
-            .Where(item => !string.Equals(
-                item.Details?.GetValueOrDefault("stage"),
-                RemoteDeliveryIntegrationCoordinator.PreHumanReviewStage,
-                StringComparison.Ordinal))
-            .OrderByDescending(item => item.Ts)
-            .FirstOrDefault();
+        var integrationStarted = TaskIntegrationRecordDetector.LatestAcceptanceStarted(
+            _timeline?.ReadAll(job.FolderPath) ?? []);
         if (integrationStarted is not null)
             return (true, integrationStarted.Ts.ToUniversalTime());
 

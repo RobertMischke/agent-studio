@@ -13,8 +13,10 @@ public sealed class HistoricalIntegrationVerificationSweepTests
     [InlineData(true, true, true, false, false, false, IntegrationRecordClasses.IntegratedHistorical)]
     [InlineData(false, false, true, true, true, false, IntegrationRecordClasses.NoCodeExpected)]
     [InlineData(true, false, true, false, false, true, IntegrationRecordClasses.ContentOnFence)]
-    [InlineData(false, false, true, false, true, false, IntegrationRecordClasses.GenuinelyMissing)]
-    public void Policy_ClassifiesFiveWayMatrix(
+    [InlineData(false, false, true, false, true, false, IntegrationRecordClasses.NoAttributionLegacy)]
+    [InlineData(false, false, false, false, true, false, IntegrationRecordClasses.GenuinelyMissing)]
+    [InlineData(true, false, true, false, true, false, IntegrationRecordClasses.GenuinelyMissing)]
+    public void Policy_ClassifiesSixWayMatrix(
         bool hasCommits,
         bool allIntegrated,
         bool historical,
@@ -38,6 +40,7 @@ public sealed class HistoricalIntegrationVerificationSweepTests
     [InlineData(IntegrationRecordClasses.IntegratedVerified, false)]
     [InlineData(IntegrationRecordClasses.IntegratedHistorical, false)]
     [InlineData(IntegrationRecordClasses.NoCodeExpected, false)]
+    [InlineData(IntegrationRecordClasses.NoAttributionLegacy, false)]
     [InlineData(IntegrationRecordClasses.ContentOnFence, true)]
     [InlineData(IntegrationRecordClasses.GenuinelyMissing, true)]
     public void OperatorVisibleDetector_OnlyReturnsActionableHistoricalClasses(
@@ -60,6 +63,53 @@ public sealed class HistoricalIntegrationVerificationSweepTests
         Assert.Equal(
             expected,
             TaskIntegrationRecordDetector.LatestOperatorVisibleVerification(task) is not null);
+    }
+
+    [Theory]
+    [InlineData(TaskStates.Completed, true, true, false, true)]
+    [InlineData(TaskStates.Archive, true, true, false, true)]
+    [InlineData(TaskStates.Completed, true, false, false, false)]
+    [InlineData(TaskStates.Completed, false, false, false, true)]
+    [InlineData(TaskStates.Completed, true, true, true, false)]
+    [InlineData(TaskStates.HumanReview, true, true, false, false)]
+    public void SweepCandidate_ExtendsV1PopulationWithAlertPopulation(
+        string state,
+        bool hasNativeRecord,
+        bool hasAcceptanceRecord,
+        bool hasHistoricalVerification,
+        bool expected)
+    {
+        var task = new TaskInfo
+        {
+            State = state,
+            Mode = TaskModes.Coding,
+            Kind = TaskKinds.Task,
+        };
+
+        Assert.Equal(
+            expected,
+            HistoricalIntegrationVerificationPolicy.IsSweepCandidate(
+                task,
+                hasNativeRecord,
+                hasAcceptanceRecord,
+                hasHistoricalVerification));
+    }
+
+    [Fact]
+    public void SweepCandidate_NativeNoCodeAcceptanceIsNotInAlertExtension()
+    {
+        var task = new TaskInfo
+        {
+            State = TaskStates.Completed,
+            Mode = TaskModes.Research,
+            Kind = TaskKinds.Task,
+        };
+
+        Assert.False(HistoricalIntegrationVerificationPolicy.IsSweepCandidate(
+            task,
+            hasNativeRecord: true,
+            hasAcceptanceRecord: true,
+            hasHistoricalVerification: false));
     }
 
     [Fact]
@@ -135,7 +185,42 @@ public sealed class HistoricalIntegrationVerificationSweepTests
                 mode: TaskModes.Research);
             Directory.CreateDirectory(Path.Combine(reportOnly, "results"));
             File.WriteAllText(Path.Combine(reportOnly, "results", "report.md"), "# Findings");
-            SeedTask(completed, "agt-3005", "AGT-3005", "2026-08-09T12:00:00Z");
+            SeedTask(completed, "agt-3005", "AGT-3005", "2026-08-09T12:00:00Z", commits:
+            [
+                Commit(
+                    new string('b', 40),
+                    "feat(AGT-3005): missing historical delivery",
+                    "round-1",
+                    "missing.cs"),
+            ]);
+            var acceptanceOnly = SeedTask(
+                completed,
+                "agt-3006",
+                "AGT-3006",
+                "2026-08-09T12:00:00Z");
+            var timeline = new TimelineLog(NullLogger<TimelineLog>.Instance);
+            Assert.True(timeline.Append(acceptanceOnly, new TimelineEvent
+            {
+                Ts = new DateTime(2026, 8, 9, 12, 0, 0, DateTimeKind.Utc),
+                Kind = TimelineEventKinds.IntegrationStarted,
+                Actor = "human:operator@example.com",
+                Summary = "Acceptance integration started.",
+            }));
+            SeedTask(
+                completed,
+                "agt-3007",
+                "AGT-3007",
+                "2026-08-09T12:00:00Z",
+                integrationRecords:
+                [
+                    new TaskIntegrationRecord
+                    {
+                        Id = HistoricalIntegrationVerificationSweep.LegacyRecordId,
+                        Classification = IntegrationRecordClasses.NoCodeExpected,
+                        RecordedAtUtc = new DateTime(2026, 8, 10, 9, 0, 0, DateTimeKind.Utc),
+                        Evidence = "The v1 sweep already classified this card.",
+                    },
+                ]);
 
             var configuration = new ConfigurationBuilder().AddInMemoryCollection(
                 new Dictionary<string, string?>
@@ -170,7 +255,7 @@ public sealed class HistoricalIntegrationVerificationSweepTests
                 git,
                 settings,
                 new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance),
-                new TimelineLog(NullLogger<TimelineLog>.Instance),
+                timeline,
                 reportPath,
                 batchSize: 2,
                 new FixedTimeProvider(new DateTimeOffset(2026, 8, 10, 10, 0, 0, TimeSpan.Zero)),
@@ -184,13 +269,15 @@ public sealed class HistoricalIntegrationVerificationSweepTests
             var second = await sweep.RunOnceAsync();
 
             Assert.True(first.Completed);
-            Assert.Equal(5, first.ScannedCards);
-            Assert.Equal(5, first.CandidateCards);
-            Assert.Equal(5, first.RecordsWritten);
+            Assert.Equal(2, first.Version);
+            Assert.Equal(7, first.ScannedCards);
+            Assert.Equal(7, first.CandidateCards);
+            Assert.Equal(6, first.RecordsWritten);
             Assert.Equal(3, first.BatchCount);
             Assert.Equal(1, first.Counts[IntegrationRecordClasses.IntegratedHistorical]);
             Assert.Equal(1, first.Counts[IntegrationRecordClasses.IntegratedVerified]);
-            Assert.Equal(1, first.Counts[IntegrationRecordClasses.NoCodeExpected]);
+            Assert.Equal(2, first.Counts[IntegrationRecordClasses.NoCodeExpected]);
+            Assert.Equal(1, first.Counts[IntegrationRecordClasses.NoAttributionLegacy]);
             Assert.Equal(1, first.Counts[IntegrationRecordClasses.ContentOnFence]);
             Assert.Equal(1, first.Counts[IntegrationRecordClasses.GenuinelyMissing]);
             Assert.Equal(2, first.OperatorItems.Count);
@@ -201,11 +288,15 @@ public sealed class HistoricalIntegrationVerificationSweepTests
             Assert.Equal(reportAfterFirstRun, File.ReadAllText(reportPath));
             Assert.All(tasksAfterFirstRun, row => Assert.Equal(row.Value, File.ReadAllText(row.Key)));
 
-            foreach (var id in Enumerable.Range(3001, 5))
+            foreach (var id in Enumerable.Range(3001, 7))
             {
                 var task = scanner.FindJob($"agt-{id}", taskStore);
                 var record = Assert.Single(task!.IntegrationRecords);
-                Assert.Equal(HistoricalIntegrationVerificationSweep.RecordId, record.Id);
+                Assert.Equal(
+                    id == 3007
+                        ? HistoricalIntegrationVerificationSweep.LegacyRecordId
+                        : HistoricalIntegrationVerificationSweep.RecordId,
+                    record.Id);
             }
             Assert.Equal(
                 IntegrationRecordClasses.IntegratedHistorical,
@@ -215,6 +306,9 @@ public sealed class HistoricalIntegrationVerificationSweepTests
             Assert.Contains(historicalSha, historicalRecord.CommitShas);
             Assert.Single(
                 scanner.FindJob("agt-3003", taskStore)!.IntegrationRecords.Single().FenceRefs);
+            Assert.Equal(
+                IntegrationRecordClasses.NoAttributionLegacy,
+                scanner.FindJob("agt-3006", taskStore)!.IntegrationRecords.Single().Classification);
         }
         finally
         {
@@ -229,6 +323,7 @@ public sealed class HistoricalIntegrationVerificationSweepTests
         string key,
         string enteredLaneAt,
         IReadOnlyList<object>? commits = null,
+        IReadOnlyList<TaskIntegrationRecord>? integrationRecords = null,
         string mode = TaskModes.Coding)
     {
         var folder = Path.Combine(lane, id);
@@ -245,6 +340,7 @@ public sealed class HistoricalIntegrationVerificationSweepTests
             createdAt = enteredLaneAt,
             enteredLaneAt,
             commits = commits ?? [],
+            integrationRecords = integrationRecords ?? [],
         }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
         File.WriteAllText(Path.Combine(folder, "prompt.md"), "Fixture task.");
         return folder;

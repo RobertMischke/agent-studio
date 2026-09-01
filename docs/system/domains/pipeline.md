@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-27
+Version: 2026-09-01
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -280,17 +280,19 @@ steer the pipeline in this policy version.
   the existing `merged` and `integrated` counters. The same sweep evaluates the
   30-minute accepted delivery invariant. The alert evaluates only accepted
   terminal cards in Completed or Archive, never cards still in Human Review,
-  whose acceptance has a native integration record or an operator-facing
-  historical verification record. Verified legacy integration and explicit
-  no-code delivery records never become acute alerts. Accepted cards without
-  Git-proven integration publish a project-filtered snapshot at
+  whose acceptance has a native acceptance record and no historical
+  verification of any class. Verified legacy integration, explicit no-code
+  delivery records, and legacy cards without recoverable attribution never
+  become acute alerts. Accepted cards without Git-proven integration publish a
+  project-filtered snapshot at
   `GET /api/pipeline/accepted-integration-alert`, render a persistent board
   banner capped at ten task keys with a link to the exact filtered board list,
   and emit a warning event containing the affected task keys.
-  Startup first classifies missing historical records in bounded background
-  batches, then inventories only `content-on-fence`, `genuinely-missing`, and
+  Startup first runs the v2 historical classification over the same terminal
+  acceptance population in bounded background batches, reusing existing v1
+  records, then inventories only `content-on-fence`, `genuinely-missing`, and
   current recorded `Error` or `NoTaskBranch` outcomes. The historical report
-  retains counts for all five classes but includes task keys only for its two
+  retains counts for all six classes but includes task keys only for its two
   operator-facing classes. Recovery starts only after this bookkeeping pass;
   its records are never merge authority and their cards are never moved by the
   recovery backstop.

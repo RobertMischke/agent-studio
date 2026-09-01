@@ -14,6 +14,7 @@ canonical layout:
     migrations/
       superseded-commits-v1.json
       historical-integration-verification-v1.json
+      historical-integration-verification-v2.json
     test-runs/
       PROJ-023.json
   projects/
@@ -79,13 +80,21 @@ repair. It lists both marked commits and ambiguous cards left untouched. The
 backend writes it atomically after scanning delivered and archived cards; an
 unreadable existing report fails that repair rather than silently rerunning it.
 
-`<TaskRepository>/.metadata/migrations/historical-integration-verification-v1.json`
-is the durable count report and completion marker for accepted and archived
-cards that predate acceptance integration recording. It contains counts for
-all five verification classes and task rows only for `content-on-fence` and
-`genuinely-missing`. The related `task.json.integrationRecords[]` rows are
-append-only and use a stable id, so an interrupted or repeated sweep cannot
-duplicate card bookkeeping.
+`<TaskRepository>/.metadata/migrations/historical-integration-verification-v2.json`
+is the current durable count report and completion marker for accepted and
+archived cards that predate complete acceptance integration recording. The v2
+population includes terminal cards with an acceptance-stage
+`integration_started` event, which is also the population used by the acute
+alert before its age and Git-state filters. It contains counts for all six
+verification classes and task rows only for `content-on-fence` and
+`genuinely-missing`. The non-alarming `no-attribution-legacy` class covers
+pre-recording cards with no attributed commit, no qualifying no-code artifact,
+and no surviving task-associated result or salvage ref. Existing v1
+`task.json.integrationRecords[]` rows remain authoritative and are never
+reclassified. The rows are append-only and use a stable per-version id, so an
+interrupted or repeated sweep cannot duplicate card bookkeeping. The v1 report
+remains as the completion evidence for its narrower pass but does not suppress
+the v2 run.
 
 ## Operational Boundary
 
@@ -203,9 +212,10 @@ excludes that rotation path, including when a legacy rotation was once tracked.
 - `integrationRecords` - append-only application bookkeeping for historical
   integration verification. Each row carries a stable id, one of
   `integrated-verified`, `integrated-historical`, `no-code-expected`,
-  `content-on-fence`, or `genuinely-missing`, the integration branch, and the
-  Git or artifact evidence used. Agents and ordinary task mutations never
-  replace these rows. The historical startup sweep and the guarded
+  `no-attribution-legacy`, `content-on-fence`, or `genuinely-missing`, the
+  integration branch, and the Git or artifact evidence used. Agents and
+  ordinary task mutations never replace these rows. The historical startup
+  sweep and the guarded
   `POST /api/tasks/{id}/integration-records` operator-verification endpoint are
   the only writers; the endpoint rejects in-flight lanes and is idempotent by
   record id.

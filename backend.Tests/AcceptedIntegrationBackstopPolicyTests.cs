@@ -92,6 +92,7 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
     [InlineData(IntegrationRecordClasses.IntegratedVerified)]
     [InlineData(IntegrationRecordClasses.IntegratedHistorical)]
     [InlineData(IntegrationRecordClasses.NoCodeExpected)]
+    [InlineData(IntegrationRecordClasses.NoAttributionLegacy)]
     [InlineData(IntegrationRecordClasses.ContentOnFence)]
     [InlineData(IntegrationRecordClasses.GenuinelyMissing)]
     public void Alert_HistoricalVerificationClass_IsNotALiveAcceptanceStall(string classification)
@@ -119,6 +120,25 @@ public sealed class AcceptedIntegrationBackstopPolicyTests
 
         Assert.False(snapshot.Active);
         Assert.Empty(snapshot.Items);
+    }
+
+    [Fact]
+    public void Alert_PostRailAcceptanceWithoutHistoricalVerification_RemainsAcute()
+    {
+        var candidate = Candidate(
+            "AGT-POST-RAIL",
+            31,
+            MergeIntoIntegrationOutcome.NoTaskBranch.ToString());
+
+        Assert.True(AcceptedIntegrationBackstopPolicy.IsAlertCandidate(candidate));
+
+        var snapshot = AcceptedIntegrationBackstopPolicy.EvaluateAlert(
+            Now,
+            TimeSpan.FromMinutes(30),
+            [candidate]);
+
+        Assert.True(snapshot.Active);
+        Assert.Equal("AGT-POST-RAIL", Assert.Single(snapshot.Items).TaskKey);
     }
 
     [Theory]

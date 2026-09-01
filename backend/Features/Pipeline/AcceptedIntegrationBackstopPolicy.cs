@@ -61,10 +61,11 @@ internal static class AcceptedIntegrationBackstopPolicy
 
     public static bool IsAlertCandidate(AcceptedIntegrationAlertCandidate candidate)
     {
-        if (candidate.HasHistoricalVerification) return false;
         if (!candidate.HasIntegrationRecord) return false;
-        if (!AcceptanceIntegrationPolicy.IsIntegrationRequired(candidate.Task)) return false;
-        return candidate.Task.State is TaskStates.Completed or TaskStates.Archive;
+        return HistoricalIntegrationVerificationPolicy.IsAlertPopulationCandidate(
+            candidate.Task,
+            candidate.HasIntegrationRecord,
+            candidate.HasHistoricalVerification);
     }
 
     public static AcceptedIntegrationSweepSummary Summarize(
