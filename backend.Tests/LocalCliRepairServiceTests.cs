@@ -63,6 +63,58 @@ public sealed class LocalCliRepairServiceTests
         Assert.Equal("@openai/codex", arguments[2]);
     }
 
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task Installer_resolves_an_npm_path_that_passes_version_preflight()
+    {
+        var resolution = await new NpmGlobalInstaller()
+            .ResolveNpmExecutableAsync(CancellationToken.None);
+
+        Assert.True(resolution.Available, resolution.Detail);
+        Assert.NotNull(resolution.Candidate);
+        Assert.True(Path.IsPathRooted(resolution.Candidate.NpmPath));
+        Assert.True(File.Exists(resolution.Candidate.NpmPath));
+        Assert.False(string.IsNullOrWhiteSpace(resolution.Version));
+    }
+
+    [Fact]
+    [Trait("Category", "MachineBound")]
+    public async Task Installer_returns_typed_npm_unavailable_when_preflight_is_broken()
+    {
+        using var temp = new TempDirectory();
+        var brokenNpm = Path.Combine(temp.Path, OperatingSystem.IsWindows() ? "npm.cmd" : "npm");
+        if (OperatingSystem.IsWindows())
+        {
+            File.WriteAllText(
+                brokenNpm,
+                "@echo off\r\necho Error: Cannot find module 'backend\\node_modules\\npm\\bin\\npm-cli.js' 1>&2\r\nexit /b 1\r\n");
+        }
+        else
+        {
+            File.WriteAllText(
+                brokenNpm,
+                "#!/bin/sh\necho \"Error: Cannot find module backend/node_modules/npm/bin/npm-cli.js\" >&2\nexit 1\n");
+            File.SetUnixFileMode(
+                brokenNpm,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        var installer = new NpmGlobalInstaller(
+            () => [new NpmExecutableCandidate(brokenNpm, null)],
+            temp.Path);
+
+        var result = await installer.InstallAsync(
+            "@openai/codex",
+            NpmGlobalInstallMode.ForceRelink,
+            CancellationToken.None);
+
+        Assert.Equal(NpmGlobalInstallOutcome.NpmUnavailable, result.Outcome);
+        Assert.False(result.Succeeded);
+        Assert.Null(result.ExitCode);
+        Assert.Contains("npm unavailable", result.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("MODULE_NOT_FOUND", result.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Cannot find module", result.StandardError, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(NpmCliInstallState.TrulyUninstalled, NpmGlobalInstallMode.Install)]
     [InlineData(NpmCliInstallState.MissingShimWithPackagePresent, NpmGlobalInstallMode.ForceRelink)]
@@ -245,10 +297,7 @@ public sealed class LocalCliRepairServiceTests
         Assert.True(File.Exists(shim));
         Assert.Equal(1, installer.Calls);
         Assert.Equal(NpmGlobalInstallMode.ForceRelink, installer.LastMode);
-        var status = Assert.Single(service.Current());
-        Assert.Equal("repaired", status.Outcome);
-        Assert.Equal("2.1.231", status.VersionBefore);
-        Assert.Equal("2.1.234", status.VersionAfter);
+        Assert.Empty(service.Current());
         var journalText = File.ReadAllText(journal);
         Assert.Contains("missing-shim-with-package-present", journalText, StringComparison.Ordinal);
         Assert.Contains("2.1.231", journalText, StringComparison.Ordinal);
@@ -270,7 +319,7 @@ public sealed class LocalCliRepairServiceTests
             () => appData,
             () => localAppData,
             journal);
-        Assert.Equal("repaired", Assert.Single(restartedService.Current()).Outcome);
+        Assert.Empty(restartedService.Current());
         await restartedService.ProbeAndRepairAsync(
             "claude", "2.1.234", Probe, CancellationToken.None);
         Assert.Equal(1, installer.Calls);
@@ -312,6 +361,58 @@ public sealed class LocalCliRepairServiceTests
             && entry.Contains("repairAction=force-relink", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Healthy_probe_clears_out_of_band_repair_failure_and_boot_does_not_resurrect_it()
+    {
+        using var temp = new TempDirectory();
+        var appData = Path.Combine(temp.Path, "appdata");
+        var npmBin = Path.Combine(appData, "npm");
+        var packageDir = Path.Combine(npmBin, "node_modules", "@openai", "codex");
+        Directory.CreateDirectory(packageDir);
+        File.WriteAllText(Path.Combine(packageDir, "package.json"), "{\"version\":\"0.151.0\"}");
+        var shim = Path.Combine(npmBin, "codex.cmd");
+        var journal = Path.Combine(temp.Path, "cli-self-heal.jsonl");
+        var now = new DateTimeOffset(2026, 8, 31, 11, 40, 0, TimeSpan.Zero);
+        var installer = new FakeInstaller((_, _) => { });
+        var service = new LocalCliRepairService(
+            installer,
+            NullLogger<LocalCliRepairService>.Instance,
+            () => now,
+            () => true,
+            () => appData,
+            () => null,
+            journal);
+
+        (bool Available, string? Version, string Path) Probe()
+            => File.Exists(shim)
+                ? (true, "codex-cli 0.151.0", shim)
+                : (false, null, "codex");
+
+        var failed = await service.ProbeAndRepairAsync(
+            "codex", "0.151.0", Probe, CancellationToken.None);
+        Assert.False(failed.Available);
+        Assert.Equal("failed", Assert.Single(service.Current()).Outcome);
+
+        File.WriteAllText(shim, "restored out of band");
+        now = now.AddMinutes(5);
+        var healthy = await service.ProbeAndRepairAsync(
+            "codex", "0.151.0", Probe, CancellationToken.None);
+
+        Assert.True(healthy.Available);
+        Assert.Empty(service.Current());
+        Assert.Contains("\"outcome\":\"healthy\"", File.ReadAllText(journal), StringComparison.Ordinal);
+
+        var restarted = new LocalCliRepairService(
+            installer,
+            NullLogger<LocalCliRepairService>.Instance,
+            () => now,
+            () => true,
+            () => appData,
+            () => null,
+            journal);
+        Assert.Empty(restarted.Current());
+    }
+
     private sealed class FakeInstaller(Action<string, NpmGlobalInstallMode> onInstall) : NpmGlobalInstaller
     {
         public int Calls { get; private set; }
@@ -325,7 +426,12 @@ public sealed class LocalCliRepairServiceTests
             Calls++;
             LastMode = mode;
             onInstall(packageName, mode);
-            return Task.FromResult(new NpmGlobalInstallResult(true, 0, "installed", ""));
+            return Task.FromResult(new NpmGlobalInstallResult(
+                NpmGlobalInstallOutcome.Installed,
+                0,
+                "installed",
+                "",
+                "fake-npm"));
         }
     }
 

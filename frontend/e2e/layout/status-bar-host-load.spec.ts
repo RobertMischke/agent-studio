@@ -96,6 +96,12 @@ async function stubHostLoad(
     completed: [],
     archive: [],
   }));
+  await page.route('**/api/tasks/archive**', json({
+    items: [],
+    total: 0,
+    offset: 0,
+    limit: 50,
+  }));
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/runner/status', json({ projects: runnerProjects, cliRepairs }));
   await page.route('**/api/clients', json([{
@@ -176,7 +182,7 @@ test.describe('Status bar execution-host load companion signal', () => {
     });
   });
 
-  test('successful local CLI repair is a quiet status note', async ({ page }) => {
+  test('successful local CLI repair occupies no status-bar space', async ({ page }) => {
     await stubHostLoad(page, 0, 0, 0, 0.8, [{
       cliType: 'claude',
       outcome: 'repaired',
@@ -187,22 +193,16 @@ test.describe('Status bar execution-host load companion signal', () => {
     }]);
     await page.goto('/');
 
-    const note = page.getByTestId('status-bar-cli-repair');
-    await expect(note).toContainText('CLI repaired at');
-    await expect(note).not.toHaveAttribute('data-signal-tone', 'mismatch');
-    await note.hover();
-    await expect(page.getByTestId('cac-tooltip')).toContainText(
-      'claude CLI npm shim restored; version 2.1.231 -> 2.1.234.',
-    );
+    await expect(page.getByTestId('status-bar-cli-repair')).toHaveCount(0);
 
     await setTheme(page, 'light');
     await page.screenshot({
-      path: join(RESULTS_DIR, 'local-cli-repaired-status-note-light--mocked.png'),
+      path: join(RESULTS_DIR, 'local-cli-healthy-zero-space-light--mocked.png'),
       fullPage: false,
     });
     await setTheme(page, 'dark');
     await page.screenshot({
-      path: join(RESULTS_DIR, 'local-cli-repaired-status-note-dark--mocked.png'),
+      path: join(RESULTS_DIR, 'local-cli-healthy-zero-space-dark--mocked.png'),
       fullPage: false,
     });
   });

@@ -1,6 +1,6 @@
 # CLI Domain Map
 
-Version: 2026-06-09
+Version: 2026-09-01
 Status: System-of-record map for CLI adapter and quota changes.
 
 Use this when a change touches Claude, Codex, Copilot, Gemini, prompt handoff,
@@ -39,6 +39,11 @@ CLI execution tests.
   a plain install or forced relink from that state and persists repair and
   nearby npm-activity evidence to
   `<TaskRepository>/logs/cli-self-heal.jsonl`.
+- `backend/Features/Cli/Repair/NpmGlobalInstaller.cs`: deterministic npm
+  process boundary. It prefers npm beside the active Node executable, validates
+  every fallback with `npm --version`, runs from an explicit temporary working
+  directory, and reports `npm-unavailable` before package installation when no
+  candidate passes preflight.
 - `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
   endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
   (lazy single-transcript parse: model, thinking, message count, first prompt)
@@ -81,8 +86,10 @@ CLI execution tests.
   package version still regenerates bin shims. Custom executable paths and
   present-but-broken command shims remain outside this policy. Repair verifies
   both the `.cmd` shim and `--version`, and is limited to one persisted attempt
-  per CLI per hour. Successful repair is informational; failure is the alarm
-  boundary and names the observed package/shim state and attempted action.
+  per CLI per hour. A healthy probe or successful repair removes the provider
+  from `RunnerStatus.CliRepairs`; only a currently unresolved failure occupies
+  UI space. A terminal `healthy` journal row prevents restart rehydration from
+  reviving a superseded failure.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.
