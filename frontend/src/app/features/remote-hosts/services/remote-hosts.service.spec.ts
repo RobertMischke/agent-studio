@@ -357,6 +357,51 @@ describe('RemoteHostsService client registry hydration', () => {
     http.verify();
   });
 
+  it('projects live slot occupancy and role-local capacity from the Task Server snapshot', () => {
+    TestBed.configureTestingModule({
+      providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],
+    });
+    const svc = TestBed.inject(RemoteHostsService);
+    const http = TestBed.inject(HttpTestingController);
+    const now = new Date().toISOString();
+
+    svc.reload();
+    http.expectOne('/api/clients').flush([]);
+    http.expectOne('/api/v1/management/remote-hosts').flush([{
+      runnerId: 'agent-runner-01',
+      name: 'agent-runner-01',
+      hostId: 'runner-host',
+      instanceId: 'runner-host:42',
+      runnerVersion: '1.0.0',
+      protocolVersion: 3,
+      status: 'active',
+      registeredAt: now,
+      lastSeenAt: now,
+      hostAdmission: { hostId: 'runner-host', admissionState: 'open' },
+      capabilities: [{
+        key: 'executor:coding', category: 'executor', advertisedStatus: 'ready',
+        healthState: 'healthy', advertisedAt: now, freshUntil: now, isFresh: true,
+        consecutiveFailures: 0, affectedClaims: [], recoveryHistory: [],
+      }],
+      telemetry: {
+        observedAt: now,
+        cpuPercent: 40,
+        memoryUsedBytes: 4_000_000_000,
+        memoryTotalBytes: 16_000_000_000,
+        cpuCores: 8,
+        activeSlots: 6,
+      },
+      roleMaxParallelism: 8,
+    }]);
+
+    expect(svc.hosts().find(host => host.id === 'agent-runner-01')).toMatchObject({
+      activeTaskCount: 6,
+      roleMaxParallelism: 8,
+      serviceRole: 'coding',
+    });
+    http.verify();
+  });
+
   it('hydrates and updates the Task Server runtime capacity by host id and version', () => {
     TestBed.configureTestingModule({
       providers: [RemoteHostsService, provideHttpClient(), provideHttpClientTesting()],

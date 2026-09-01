@@ -337,7 +337,10 @@ without a parallel surface.
   Board cards deliberately show the actual live runner from the fenced run
   lease, not merely this configured target, so assignment and attribution
   cannot be confused. A fresh connected remote lease also drives the card's
-  CURRENT running copy and the status bar's separate local / remote totals;
+  CURRENT running copy. The status bar reads live occupied slots and role-local
+  ceilings from the Execution Hosts heartbeat projection, rendering compact
+  `remote N/M` and `review N/M` plane utilization with per-host detail in the
+  tooltip; a zero plane renders as `remote idle` or `review idle`;
   a disconnected, expired, or recovering location remains an acute orphan
   candidate. These consumers reuse the grouped-board and execution-location
   snapshots and do not add another polling path. The historical target is the

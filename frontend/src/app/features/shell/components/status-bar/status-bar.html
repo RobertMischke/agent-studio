@@ -12,8 +12,8 @@
       (activated)="navigateToExecutionHosts()" />
     <app-statusbar-item
       bullet="◎"
-      [pulsing]="reviewActiveJobs() > 0"
-      [signalTone]="reviewAttention() ? 'mismatch' : (reviewActiveJobs() > 0 ? 'working' : null)"
+      [pulsing]="reviewActiveSlots() > 0"
+      [signalTone]="reviewAttention() ? 'mismatch' : (reviewActiveSlots() > 0 ? 'working' : null)"
       [label]="reviewLabel()"
       [tooltip]="reviewTooltip()"
       [button]="false"
@@ -22,7 +22,7 @@
       [button]="false"
       icon="refresh"
       [iconSize]="11"
-      [label]="autoCount() + '/' + projectCount() + ' auto'"
+      [label]="'auto ' + autoCount() + '/' + projectCount()"
       [tooltip]="autoTooltip()" />
     @if (latestCliRepair(); as repair) {
       <app-statusbar-item

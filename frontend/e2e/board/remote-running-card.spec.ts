@@ -182,7 +182,7 @@ test.describe('Remote lease drives the board running state', () => {
       await expect(card.getByTestId('task-live-status')).toContainText(/Active for 2m\d{2}s/);
       await expect(card.getByTestId('task-live-status')).not.toContainText('No active run');
       await expect(card.getByTestId('task-card-stalled')).toHaveCount(0);
-      await expect(page.getByTestId('status-bar-running')).toContainText('0 local · 8 remote');
+      await expect(page.getByTestId('status-bar-running')).toContainText('remote 8');
 
       // Background feeds outside this fixture's board scope may surface a
       // generic error dialog. It is unrelated to the card projection and must
@@ -194,10 +194,10 @@ test.describe('Remote lease drives the board running state', () => {
       });
 
       const screenshot = await page.screenshot({
-        path: join(RESULTS_DIR, `remote-wave-after-${theme}.png`),
+        path: join(RESULTS_DIR, `remote-wave-after-${theme}--mocked.png`),
         fullPage: false,
       });
-      await testInfo.attach(`remote-wave-after-${theme}.png`, { body: screenshot, contentType: 'image/png' });
+      await testInfo.attach(`remote-wave-after-${theme}--mocked.png`, { body: screenshot, contentType: 'image/png' });
     });
   }
 });
