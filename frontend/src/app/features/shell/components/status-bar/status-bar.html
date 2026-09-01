@@ -28,10 +28,10 @@
       <app-statusbar-item
         [button]="false"
         bullet="●"
-        [signalTone]="repair.outcome === 'failed' ? 'mismatch' : null"
+        signalTone="mismatch"
         [label]="cliRepairLabel()"
         [tooltip]="repair.detail"
-        [warning]="repair.outcome === 'failed'"
+        [warning]="true"
         warningLabel="CLI repair failed"
         testid="status-bar-cli-repair" />
     }
