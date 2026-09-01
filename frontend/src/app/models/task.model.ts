@@ -692,8 +692,6 @@ export interface ClientSummary {
   /** Ceiling the live daemon reports as adopted. Telemetry, not policy. */
   runnerEffectiveMaxParallelism?: number | null;
   runnerEffectiveMaxParallelismAppliedAt?: string | null;
-  runnerActiveGateCount?: number | null;
-  runnerGateCapacity?: number | null;
   /** Present only for a synthetic row representing an unreadable identity file. */
   identityFileError?: string | null;
   identityFileName?: string | null;

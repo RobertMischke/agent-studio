@@ -206,10 +206,6 @@ steer the pipeline in this policy version.
   unavailable, recovery also fails closed without releasing a push. This closes
   the BP-02 merge-commit-before-gate crash window without treating Git ancestry
   as a verdict.
-- `backend/Features/Pipeline/RemoteGateActivityStore.cs`: process-local active
-  read model fed by the SSH gate start/completion events. The Execution Hosts view
-  uses it to show GATE work separately from daemon RUN slots; the store is
-  visibility-only and never admits, cancels, or reorders a gate.
 - `runner/RemoteReviewWorkspace.cs` and
   `contracts/TaskServer.Contracts/ReviewContracts.cs`: exact-subject remote
   verification. A frozen command is either a deterministic tool command or a
@@ -616,18 +612,18 @@ and the exact-subject, per-step placement contract in
 | Deterministic repository tools, including restore, build, test, lint, and subject inspection | Agent Host, in the ReviewAttempt task worktree at the exact Result-SHA | Yes, default for the frozen Remote Review plan | They need the repository, declared toolchain, and host caches, not Studio state. Admission uses the existing Review Executor capacity, capability, lease, fence, and resource namespace. Missing CLI or toolchain is infrastructure failure, never a local fallback or product verdict. |
 | Semantic aspects (`aspect-*`) | Agent Host, in the same exact-subject ReviewAttempt workspace | Yes, default when the aspect is enabled | The plan freezes prompt, CLI, model, and thinking level before claim. The Host must advertise matching CLI and provider-authentication capabilities. Execution is read-only and clean-context; the accepted report produces the same `aspect-*.md`, `aspect-*.json`, file provenance, status, tokens, and verdict as local execution. |
 | Decision assistance | Evidence generation runs on the Agent Host; orchestration synthesis and the binding decision remain in the control plane | Split | Repository-reading evidence belongs with the exact subject and is reported through the fenced ReviewAttempt. Combining all evidence, applying retry budgets, requesting reissue/escalation, and changing a lane require the canonical task history and Task Server authority. These operations must not run in a disposable repository worker. This is a control-plane boundary, not a requirement that the control plane remain on the Studio workstation. |
-| Review build/test gate | Agent Host through the current ReviewAttempt adapter | Yes, current bridge to parity | Command evidence is attributed per step even though the durable attempt is still review-shaped. This reuses the proven exact-SHA workspace, dependency/npm cache, capability, lease, timeout, and report path. It removes Studio-host execution from canonical Remote review without weakening W18's target. |
-| Integration and release gates (`pre-develop`, `pre-main`) | Integration owner; command bodies may use the existing remote gate transport | Yes, migration still bounded by W18 | The tested subject is an integration commit created inside the serialized merge/rollback boundary, not the original task Result-SHA. Until the dedicated gate lifecycle exists, the integration owner must retain transaction ordering and rollback authority. The approved [W18 Remote Gate target architecture](../../operations/remote-gate-zielbild/index.html) remains a dedicated `GateSubject`/`GateAttempt` claim, not permanent embedding in ReviewAttempt and not silent in-process fallback. |
+| Review build/test gate | Agent Host through a claimed and fenced ReviewAttempt | Yes, default for canonical Remote review | Command evidence is attributed per step even though the durable attempt is review-shaped. This reuses the exact-SHA workspace, dependency/npm cache, capability, lease, timeout, and report path. There is no SSH dispatch or local infrastructure fallback in this path. |
+| Integration and release gates (`pre-develop`, `pre-main`) | Integration owner through the in-process exact-subject gate runner | Not yet remotely claimable | The tested subject is an integration commit created inside the serialized merge/rollback boundary, not the original task Result-SHA. The integration owner retains transaction ordering and rollback authority. A future remote transport must use the approved [W18 Remote Gate target architecture](../../operations/remote-gate-zielbild/index.html), not SSH dispatch and not a silent remote-to-local fallback. |
 | Task/project mutation tools, including managed docs/wiki writes, task spawning, commits, integration, push, and lane mutation | Task Server or platform-owned integration boundary | No as an ordinary repository step | They need canonical task/project paths, append-only ledgers, global serialization, API authorization, or platform-owned Git durability. An Agent Host may return evidence or a recommendation, but it cannot write the task namespace or perform the side effect from its disposable review worktree. |
 | PRE qualification/enrichment and cross-project DRIFT checks | Control plane | Not in the Remote Review worktree | PRE freezes policy and task context before dispatch. DRIFT reads designated-topic and cross-project state and may lead to centrally deduplicated follow-up work. Neither is an exact-subject repository review command. |
 | Studio-owned UI probes and operator-desktop evidence | Studio seat | No | They depend on the locally supervised stable browser, loopback Studio origin, Windows-native dev seat, or operator-visible desktop session. Headless browser tests that can declare an immutable repository subject, browser/toolchain capability, and self-contained artifacts are ordinary remote tools; a probe of the Studio seat itself is not. |
 
-The current ReviewAttempt adapter is intentionally narrower than the W18
-destination. It provides Remote parity now for review-shaped deterministic
-tools and semantic aspects. W18 still separates deterministic gate lifecycle
-into a first-class claimable GateAttempt so gate queueing, retries, cleanup, and
-terminal infrastructure state are independently visible and do not consume
-review identity indefinitely.
+The ReviewAttempt transport is the canonical current path for Remote review
+tools and semantic aspects. It replaced the former SSH gate shortcut. W18 may
+still separate deterministic gate lifecycle into a first-class claimable
+GateAttempt so integration gates and independently visible gate queueing,
+retries, cleanup, and terminal infrastructure state can use the same remote
+control-plane contract.
 
 Every remotely executed command records `executionLocation=remote`, Host,
 Executor, ReviewAttempt, lease/fence-derived authority, start/finish time, exact

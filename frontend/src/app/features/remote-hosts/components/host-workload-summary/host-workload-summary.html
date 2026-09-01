@@ -1,7 +1,7 @@
 <section class="workloads" data-testid="remote-host-workloads" aria-label="Host workload classes">
   <div class="workloads__head">
     <strong>Host work</strong>
-    <span>Process and event truth; lane/claim drift is not folded into these counts.</span>
+    <span>Daemon and lease truth; lane/claim drift is not folded into this count.</span>
   </div>
   <div class="workloads__grid">
     <article class="workload"
@@ -21,13 +21,5 @@
       </strong>
       <small>Daemon telemetry · coding and agent runs</small>
     </article>
-    <article class="workload" data-testid="remote-host-gate-pool">
-      <span class="workload__kind">GATE work</span>
-      <strong>{{ gateWork() }}</strong>
-      <small>Gate events · SSH build/test gates outside RUN slots</small>
-    </article>
   </div>
-  <p class="workloads__explain" data-testid="remote-host-cpu-context">
-    CPU and host load include GATE work and other processes. GATE work does not consume a RUN slot.
-  </p>
 </section>
