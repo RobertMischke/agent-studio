@@ -38,7 +38,33 @@ public class TaskScannerService : ITaskScanner
     private readonly ConcurrentDictionary<string, ArchivedFolderSnapshot> _archivedFolders =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
+    /// <summary>
+    /// Live-folder memo. The dominant per-scan cost is the ~406 live folders, each
+    /// re-reading and re-parsing <c>task.json</c> and tail-scanning
+    /// <c>cli-output.log</c> and <c>session-events.jsonl</c> on every ~14s refresh.
+    /// This gates those expensive steps behind a cheap folder fingerprint: on a
+    /// hit the previous <see cref="TaskInfo"/> is reused wholesale. The
+    /// fingerprint is exactly the set of stats <see cref="GetLastActivityTime"/>
+    /// already pays, so a hit costs only those probes. Marker files (quota-wait,
+    /// pending-intent, lifecycle, steer-pending, park) are deliberately NOT
+    /// fingerprinted — they are rewritten in place without touching the tracked
+    /// stats — so <see cref="ApplyVolatileMarkers"/> re-reads and re-applies their
+    /// derived fields on every hit.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, LiveFolderSnapshot> _liveFolders =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     private sealed record ArchivedFolderSnapshot(long TaskJsonLength, DateTime TaskJsonWriteUtc, TaskInfo Task);
+
+    private sealed record LiveFolderFingerprint(
+        long TaskJsonLength, DateTime TaskJsonWriteUtc,
+        DateTime JobDirWriteUtc,
+        DateTime LogsDirWriteUtc, DateTime ResultsDirWriteUtc, DateTime AttachmentsDirWriteUtc,
+        DateTime StatusMdWriteUtc,
+        long CliOutputLength, DateTime CliOutputWriteUtc,
+        long SessionEventsLength, DateTime SessionEventsWriteUtc);
+
+    private sealed record LiveFolderSnapshot(LiveFolderFingerprint Fingerprint, TaskInfo Task);
 
     /// <summary>
     /// Watch paths that resolved to a non-existent folder and have already
@@ -473,6 +499,13 @@ public class TaskScannerService : ITaskScanner
             if (!candidatePaths.Contains(archivedPath))
                 _archivedFolders.TryRemove(archivedPath, out _);
         }
+        // Same bound for the live memo: drop entries whose folder disappeared
+        // (lane move to archive, or a delete) so it cannot grow with history.
+        foreach (var livePath in _liveFolders.Keys)
+        {
+            if (!candidatePaths.Contains(livePath))
+                _liveFolders.TryRemove(livePath, out _);
+        }
 
         sw.Stop();
         // Only log when the walk is slow enough to matter, so steady-state
@@ -490,16 +523,29 @@ public class TaskScannerService : ITaskScanner
     public TaskInfo? ScanJobFolder(string jobDir, WatchPathEntry entry, string state)
     {
         var jobJsonPath = Path.Combine(jobDir, "task.json");
-        if (!File.Exists(jobJsonPath)) return null;
+        // One stat for existence + length + mtime. FileInfo caches the probe, so
+        // the archive and live memos below reuse it without re-hitting the disk.
+        var taskJsonInfo = new FileInfo(jobJsonPath);
+        if (!taskJsonInfo.Exists) return null;
 
         try
         {
-            var taskJsonInfo = new FileInfo(jobJsonPath);
             if (_archivedFolders.TryGetValue(jobDir, out var archived)
                 && archived.TaskJsonLength == taskJsonInfo.Length
                 && archived.TaskJsonWriteUtc == taskJsonInfo.LastWriteTimeUtc)
             {
                 return archived.Task;
+            }
+
+            // Live fast path: an unchanged folder fingerprint means task.json and
+            // both tail-scanned logs are byte-identical to the last scan, so the
+            // parsed TaskInfo is reusable. Only the un-fingerprinted marker files
+            // (see ApplyVolatileMarkers) are re-read, keeping quota-wait / park /
+            // steer / lifecycle / intent chips live even on a hit.
+            if (_liveFolders.TryGetValue(jobDir, out var live)
+                && live.Fingerprint == ComputeLiveFingerprint(jobDir, taskJsonInfo))
+            {
+                return ApplyVolatileMarkers(live.Task, jobDir);
             }
 
             var json = File.ReadAllText(jobJsonPath);
@@ -646,10 +692,17 @@ public class TaskScannerService : ITaskScanner
                     taskJsonInfo.Length,
                     taskJsonInfo.LastWriteTimeUtc,
                     info);
+                _liveFolders.TryRemove(jobDir, out _);
             }
             else
             {
                 _archivedFolders.TryRemove(jobDir, out _);
+                // Re-stat first so a divergent-id self-heal (legacy layout, above)
+                // that rewrote task.json this scan is captured in the fingerprint;
+                // otherwise the next scan sees a fresh mtime and needlessly misses.
+                taskJsonInfo.Refresh();
+                _liveFolders[jobDir] = new LiveFolderSnapshot(
+                    ComputeLiveFingerprint(jobDir, taskJsonInfo), info);
             }
             return info;
         }
@@ -1311,10 +1364,9 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     private static bool IsOrchestratorMetaLine(string line)
     {
-        var lower = line.ToLowerInvariant();
-        if (lower.Contains("[supervisor]")) return true;
+        if (line.Contains("[supervisor]", StringComparison.OrdinalIgnoreCase)) return true;
         foreach (var tag in OrchestratorMetaTags)
-            if (lower.Contains(tag)) return true;
+            if (line.Contains(tag, StringComparison.OrdinalIgnoreCase)) return true;
         return false;
     }
 
@@ -1325,10 +1377,9 @@ public class TaskScannerService : ITaskScanner
     /// </summary>
     private static bool IsAcceptReconcileLine(string line)
     {
-        var lower = line.ToLowerInvariant();
-        if (!lower.Contains("[decision]")) return false;
-        return lower.Contains("auto-review accepted")
-            || lower.Contains("reconciled on accept");
+        if (!line.Contains("[decision]", StringComparison.OrdinalIgnoreCase)) return false;
+        return line.Contains("auto-review accepted", StringComparison.OrdinalIgnoreCase)
+            || line.Contains("reconciled on accept", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static string ReadTailUtf8(string path, int maxBytes)
@@ -1354,38 +1405,37 @@ public class TaskScannerService : ITaskScanner
         issue = null;
         if (string.IsNullOrWhiteSpace(line)) return false;
 
-        var lower = line.ToLowerInvariant();
         // EnvironmentBlocker takes precedence: the marker is the runtime
         // signal that the host environment (sandbox / logon session /
         // ACLs) refused to let the agent execute. Surfaced as its own
         // chip so the user does not waste time inspecting an empty
         // change set as if it were a normal permission denial.
-        if (lower.Contains("environment-blocker") || lower.Contains("[environment-blocker]"))
+        if (line.Contains("environment-blocker", StringComparison.OrdinalIgnoreCase) || line.Contains("[environment-blocker]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("environment-blocker", "Environment blocker", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("permission-blocked") || lower.Contains("permission denied and could not request permission"))
+        if (line.Contains("permission-blocked", StringComparison.OrdinalIgnoreCase) || line.Contains("permission denied and could not request permission", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("permission-blocked", "Permission blocked", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("watchdog-timeout") || (lower.Contains("[watchdog]") && lower.Contains("killed after")))
+        if (line.Contains("watchdog-timeout", StringComparison.OrdinalIgnoreCase) || (line.Contains("[watchdog]", StringComparison.OrdinalIgnoreCase) && line.Contains("killed after", StringComparison.OrdinalIgnoreCase)))
         {
             issue = BuildOutcomeIssue("watchdog-timeout", "Watchdog timeout", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("[tool-router-error]"))
+        if (line.Contains("[tool-router-error]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("tool-router-error", "Tool router error", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("[no-reply]"))
+        if (line.Contains("[no-reply]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("no-reply", "No reply", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("empty-fast-exit"))
+        if (line.Contains("empty-fast-exit", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("empty-fast-exit", "Empty fast exit", "High", line, lastSeenAt);
             return true;
@@ -1393,7 +1443,7 @@ public class TaskScannerService : ITaskScanner
         // Quarantined / context-overflow are terminal, non-retryable circuit-breaker
         // outcomes (the run was parked in human review to stop an endless reissue
         // loop), so they rank High like the other unrecoverable runner outcomes.
-        if (lower.Contains("quarantined"))
+        if (line.Contains("quarantined", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("quarantined", "Quarantined", "High", line, lastSeenAt);
             return true;
@@ -1406,52 +1456,52 @@ public class TaskScannerService : ITaskScanner
         // `git-commit-attribution`) -> a false High-severity chip + spurious
         // reissue (ASS-914). The bracketed form is the runner's structured tag
         // and cannot be produced by the agent describing the pipeline.
-        if (lower.Contains("[worktree-containment]"))
+        if (line.Contains("[worktree-containment]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("worktree-containment", "Worktree containment", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("[agent-git-violation]"))
+        if (line.Contains("[agent-git-violation]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("agent-git-violation", "Agent git violation", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("[worker-head-advanced]"))
+        if (line.Contains("[worker-head-advanced]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("worker-head-advanced", "Worker advanced HEAD", "Info", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("[integration-conflict]"))
+        if (line.Contains("[integration-conflict]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("integration-conflict", "Integration conflict", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("[integration-error]"))
+        if (line.Contains("[integration-error]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("integration-error", "Integration error", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("[task-branch-unpushed]"))
+        if (line.Contains("[task-branch-unpushed]", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("task-branch-unpushed", "Task branch unpushed", "Warn", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("context-overflow"))
+        if (line.Contains("context-overflow", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("context-overflow", "Context overflow", "High", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("missing-terminal-sentinel"))
+        if (line.Contains("missing-terminal-sentinel", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("missing-terminal-sentinel", "Missing sentinel", "Warn", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("classifier-unknown") || lower.Contains("could not classify the agent's reply"))
+        if (line.Contains("classifier-unknown", StringComparison.OrdinalIgnoreCase) || line.Contains("could not classify the agent's reply", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("classifier-unknown", "Classifier unknown", "Warn", line, lastSeenAt);
             return true;
         }
-        if (lower.Contains("heuristic-done"))
+        if (line.Contains("heuristic-done", StringComparison.OrdinalIgnoreCase))
         {
             issue = BuildOutcomeIssue("heuristic-done", "Heuristic done", "Warn", line, lastSeenAt);
             return true;
@@ -1930,6 +1980,63 @@ public class TaskScannerService : ITaskScanner
 
         return entries.OrderBy(e => e.Timestamp).ToList();
     }
+
+    /// <summary>
+    /// Cheap folder fingerprint that gates the live-folder fast path. Covers
+    /// exactly the stats <see cref="GetLastActivityTime"/> pays plus the lengths
+    /// of the two tail-scanned logs, so a matching fingerprint guarantees the
+    /// parsed <c>task.json</c>, the <c>cli-output.log</c>/<c>session-events.jsonl</c>
+    /// tails, and the derived last-activity time are all unchanged. Marker files
+    /// are intentionally excluded — they are re-applied per scan. The passed
+    /// <paramref name="taskJsonInfo"/> is reused so task.json is not re-stat'd.
+    /// </summary>
+    private static LiveFolderFingerprint ComputeLiveFingerprint(string jobDir, FileInfo taskJsonInfo)
+    {
+        var cliOutput = StatFile(TaskPaths.CliOutputLog(jobDir));
+        var sessionEvents = StatFile(TaskPaths.SessionEventsLog(jobDir));
+        var statusMd = StatFile(Path.Combine(jobDir, "status.md"));
+
+        return new LiveFolderFingerprint(
+            taskJsonInfo.Length, taskJsonInfo.LastWriteTimeUtc,
+            StatDir(jobDir),
+            StatDir(Path.Combine(jobDir, "logs")),
+            StatDir(Path.Combine(jobDir, "results")),
+            StatDir(Path.Combine(jobDir, "attachments")),
+            statusMd.WriteUtc,
+            cliOutput.Length, cliOutput.WriteUtc,
+            sessionEvents.Length, sessionEvents.WriteUtc);
+
+        // One stat per path; a missing file/dir yields a stable sentinel so its
+        // later appearance flips the fingerprint and forces a re-parse.
+        static (long Length, DateTime WriteUtc) StatFile(string path)
+        {
+            var fi = new FileInfo(path);
+            return fi.Exists ? (fi.Length, fi.LastWriteTimeUtc) : (-1L, default);
+        }
+
+        static DateTime StatDir(string path)
+        {
+            var di = new DirectoryInfo(path);
+            return di.Exists ? di.LastWriteTimeUtc : default;
+        }
+    }
+
+    /// <summary>
+    /// Re-reads the un-fingerprinted marker files and projects their fields onto a
+    /// reused live <see cref="TaskInfo"/>. These markers (quota-wait, pending
+    /// intent, post-processing lifecycle, steer-pending, park) can be written in
+    /// place without changing the folder fingerprint, so they must be refreshed on
+    /// every scan even when the fast path skips the full parse.
+    /// </summary>
+    private TaskInfo ApplyVolatileMarkers(TaskInfo cached, string jobDir)
+        => cached with
+        {
+            QuotaWait = QuotaWaitMarker.ToStatus(QuotaWaitMarker.TryRead(jobDir, _logger)),
+            PendingIntent = ReadPendingIntent(jobDir),
+            PostProcessingChecks = ReadPostProcessingChecks(jobDir, cached.State),
+            SteerPendingSince = ReadSteerPendingSince(jobDir, cached.State),
+            ParkedBlocker = ReadParkedBlocker(jobDir, cached.State),
+        };
 
     private static DateTime GetLastActivityTime(string dir)
     {
