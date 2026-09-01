@@ -140,6 +140,21 @@ public sealed class ExecutionOutcomeAdapterTests
     }
 
     [Fact]
+    public void Rate_limit_exit_one_wins_over_auth_text_and_carries_reset_time()
+    {
+        var reset = new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero);
+
+        var result = ExecutionOutcomeAdapter.Classify(Coding(
+            ExitCode: 1,
+            StdErr: $"authentication failed: HTTP 429 rate_limit_exceeded resetAt='{reset:O}'"));
+
+        Assert.Equal(ExecutionOutcomeKind.QuotaExceeded, result.Outcome);
+        Assert.Equal(ExecutionRecoveryAction.WaitForCapabilityRecovery, result.RecoveryAction);
+        Assert.Equal(reset, result.RetryAt);
+        Assert.Contains("rate-limited until", result.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Real_oom_kill_still_wins_even_with_done_sentinel()
     {
         var result = ExecutionOutcomeAdapter.Classify(Coding(

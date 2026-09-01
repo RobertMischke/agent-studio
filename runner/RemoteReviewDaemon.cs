@@ -189,6 +189,7 @@ public sealed class RemoteReviewDaemon
             TimeSpan.FromSeconds(_options.ServerRequestTimeoutSeconds),
             _log,
             shutdown);
+        _ = ProviderAuthProbe.Shared.ConsumeChanged();
 
         var nextCapabilityAdvertisement = DateTime.UtcNow.AddMinutes(1);
         var admissionClosed = false;
@@ -251,7 +252,8 @@ public sealed class RemoteReviewDaemon
                 }
                 var observedServer = false;
                 var admissionTelemetry = TakeTelemetry(force: true);
-                if (DateTime.UtcNow >= nextCapabilityAdvertisement)
+                var providerAuthChanged = ProviderAuthProbe.Shared.ConsumeChanged();
+                if (DateTime.UtcNow >= nextCapabilityAdvertisement || providerAuthChanged)
                 {
                     var generation = ++capabilityGeneration;
                     await CapabilityAdvertisementRecovery.ExecuteAsync(

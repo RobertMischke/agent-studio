@@ -23,16 +23,30 @@ describe('ProviderAuthStatusService', () => {
     notifications = TestBed.inject(NotificationService);
   });
 
-  it('notifies only when a previously OK provider becomes unavailable', () => {
+  it('alarms only when a provider becomes genuinely signed out', () => {
     service.ingest([snapshot('ready')]);
     expect(notifications.notifications()).toHaveLength(0);
 
-    service.ingest([snapshot('unavailable')]);
+    service.ingest([snapshot('unavailable', null, 'signed-out')]);
 
     expect(notifications.notifications()).toHaveLength(1);
     expect(notifications.notifications()[0].title).toBe('Claude sign-in required');
-    expect(notifications.notifications()[0].message).toContain('changed from OK to unavailable');
+    expect(notifications.notifications()[0].kind).toBe('error');
+    expect(notifications.notifications()[0].message).toContain('genuinely signed out');
     expect(notifications.notifications()[0].message).toContain('runner-berlin');
+  });
+
+  it('labels transient and limited states without raising a sign-in alarm', () => {
+    service.ingest([snapshot('ready')]);
+    service.ingest([snapshot('ready', null, 'transient-auth-error')]);
+    service.ingest([snapshot('limited', null, 'rate-limited')]);
+
+    expect(notifications.notifications().map(item => item.title)).toEqual([
+      'Claude transient auth error, retrying',
+      'Claude rate-limited',
+    ]);
+    expect(notifications.notifications().every(item => item.kind === 'info')).toBe(true);
+    expect(notifications.notifications().some(item => item.title?.includes('sign-in required'))).toBe(false);
   });
 
   it('warns once when a known expiry enters the final fourteen days', () => {
@@ -42,14 +56,26 @@ describe('ProviderAuthStatusService', () => {
     service.ingest([snapshot('ready', expiresAt)]);
 
     expect(notifications.notifications()).toHaveLength(1);
-    expect(notifications.notifications()[0].title).toBe('Claude authentication expires soon');
-    expect(notifications.notifications()[0].message).toContain('expires in 10 days');
+    expect(notifications.notifications()[0].title).toBe('Claude credentials expiring / re-auth needed');
+    expect(notifications.notifications()[0].kind).toBe('info');
+    expect(notifications.notifications()[0].message).toContain('need attention');
+  });
+
+  it('surfaces an age-based credential warning when no exact expiry is available', () => {
+    service.ingest([snapshot('ready', null, 'credentials-expiring', 'Credential metadata is 31 days old')]);
+    service.ingest([snapshot('ready', null, 'credentials-expiring', 'Credential metadata is 31 days old')]);
+
+    expect(notifications.notifications()).toHaveLength(1);
+    expect(notifications.notifications()[0].title).toBe('Claude credentials expiring / re-auth needed');
+    expect(notifications.notifications()[0].message).toContain('31 days old');
   });
 });
 
 function snapshot(
-  status: 'ready' | 'unavailable',
+  status: 'ready' | 'limited' | 'unavailable',
   expiresAt: string | null = null,
+  operationalState: string | null = null,
+  detail = status === 'ready' ? 'Active session confirmed' : 'Not logged in',
 ): TaskServerRunnerCapabilitySnapshot {
   const now = new Date().toISOString();
   return {
@@ -72,7 +98,7 @@ function snapshot(
       key: 'provider-auth:claude', category: 'provider-auth', advertisedStatus: status,
       healthState: 'healthy', advertisedAt: now,
       freshUntil: new Date(Date.now() + 120_000).toISOString(), isFresh: true,
-      consecutiveFailures: 0, detail: status === 'ready' ? 'Active session confirmed' : 'Not logged in',
+      consecutiveFailures: 0, detail, operationalState,
       expiresAt, affectedClaims: [], recoveryHistory: [],
     }],
   };

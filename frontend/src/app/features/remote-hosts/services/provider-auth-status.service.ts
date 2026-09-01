@@ -54,22 +54,37 @@ export class ProviderAuthStatusService implements OnDestroy {
     if (wasLoaded) {
       for (const [id, current] of next) {
         const prior = this.previous.get(id);
-        if (prior?.state === 'ok' && current.state === 'unavailable') {
-          this.notifications.warning(
-            `${current.providerLabel} authentication changed from OK to unavailable on ${current.hostName}. Ready cards assigned to this host are waiting. ${current.detail}`,
+        if (prior?.state !== 'signed-out' && current.state === 'signed-out') {
+          this.notifications.error(
+            `${current.providerLabel} is genuinely signed out on ${current.hostName}. Ready cards assigned to this host are waiting. ${current.detail}`,
             `${current.providerLabel} sign-in required`,
+          );
+        } else if (prior?.state !== 'retrying' && current.state === 'retrying') {
+          this.notifications.info(
+            `${current.providerLabel} reported a transient authentication error on ${current.hostName}. The last usable state is retained and the runner is probing again. ${current.detail}`,
+            `${current.providerLabel} transient auth error, retrying`,
+          );
+        } else if (prior?.state !== 'limited' && current.state === 'limited') {
+          this.notifications.info(
+            `${current.providerLabel} claims on ${current.hostName} are rate-limited. Matching cards will resume after a successful reset-time probe. ${current.detail}`,
+            `${current.providerLabel} rate-limited`,
+          );
+        } else if (prior && prior.state !== 'ok' && current.state === 'ok') {
+          this.notifications.success(
+            `${current.providerLabel} authentication recovered on ${current.hostName}. Matching Ready cards are eligible again.`,
+            `${current.providerLabel} authentication recovered`,
           );
         }
       }
     }
     for (const current of next.values()) {
-      if (!current.expiresSoon || !current.expiresAt || !current.expiryLabel) continue;
-      const warningKey = `${current.id}:${current.expiresAt}`;
+      if (current.state !== 'expiring') continue;
+      const warningKey = `${current.id}:${current.expiresAt ?? current.detail}`;
       if (this.expiryWarnings.has(warningKey)) continue;
       this.expiryWarnings.add(warningKey);
-      this.notifications.warning(
-        `${current.providerLabel} authentication on ${current.hostName} ${current.expiryLabel.toLowerCase()}. Renew it before Ready cards are held.`,
-        `${current.providerLabel} authentication expires soon`,
+      this.notifications.info(
+        `${current.providerLabel} credentials on ${current.hostName} need attention before they become a hard failure. ${current.detail}`,
+        `${current.providerLabel} credentials expiring / re-auth needed`,
       );
     }
     this.previous = next;

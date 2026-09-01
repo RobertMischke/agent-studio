@@ -22,7 +22,8 @@ public sealed class ProviderAuthProbeTests
         TimeSpan? ttl = null,
         TimeSpan? timeout = null,
         int negativeConfirmations = ProviderAuthProbe.DefaultNegativeConfirmations,
-        Action<string>? diagnosticLog = null)
+        Action<string>? diagnosticLog = null,
+        ProviderCredentialInspector? credentialInspector = null)
         => new(
             launcher,
             _ => binaryExists,
@@ -30,7 +31,8 @@ public sealed class ProviderAuthProbeTests
             ttl,
             timeout,
             negativeConfirmations,
-            diagnosticLog);
+            diagnosticLog,
+            credentialInspector);
 
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]
@@ -274,6 +276,102 @@ public sealed class ProviderAuthProbeTests
     }
 
     [Fact]
+    public async Task A_single_transient_run_auth_failure_never_latches_and_the_next_probe_recovers()
+    {
+        var probe = Probe((_, _, _) => Task.FromResult(
+            new ProcessResult(0, "Logged in", "")));
+        await probe.RefreshAsync("codex", CancellationToken.None);
+
+        var evidence = probe.ObserveProcessResult(
+            "codex",
+            new ProcessResult(
+                1,
+                "",
+                "authentication failed while token refresh is already in progress; try again"));
+        var retrying = probe.Current("codex");
+        var recovered = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthFailureKind.Transient, evidence.Kind);
+        Assert.Equal(ProviderAuthProbe.Ready, retrying.Status);
+        Assert.Equal(ProviderAuthOperationalStates.TransientError, retrying.OperationalState);
+        Assert.Contains("Transient auth error, retrying", retrying.Detail, StringComparison.Ordinal);
+        Assert.Equal(ProviderAuthProbe.Ready, recovered.Status);
+        Assert.Equal(ProviderAuthOperationalStates.Authenticated, recovered.OperationalState);
+        Assert.False(recovered.ProbeDegraded);
+    }
+
+    [Fact]
+    public void Repeated_explicit_run_logout_signals_are_required_before_signed_out()
+    {
+        var probe = Probe(Answers(0, "Logged in"));
+
+        probe.ObserveProcessResult("codex", new ProcessResult(1, "Not logged in", ""));
+        var first = probe.Current("codex");
+        probe.ObserveProcessResult("codex", new ProcessResult(1, "Not logged in", ""));
+        var confirmed = probe.Current("codex");
+
+        Assert.Equal(ProviderAuthProbe.Ready, first.Status);
+        Assert.Equal(ProviderAuthOperationalStates.TransientError, first.OperationalState);
+        Assert.Equal(ProviderAuthProbe.Unavailable, confirmed.Status);
+        Assert.Equal(ProviderAuthOperationalStates.SignedOut, confirmed.OperationalState);
+        Assert.Contains("re-auth needed", confirmed.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Rate_limit_exit_becomes_limited_instead_of_sign_in_required()
+    {
+        var now = new DateTimeOffset(2026, 8, 31, 8, 0, 0, TimeSpan.Zero);
+        var reset = now.AddHours(1);
+        var probe = Probe(Answers(0, "Logged in"), clock: () => now);
+
+        var evidence = probe.ObserveProcessResult(
+            "codex",
+            new ProcessResult(
+                1,
+                "",
+                $"HTTP 429 authentication failed: rate_limit_exceeded resetsAt={reset.ToUnixTimeSeconds()}"));
+        var status = probe.Current("codex");
+
+        Assert.Equal(ProviderAuthFailureKind.RateLimited, evidence.Kind);
+        Assert.Equal(reset, evidence.RetryAt);
+        Assert.Equal(ProviderAuthProbe.Limited, status.Status);
+        Assert.Equal(ProviderAuthOperationalStates.RateLimited, status.OperationalState);
+        Assert.DoesNotContain("sign", status.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Credential_expiry_warning_stays_ready_and_is_advertised_before_failure()
+    {
+        var now = new DateTimeOffset(2026, 8, 31, 8, 0, 0, TimeSpan.Zero);
+        var codexHome = Path.Combine(Path.GetTempPath(), $"provider-auth-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(codexHome);
+        try
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(codexHome, "auth.json"),
+                $$"""{"refresh_token":"fixture","refresh_token_expires_at":{{now.AddDays(10).ToUnixTimeSeconds()}}}""");
+            var inspector = new ProviderCredentialInspector(
+                environment: name => name == "CODEX_HOME" ? codexHome : null,
+                home: () => null);
+            var probe = Probe(
+                Answers(0, "Logged in"),
+                clock: () => now,
+                credentialInspector: inspector);
+
+            var status = await probe.RefreshAsync("codex", CancellationToken.None);
+
+            Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+            Assert.Equal(ProviderAuthOperationalStates.CredentialsExpiring, status.OperationalState);
+            Assert.Equal(now.AddDays(10), status.ExpiresAt);
+            Assert.Contains("renew before", status.Detail, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(codexHome, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Expired_unavailable_cache_recovers_in_the_background_without_restart()
     {
         var calls = 0;
@@ -418,4 +516,5 @@ public sealed class ProviderAuthProbeTests
             await Task.Delay(10);
         }
     }
+
 }

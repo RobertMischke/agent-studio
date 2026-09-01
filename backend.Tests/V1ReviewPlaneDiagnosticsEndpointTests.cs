@@ -146,6 +146,63 @@ public sealed class V1ReviewPlaneDiagnosticsEndpointTests : IDisposable
     }
 
     [Fact]
+    public void Provider_auth_pause_requires_a_successful_probe_and_then_recovers_without_registration()
+    {
+        var registry = new V1ReviewExecutorRegistry();
+        registry.Register(
+            RunnerId,
+            new Contract.RegisterRunnerRequest(
+                RunnerId,
+                "review-host",
+                Instance,
+                "1.0.0",
+                Contract.TaskServerProtocol.Current,
+                [Contract.ReviewCapabilities.CodingExecutor]));
+        var capability = Contract.CapabilityProtocol.ProviderAuthentication("codex");
+        Contract.CapabilityAdvertisementRequest Advertisement(
+            long generation,
+            string operationalState) => new(
+                RunnerId,
+                Instance,
+                Contract.CapabilityProtocol.CurrentSchemaVersion,
+                DateTime.UtcNow,
+                180,
+                generation,
+                [
+                    new Contract.AdvertisedCapabilityDto(
+                        capability,
+                        "provider-auth",
+                        "ready",
+                        Identity: "codex",
+                        OperationalState: operationalState),
+                ]);
+        registry.AdvertiseCapabilities(
+            RunnerId,
+            Advertisement(1, Contract.ProviderAuthOperationalStates.Authenticated));
+        for (var index = 1; index <= 2; index++)
+        {
+            registry.ReportCapabilityFailure(
+                RunnerId,
+                Failure(
+                    capability,
+                    "ProviderUnauthorized",
+                    $"provider-auth-{index}",
+                    DateTime.UtcNow));
+        }
+        Assert.True(registry.TryGetCapabilityPause(RunnerId, out _));
+
+        registry.AdvertiseCapabilities(
+            RunnerId,
+            Advertisement(2, Contract.ProviderAuthOperationalStates.TransientError));
+        Assert.True(registry.TryGetCapabilityPause(RunnerId, out _));
+
+        registry.AdvertiseCapabilities(
+            RunnerId,
+            Advertisement(3, Contract.ProviderAuthOperationalStates.Authenticated));
+        Assert.False(registry.TryGetCapabilityPause(RunnerId, out _));
+    }
+
+    [Fact]
     [Trait("Category", "MachineBound")]
     public async Task Concurrent_registration_and_advertisement_never_hold_the_registry_gate()
     {

@@ -8,11 +8,14 @@ namespace AgentRunner.Tests;
 public sealed class RunnerCapabilityProbeTests
 {
     [Theory]
-    [InlineData(1, "", "HTTP 401 Missing bearer authentication", true)]
+    [InlineData(1, "", "HTTP 401 Missing bearer authentication", false)]
     [InlineData(1, "", "login required", true)]
+    [InlineData(1, "", "invalid credentials", true)]
+    [InlineData(1, "", "authentication failed while token refresh is already in progress", false)]
+    [InlineData(1, "", "429 rate limit exceeded", false)]
     [InlineData(1, "", "ordinary product failure", false)]
     [InlineData(0, "", "HTTP 401 in historical output", false)]
-    public void Provider_authentication_failure_requires_a_nonzero_typed_signal(
+    public void Provider_authentication_failure_requires_explicit_signed_out_evidence(
         int exitCode,
         string stdout,
         string stderr,

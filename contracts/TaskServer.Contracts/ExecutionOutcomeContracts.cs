@@ -125,7 +125,115 @@ public sealed record ExecutionOutcomeDecision(
     bool ConsumesCodingReworkBudget,
     bool InvokesCodingModel,
     ExecutionRawFacts RawFacts,
-    string? Detail = null);
+    string? Detail = null,
+    DateTimeOffset? RetryAt = null);
+
+public sealed record ProviderLimitEvidence(
+    bool Limited,
+    DateTimeOffset? ResetAt,
+    string Detail);
+
+/// <summary>
+/// Pure parser for account-level provider limits. Healthy warning telemetry is
+/// deliberately excluded: only an exhausted or rejected response closes claim
+/// admission for the matching provider.
+/// </summary>
+public static class ProviderLimitParser
+{
+    private static readonly Regex Exhausted = new(
+        """(?:\b429\b|hit[\s_-]+your[\s_-]+(?:session[\s_-]+)?limit|session[\s_-]+limit(?:[\s_-]+(?:reached|exceeded))?|usage[\s_-]+limit(?:[\s_-]+(?:reached|exceeded))?|quota[\s_-]+(?:exceeded|exhausted)|rate[\s_-]*limit(?:ed|[\s_-]+exceeded)|insufficient_quota|too[\s_-]+many[\s_-]+requests|(?:status|overage_status)\s*[\"':=]+\s*(?:rejected|not_allowed))""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex IsoReset = new(
+        """(?:resets?_?at|reset_?at)\s*[\"':=]+\s*[\"']?(?<value>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2}))""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex EpochReset = new(
+        """(?:resetsAt|resets_at|resetAt|reset_at)\s*[\"':=]+\s*(?<value>\d{10,13})""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex WallClockReset = new(
+        @"resets?(?:\s+at)?\s+(?<time>\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s*\((?<zone>[^)]+)\))?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    public static ProviderLimitEvidence Parse(
+        string? output,
+        DateTimeOffset observedAt,
+        TimeZoneInfo? fallbackZone = null)
+    {
+        var text = output ?? string.Empty;
+        if (!Exhausted.IsMatch(text))
+            return new ProviderLimitEvidence(false, null, "No exhausted provider-limit signal was present.");
+
+        var resetAt = ParseReset(text, observedAt, fallbackZone ?? TimeZoneInfo.Local);
+        var detail = resetAt is { } reset
+            ? $"provider account rate-limited until {reset.UtcDateTime:O}"
+            : "provider account rate-limited; reset time was not reported";
+        return new ProviderLimitEvidence(true, resetAt, detail);
+    }
+
+    private static DateTimeOffset? ParseReset(
+        string text,
+        DateTimeOffset observedAt,
+        TimeZoneInfo fallbackZone)
+    {
+        var iso = IsoReset.Match(text);
+        if (iso.Success
+            && DateTimeOffset.TryParse(
+                iso.Groups["value"].Value,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal,
+                out var isoValue))
+            return isoValue.ToUniversalTime();
+
+        var epoch = EpochReset.Match(text);
+        if (epoch.Success
+            && long.TryParse(
+                epoch.Groups["value"].Value,
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var rawEpoch))
+        {
+            try
+            {
+                return rawEpoch >= 1_000_000_000_000
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(rawEpoch)
+                    : DateTimeOffset.FromUnixTimeSeconds(rawEpoch);
+            }
+            catch (ArgumentOutOfRangeException) { }
+        }
+
+        var wall = WallClockReset.Match(text);
+        if (!wall.Success) return null;
+        var compact = wall.Groups["time"].Value.Replace(" ", string.Empty);
+        if (!DateTime.TryParseExact(
+                compact,
+                ["h:mmtt", "hh:mmtt", "htt", "hhtt", "H:mm", "HH:mm"],
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var clock))
+            return null;
+
+        var zone = fallbackZone;
+        if (wall.Groups["zone"].Success)
+        {
+            try { zone = TimeZoneInfo.FindSystemTimeZoneById(wall.Groups["zone"].Value.Trim()); }
+            catch (TimeZoneNotFoundException) { }
+            catch (InvalidTimeZoneException) { }
+        }
+        var localNow = TimeZoneInfo.ConvertTime(observedAt, zone);
+        var localReset = new DateTime(
+            localNow.Year,
+            localNow.Month,
+            localNow.Day,
+            clock.Hour,
+            clock.Minute,
+            0,
+            DateTimeKind.Unspecified);
+        if (localReset <= localNow.DateTime) localReset = localReset.AddDays(1);
+        return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localReset, zone), TimeSpan.Zero);
+    }
+}
 
 public sealed record ProviderOutputEvidence(
     string? TerminalEvent,
@@ -151,10 +259,6 @@ public static class ExecutionOutcomeAdapter
 
     private static readonly Regex Authentication = new(
         @"(?:\b401\b|unauthori[sz]ed|authentication\s+(?:failed|required)|missing\s+(?:bearer|basic)\s+authentication|login\s+required|invalid\s+(?:api\s+)?key)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex Quota = new(
-        @"(?:\b429\b|quota\s+(?:exceeded|exhausted)|rate\s*limit(?:ed| exceeded)?|usage\s+limit|insufficient_quota|too\s+many\s+requests)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex InvalidConfiguration = new(
@@ -221,10 +325,22 @@ public static class ExecutionOutcomeAdapter
             return Decide(facts, ExecutionOutcomeKind.OutOfMemory, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.SessionState == ExecutionSessionState.Invalid || (!honestTerminal && InvalidSession.IsMatch(diagnostic)))
             return Decide(facts, ExecutionOutcomeKind.InvalidSession, OutcomeConfidence.High, null, infrastructure: true);
+        var providerLimit = honestTerminal
+            ? new ProviderLimitEvidence(false, null, "Successful terminal output is not a provider limit.")
+            : ProviderLimitParser.Parse(diagnostic, DateTimeOffset.UtcNow);
+        if (providerLimit.Limited)
+        {
+            return Decide(
+                facts,
+                ExecutionOutcomeKind.QuotaExceeded,
+                OutcomeConfidence.High,
+                null,
+                infrastructure: true,
+                detail: providerLimit.Detail,
+                retryAt: providerLimit.ResetAt);
+        }
         if (!honestTerminal && Authentication.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.AuthenticationFailure, OutcomeConfidence.High, null, infrastructure: true);
-        if (!honestTerminal && Quota.IsMatch(diagnostic))
-            return Decide(facts, ExecutionOutcomeKind.QuotaExceeded, OutcomeConfidence.High, null, infrastructure: true);
         if (!honestTerminal && InvalidConfiguration.IsMatch(diagnostic))
             return Decide(facts, ExecutionOutcomeKind.InvalidModelOrConfiguration, OutcomeConfidence.High, null, infrastructure: true);
         if (facts.LaunchFailed)
@@ -273,7 +389,8 @@ public static class ExecutionOutcomeAdapter
         OutcomeConfidence confidence,
         string? ambiguity,
         bool infrastructure,
-        string? detail = null)
+        string? detail = null,
+        DateTimeOffset? retryAt = null)
     {
         var recovery = SelectRecovery(facts, outcome);
         var invokesCoding = facts.AttemptKind == ExecutionAttemptKind.Coding
@@ -291,7 +408,8 @@ public static class ExecutionOutcomeAdapter
             ConsumesCodingReworkBudget: false,
             InvokesCodingModel: invokesCoding,
             RawFacts: facts,
-            Detail: detail);
+            Detail: detail,
+            RetryAt: retryAt);
     }
 
     private static ExecutionRecoveryAction SelectRecovery(

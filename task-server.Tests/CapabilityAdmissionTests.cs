@@ -292,6 +292,83 @@ public sealed class CapabilityAdmissionTests
             });
     }
 
+    [Fact]
+    public async Task Successful_provider_probe_clears_runtime_failure_latch_without_runner_restart()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        const string runner = "codex";
+        const string instance = "codex-instance";
+        var capability = CapabilityProtocol.ProviderAuthentication("codex");
+        await RegisterAndAdvertiseAsync(
+            store,
+            clock,
+            runner,
+            instance,
+            "host-a",
+            CapabilityProtocol.CodingExecutor,
+            capability);
+        await FailAsync(store, clock, runner, instance, capability, "auth-1");
+        await FailAsync(store, clock, runner, instance, capability, "auth-2");
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await store.AdvertiseCapabilitiesAsync(
+            ProviderAuthAdvertisement(
+                clock,
+                runner,
+                instance,
+                generation: 2,
+                capability,
+                "ready",
+                ProviderAuthOperationalStates.TransientError),
+            runner,
+            default);
+        var retained = Assert.Single(
+            Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default)).Capabilities,
+            item => item.Key == capability);
+        Assert.Equal(CapabilityHealthStates.Draining, retained.HealthState);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        var expiresAt = clock.GetUtcNow().UtcDateTime.AddDays(10);
+        await store.AdvertiseCapabilitiesAsync(
+            ProviderAuthAdvertisement(
+                clock,
+                runner,
+                instance,
+                generation: 3,
+                capability,
+                "ready",
+                ProviderAuthOperationalStates.CredentialsExpiring,
+                expiresAt),
+            runner,
+            default);
+
+        var recovered = Assert.Single(
+            Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default)).Capabilities,
+            item => item.Key == capability);
+        Assert.Equal(CapabilityHealthStates.Healthy, recovered.HealthState);
+        Assert.Equal(0, recovered.ConsecutiveFailures);
+        Assert.Null(recovered.CooldownUntil);
+        Assert.Equal(ProviderAuthOperationalStates.CredentialsExpiring, recovered.OperationalState);
+        Assert.Equal(expiresAt, recovered.ExpiresAt);
+        Assert.Contains(
+            recovered.RecoveryHistory,
+            item => item.FromState == CapabilityHealthStates.Draining
+                    && item.ToState == CapabilityHealthStates.Healthy);
+
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                runner,
+                instance,
+                RequiredCapabilities: [CapabilityProtocol.CodingExecutor, capability]),
+            runner,
+            default);
+        Assert.Equal("claimed", claim.Status);
+    }
+
     [Theory]
     [InlineData(CapabilityProtocol.Disk)]
     [InlineData(CapabilityProtocol.LeaseAuthority)]
@@ -580,6 +657,33 @@ public sealed class CapabilityAdmissionTests
             300,
             generation,
             capabilities.Select(key => new AdvertisedCapabilityDto(key, key.Split(':')[0])).ToArray());
+
+    private static CapabilityAdvertisementRequest ProviderAuthAdvertisement(
+        ManualTimeProvider clock,
+        string runner,
+        string instance,
+        long generation,
+        string capability,
+        string status,
+        string operationalState,
+        DateTime? expiresAt = null)
+        => new(
+            runner,
+            instance,
+            CapabilityProtocol.CurrentSchemaVersion,
+            clock.GetUtcNow().UtcDateTime,
+            300,
+            generation,
+            [
+                new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                new AdvertisedCapabilityDto(
+                    capability,
+                    "provider-auth",
+                    status,
+                    Identity: capability.Split(':')[1],
+                    OperationalState: operationalState,
+                    ExpiresAt: expiresAt),
+            ]);
 
     private static async Task CompleteSuccessfulRunAsync(
         TaskServerStore store,

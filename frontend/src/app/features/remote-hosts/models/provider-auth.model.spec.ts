@@ -24,6 +24,25 @@ describe('provider auth projection', () => {
     expect(unknown.detail).toContain('expired');
   });
 
+  it('keeps transient errors eligible and distinguishes limited from signed out', () => {
+    const retrying = providerAuthBadgesForSnapshot(
+      snapshot('ready', 'healthy', true, 'Transient auth error, retrying', null, 'transient-auth-error'),
+      NOW,
+    )[0];
+    const limited = providerAuthBadgesForSnapshot(
+      snapshot('limited', 'healthy', true, 'Rate-limited until 2026-08-04T13:00:00Z', null, 'rate-limited'),
+      NOW,
+    )[0];
+    const signedOut = providerAuthBadgesForSnapshot(
+      snapshot('unavailable', 'healthy', true, 'Genuinely signed out', null, 'signed-out'),
+      NOW,
+    )[0];
+
+    expect(retrying.state).toBe('retrying');
+    expect(limited.state).toBe('limited');
+    expect(signedOut.state).toBe('signed-out');
+  });
+
   it('warns fourteen days before a known credential expiry', () => {
     const expiresAt = new Date(NOW + 13 * 24 * 60 * 60_000).toISOString();
     const badge = providerAuthBadgesForSnapshot(
@@ -81,6 +100,25 @@ describe('provider auth projection', () => {
       NOW,
     ))).toBeNull();
   });
+
+  it('keeps transient last-good auth eligible and names rate-limit waits without asking for sign-in', () => {
+    const task = { state: '2-ready', cliType: 'codex' } as TaskInfo;
+    const transient = providerAuthBadgesForSnapshot(
+      snapshot('ready', 'healthy', true, 'Transient auth error, retrying', null, 'transient-auth-error', 'codex'),
+      NOW,
+    );
+    const limited = providerAuthBadgesForSnapshot(
+      snapshot('limited', 'healthy', true, 'Rate-limited until 2026-08-04T13:00:00Z', null, 'rate-limited', 'codex'),
+      NOW,
+    );
+
+    expect(providerAuthWaitReason(task, transient)).toBeNull();
+    expect(providerAuthWaitReason(task, limited)).toMatchObject({
+      state: 'limited',
+      label: 'Waiting for Codex rate limit on runner-berlin',
+    });
+    expect(providerAuthWaitReason(task, limited)?.label).not.toContain('sign-in');
+  });
 });
 
 function snapshot(
@@ -89,6 +127,8 @@ function snapshot(
   isFresh: boolean,
   detail = 'Active session confirmed',
   expiresAt: string | null = null,
+  operationalState: string | null = null,
+  provider = 'claude',
 ): TaskServerRunnerCapabilitySnapshot {
   return {
     runnerId: 'agent-runner-01',
@@ -102,7 +142,7 @@ function snapshot(
     lastSeenAt: '2026-08-04T11:59:50Z',
     hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
     capabilities: [{
-      key: 'cli-execution:claude',
+      key: `cli-execution:${provider}`,
       category: 'cli-execution',
       advertisedStatus: 'ready',
       healthState: 'healthy',
@@ -113,7 +153,7 @@ function snapshot(
       affectedClaims: [],
       recoveryHistory: [],
     }, {
-      key: 'provider-auth:claude',
+      key: `provider-auth:${provider}`,
       category: 'provider-auth',
       advertisedStatus,
       healthState,
@@ -123,6 +163,7 @@ function snapshot(
       consecutiveFailures: healthState === 'healthy' ? 0 : 1,
       detail,
       expiresAt,
+      operationalState,
       affectedClaims: [],
       recoveryHistory: [],
     }],
