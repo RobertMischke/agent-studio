@@ -701,7 +701,7 @@ test.describe('Execution Hosts settings section', () => {
     expect(String(createBody?.['promptMarkdown'])).not.toContain(providerSecret);
   });
 
-  test('shows provider auth OK, unavailable, and unknown states with renewal context', async ({ page }) => {
+  test('shows provider auth retrying, limited, expiring, signed-out, and unknown states', async ({ page }) => {
     const now = Date.now();
     const capability = (key: string, advertisedStatus: string, detail?: string) => ({
       key, category: key.split(':')[0], advertisedStatus, healthState: 'healthy',
@@ -713,11 +713,24 @@ test.describe('Execution Hosts settings section', () => {
     });
     const claude = {
       ...capability('provider-auth:claude', 'unavailable', 'Not logged in'),
-      expiresAt: new Date(now + 10 * 24 * 60 * 60_000).toISOString(),
+      signal: 'signed-out',
       recoveryHistory: [{
         occurredAt: new Date(now - 30_000).toISOString(), fromState: 'ready',
         toState: 'unavailable', reason: 'Provider probe changed.',
       }],
+    };
+    const codex = {
+      ...capability('provider-auth:codex', 'ready', 'Transient auth error, retrying after a token refresh race.'),
+      signal: 'transient-auth-error',
+    };
+    const copilot = {
+      ...capability('provider-auth:copilot', 'limited', 'Rate-limited until the provider reset.'),
+      signal: 'rate-limited', limitedUntil: new Date(now + 15 * 60_000).toISOString(),
+    };
+    const antigravity = {
+      ...capability('provider-auth:antigravity', 'ready', 'Active session confirmed; credentials expire soon.'),
+      signal: 'credentials-expiring',
+      expiresAt: new Date(now + 10 * 24 * 60 * 60_000).toISOString(),
     };
     await page.unroute('**/api/v1/management/remote-hosts');
     await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
@@ -730,7 +743,8 @@ test.describe('Execution Hosts settings section', () => {
         hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
         capabilities: [
           capability('cli-execution:claude', 'ready'), claude,
-          capability('cli-execution:codex', 'ready'), capability('provider-auth:codex', 'ready', 'Active session confirmed'),
+          capability('cli-execution:codex', 'ready'), codex,
+          copilot, antigravity,
           capability('cli-execution:gemini', 'ready'),
         ],
         telemetry: null,
@@ -741,9 +755,11 @@ test.describe('Execution Hosts settings section', () => {
     const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
     await expandHost(remote);
     await expect(remote.getByTestId('remote-host-provider-auth-claude')).toHaveAttribute('data-state', 'unavailable');
-    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'ok');
+    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'retrying');
+    await expect(remote.getByTestId('remote-host-provider-auth-copilot')).toHaveAttribute('data-state', 'limited');
+    await expect(remote.getByTestId('remote-host-provider-auth-antigravity')).toHaveAttribute('data-state', 'expiring');
     await expect(remote.getByTestId('remote-host-provider-auth-gemini')).toHaveAttribute('data-state', 'unknown');
-    await expect(remote.getByTestId('remote-host-provider-auth-expiry-claude')).toContainText('Expires in 10 days');
+    await expect(remote.getByTestId('remote-host-provider-auth-expiry-antigravity')).toContainText('Expires in 10 days');
     await expect(remote.getByTestId('remote-host-provider-auth-history-claude')).toContainText('ready → unavailable');
     await remote.getByTestId('remote-host-provider-auth-claude').hover();
     await expect(page.getByRole('tooltip')).toContainText('Not logged in');

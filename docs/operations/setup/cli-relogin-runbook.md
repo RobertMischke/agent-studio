@@ -8,25 +8,35 @@ The authoritative host secret store is
 `/etc/agent-runner/provider-auth.env`. It contains all environment-backed
 provider credentials, is owned by `root:agent`, and has mode `640`. Both the
 Coding and Review systemd units load it after their ordinary runner
-EnvironmentFile. A provider probe reads only the daemon process environment. It
-does not read this file or any other credential path.
+EnvironmentFile. A provider probe uses the daemon process environment and CLI
+status as authentication authority. It may also read expiry and modification
+timestamps from the runner user's native Claude and Codex credential files, but
+never returns or logs token values.
 
 ## 1. Confirm the affected provider and host
 
 Open **Workspace Settings > Execution Hosts** and inspect **Provider
-authentication** on the affected host. The badge exposes three states:
+authentication** on the affected host. The badge exposes these states:
 
 - **OK**: a fresh capability snapshot reports usable provider authentication.
-- **Unavailable**: a fresh probe failed. Hover the badge for the runner's probe
-  detail, such as `Not logged in`.
+- **Retrying**: a timeout, network error, or token-refresh race occurred. The
+  last-good capability remains usable while the probe retries.
+- **Limited**: the provider rejected work at an account limit. Matching claims
+  wait until the displayed reset time and resume after recovery is confirmed.
+- **Expiring**: the CLI still confirms an active session, but credential
+  metadata is inside the 14-day warning window.
+- **Unavailable**: repeated explicit provider-login output confirmed that the
+  account is genuinely signed out. Hover for detail such as `Not logged in`.
 - **Unknown**: no current provider-auth advertisement exists, the advertisement
   is stale, or the runner is unreachable.
 
 Provider transitions are retained in the capability recovery history. An
-`OK -> Unavailable` transition creates an operator notification. A run that
-fails with a recognized provider-auth error reports the capability failure at
-once, without waiting for the next 60-second probe cycle. Ready cards assigned
-to that host show the same blocking reason.
+`OK -> Unavailable` transition creates an operator notification only after two
+consecutive explicit login failures. Tool errors, generic exit 1 output,
+timeouts, and rate limits never create a sign-in notification. A later positive
+probe clears the matching provider-auth circuit and re-advertises recovery
+without a runner restart. Ready cards show sign-in blocking only for the
+confirmed unavailable state.
 
 If the runner advertises a credential expiry, Studio warns once when it enters
 the final 14 days. An absent expiry is reported as unknown and is never guessed

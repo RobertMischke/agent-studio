@@ -439,6 +439,67 @@ public sealed class CapabilityAdmissionTests
     }
 
     [Fact]
+    public async Task Successful_provider_probe_clears_auth_drain_without_runner_restart()
+    {
+        using var temp = new TempDirectory();
+        var clock = new ManualTimeProvider(Start);
+        var store = Store(temp.Path, clock);
+        await store.InitializeAsync();
+        await SeedTasksAsync(store, 1);
+        const string runner = "codex";
+        const string instance = "codex-instance";
+        var capability = CapabilityProtocol.ProviderAuthentication("codex");
+        await RegisterAndAdvertiseAsync(
+            store,
+            clock,
+            runner,
+            instance,
+            "host-a",
+            CapabilityProtocol.CodingExecutor,
+            capability);
+        await FailAsync(store, clock, runner, instance, capability, "auth-1");
+        await FailAsync(store, clock, runner, instance, capability, "auth-2");
+
+        await store.AdvertiseCapabilitiesAsync(
+            new CapabilityAdvertisementRequest(
+                runner,
+                instance,
+                CapabilityProtocol.CurrentSchemaVersion,
+                clock.GetUtcNow().UtcDateTime,
+                300,
+                2,
+                [
+                    new AdvertisedCapabilityDto(CapabilityProtocol.CodingExecutor, "executor"),
+                    new AdvertisedCapabilityDto(
+                        capability,
+                        "provider-auth",
+                        "ready",
+                        Signal: "ok"),
+                ]),
+            runner,
+            default);
+
+        var snapshot = Assert.Single(await store.ListRunnerCapabilitySnapshotsAsync(default));
+        var auth = Assert.Single(snapshot.Capabilities, item => item.Key == capability);
+        Assert.Equal(CapabilityHealthStates.Healthy, auth.HealthState);
+        Assert.Equal(0, auth.ConsecutiveFailures);
+        Assert.Null(auth.CooldownUntil);
+        Assert.Contains(
+            auth.RecoveryHistory,
+            item => item.FromState == CapabilityHealthStates.Draining
+                    && item.ToState == CapabilityHealthStates.Healthy);
+
+        var claim = await store.ClaimAsync(
+            new ClaimRequest(
+                runner,
+                instance,
+                RequiredCapabilities: [CapabilityProtocol.CodingExecutor, capability]),
+            runner,
+            default);
+        Assert.Equal("claimed", claim.Status);
+    }
+
+    [Fact]
     public async Task Advertisement_generation_and_failure_idempotency_reject_stale_writes()
     {
         using var temp = new TempDirectory();

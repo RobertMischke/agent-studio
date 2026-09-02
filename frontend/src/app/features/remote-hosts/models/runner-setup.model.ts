@@ -95,7 +95,7 @@ export function buildRunnerSetupRequest(host: RemoteHost, config: RunnerSetupCon
       '- Confirm both `agent-runner.service` and `agent-runner-review.service`, when installed, load that shared file with `EnvironmentFile=` after their role-specific EnvironmentFile entry.',
       '- Provider credentials were already delivered by Studio through SSH stdin. Never request, repeat, or place a credential in this task conversation, command arguments, repository, or task files.',
       '- After restart, verify through `/proc/<main-pid>/environ` that the expected variable name reached the daemon, without printing its value.',
-      '- Treat the runner provider probe as authoritative. It reads process environment only, never a credential file path. Report each `runner-provider-auth` result and the matching capability snapshot detail.',
+      '- Treat the runner provider probe as authoritative. Authentication comes from process environment plus CLI status. Native credential files are read only for expiry and modification timestamps, never token values. Report each `runner-provider-auth` result and the matching capability snapshot detail.',
       '',
       '4. Verification and real handoff',
       '- Confirm the systemd service is active and enabled, the Task Server accepts the configured client identity, and the client registry shows a fresh LastSeen plus runnerGitStatus `ready`.',

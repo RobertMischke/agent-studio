@@ -1,5 +1,7 @@
 using AgentRunner;
 using AgentStudio.TaskServer.Contracts;
+using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace AgentRunner.Tests;
@@ -22,7 +24,8 @@ public sealed class ProviderAuthProbeTests
         TimeSpan? ttl = null,
         TimeSpan? timeout = null,
         int negativeConfirmations = ProviderAuthProbe.DefaultNegativeConfirmations,
-        Action<string>? diagnosticLog = null)
+        Action<string>? diagnosticLog = null,
+        Func<string, ProviderCredentialFreshness>? credentialFreshness = null)
         => new(
             launcher,
             _ => binaryExists,
@@ -30,7 +33,11 @@ public sealed class ProviderAuthProbeTests
             ttl,
             timeout,
             negativeConfirmations,
-            diagnosticLog);
+            diagnosticLog,
+            credentialFreshness ?? (_ => new ProviderCredentialFreshness(
+                null,
+                null,
+                "Credential metadata fixture has no expiry.")));
 
     [Theory]
     [InlineData(0, "Not logged in. Run `claude auth login` to sign in.")]
@@ -49,6 +56,7 @@ public sealed class ProviderAuthProbeTests
         Assert.Equal(ProviderAuthProbe.Ready, first.Status);
         Assert.True(first.ProbeDegraded);
         Assert.Equal(ProviderAuthProbe.Unavailable, status.Status);
+        Assert.Equal(ProviderAuthProbe.SignalSignedOut, status.Signal);
         Assert.Contains("no usable session", status.Detail, StringComparison.Ordinal);
         Assert.Contains("claude auth status --text", status.Detail, StringComparison.Ordinal);
     }
@@ -271,6 +279,146 @@ public sealed class ProviderAuthProbeTests
         Assert.Contains(logs, line => line.StartsWith(
             "runner-provider-auth-probe-recovered ",
             StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Single_transient_runtime_failure_keeps_last_good_and_next_probe_recovers()
+    {
+        var probe = Probe(Answers(0, "Logged in"));
+        await probe.RefreshAsync("codex", CancellationToken.None);
+
+        var transient = probe.RecordProcessResult(
+            "codex",
+            new ProcessResult(1, "", "network error while token refresh in progress"));
+
+        Assert.Equal(ProviderAuthProbe.Ready, transient.Status);
+        Assert.Equal(ProviderAuthProbe.SignalTransient, transient.Signal);
+        Assert.True(transient.ProbeDegraded);
+
+        var recovered = await probe.RefreshAsync("codex", CancellationToken.None);
+        Assert.Equal(ProviderAuthProbe.Ready, recovered.Status);
+        Assert.Equal(ProviderAuthProbe.SignalOk, recovered.Signal);
+        Assert.False(recovered.ProbeDegraded);
+    }
+
+    [Fact]
+    public async Task Rate_limit_exit_one_is_limited_and_never_reads_as_signed_out()
+    {
+        var now = new DateTimeOffset(2026, 9, 1, 17, 0, 0, TimeSpan.Zero);
+        var probe = Probe(Answers(0, "Logged in"), clock: () => now);
+        await probe.RefreshAsync("codex", CancellationToken.None);
+
+        var limited = probe.RecordProcessResult(
+            "codex",
+            new ProcessResult(1, "", "rate limit exceeded; resets at 2026-09-01T18:00:00Z"));
+
+        Assert.Equal(ProviderAuthProbe.Limited, limited.Status);
+        Assert.Equal(ProviderAuthProbe.SignalLimited, limited.Signal);
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 1, 18, 0, 0, TimeSpan.Zero),
+            limited.LimitedUntil);
+        Assert.False(RunnerCapabilityProbe.IsProviderAuthenticationFailure(
+            new ProcessResult(1, "", "rate limit exceeded")));
+
+        var beforeReset = await probe.RefreshAsync("codex", CancellationToken.None);
+        Assert.Equal(ProviderAuthProbe.Limited, beforeReset.Status);
+        now = now.AddHours(2);
+        var recovered = await probe.RefreshAsync("codex", CancellationToken.None);
+        Assert.Equal(ProviderAuthProbe.Ready, recovered.Status);
+        Assert.Equal(ProviderAuthProbe.SignalOk, recovered.Signal);
+    }
+
+    [Fact]
+    public async Task Apply_patch_tool_failure_does_not_change_available_capability()
+    {
+        const string toolError = "ERROR codex_core::tools::router: error=apply_patch verification failed: "
+            + "Failed to find context 'public sealed class V1ReviewExecutorRegistry' in "
+            + "/home/agent/runner-work/PROJ-002/worktrees/AGT-2694/backend/Features/Runner/V1ReviewPlaneEndpoints.cs";
+        var probe = Probe(Answers(0, "Logged in"));
+        var ready = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        var afterToolError = probe.RecordProcessResult("codex", new ProcessResult(1, "", toolError));
+
+        Assert.Equal(ready, afterToolError);
+        Assert.Equal(ProviderAuthProbe.Ready, afterToolError.Status);
+        Assert.Equal(ProviderAuthProbe.SignalOk, afterToolError.Signal);
+    }
+
+    [Fact]
+    public async Task Credential_expiry_warning_is_quiet_and_does_not_block_claims()
+    {
+        var now = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero);
+        var expiresAt = now.AddDays(10);
+        var probe = Probe(
+            Answers(0, "Logged in"),
+            clock: () => now,
+            credentialFreshness: _ => new ProviderCredentialFreshness(
+                expiresAt,
+                now.AddDays(-20),
+                "Credential expiry metadata was read."));
+
+        var status = await probe.RefreshAsync("codex", CancellationToken.None);
+
+        Assert.Equal(ProviderAuthProbe.Ready, status.Status);
+        Assert.Equal(ProviderAuthProbe.SignalExpiring, status.Signal);
+        Assert.Equal(expiresAt, status.ExpiresAt);
+        Assert.Contains("re-authentication may be needed soon", status.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Codex_auth_json_jwt_expiry_is_read_without_exposing_the_token()
+    {
+        var home = Path.Combine(Path.GetTempPath(), $"provider-auth-home-{Guid.NewGuid():N}");
+        var expiresAt = new DateTimeOffset(2026, 9, 12, 8, 30, 0, TimeSpan.Zero);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(home, ".codex"));
+            var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{{\"exp\":{expiresAt.ToUnixTimeSeconds()}}}"))
+                .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            var token = $"fixture-header.{payload}.fixture-signature";
+            File.WriteAllText(
+                Path.Combine(home, ".codex", "auth.json"),
+                JsonSerializer.Serialize(new { tokens = new { access_token = token } }));
+
+            var freshness = ProviderCredentialMonitor.Inspect("codex", home);
+
+            Assert.Equal(expiresAt, freshness.ExpiresAt);
+            Assert.DoesNotContain(token, freshness.Detail, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(home)) Directory.Delete(home, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Claude_credentials_json_millisecond_expiry_is_read_without_values()
+    {
+        var home = Path.Combine(Path.GetTempPath(), $"provider-auth-home-{Guid.NewGuid():N}");
+        var expiresAt = new DateTimeOffset(2026, 9, 8, 18, 0, 0, TimeSpan.Zero);
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(home, ".claude"));
+            File.WriteAllText(
+                Path.Combine(home, ".claude", ".credentials.json"),
+                JsonSerializer.Serialize(new
+                {
+                    claudeAiOauth = new
+                    {
+                        accessToken = "secret-fixture",
+                        expiresAt = expiresAt.ToUnixTimeMilliseconds(),
+                    },
+                }));
+
+            var freshness = ProviderCredentialMonitor.Inspect("claude", home);
+
+            Assert.Equal(expiresAt, freshness.ExpiresAt);
+            Assert.DoesNotContain("secret-fixture", freshness.Detail, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(home)) Directory.Delete(home, recursive: true);
+        }
     }
 
     [Fact]

@@ -75,7 +75,8 @@ describe('runner setup model', () => {
     expect(request.prompt).toContain('root:agent');
     expect(request.prompt).toContain('Provider credentials were already delivered by Studio through SSH stdin');
     expect(request.prompt).toContain('/proc/<main-pid>/environ');
-    expect(request.prompt).toContain('reads process environment only');
+    expect(request.prompt).toContain('process environment plus CLI status');
+    expect(request.prompt).toContain('never token values');
     expect(request.prompt).not.toContain('codex login --device-auth');
     expect(request.prompt).not.toContain('claude auth login');
     expect(request.prompt).toContain('one real smoke task');

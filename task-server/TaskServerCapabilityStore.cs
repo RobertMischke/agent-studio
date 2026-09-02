@@ -61,6 +61,10 @@ public sealed partial class TaskServerStore
                     throw new ArgumentException("Capability key and category are required.");
                 var advertisedStatus = capability.Status.Trim().ToLowerInvariant();
                 var tracksProbeHistory = key.StartsWith("provider-auth:", StringComparison.Ordinal);
+                var positiveRecovery = tracksProbeHistory
+                                       && advertisedStatus == ProviderAuthProbeStatuses.Ready
+                                       && capability.Signal is ProviderAuthProbeSignals.Ok
+                                           or ProviderAuthProbeSignals.CredentialsExpiring;
                 var previous = tracksProbeHistory
                     ? await ReadCapabilityRowAsync(connection, transaction, request.RunnerId, key, ct)
                     : null;
@@ -76,23 +80,48 @@ public sealed partial class TaskServerStore
                             advertisedStatus,
                             $"Provider authentication probe changed from {previous.AdvertisedStatus} to {advertisedStatus}."));
                 }
+                if (previous is not null
+                    && positiveRecovery
+                    && previous.HealthState != CapabilityHealthStates.Healthy)
+                {
+                    probeHistory = AppendHistory(
+                        probeHistory,
+                        new CapabilityRecoveryEventDto(
+                            advertisedAt,
+                            previous.HealthState,
+                            CapabilityHealthStates.Healthy,
+                            "Provider authentication probe confirmed recovery."));
+                }
                 await ExecuteAsync(connection, """
                     INSERT INTO runner_capabilities(
                         runner_id, capability_key, category, schema_version,
                         advertised_status, health_state, reason, version,
-                        identity_value, detail, advertised_at, fresh_until,
+                        identity_value, detail, signal, credential_expires_at,
+                        limited_until, credential_modified_at, advertised_at, fresh_until,
                         generation, recovery_history_json, updated_at)
                     VALUES (
                         $runner, $key, $category, $schema, $status, 'healthy',
-                        NULL, $version, $identity, $detail, $advertised,
+                        NULL, $version, $identity, $detail, $signal, $expires,
+                        $limited, $credential_modified, $advertised,
                         $fresh, $generation, $history, $updated)
                     ON CONFLICT(runner_id, capability_key) DO UPDATE SET
                         category = excluded.category,
                         schema_version = excluded.schema_version,
                         advertised_status = excluded.advertised_status,
+                        health_state = CASE WHEN $positive_recovery = 1 THEN 'healthy' ELSE runner_capabilities.health_state END,
+                        reason = CASE WHEN $positive_recovery = 1 THEN NULL ELSE runner_capabilities.reason END,
+                        first_failure_at = CASE WHEN $positive_recovery = 1 THEN NULL ELSE runner_capabilities.first_failure_at END,
+                        last_failure_at = CASE WHEN $positive_recovery = 1 THEN NULL ELSE runner_capabilities.last_failure_at END,
+                        cooldown_until = CASE WHEN $positive_recovery = 1 THEN NULL ELSE runner_capabilities.cooldown_until END,
+                        canary_claim_id = CASE WHEN $positive_recovery = 1 THEN NULL ELSE runner_capabilities.canary_claim_id END,
+                        consecutive_failures = CASE WHEN $positive_recovery = 1 THEN 0 ELSE runner_capabilities.consecutive_failures END,
                         version = excluded.version,
                         identity_value = excluded.identity_value,
                         detail = excluded.detail,
+                        signal = excluded.signal,
+                        credential_expires_at = excluded.credential_expires_at,
+                        limited_until = excluded.limited_until,
+                        credential_modified_at = excluded.credential_modified_at,
                         advertised_at = excluded.advertised_at,
                         fresh_until = excluded.fresh_until,
                         generation = excluded.generation,
@@ -110,11 +139,16 @@ public sealed partial class TaskServerStore
                     ("$version", capability.Version),
                     ("$identity", capability.Identity),
                     ("$detail", capability.Detail),
+                    ("$signal", capability.Signal),
+                    ("$expires", capability.ExpiresAt is null ? null : Iso(capability.ExpiresAt.Value.ToUniversalTime())),
+                    ("$limited", capability.LimitedUntil is null ? null : Iso(capability.LimitedUntil.Value.ToUniversalTime())),
+                    ("$credential_modified", capability.CredentialModifiedAt is null ? null : Iso(capability.CredentialModifiedAt.Value.ToUniversalTime())),
                     ("$advertised", Iso(advertisedAt)),
                     ("$fresh", Iso(freshUntil)),
                     ("$generation", request.Generation),
                     ("$history", JsonSerializer.Serialize(probeHistory)),
                     ("$tracks_history", tracksProbeHistory ? 1 : 0),
+                    ("$positive_recovery", positiveRecovery ? 1 : 0),
                     ("$updated", now));
             }
             if (request.Telemetry is not null)
@@ -371,7 +405,8 @@ public sealed partial class TaskServerStore
                        reason, advertised_at, fresh_until, first_failure_at,
                        last_failure_at, cooldown_until, canary_claim_id,
                        consecutive_failures, version, identity_value, detail,
-                       recovery_history_json
+                       recovery_history_json, signal, credential_expires_at,
+                       limited_until, credential_modified_at
                   FROM runner_capabilities
                  WHERE runner_id = $runner
                  ORDER BY category, capability_key;
@@ -400,7 +435,11 @@ public sealed partial class TaskServerStore
                         reader.IsDBNull(13) ? null : reader.GetString(13),
                         reader.IsDBNull(14) ? null : reader.GetString(14),
                         await AffectedClaimsAsync(connection, runner.Id, key, ct),
-                        DeserializeHistory(reader.GetString(15))));
+                        DeserializeHistory(reader.GetString(15)),
+                        reader.IsDBNull(16) ? null : reader.GetString(16),
+                        reader.IsDBNull(17) ? null : Parse(reader.GetString(17)),
+                        reader.IsDBNull(18) ? null : Parse(reader.GetString(18)),
+                        reader.IsDBNull(19) ? null : Parse(reader.GetString(19))));
                 }
             }
             HostTelemetrySnapshotDto? telemetry = null;
@@ -690,7 +729,8 @@ public sealed partial class TaskServerStore
             SELECT capability_key, category, advertised_status, health_state,
                    reason, advertised_at, fresh_until, first_failure_at,
                    last_failure_at, cooldown_until, canary_claim_id,
-                   consecutive_failures, recovery_history_json
+                   consecutive_failures, recovery_history_json, signal,
+                   credential_expires_at, limited_until, credential_modified_at
               FROM runner_capabilities
              WHERE runner_id = $runner AND canary_claim_id = $claim;
             """, transaction, ("$runner", runnerId), ("$claim", claimId)))
@@ -783,7 +823,8 @@ public sealed partial class TaskServerStore
             SELECT capability_key, category, advertised_status, health_state,
                    reason, advertised_at, fresh_until, first_failure_at,
                    last_failure_at, cooldown_until, canary_claim_id,
-                   consecutive_failures, recovery_history_json
+                   consecutive_failures, recovery_history_json, signal,
+                   credential_expires_at, limited_until, credential_modified_at
               FROM runner_capabilities
              WHERE runner_id = $runner AND capability_key = $key;
             """, transaction, ("$runner", runnerId), ("$key", key));
@@ -805,7 +846,11 @@ public sealed partial class TaskServerStore
             reader.IsDBNull(9) ? null : Parse(reader.GetString(9)),
             reader.IsDBNull(10) ? null : reader.GetString(10),
             reader.GetInt32(11),
-            DeserializeHistory(reader.GetString(12)));
+            DeserializeHistory(reader.GetString(12)),
+            reader.IsDBNull(13) ? null : reader.GetString(13),
+            reader.IsDBNull(14) ? null : Parse(reader.GetString(14)),
+            reader.IsDBNull(15) ? null : Parse(reader.GetString(15)),
+            reader.IsDBNull(16) ? null : Parse(reader.GetString(16)));
 
     private async Task<RemoteHostAdmissionDto> ReadHostAdmissionAsync(
         SqliteConnection connection,
@@ -917,5 +962,20 @@ public sealed partial class TaskServerStore
         DateTime? CooldownUntil,
         string? CanaryClaimId,
         int ConsecutiveFailures,
-        IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory);
+        IReadOnlyList<CapabilityRecoveryEventDto> RecoveryHistory,
+        string? Signal,
+        DateTime? ExpiresAt,
+        DateTime? LimitedUntil,
+        DateTime? CredentialModifiedAt);
+}
+
+internal static class ProviderAuthProbeStatuses
+{
+    public const string Ready = "ready";
+}
+
+internal static class ProviderAuthProbeSignals
+{
+    public const string Ok = "ok";
+    public const string CredentialsExpiring = "credentials-expiring";
 }

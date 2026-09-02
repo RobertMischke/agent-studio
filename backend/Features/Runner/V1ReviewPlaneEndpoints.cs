@@ -1493,7 +1493,11 @@ public sealed class V1ReviewExecutorRegistry
                     capability.Identity,
                     capability.Detail,
                     [],
-                    []);
+                    [],
+                    capability.Signal,
+                    capability.ExpiresAt,
+                    capability.LimitedUntil,
+                    capability.CredentialModifiedAt);
             })
             .GroupBy(capability => capability.Key, StringComparer.Ordinal)
             .Select(group => group.Last())
@@ -1541,6 +1545,20 @@ public sealed class V1ReviewExecutorRegistry
                                 .TakeLast(20)
                                 .ToArray();
                         }
+                        var failure = _capabilityFailures
+                            .GetValueOrDefault(runnerId)?
+                            .GetValueOrDefault(capability.Key);
+                        if (failure is not null && IsPositiveProviderAuthRecovery(capability))
+                        {
+                            history = history
+                                .Append(new Contract.CapabilityRecoveryEventDto(
+                                    advertisedAt,
+                                    failure.HealthState,
+                                    Contract.CapabilityHealthStates.Healthy,
+                                    "Provider authentication probe confirmed recovery."))
+                                .TakeLast(20)
+                                .ToArray();
+                        }
                         return capability with { RecoveryHistory = history };
                     })
                     .ToArray();
@@ -1553,15 +1571,12 @@ public sealed class V1ReviewExecutorRegistry
                 request.Generation,
                 capabilities,
                 request.Telemetry);
-            // An advertisement refreshes the capability snapshot; it is NOT a
-            // health verdict. The review daemon re-advertises every 60 seconds, so
-            // clearing the drain here meant the cooldown never drained anything: an
-            // executor with a broken capability became claim-eligible again a
-            // minute later, over and over. A pause therefore lifts only by its own
-            // cooldown expiring or by a full re-registration
-            // (PUT /api/v1/runners/{id} - a daemon restart, a genuinely new
-            // instance declaring its health). While a cooldown is active the
-            // failure counters stay untouched, so the backoff keeps escalating.
+            // A generic advertisement is not a recovery verdict. Provider auth
+            // is the deliberate exception: an explicit successful status probe
+            // is stronger evidence than the earlier run failure and clears only
+            // that provider's circuit without a daemon restart. Retained
+            // last-good and transient probe states do not clear a cooldown.
+            ClearRecoveredProviderAuthFailuresLocked(runnerId, capabilities);
             if (!HasActiveCapabilityCooldownLocked(runnerId, now))
                 ClearCapabilityFailures(runnerId);
             return new Contract.RunnerCapabilitySnapshotDto(
@@ -1994,6 +2009,22 @@ public sealed class V1ReviewExecutorRegistry
     private bool HasActiveCapabilityCooldownLocked(string runnerId, DateTime now)
         => _capabilityFailures.TryGetValue(runnerId, out var failures)
            && failures.Values.Any(state => state.CooldownUntil > now);
+
+    /// <summary>Caller must hold <see cref="_gate"/>.</summary>
+    private void ClearRecoveredProviderAuthFailuresLocked(
+        string runnerId,
+        IReadOnlyList<Contract.CapabilityHealthDto> capabilities)
+    {
+        if (!_capabilityFailures.TryGetValue(runnerId, out var failures)) return;
+        foreach (var capability in capabilities.Where(IsPositiveProviderAuthRecovery))
+            failures.Remove(capability.Key);
+        if (failures.Count == 0) _capabilityFailures.Remove(runnerId);
+    }
+
+    private static bool IsPositiveProviderAuthRecovery(Contract.CapabilityHealthDto capability)
+        => capability.Key.StartsWith("provider-auth:", StringComparison.Ordinal)
+           && string.Equals(capability.AdvertisedStatus, "ready", StringComparison.Ordinal)
+           && capability.Signal is "ok" or "credentials-expiring";
 
     /// <summary>Caller must hold <see cref="_gate"/>.</summary>
     private void ClearCapabilityFailures(string runnerId)
