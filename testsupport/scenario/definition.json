@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "id": "deployment-regression-v1",
+  "clockUtc": "2026-09-06T12:00:00Z",
+  "pollIntervalMilliseconds": 100,
+  "pollTimeoutSeconds": 30,
+  "smokeStepCount": 6,
+  "fixture": {
+    "projectName": "Deployment scenario",
+    "taskPrefix": "DEP",
+    "repository": "fixture/repository",
+    "fakeCodingCli": "fixture/fake-coding-cli.sh",
+    "fakeReviewCli": "fixture/fake-review-cli.sh"
+  },
+  "steps": [
+    {
+      "id": "bootstrap-principals",
+      "title": "Bootstrap principals and seeded fixture",
+      "assertions": [
+        { "type": "resource.count", "subject": "fixture.tasks", "expected": 4 },
+        { "type": "git.test-state", "subject": "fixture.repository", "expected": "failing" }
+      ]
+    },
+    {
+      "id": "register-runner",
+      "title": "Register the deterministic runner",
+      "assertions": [
+        { "type": "field.equals", "subject": "runner.status", "expected": "active" }
+      ]
+    },
+    {
+      "id": "create-task",
+      "title": "Create the coding task",
+      "assertions": [
+        { "type": "field.equals", "subject": "task.state", "expected": "2-ready" }
+      ]
+    },
+    {
+      "id": "claim",
+      "title": "Claim fenced coding work",
+      "assertions": [
+        { "type": "field.equals", "subject": "claim.status", "expected": "claimed" },
+        { "type": "number.minimum", "subject": "claim.fence", "expected": 1 }
+      ]
+    },
+    {
+      "id": "fake-cli-run",
+      "title": "Run fake coding CLI and hand off its commit",
+      "assertions": [
+        { "type": "git.commit", "subject": "result.sha", "expected": "present" },
+        { "type": "file.exists", "subject": "runner.log", "expected": true },
+        { "type": "field.equals", "subject": "task.state", "expected": "4-auto-review" }
+      ]
+    },
+    {
+      "id": "auto-review",
+      "title": "Run fake review CLI against the immutable result",
+      "assertions": [
+        { "type": "field.equals", "subject": "review.outcome", "expected": "Pass" },
+        { "type": "file.exists", "subject": "review.log", "expected": true }
+      ]
+    },
+    {
+      "id": "integrate",
+      "title": "Integrate the reviewed commit",
+      "assertions": [
+        { "type": "git.ancestor", "subject": "result.sha:main", "expected": "main" }
+      ]
+    },
+    {
+      "id": "complete",
+      "title": "Complete orchestration and task lifecycle",
+      "assertions": [
+        { "type": "field.equals", "subject": "task.state", "expected": "6-completed" }
+      ]
+    },
+    {
+      "id": "orchestrator-chat",
+      "title": "Record an orchestrator turn with context receipt",
+      "assertions": [
+        { "type": "resource.count", "subject": "chat.receipts", "expected": 1 }
+      ]
+    },
+    {
+      "id": "dossier-decision",
+      "title": "Record the dossier decision",
+      "assertions": [
+        { "type": "field.equals", "subject": "dossier.state", "expected": "6-completed" }
+      ]
+    },
+    {
+      "id": "backup",
+      "title": "Create an integrity-checked backup",
+      "assertions": [
+        { "type": "hash.sha256", "subject": "backup.sha256", "expected": "valid" }
+      ]
+    },
+    {
+      "id": "restore",
+      "title": "Restore into an empty store",
+      "assertions": [
+        { "type": "field.equals", "subject": "restore.verified", "expected": true }
+      ]
+    },
+    {
+      "id": "inventory-equality",
+      "title": "Compare pre-backup and restored inventories",
+      "assertions": [
+        { "type": "hash.equals", "subject": "inventory.sha256", "expected": "pre-backup" }
+      ]
+    }
+  ]
+}

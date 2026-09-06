@@ -94,6 +94,17 @@ jobs:
             --filter "FullyQualifiedName~TaskServer.Tests.TopologyTests|FullyQualifiedName~TaskServer.Tests.ProtocolTests" \
             --logger "console;verbosity=normal"
 
+      - name: Test deployment scenario in Docker Compose
+        run: scripts/scenario.sh --target compose --level full --output "$RUNNER_TEMP/deployment-scenario"
+
+      - name: Upload deployment scenario report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-scenario-${{ github.ref_name }}
+          path: ${{ runner.temp }}/deployment-scenario/**
+          if-no-files-found: error
+
       - name: Lint and type-check frontend
         working-directory: frontend
         run: |

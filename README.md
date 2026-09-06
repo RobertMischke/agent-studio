@@ -54,6 +54,20 @@ To add execution capacity after the Studio is running, follow the
 contributors use the separate
 [contributor setup](./docs/operations/setup/contributor-setup.md).
 
+## Testing
+
+Every deployment card runs the reduced deterministic scenario, and every
+release runs the complete scenario against Docker Compose:
+
+```bash
+scripts/scenario.sh --target inproc --level smoke
+scripts/scenario.sh --target compose --level full
+```
+
+The same definition can verify a deployed Task Server with `--target remote`.
+See the [deployment regression scenario guide](./docs/operations/testing/deployment-scenario.md)
+for credentials, reports, determinism guarantees, and the extension contract.
+
 ## More
 
 Agent Studio is part of the agent-orc ecosystem. It uses

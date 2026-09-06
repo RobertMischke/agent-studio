@@ -16,4 +16,13 @@
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The deployment scenario is its own executable project below this
+         shared-helper directory. Keep its sources and build output out of the
+         parent SDK project's recursive default glob. -->
+    <Compile Remove="scenario/**/*.cs" />
+    <EmbeddedResource Remove="scenario/**" />
+    <None Remove="scenario/**" />
+  </ItemGroup>
+
 </Project>

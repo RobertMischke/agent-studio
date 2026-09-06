@@ -55,7 +55,7 @@ services:
     depends_on:
       - orchestrator-api
     env_file:
-      - path: ./runner.env
+      - path: ${RUNNER_ENV_FILE:-./runner.env}
         required: true
     environment:
       RUNNER_SERVER_URL: http://orchestrator-api:5031
@@ -65,7 +65,7 @@ services:
       RUNNER_AUTH_TOKEN_FILE: /run/secrets/runner.token
     volumes:
       - runner-coding:/var/lib/agent-host
-      - ./runner.token:/run/secrets/runner.token:ro
+      - ${RUNNER_TOKEN_FILE:-./runner.token}:/run/secrets/runner.token:ro
 
   agent-host-review:
     build:
@@ -76,7 +76,7 @@ services:
     depends_on:
       - orchestrator-api
     env_file:
-      - path: ./runner.env
+      - path: ${RUNNER_ENV_FILE:-./runner.env}
         required: true
     environment:
       RUNNER_SERVER_URL: http://orchestrator-api:5031
@@ -85,7 +85,7 @@ services:
       RUNNER_AUTH_TOKEN_FILE: /run/secrets/runner.token
     volumes:
       - runner-review:/var/lib/agent-host
-      - ./runner.token:/run/secrets/runner.token:ro
+      - ${RUNNER_TOKEN_FILE:-./runner.token}:/run/secrets/runner.token:ro
 
   task-server:
     build:
@@ -117,6 +117,27 @@ services:
       - task-server
     ports:
       - "127.0.0.1:${STUDIO_BFF_PORT:-5072}:5072"
+
+  deployment-scenario-runner:
+    build:
+      context: .
+      dockerfile: testsupport/scenario/Dockerfile
+    profiles: ["runner"]
+    depends_on:
+      - task-server
+    volumes:
+      - ${SCENARIO_RESULTS_DIR:-./scenario-results}:/scenario-results
+    command:
+      - --target
+      - compose
+      - --level
+      - ${SCENARIO_LEVEL:-full}
+      - --definition
+      - /app/definition.json
+      - --output
+      - /scenario-results
+      - --url
+      - http://task-server:5071
 
 volumes:
   workspace:

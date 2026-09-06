@@ -452,6 +452,11 @@ evidence.
 The release-blocking harness is intentionally separate from browser E2E. Build
 the deployables once, then run the topology and compatibility gate:
 
+The shared [deployment regression scenario](../testing/deployment-scenario.md)
+adds the seeded claim, coding, review, integration, chat, decision, backup, and
+restore lifecycle used by every deployment card and release. Run its reduced
+in-process level before the longer topology rehearsal below.
+
 ```bash
 dotnet build agent-taskboard.sln
 dotnet test runner.Tests/AgentRunner.Tests.csproj \

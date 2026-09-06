@@ -7,6 +7,10 @@ on:
     paths:
       - 'backend/**'
       - 'backend.Tests/**'
+      - 'contracts/TaskServer.Contracts/**'
+      - 'task-server/**'
+      - 'testsupport/scenario/**'
+      - 'scripts/scenario.sh'
       - '.github/workflows/build-profile-validation-windows.yml'
   workflow_dispatch:
 
@@ -27,3 +31,7 @@ jobs:
           dotnet test backend.Tests/OrchestratorApi.Tests.csproj
           --filter "FullyQualifiedName=AgentStudio.Tests.BuildProfileValidationServiceTests.DotnetProfile_UsesHostShell_ValidatesGreenAndAllowsPickup|FullyQualifiedName=AgentStudio.Tests.ProjectSettingsServiceTests.ChangingOnlyTestFilter_PreservesPipelineReadyValidation"
           --logger "console;verbosity=normal"
+
+      - name: Run deployment scenario card gate
+        shell: bash
+        run: scripts/scenario.sh --target inproc --level smoke --output "$RUNNER_TEMP/deployment-scenario"
