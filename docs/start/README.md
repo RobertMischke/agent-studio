@@ -63,6 +63,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Model routing policy (model, thinking level, risk floors, benchmark evidence) | [domains/model-routing-policy.md](../system/domains/model-routing-policy.md) |
 | Tokens | [domains/tokens.md](../system/domains/tokens.md) |
 | Remote execution outcome and recovery | [contracts/run-outcome.md](../system/contracts/run-outcome.md#remote-execution-outcome-adapter) |
+| Workspace repository lifecycle and backlog recovery | [operations/workspace-repository-lifecycle.md](../operations/workspace-repository-lifecycle.md) |
 | Remote infrastructure scenario result contract | [contracts/remote-run-result.md](../system/contracts/remote-run-result.md) |
 | ADR archive | [architecture/decisions/adr-archive.md](../system/architecture/decisions/adr-archive.md) |
 | Architecture model | [architecture/model.md](../system/architecture/model.md) |

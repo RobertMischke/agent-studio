@@ -2265,6 +2265,28 @@
             process stderr into the failure detail and the durable grade's explicit Detail line, including the full path.
           </td>
         </tr>
+        <tr id="case-agt-2728-workspace-push-backlog">
+          <td>2026-09-06</td>
+          <td><code>AGT-2728</code><br><span class="small">workspace repository backlog could not outlive the push timeout</span></td>
+          <td>
+            The Task Repository was 2,805 commits ahead of <code>origin/main</code>. All 24 push attempts that day stopped
+            at the same 30-second process cap. Each retry restarted <code>pack-objects</code>, so attempt 3 reached the same
+            timeout and the worker gave up. The repository also held 133,105 loose objects and 17.4 GiB of loose data.
+          </td>
+          <td>
+            <code>WorkspaceArtifactPushWorker</code> reused <code>GitNetworkProcessRunner.DefaultTimeout</code> for every
+            attempt and had no backlog-aware budget. The Task Repository had no hosted Git maintenance, while root-level
+            runtime files escaped scoped evidence commits and accumulated outside the intended history policy.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> the first push keeps the 30-second cap, but a timeout switches later
+            attempts to a configurable 10-minute catch-up budget under a repository single-flight gate. Backlog warnings
+            include ahead commits and estimated object bytes. Exhaustion now emits a high-severity supervisor advisory.
+            An hourly load-gated lifecycle pass sweeps tracked drift, excludes runtime state, refuses files above 50 MiB,
+            and consolidates loose objects. The former terminal was silent attempt-3 abandonment; the new terminal is a
+            visible advisory with enough repository context for recovery.
+          </td>
+        </tr>
       </tbody>
     </table>
 

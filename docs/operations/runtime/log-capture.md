@@ -172,13 +172,10 @@ source commits. Three layers protect this:
    (`docs/system/contracts/filesystem.md`). Anything under
    `<job>/logs/runtime/` or `<job>/results/runtime/` is therefore outside
    product-source Git history by default.
-2. **The task-store evidence checkout owns its ignore policy.** The recommended
-   `.gitignore` excludes task `results/` folders (see
-   `docs/system/contracts/protocol-style.md §4.3`) and can be extended with task
-   `logs/runtime/` paths if an operator decides to keep the bus log committed
-   but the runtime log local. The current default keeps both `logs/bus/` and
-   `logs/runtime/` tracked because they are textual JSONL and useful for
-   cross-machine review.
+2. **The task-store evidence checkout owns its ignore policy.** The lifecycle
+   worker keeps workspace-level `logs/bus/` local and ignored because it is a
+   rotating runtime projection. Job-scoped `logs/runtime/` remains task
+   evidence. See [workspace repository lifecycle](../workspace-repository-lifecycle.md).
 3. **`test-results/` is gitignored in this repository** (`.gitignore` line
    for `test-results/`), so any local-dev runtime capture written under
    `frontend/e2e/test-results/runtime/` cannot be committed.

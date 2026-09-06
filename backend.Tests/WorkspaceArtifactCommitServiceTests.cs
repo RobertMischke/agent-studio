@@ -1,11 +1,13 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentStudio.State;
 
 using Xunit;
 
 namespace AgentStudio.Tests;
 
+[Trait("Category", "MachineBound")]
 public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
 {
     private readonly string _root;
@@ -254,11 +256,170 @@ public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
             RunGitCapture(_root, $"--git-dir={remote}", "rev-parse", "refs/heads/develop").Trim());
     }
 
+    [Fact]
+    public async Task WorkspacePushWorker_TimeoutSwitchesRetriesToCatchUpBudget()
+    {
+        var timeouts = new List<TimeSpan>();
+        var pushAttempts = 0;
+        Task<WorkspacePushGitResult> Run(
+            string _, IReadOnlyList<string> args, TimeSpan timeout, CancellationToken __)
+        {
+            if (args[0] == "rev-list")
+                return Task.FromResult(new WorkspacePushGitResult(0, "2000\n", "", false));
+            if (args[0] == "count-objects")
+                return Task.FromResult(new WorkspacePushGitResult(0, "size: 0\nsize-pack: 0\n", "", false));
+            timeouts.Add(timeout);
+            pushAttempts++;
+            return Task.FromResult(pushAttempts == 1
+                ? new WorkspacePushGitResult(-1, "", "timed out", true)
+                : new WorkspacePushGitResult(0, "", "", false));
+        }
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["WorkspaceArtifacts:PushRetrySeconds"] = "0",
+            ["WorkspaceArtifacts:CatchUpTimeoutSeconds"] = "600",
+        }).Build();
+        var logger = new CapturingLogger<WorkspaceArtifactPushWorker>();
+        var worker = new WorkspaceArtifactPushWorker(
+            new WorkspaceArtifactPushQueue(),
+            logger,
+            config, null, null, null, Run);
+
+        Assert.True(await worker.ProcessAsync(
+            new WorkspaceArtifactPushRequest(_root, "backlog"), default));
+        Assert.Equal([TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(10)], timeouts);
+        Assert.Contains(logger.Entries,
+            entry => entry.Any(field => field.Key == "AheadCount" && Equals(field.Value, 2000)));
+    }
+
+    [Fact]
+    public async Task WorkspacePushWorker_FinalFailureWritesSupervisorAdvisoryWithAheadCount()
+    {
+        Task<WorkspacePushGitResult> Run(
+            string _, IReadOnlyList<string> args, TimeSpan __, CancellationToken ___) =>
+            Task.FromResult(args[0] switch
+            {
+                "rev-list" => new WorkspacePushGitResult(0, "73\n", "", false),
+                "count-objects" => new WorkspacePushGitResult(0, "size: 1\nsize-pack: 2\n", "", false),
+                _ => new WorkspacePushGitResult(1, "", "remote offline", false),
+            });
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TaskRepository"] = _root,
+            ["WorkspaceArtifacts:PushRetrySeconds"] = "0",
+        }).Build();
+        var advisories = new SupervisorAdvisoryStore();
+        var worker = new WorkspaceArtifactPushWorker(
+            new WorkspaceArtifactPushQueue(),
+            NullLogger<WorkspaceArtifactPushWorker>.Instance,
+            config, null, advisories, null, Run);
+
+        Assert.False(await worker.ProcessAsync(
+            new WorkspaceArtifactPushRequest(_root, "ASS-ADVISORY", Project: "demo"), default));
+
+        var advisory = Assert.Single(advisories.Snapshot(_root, "demo"));
+        Assert.Equal("workspace-repository-push-backlog", advisory.Topic);
+        Assert.Contains(_root, advisory.Message);
+        Assert.Contains("Ahead commits: 73", advisory.Message);
+    }
+
+    [Fact]
+    public void TrackedSweep_CommitsTrackedDriftButLeavesUntrackedFiles()
+    {
+        var tracked = Path.Combine(_root, "tracked.txt");
+        File.WriteAllText(tracked, "original\n");
+        RunGit(_root, "add", "tracked.txt");
+        RunGit(_root, "commit", "-q", "-m", "track file");
+        File.WriteAllText(tracked, "changed\n");
+        File.WriteAllText(Path.Combine(_root, "untracked.txt"), "local\n");
+
+        var result = _service.TryCommitTrackedSweep(_root);
+
+        Assert.True(result.DidCommit, result.Error);
+        Assert.Equal("changed\n", RunGitCapture(_root, "show", "HEAD:tracked.txt"));
+        Assert.Contains("?? untracked.txt", RunGitCapture(_root, "status", "--porcelain=v1"));
+    }
+
+    [Fact]
+    public void SizeGuard_RefusesOversizedFileBeforeGitAdd()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TaskRepository"] = _root,
+            ["WorkspaceEvidence:MaxStagedFileBytes"] = (1024 * 1024).ToString(),
+        }).Build();
+        var logger = new CapturingLogger<WorkspaceArtifactCommitService>();
+        var service = new WorkspaceArtifactCommitService(config, logger);
+        var job = JobFolder("ASS-LARGE");
+        Directory.CreateDirectory(job);
+        var large = Path.Combine(job, "too-large.bin");
+        using (var stream = File.Create(large)) stream.SetLength(2 * 1024 * 1024);
+
+        var result = service.TryCommitArtifactUpload(_root, "ASS-LARGE", job, ["too-large.bin"]);
+
+        Assert.False(result.DidCommit);
+        Assert.Contains("??", RunGitCapture(_root, "status", "--porcelain=v1", "--", Relative(large)));
+        Assert.DoesNotContain(Relative(large), RunGitCapture(_root, "diff", "--cached", "--name-only"));
+        Assert.Contains(logger.Entries,
+            entry => entry.Any(field => field.Key == "Path" && Equals(field.Value, Relative(large))));
+    }
+
+    [Fact]
+    public void RuntimeStatePolicy_IgnoresAndUntracksBusAndAttemptAuthorityFiles()
+    {
+        var bus = Path.Combine(_root, "logs", "bus", "demo", "2026-09-06.jsonl");
+        var authority = Path.Combine(_root, ".metadata", "attempt-authority.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(bus)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(authority)!);
+        File.WriteAllText(bus, "{}\n");
+        File.WriteAllText(authority, "{}\n");
+        RunGit(_root, "add", "-f", "logs/bus", ".metadata/attempt-authority.json");
+        RunGit(_root, "commit", "-q", "-m", "seed runtime state");
+
+        var result = _service.TryApplyRuntimeStatePolicy(_root);
+
+        Assert.True(result.DidCommit, result.Error);
+        Assert.True(File.Exists(bus));
+        Assert.True(File.Exists(authority));
+        Assert.Empty(RunGitCapture(_root, "ls-files", "logs/bus", ".metadata/attempt-authority.json"));
+        var ignore = File.ReadAllText(Path.Combine(_root, ".gitignore"));
+        Assert.Contains("/logs/bus/", ignore);
+        Assert.Contains("/.metadata/attempt-authority*", ignore);
+    }
+
+    [Fact]
+    public void RepositoryMaintenance_ConfiguresBoundsAndConsolidatesLooseObjects()
+    {
+        for (var i = 0; i < 80; i++)
+        {
+            File.WriteAllText(Path.Combine(_root, $"object-{i}.txt"), Guid.NewGuid().ToString("N"));
+            RunGit(_root, "add", $"object-{i}.txt");
+            RunGit(_root, "commit", "-q", "-m", $"object {i}");
+        }
+        var before = LooseObjectCount();
+
+        var result = _service.TryRunMaintenance(_root);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal("2000", RunGitCapture(_root, "config", "--local", "gc.auto").Trim());
+        Assert.Equal("incremental", RunGitCapture(_root, "config", "--local", "maintenance.strategy").Trim());
+        Assert.True(LooseObjectCount() < before, $"Loose objects did not fall below {before}.");
+    }
+
     private string JobFolder(string id) =>
         Path.Combine(_root, "projects", "agent-taskboard", "tasks", "001", id);
 
     private string Relative(string path) =>
         Path.GetRelativePath(_root, path).Replace('\\', '/');
+
+    private int LooseObjectCount()
+    {
+        var line = RunGitCapture(_root, "count-objects", "-v")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Single(value => value.StartsWith("count: ", StringComparison.Ordinal));
+        return int.Parse(line["count: ".Length..]);
+    }
 
     private static string PipelineJson(string stepId, string verdict, int? attempt = null)
     {

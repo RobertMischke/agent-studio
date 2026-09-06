@@ -21,8 +21,9 @@ namespace AgentStudio.Pipeline;
 /// <c>.gitignore</c>. Runtime state that lives <em>inside</em> a project folder
 /// — chiefly the tracked, high-churn <c>projects/&lt;name&gt;/.orchestrator/</c>
 /// session/event files — is NOT handled by scoping and is dropped by the
-/// <see cref="ExcludeGlobs"/>, which the committer applies as <c>:(exclude)</c>
-/// pathspecs so the exclusion holds even for already-tracked files.</para>
+/// <see cref="ExcludeGlobs"/>, which the committer matches against exact
+/// candidates before staging so the exclusion holds even for already-tracked
+/// files.</para>
 /// </summary>
 public sealed class WorkspaceEvidenceBatcher
 {
@@ -30,10 +31,8 @@ public sealed class WorkspaceEvidenceBatcher
     // telemetry/logs by name: a project can legitimately be called "logs"
     // (projects/logs holds drift analysis), and the repo-root runtime dirs are
     // already outside every projects/<name> pathspec we stage. The committer
-    // enforces each glob both by unstaging it (`git reset`) and as a
-    // `:(exclude)` pathspec on the partial commit (the half that holds for
-    // already-tracked files); both use default magic (where * also matches /),
-    // so a glob matches at any depth under the staged projects/<name> folders.
+    // matches each friendly glob while enumerating exact candidates before
+    // `git add`, so the excludes hold for both tracked and untracked files.
     //
     // `*/.orchestrator/*` is load-bearing, not defense-in-depth: the
     // per-project .orchestrator/ runtime (orchestrator.jsonl ~1 MB and growing,

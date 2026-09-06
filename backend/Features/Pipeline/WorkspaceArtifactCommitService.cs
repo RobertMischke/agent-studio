@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Enumeration;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +24,13 @@ public sealed class WorkspaceArtifactCommitService
     private readonly WorkspaceArtifactPushQueue? _pushQueue;
     private readonly int _indexLockRetryAttempts;
     private readonly int _indexLockRetryBackoffMs;
+    private readonly long _maxStagedFileBytes;
+    private readonly TimeSpan _maintenanceTimeout;
+    private static readonly string[] RuntimeStateGlobs =
+    {
+        "logs/bus/**",
+        ".metadata/attempt-authority*",
+    };
 
     // Per-repo serialization gate. The punctual job-folder commits and the
     // debounced Transition-Committer's evidence batches both mutate the same
@@ -48,6 +56,13 @@ public sealed class WorkspaceArtifactCommitService
             configuration.GetValue<int?>("WorkspaceEvidence:IndexLockRetryAttempts") ?? 5, 1, 50);
         _indexLockRetryBackoffMs = Math.Clamp(
             configuration.GetValue<int?>("WorkspaceEvidence:IndexLockRetryBackoffMs") ?? 100, 0, 5000);
+        _maxStagedFileBytes = Math.Clamp(
+            configuration.GetValue<long?>("WorkspaceEvidence:MaxStagedFileBytes") ?? 50L * 1024 * 1024,
+            1L * 1024 * 1024,
+            95L * 1024 * 1024);
+        _maintenanceTimeout = TimeSpan.FromSeconds(Math.Clamp(
+            configuration.GetValue<int?>("WorkspaceRepositoryMaintenance:CommandTimeoutSeconds") ?? 600,
+            30, 3600));
     }
 
     public WorkspaceArtifactCommitResult TryCommitRunBoundary(
@@ -151,13 +166,14 @@ public sealed class WorkspaceArtifactCommitService
             // recovered rather than surfaced as a failure.
             lock (RepoGate(gitRoot))
             {
-                var addArgs = new List<string> { "add", "-A", "--" };
-                addArgs.AddRange(pathspecs);
-                var add = RunGitRetryingIndexLock(gitRoot, addArgs);
+                var candidates = FindEligibleChanges(gitRoot, pathspecs, [], trackedOnly: false);
+                if (candidates.Count == 0)
+                    return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
+                var add = AddCandidates(gitRoot, candidates);
                 if (add.Code != 0)
                     return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
 
-                var changed = RunGit(gitRoot, ["diff", "--cached", "--quiet", "--", .. pathspecs]);
+                var changed = RunGit(gitRoot, ["diff", "--cached", "--quiet", "--", .. candidates]);
                 if (changed.Code == 0)
                     return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
                 if (changed.Code != 1)
@@ -174,7 +190,7 @@ public sealed class WorkspaceArtifactCommitService
                     "-c", $"user.email={CommitterEmail}",
                     "commit", "-F", "-", "--"
                 };
-                commitArgs.AddRange(pathspecs);
+                commitArgs.AddRange(candidates);
                 var commit = RunGitRetryingIndexLock(gitRoot, commitArgs, plan.Message);
                 if (commit.Code != 0)
                 {
@@ -387,12 +403,12 @@ public sealed class WorkspaceArtifactCommitService
     /// the git root) minus <paramref name="excludeGlobs"/>, and commits them
     /// with <paramref name="message"/>. Shares the committer identity, git
     /// plumbing, per-repo lock and index.lock retry with the punctual
-    /// job-folder commits above — no parallel implementation. Push is left to
+    /// job-folder commits above; there is no parallel implementation. Push is left to
     /// the caller (the batcher enqueues onto the existing push queue when the
     /// <c>WorkspaceEvidence:Push</c> switch is on), so this method never
     /// touches the network. Never throws: every failure is returned as a
-    /// <see cref="WorkspaceArtifactCommitResult.Failed"/> so the caller — and
-    /// ultimately the transition that produced the evidence — is never broken.
+    /// <see cref="WorkspaceArtifactCommitResult.Failed"/> so the caller and
+    /// ultimately the transition that produced the evidence are never broken.
     /// </summary>
     public WorkspaceArtifactCommitResult TryCommitEvidence(
         string gitRoot,
@@ -415,48 +431,22 @@ public sealed class WorkspaceArtifactCommitService
             if (pathspecs.Count == 0)
                 return WorkspaceArtifactCommitResult.Skipped("no-data-paths");
 
-            // Excludes are enforced in two places, and BOTH are required:
-            //   1. `git reset` unstages them from the index (below). This alone
-            //      handles untracked scratch, and keeps the index clean so the
-            //      diff-check is precise.
-            //   2. `:(exclude)` magic pathspecs on the `git commit` (here). This
-            //      is the load-bearing half for already-TRACKED files: passing
-            //      pathspecs to `git commit` triggers partial-commit (`--only`)
-            //      semantics that record the WORKING-TREE content of every listed
-            //      tracked path and disregard the index — so a reset-unstaged but
-            //      tracked file (e.g. a project's ~1 MB `.orchestrator/` runtime
-            //      churn) would otherwise still be committed. The exclude pathspec
-            //      removes it from the partial commit's file set.
-            // The excludes are deliberately NOT put on `git add`/`git diff`: a
-            // no-slash exclude glob (e.g. `*.tmp`) makes `git add` stage nothing
-            // at all (a git pathspec quirk), which would silently disable the
-            // whole evidence commit. `git commit` does not share that quirk.
-            var resetSpecs = NormalizeExcludeGlobs(excludeGlobs);
-            var excludeCommitSpecs = BuildExcludePathspecs(excludeGlobs);
-
+            // Enumerate exact candidate files before `git add`. The friendly
+            // workspace globs are matched in-process because Git's no-slash
+            // exclude pathspec rules can unexpectedly exclude the whole tree.
             string? shortSha;
             lock (RepoGate(gitRoot))
             {
-                // Stage the data paths (git add already honours the workspace
-                // repo's .gitignore), then unstage the exclude globs from the
-                // index.
-                var addArgs = new List<string> { "add", "-A", "--" };
-                addArgs.AddRange(pathspecs);
-                var add = RunGitRetryingIndexLock(gitRoot, addArgs);
+                var candidates = FindEligibleChanges(
+                    gitRoot, pathspecs, excludeGlobs, trackedOnly: false);
+                if (candidates.Count == 0)
+                    return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
+                var add = AddCandidates(gitRoot, candidates);
                 if (add.Code != 0)
                     return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
 
-                if (resetSpecs.Count > 0)
-                {
-                    var resetArgs = new List<string> { "reset", "-q", "--" };
-                    resetArgs.AddRange(resetSpecs);
-                    var reset = RunGit(gitRoot, resetArgs);
-                    if (reset.Code != 0)
-                        _logger.LogDebug("workspace-evidence exclude reset non-zero root={Root} error={Error}", gitRoot, reset.ErrorText);
-                }
-
                 var diffArgs = new List<string> { "diff", "--cached", "--quiet", "--" };
-                diffArgs.AddRange(pathspecs);
+                diffArgs.AddRange(candidates);
                 var changed = RunGit(gitRoot, diffArgs);
                 if (changed.Code == 0)
                     return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
@@ -469,8 +459,7 @@ public sealed class WorkspaceArtifactCommitService
                     "-c", $"user.email={CommitterEmail}",
                     "commit", "-F", "-", "--"
                 };
-                commitArgs.AddRange(pathspecs);
-                commitArgs.AddRange(excludeCommitSpecs);
+                commitArgs.AddRange(candidates);
                 var commit = RunGitRetryingIndexLock(gitRoot, commitArgs, message);
                 if (commit.Code != 0)
                 {
@@ -495,35 +484,235 @@ public sealed class WorkspaceArtifactCommitService
         }
     }
 
-    /// <summary>Normalize exclude globs into git reset pathspecs (default magic,
-    /// where <c>*</c> also matches <c>/</c>), dropping blanks.</summary>
-    private static List<string> NormalizeExcludeGlobs(IReadOnlyList<string> excludeGlobs)
+    /// <summary>
+    /// Commits tracked workspace files left dirty by writers that do not have a
+    /// punctual commit boundary. Runtime-only state and oversized files are
+    /// excluded. The lifecycle worker invokes this at most once per hour.
+    /// </summary>
+    public WorkspaceArtifactCommitResult TryCommitTrackedSweep(string? workspaceRoot)
     {
-        var specs = new List<string>();
-        if (excludeGlobs == null) return specs;
-        foreach (var glob in excludeGlobs)
+        try
         {
-            if (string.IsNullOrWhiteSpace(glob)) continue;
-            specs.Add(glob.Trim());
+            var gitRoot = ResolveWorkspaceGitRoot(workspaceRoot);
+            if (gitRoot == null)
+                return WorkspaceArtifactCommitResult.Skipped("not-a-git-repo");
+
+            string? shortSha;
+            lock (RepoGate(gitRoot))
+            {
+                var candidates = FindEligibleChanges(
+                    gitRoot, ["."], RuntimeStateGlobs, trackedOnly: true);
+                if (candidates.Count == 0)
+                    return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
+
+                var add = AddCandidates(gitRoot, candidates);
+                if (add.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
+
+                var commitArgs = new List<string>
+                {
+                    "-c", $"user.name={CommitterName}",
+                    "-c", $"user.email={CommitterEmail}",
+                    "commit", "-m", "chore(workspace): sweep tracked workspace drift", "--"
+                };
+                commitArgs.AddRange(candidates);
+                var commit = RunGitRetryingIndexLock(gitRoot, commitArgs);
+                if (commit.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-commit", commit.ErrorText);
+
+                var sha = RunGit(gitRoot, ["rev-parse", "--short", "HEAD"]);
+                shortSha = sha.Code == 0 ? sha.Out.Trim() : null;
+            }
+
+            EnqueueSweepPush(gitRoot);
+            _logger.LogInformation(
+                "workspace-artifact-sweep-commit repo={Repo} sha={Sha}", gitRoot, shortSha ?? "");
+            return WorkspaceArtifactCommitResult.Committed(shortSha, 0, "tracked-sweep");
         }
-        return specs;
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "workspace-artifact-sweep failed");
+            return WorkspaceArtifactCommitResult.Failed("exception", ex.Message);
+        }
     }
 
-    /// <summary>Turn exclude globs into <c>:(exclude)</c> magic pathspecs (default
-    /// magic, where <c>*</c> also matches <c>/</c>, so a glob matches at any depth
-    /// under the staged data paths) for the partial-commit's file set. Blanks are
-    /// dropped; a glob already written as an exclude pathspec is passed through.</summary>
-    private static List<string> BuildExcludePathspecs(IReadOnlyList<string> excludeGlobs)
+    /// <summary>
+    /// Persists the runtime-state classification in the workspace repository:
+    /// bus logs and all attempt-authority snapshots remain on disk but are
+    /// ignored and removed from Git tracking.
+    /// </summary>
+    public WorkspaceArtifactCommitResult TryApplyRuntimeStatePolicy(string? workspaceRoot)
     {
-        var specs = new List<string>();
-        if (excludeGlobs == null) return specs;
-        foreach (var glob in excludeGlobs)
+        try
         {
-            if (string.IsNullOrWhiteSpace(glob)) continue;
-            var trimmed = glob.Trim();
-            specs.Add(trimmed.StartsWith(":", StringComparison.Ordinal) ? trimmed : $":(exclude){trimmed}");
+            var gitRoot = ResolveWorkspaceGitRoot(workspaceRoot);
+            if (gitRoot == null)
+                return WorkspaceArtifactCommitResult.Skipped("not-a-git-repo");
+
+            string? shortSha;
+            lock (RepoGate(gitRoot))
+            {
+                var ignorePath = Path.Combine(gitRoot, ".gitignore");
+                var existing = File.Exists(ignorePath) ? File.ReadAllText(ignorePath) : string.Empty;
+                var required = new[] { "/logs/bus/", "/.metadata/attempt-authority*" };
+                var missing = required.Where(rule => !existing.Split('\n')
+                    .Any(line => string.Equals(line.Trim(), rule, StringComparison.Ordinal))).ToList();
+                if (missing.Count > 0)
+                {
+                    var separator = existing.Length == 0 || existing.EndsWith('\n') ? string.Empty : Environment.NewLine;
+                    File.AppendAllText(ignorePath, separator + string.Join(Environment.NewLine, missing) + Environment.NewLine);
+                }
+
+                // The task repository is platform-owned. Clearing its index is
+                // safe under the shared gate and prevents unrelated staged
+                // paths from leaking into this policy commit.
+                var reset = RunGitRetryingIndexLock(gitRoot, ["reset", "-q"]);
+                if (reset.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-reset", reset.ErrorText);
+                var addIgnore = RunGitRetryingIndexLock(gitRoot, ["add", "--", ".gitignore"]);
+                if (addIgnore.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-add-ignore", addIgnore.ErrorText);
+                var untrack = RunGitRetryingIndexLock(gitRoot,
+                    ["rm", "-q", "-r", "--cached", "--ignore-unmatch", "--", "logs/bus", ".metadata/attempt-authority*"]);
+                if (untrack.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-untrack-runtime", untrack.ErrorText);
+
+                var changed = RunGit(gitRoot, ["diff", "--cached", "--quiet"]);
+                if (changed.Code == 0)
+                    return WorkspaceArtifactCommitResult.Skipped("policy-current");
+                if (changed.Code != 1)
+                    return WorkspaceArtifactCommitResult.Failed("git-diff-cached", changed.ErrorText);
+
+                var commit = RunGitRetryingIndexLock(gitRoot,
+                    ["-c", $"user.name={CommitterName}", "-c", $"user.email={CommitterEmail}",
+                     "commit", "-m", "chore(workspace): keep runtime state out of git"]);
+                if (commit.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-commit", commit.ErrorText);
+                var sha = RunGit(gitRoot, ["rev-parse", "--short", "HEAD"]);
+                shortSha = sha.Code == 0 ? sha.Out.Trim() : null;
+            }
+
+            EnqueueSweepPush(gitRoot);
+            _logger.LogInformation(
+                "workspace-runtime-state-policy-committed repo={Repo} sha={Sha}", gitRoot, shortSha ?? "");
+            return WorkspaceArtifactCommitResult.Committed(shortSha, 0, "runtime-policy");
         }
-        return specs;
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "workspace-runtime-state-policy failed");
+            return WorkspaceArtifactCommitResult.Failed("exception", ex.Message);
+        }
+    }
+
+    internal WorkspaceArtifactCommitResult TryRunMaintenance(
+        string? workspaceRoot,
+        Action<string, IReadOnlyList<string>>? observedCommand = null)
+    {
+        try
+        {
+            var gitRoot = ResolveWorkspaceGitRoot(workspaceRoot);
+            if (gitRoot == null)
+                return WorkspaceArtifactCommitResult.Skipped("not-a-git-repo");
+            lock (RepoGate(gitRoot))
+            {
+                IReadOnlyList<IReadOnlyList<string>> commands =
+                [
+                    ["config", "--local", "gc.auto", "2000"],
+                    ["config", "--local", "maintenance.strategy", "incremental"],
+                    ["config", "--local", "core.fsmonitor", OperatingSystem.IsWindows() ? "true" : "false"],
+                    ["repack", "-d", "-l"],
+                    ["maintenance", "run", "--task=commit-graph", "--task=incremental-repack"],
+                    ["prune-packed"],
+                ];
+                foreach (var command in commands)
+                {
+                    observedCommand?.Invoke(gitRoot, command);
+                    var result = RunGitBounded(gitRoot, command, _maintenanceTimeout);
+                    if (result.Code != 0)
+                        return WorkspaceArtifactCommitResult.Failed("git-maintenance", result.ErrorText);
+                }
+            }
+            return WorkspaceArtifactCommitResult.Skipped("maintenance-complete");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "workspace-repository-maintenance failed");
+            return WorkspaceArtifactCommitResult.Failed("exception", ex.Message);
+        }
+    }
+
+    private void EnqueueSweepPush(string gitRoot)
+    {
+        if (!WorkspaceAutoPushEnabled() || _pushQueue == null) return;
+        if (!_pushQueue.Enqueue(new WorkspaceArtifactPushRequest(gitRoot, "workspace-lifecycle")))
+            _logger.LogWarning("workspace-artifact-push enqueue failed jobId=workspace-lifecycle repo={Repo}", gitRoot);
+    }
+
+    private List<string> FindEligibleChanges(
+        string gitRoot,
+        IReadOnlyList<string> includePathspecs,
+        IReadOnlyList<string> excludeGlobs,
+        bool trackedOnly)
+    {
+        var trackedArgs = new List<string> { "ls-files", "-m", "-d", "-z", "--" };
+        trackedArgs.AddRange(includePathspecs);
+        var tracked = RunGit(gitRoot, trackedArgs);
+        if (tracked.Code != 0) return [];
+
+        var listedOutput = tracked.Out;
+        if (!trackedOnly)
+        {
+            var untrackedArgs = new List<string> { "ls-files", "-o", "--exclude-standard", "-z", "--" };
+            untrackedArgs.AddRange(includePathspecs);
+            var untracked = RunGit(gitRoot, untrackedArgs);
+            if (untracked.Code != 0) return [];
+            listedOutput += untracked.Out;
+        }
+
+        var accepted = new List<string>();
+        foreach (var raw in listedOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var relative = raw.Replace('\\', '/');
+            if (excludeGlobs.Any(pattern => MatchesWorkspaceGlob(relative, pattern)))
+                continue;
+            var full = Path.Combine(gitRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(full))
+            {
+                var bytes = new FileInfo(full).Length;
+                if (bytes > _maxStagedFileBytes)
+                {
+                    _logger.LogWarning(
+                        "workspace-artifact-size-guard-refused repo={Repo} path={Path} bytes={Bytes} limitBytes={LimitBytes}",
+                        gitRoot, relative, bytes, _maxStagedFileBytes);
+                    continue;
+                }
+            }
+            accepted.Add(relative);
+        }
+        return accepted.Distinct(StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToList();
+    }
+
+    private GitProcessResult AddCandidates(string gitRoot, IReadOnlyList<string> candidates)
+    {
+        GitProcessResult result = new(string.Empty, string.Empty, 0);
+        foreach (var batch in candidates.Chunk(200))
+        {
+            var args = new List<string> { "add", "-A", "--" };
+            args.AddRange(batch);
+            result = RunGitRetryingIndexLock(gitRoot, args);
+            if (result.Code != 0) return result;
+        }
+        return result;
+    }
+
+    private static bool MatchesWorkspaceGlob(string relativePath, string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        var normalized = pattern.Trim().Replace('\\', '/').Replace("**", "*");
+        return FileSystemName.MatchesSimpleExpression(
+            normalized,
+            relativePath,
+            ignoreCase: OperatingSystem.IsWindows());
     }
 
     private GitProcessResult RunGitRetryingIndexLock(string gitRoot, IReadOnlyList<string> args, string? stdin = null)
@@ -673,6 +862,25 @@ public sealed class WorkspaceArtifactCommitService
         var stderr = p.StandardError.ReadToEnd();
         p.WaitForExit(30_000);
         return new GitProcessResult(stdout, stderr, p.ExitCode);
+    }
+
+    private static GitProcessResult RunGitBounded(
+        string cwd, IReadOnlyList<string> args, TimeSpan timeout)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        var result = GitNetworkProcessRunner.Run(psi, timeout: timeout);
+        return new GitProcessResult(result.StandardOutput, result.StandardError, result.ExitCode);
     }
 
     internal sealed record GitProcessResult(string Out, string Err, int Code)

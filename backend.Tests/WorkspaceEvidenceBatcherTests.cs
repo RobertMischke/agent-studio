@@ -17,6 +17,7 @@ namespace AgentStudio.Tests;
 /// Real git on a temp repo (mirrors <see cref="WorkspaceArtifactCommitServiceTests"/>);
 /// virtual time via <c>FakeTimeProvider</c> so there is no MachineBound sleep.
 /// </summary>
+[Trait("Category", "MachineBound")]
 public sealed class WorkspaceEvidenceBatcherTests : IDisposable
 {
     private readonly string _root;
