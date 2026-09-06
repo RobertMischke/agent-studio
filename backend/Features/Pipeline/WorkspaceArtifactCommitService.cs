@@ -1,9 +1,9 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using AgentStudio.Retention;
 
 namespace AgentStudio.Pipeline;
 
@@ -30,11 +30,7 @@ public sealed class WorkspaceArtifactCommitService
     // collide on `.git/index.lock`. Keyed by resolved git root so distinct
     // repos never contend. Static so the single DI singleton and any test
     // instance pointed at the same repo share the gate.
-    private static readonly ConcurrentDictionary<string, object> RepoGates =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    private static object RepoGate(string gitRoot) =>
-        RepoGates.GetOrAdd(gitRoot, _ => new object());
+    private static object RepoGate(string gitRoot) => RetentionRepositoryGate.For(gitRoot);
 
     public WorkspaceArtifactCommitService(
         IConfiguration configuration,
@@ -142,6 +138,15 @@ public sealed class WorkspaceArtifactCommitService
             var pathspecs = BuildPathspecs(gitRoot, beforeMoveFolderPath, afterMoveFolderPath);
             if (pathspecs.Count == 0)
                 return WorkspaceArtifactCommitResult.Skipped("job-folder-outside-workspace");
+
+            var refused = FindCommitRefusals(gitRoot, pathspecs);
+            if (refused.Count > 0)
+            {
+                _logger.LogWarning(
+                    "workspace-artifact-commit refused oversized class-c files jobId={JobId} files={Files}",
+                    jobId, string.Join(",", refused));
+                return WorkspaceArtifactCommitResult.Failed("artifact-oversize", string.Join(", ", refused));
+            }
 
             string? shortSha;
             ArtifactCommitPlan plan;
@@ -415,6 +420,15 @@ public sealed class WorkspaceArtifactCommitService
             if (pathspecs.Count == 0)
                 return WorkspaceArtifactCommitResult.Skipped("no-data-paths");
 
+            var refused = FindCommitRefusals(gitRoot, pathspecs);
+            if (refused.Count > 0)
+            {
+                _logger.LogWarning(
+                    "workspace-evidence-commit refused oversized class-c files root={Root} files={Files}",
+                    gitRoot, string.Join(",", refused));
+                return WorkspaceArtifactCommitResult.Failed("artifact-oversize", string.Join(", ", refused));
+            }
+
             // Excludes are enforced in two places, and BOTH are required:
             //   1. `git reset` unstages them from the index (below). This alone
             //      handles untracked scratch, and keeps the index clean so the
@@ -597,6 +611,23 @@ public sealed class WorkspaceArtifactCommitService
             return;
         }
         result.Add(rel.Replace('\\', '/'));
+    }
+
+    internal static IReadOnlyList<string> FindCommitRefusals(string gitRoot, IReadOnlyList<string> pathspecs)
+    {
+        var result = new List<string>();
+        foreach (var pathspec in pathspecs)
+        {
+            var root = Path.GetFullPath(Path.Combine(gitRoot, pathspec));
+            if (!Directory.Exists(root)) continue;
+            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(gitRoot, path).Replace('\\', '/');
+                var size = new FileInfo(path).Length;
+                if (ArtifactClassifier.IsCommitRefused(relative, size)) result.Add(relative);
+            }
+        }
+        return result.Order(StringComparer.Ordinal).ToList();
     }
 
     private static string NormalizeVerdict(ReviewDecisionKind verdict) => verdict switch

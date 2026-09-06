@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using AgentStudio.Retention;
 
 namespace AgentStudio.Pipeline;
 
@@ -53,6 +54,18 @@ public sealed class WorkspaceEvidenceBatcher
         "*/.runtime/*",
         "*/logs/cli-output.log.1",
     };
+
+    private static readonly string[] RetentionHeavyExcludeGlobs =
+    {
+        "*/attachments/*",
+        "*/results/*",
+        "*/logs/cli-output.log",
+        "*/review-stdout*.log",
+        "*/review/*stdout.log",
+    };
+
+    internal static bool IsHeavyArtifact(string path) =>
+        ArtifactClassifier.Classify(path) == ArtifactClass.HeavyWorkingData;
 
     private readonly WorkspaceArtifactCommitService _commit;
     private readonly WorkspaceArtifactPushQueue? _push;
@@ -113,7 +126,10 @@ public sealed class WorkspaceEvidenceBatcher
         get
         {
             var configured = _config.GetSection("WorkspaceEvidence:ExcludeGlobs").Get<string[]>();
-            return configured is { Length: > 0 } ? configured : DefaultExcludeGlobs;
+            return (configured is { Length: > 0 } ? configured : DefaultExcludeGlobs)
+                .Concat(RetentionHeavyExcludeGlobs)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
         }
     }
 

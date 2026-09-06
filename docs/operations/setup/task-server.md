@@ -234,6 +234,53 @@ SHA. This output is also used by deployment verification:
 task-server <VERSION>+sha.<40-character-commit>
 ```
 
+## Retention CLI
+
+The Task Server binary hosts the shared retention engine for both the legacy
+file-tree store and the future SQLite adapter. File-tree commands require an
+explicit workspace path. The default cold archive is the
+`agent-taskboard-archive` sibling of that workspace; set `ARCHIVE_PATH` or pass
+`--archive` to select another path outside the repository.
+
+```text
+dotnet task-server.dll retention plan --workspace <path> --policy <file|default> [--project <id>] [--task <key>] [--json]
+dotnet task-server.dll retention apply --workspace <path> --policy <file|default> [--project <id>] [--task <key>] [--json]
+dotnet task-server.dll retention restore --workspace <path> --task <key> [--project <id>] [--json]
+```
+
+`plan` does not move or delete artifacts. It prints a summary or JSON and
+writes the complete report under `.metadata/retention-reports/`. The report
+contains before and after task, hot-byte, cold-byte, Git-directory, and Git
+working-tree measurements, counts and bytes by rule and project, and the largest affected
+tasks. `apply` executes exactly that plan, appends
+`.metadata/retention-audit.jsonl`, and makes one scoped evidence commit per
+affected project. The repository mutation shares the legacy workspace
+committer's gate. Class C files larger than 50 MiB are rejected before staging.
+
+At 30 days after a terminal transition, class C originals move to a Deflate
+ZIP payload while content-aware Markdown excerpts stay hot as class B
+evidence. At 180 days, class B and any remaining class C files move cold while
+`task.json`, `status.md`, excerpts, and `archive-manifest.json` remain as the
+hot stub. Restore verifies the payload and every file SHA-256 before replacing
+content and records `restoredAt` in both manifests and the pointer.
+
+The file-tree full-backup commands create a self-contained, externally
+copyable set:
+
+```text
+dotnet task-server.dll retention backup-full --workspace <path> --out <backup-path>/full/<timestamp> [--archive <path>] [--json]
+dotnet task-server.dll retention verify-full --out <backup-set> [--json]
+dotnet task-server.dll retention restore-full --out <backup-set> --into <empty-directory> [--json]
+```
+
+Each set contains `repository.bundle`, untracked workspace evidence, every
+cold manifest and payload referenced by the snapshot, and
+`analysis/tasks.v1.jsonl`. The analysis export schema version is `1`; each line
+contains `taskKey`, `taskId`, `project`, `lane`, `terminalAt`, and `hotBytes`.
+`inventory.json` records every set member with its size and SHA-256 plus a
+canonical set hash. `complete.json` is written last. Verification checks the
+completion marker, inventory hash, set hash, and every member before restore.
+
 ## Sole v1 owner and transition proxy
 
 Only a valid absolute HTTP or HTTPS `TaskServer:BaseUrl` selects the standalone

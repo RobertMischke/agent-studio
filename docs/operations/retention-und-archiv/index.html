@@ -365,9 +365,12 @@ auslöst. Klasse A verlässt den heißen Store nie.</figcaption>
 
 <!-- ============================================================ -->
 <h2 id="sofort"><span class="no">§7</span>Sofortmaßnahmen im heutigen Repository</h2>
-<p class="stx stx-part"><b>Stand 06.09. 22:30:</b> Ignore-Regel für <code>.metadata/attempt-authority*</code> gesetzt,
-gedriftete Bus-Logs und Task-Zustände committet, Einzel-Push abgebrochen (über 2 GB), Repack der losen Objekte läuft,
-Block-Push zu 250 Commits läuft (erster Block in 303 s). Die übrigen Punkte sind Teil von R1 (§10).</p>
+<p class="stx stx-part"><b>Status 6 September 2026, R1 implementation:</b> The shared engine, file-tree adapter,
+content-aware staged excerpts, local ZIP archive with hashed manifests and restore, full-backup round trip, CLI,
+50 MiB commit guard, and runtime-log exclusions are implemented and covered by fixture tests. The execution host did
+not expose <code>C:\Projects\agent-taskboard-workspace</code>; the only similarly named Linux directory was a 108 KB
+non-Git runner scratch tree, not the measured 2,264-task repository. No live before/after figures are claimed and the
+approved plan/apply sweep remains pending on a host that mounts the operator workspace.</p>
 <ol>
   <li><b>Log nur am Run-Ende committen.</b> <code>WorkspaceEvidenceBatcher</code> und die Run-Grenzen schließen Klasse C
       während eines laufenden Runs aus; erst der Abschluss des Runs committet eine Version. Erwartete Wirkung: rund 90 %
