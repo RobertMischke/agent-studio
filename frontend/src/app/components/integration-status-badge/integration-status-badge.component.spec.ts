@@ -49,20 +49,20 @@ describe('IntegrationStatusBadgeComponent', () => {
     expect(badge.classList.contains('integration-badge--acute')).toBe(false);
   });
 
-  it('renders pending as amber "NICHT integriert" and flags acute', () => {
+  it('renders pending as amber "NOT integrated" and flags acute', () => {
     const fixture = render(integration('pending'));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('NICHT integriert');
+    expect(badge.textContent).toContain('NOT integrated');
     expect(badge.dataset['kind']).toBe('pending');
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
   });
 
-  it('renders partial as an orange "teilweise integriert" badge with missing SHAs in the tooltip', () => {
+  it('renders partial as an orange "partially integrated" badge with missing SHAs in the tooltip', () => {
     const fixture = render(
       integration('partial', { detail: '1/2 attributed commits integrated; missing: beef123' }),
     );
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('teilweise integriert');
+    expect(badge.textContent).toContain('partially integrated');
     expect(badge.dataset['kind']).toBe('partial');
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
     expect(fixture.componentInstance.tooltip()).toContain('Partially integrated');
@@ -177,10 +177,10 @@ describe('IntegrationStatusBadgeComponent', () => {
     http.verify();
   });
 
-  it('renders no-branch as grey "kein Branch"', () => {
+  it('renders no-branch as grey "no branch"', () => {
     const fixture = render(integration('no-branch'));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('kein Branch');
+    expect(badge.textContent).toContain('no branch');
     expect(badge.dataset['kind']).toBe('no-branch');
     expect(badge.classList.contains('integration-badge--acute')).toBe(false);
   });
@@ -194,5 +194,30 @@ describe('IntegrationStatusBadgeComponent', () => {
     const fixture = render(integration('pending', { integrationBranch: 'trunk' }));
     expect(fixture.componentInstance.tooltip()).toContain('NOT integrated into trunk');
     expect(fixture.componentInstance.ariaLabel()).toContain('Not integrated into trunk');
+  });
+
+  it('renders one repository chip per delivery repository', () => {
+    const fixture = render(integration('integrated', {
+      repositories: [
+        {
+          repository: 'repo-studio', label: 'agent-studio', commits: ['a', 'b'],
+          integrationBranch: 'develop', releaseBranch: 'main',
+          onIntegrationBranch: true, onReleaseBranch: true,
+          detail: 'agent-studio: 2/2 attributed commits are in develop.',
+        },
+        {
+          repository: 'repo-runner', label: 'runner', commits: ['c'],
+          integrationBranch: 'main', releaseBranch: 'main',
+          onIntegrationBranch: true, onReleaseBranch: true,
+          detail: 'runner: 1/1 attributed commits are in main.',
+        },
+      ],
+    }));
+
+    const repositories = fixture.nativeElement.querySelector(
+      '[data-testid="integration-repositories"]',
+    ) as HTMLElement;
+    expect(repositories.textContent).toContain('agent-studio 2/2 develop and main');
+    expect(repositories.textContent).toContain('runner 1/1 main');
   });
 });

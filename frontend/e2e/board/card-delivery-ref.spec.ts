@@ -6,7 +6,7 @@ import { dismissDevErrorDialog, setTheme } from '../helpers/theme';
 const PROJECT = 'Delivery ref fixture';
 const WATCH_PATH = '/fixtures/delivery-ref-card';
 const DELIVERY_REF = 'runner/agent-runner-01/AGT-2220';
-const RESULTS = join(process.cwd(), 'results', 'AGT-2434');
+const RESULTS = process.env.JOB_RESULTS_DIR ?? join(process.cwd(), 'test-results', 'card-delivery-ref');
 
 const remoteReviewTask = {
   id: 'out-of-band-nur-mit-verifizierten-commits',
@@ -41,11 +41,30 @@ const remoteReviewTask = {
     merge: null,
   },
   integration: {
-    status: 'pending',
+    status: 'partial',
     deliveryRef: DELIVERY_REF,
     sha: null,
-    integrationBranch: 'main',
-    detail: `Delivery ref '${DELIVERY_REF}' is not yet integrated into main.`,
+    integrationBranch: 'develop',
+    detail: 'agent-studio: 5/5 attributed commits are in develop. · runner: 3/4 attributed commits are in main; missing: dcb54c7',
+    repositories: [{
+      repository: 'github.com/openai/agent-studio',
+      label: 'agent-studio',
+      commits: ['1111111', '2222222', '3333333', '4444444', '5555555'],
+      integrationBranch: 'develop',
+      releaseBranch: 'main',
+      onIntegrationBranch: true,
+      onReleaseBranch: true,
+      detail: 'agent-studio: 5/5 attributed commits are in develop.',
+    }, {
+      repository: 'github.com/openai/agent-runner',
+      label: 'runner',
+      commits: ['aaaaaaa', 'bbbbbbb', 'ccccccc', 'dcb54c7'],
+      integrationBranch: 'main',
+      releaseBranch: 'main',
+      onIntegrationBranch: false,
+      onReleaseBranch: false,
+      detail: 'runner: 3/4 attributed commits are in main; missing: dcb54c7',
+    }],
   },
 };
 
@@ -129,9 +148,15 @@ test.describe('Review card delivery ref projection', () => {
       await expect(card).toBeVisible({ timeout: 15_000 });
 
       const integration = card.getByTestId('integration-status-badge');
-      await expect(integration).toHaveAttribute('data-integration-status', 'pending');
-      await expect(integration).toContainText('NICHT integriert');
-      await expect(integration).not.toContainText('kein Branch');
+      await expect(integration).toHaveAttribute('data-integration-status', 'partial');
+      await expect(integration).toContainText('partially integrated');
+
+      const repositories = card.getByTestId('integration-repositories');
+      await expect(repositories).toContainText('agent-studio 5/5 develop and main');
+      await expect(repositories).toContainText('runner 3/4 main');
+      await dismissDevErrorDialog(page);
+      await repositories.locator('[data-integrated="false"]').hover();
+      await expect(page.getByTestId('cac-tooltip')).toContainText('missing: dcb54c7');
 
       const context = card.getByTestId('task-card-change-context');
       await expect(context).toContainText(DELIVERY_REF);
@@ -139,6 +164,7 @@ test.describe('Review card delivery ref projection', () => {
       await expect(context).not.toContainText('main checkout');
       await expect(context).not.toContainText('no code changes');
 
+      await page.mouse.move(0, 0);
       mkdirSync(RESULTS, { recursive: true });
       const screenshotPath = join(RESULTS, `board-delivery-ref-${theme}.png`);
       await card.screenshot({ path: screenshotPath });

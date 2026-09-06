@@ -31,6 +31,7 @@ public class TaskMutationService
     // simply skip the timeline event.
     private readonly TimelineLog? _timeline;
     private readonly GitService? _git;
+    private readonly ProjectSettingsService? _projectSettings;
     // Lane mutex: serialise the slug-uniqueness check + folder create in
     // CreateJob with the other lane writers (move/archive/delete) so two
     // concurrent creates cannot pick the same dedupe suffix and land two
@@ -38,7 +39,7 @@ public class TaskMutationService
     // service directly keep compiling; the NullSingleton still serialises.
     private readonly LaneMutexRegistry _laneMutex;
 
-    public TaskMutationService(TaskScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, TaskChangeNotifier notifier, ILogger<TaskMutationService> logger, TimelineLog? timeline = null, LaneMutexRegistry? laneMutex = null, GitService? git = null)
+    public TaskMutationService(TaskScannerService scanner, ClientIdentityStore clients, ProjectRegistry projectRegistry, TaskChangeNotifier notifier, ILogger<TaskMutationService> logger, TimelineLog? timeline = null, LaneMutexRegistry? laneMutex = null, GitService? git = null, ProjectSettingsService? projectSettings = null)
     {
         _scanner = scanner;
         _clients = clients;
@@ -48,6 +49,7 @@ public class TaskMutationService
         _timeline = timeline;
         _laneMutex = laneMutex ?? LaneMutexRegistry.NullSingleton;
         _git = git;
+        _projectSettings = projectSettings;
     }
 
     /// <summary>
@@ -305,6 +307,7 @@ public class TaskMutationService
                 if (!producerBySha.TryGetValue(commit.Sha, out var producer)) return commit;
                 return commit with
                 {
+                    Repository = commit.Repository ?? producer.Repository,
                     Branch = commit.Branch ?? producer.Branch,
                     RunAttemptId = commit.RunAttemptId ?? producer.RunAttemptId,
                     RunnerId = commit.RunnerId ?? producer.RunnerId,
@@ -1061,6 +1064,66 @@ public class TaskMutationService
             repairedTasks,
             repairedCommits,
             unresolvedTasks);
+    }
+
+    /// <summary>
+    /// One-time idempotent migration from legacy <c>[repository]</c> message
+    /// decoration to structured commit repository and branch fields. Prefixes
+    /// remain untouched as informational message text.
+    /// </summary>
+    public CommitDeliveryMetadataBackfillResult BackfillCommitDeliveryMetadata()
+    {
+        var repairedTasks = 0;
+        var repairedCommits = 0;
+        var projects = _projectRegistry.List();
+        foreach (var task in _scanner.ScanAllJobsWithArchive())
+        {
+            var persisted = ReadPersistedCommitChain(task.FolderPath);
+            if (persisted is null || persisted.Count == 0) continue;
+
+            var changed = false;
+            var migrated = persisted.Select(commit =>
+            {
+                if (!string.IsNullOrWhiteSpace(commit.Repository)
+                    && !string.IsNullOrWhiteSpace(commit.Branch)) return commit;
+
+                var legacyName = CommitRepositoryMetadata.LegacyRepositoryPrefix(commit.Message);
+                var registered = projects.FirstOrDefault(project =>
+                    legacyName is not null && CommitRepositoryMetadata.Matches(project, legacyName));
+                registered ??= projects.FirstOrDefault(project =>
+                    string.Equals(project.Id, task.ProjectName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(project.DisplayName, task.ProjectName, StringComparison.OrdinalIgnoreCase));
+
+                var url = registered is null ? null : CommitRepositoryMetadata.RepositoryUrl(registered);
+                var repository = commit.Repository
+                    ?? AgentStudio.TaskServer.Contracts.RepositoryIdentityContract.FromUrl(url)
+                    ?? legacyName;
+                var branch = commit.Branch;
+                if (string.IsNullOrWhiteSpace(branch) && registered is not null && _projectSettings is not null)
+                    branch = _projectSettings.Get(registered.DisplayName).IntegrationBranch;
+                if (string.IsNullOrWhiteSpace(branch) && _git is not null)
+                {
+                    var root = registered?.RepositoryPath
+                        ?? _git.ResolveRepoRootForWatchPath(task.WatchPath);
+                    if (!string.IsNullOrWhiteSpace(root)) branch = _git.ReadCurrentBranchAt(root!);
+                }
+
+                if (string.IsNullOrWhiteSpace(repository) && string.IsNullOrWhiteSpace(branch)) return commit;
+                changed = true;
+                repairedCommits++;
+                return commit with { Repository = repository, Branch = branch };
+            }).ToList();
+
+            if (!changed || !WriteCommitState(task.FolderPath, migrated)) continue;
+            repairedTasks++;
+        }
+
+        if (repairedTasks > 0)
+            _logger.LogInformation(
+                "commit-delivery-metadata-backfill tasks={Tasks} commits={Commits}",
+                repairedTasks,
+                repairedCommits);
+        return new CommitDeliveryMetadataBackfillResult(repairedTasks, repairedCommits);
     }
 
     /// <summary>
@@ -2074,3 +2137,7 @@ public sealed record CommitMetadataBackfillResult(
     int RepairedTasks,
     int RepairedCommits,
     int UnresolvedTasks);
+
+public sealed record CommitDeliveryMetadataBackfillResult(
+    int RepairedTasks,
+    int RepairedCommits);

@@ -44,6 +44,10 @@ public sealed record AttributionInput
     public string? TaskBranch { get; init; }
     /// <summary>Current HEAD branch. Null skips the branch check.</summary>
     public string? HeadBranch { get; init; }
+    /// <summary>Registered repository id or URL stamped onto every attributed commit.</summary>
+    public string? Repository { get; init; }
+    /// <summary>Delivery branch observed when attribution was computed.</summary>
+    public string? Branch { get; init; }
     /// <summary>Substring that marks the agent in author/co-author lines. Default <c>Claude</c>.</summary>
     public string AgentMarker { get; init; } = "Claude";
     /// <summary>Repo-root-relative path prefix for the dev checkout (e.g. <c>agent-taskboard-dev/</c>). Null skips the working-dir check.</summary>
@@ -123,6 +127,8 @@ public static class CommitAttributionService
                     Sha = c.Sha,
                     ShortSha = string.IsNullOrEmpty(c.ShortSha) ? Short(c.Sha) : c.ShortSha,
                     Message = message,
+                    Repository = input.Repository,
+                    Branch = input.Branch,
                     FilesChanged = c.FilesChanged,
                     Files = c.Files.ToList(),
                     At = c.AuthorDateUtc,
@@ -180,6 +186,8 @@ public static class CommitAttributionService
                 Sha = c.Sha,
                 ShortSha = string.IsNullOrEmpty(c.ShortSha) ? Short(c.Sha) : c.ShortSha,
                 Message = message,
+                Repository = input.Repository,
+                Branch = input.Branch,
                 FilesChanged = c.FilesChanged,
                 Files = c.Files.ToList(),
                 At = c.AuthorDateUtc,

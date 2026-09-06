@@ -227,6 +227,31 @@ describe('buildDelivery', () => {
     );
     expect(d.filesChanged).toBe(3);
   });
+
+  it('formats repository-scoped delivery membership', () => {
+    const d = buildDelivery(info({
+      integration: {
+        status: 'partial', deliveryRef: null, sha: null, integrationBranch: 'develop', detail: null,
+        repositories: [
+          {
+            repository: 'studio', label: 'agent-studio', commits: ['a'],
+            integrationBranch: 'develop', releaseBranch: 'main',
+            onIntegrationBranch: true, onReleaseBranch: true, detail: 'agent-studio: 1/1 attributed commits are in develop.',
+          },
+          {
+            repository: 'runner', label: 'runner', commits: ['b', 'c'],
+            integrationBranch: 'main', releaseBranch: 'main',
+            onIntegrationBranch: false, onReleaseBranch: false, detail: 'runner: 1/2 attributed commits are in main; missing: c.',
+          },
+        ],
+      },
+    } as Partial<TaskInfo>));
+
+    expect(d.repositories.map(repository => repository.text)).toEqual([
+      'agent-studio 1/1 develop and main',
+      'runner 1/2 main',
+    ]);
+  });
 });
 
 describe('deriveRecommendation', () => {

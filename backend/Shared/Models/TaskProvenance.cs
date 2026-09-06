@@ -131,6 +131,9 @@ public record TaskMergeSignal
 
     /// <summary>Short SHA of the task anchor that reached main. Null when not in main.</summary>
     public string? ReleaseSha { get; init; }
+
+    /// <summary>Per-repository membership for multi-repository deliveries.</summary>
+    public IReadOnlyList<TaskRepositoryIntegrationStatus> Repositories { get; init; } = [];
 }
 
 /// <summary>
@@ -275,6 +278,28 @@ public record TaskIntegrationStatus
     /// <see cref="IntegrationStatuses.ConflictSkipped"/>.
     /// </summary>
     public TaskIntegrationFailure? Failure { get; init; }
+
+    /// <summary>
+    /// Repository-scoped delivery membership. The card-level status is
+    /// integrated only when every entry is on its integration branch.
+    /// </summary>
+    public IReadOnlyList<TaskRepositoryIntegrationStatus> Repositories { get; init; } = [];
+}
+
+/// <summary>One repository slice of an attributed delivery.</summary>
+public sealed record TaskRepositoryIntegrationStatus
+{
+    /// <summary>Registered repository id or repository URL.</summary>
+    public string Repository { get; init; } = "";
+    /// <summary>Human-readable repository name derived from registry metadata.</summary>
+    public string Label { get; init; } = "repository";
+    /// <summary>Attributed commit SHAs in oldest-to-newest order.</summary>
+    public IReadOnlyList<string> Commits { get; init; } = [];
+    public string IntegrationBranch { get; init; } = "develop";
+    public string ReleaseBranch { get; init; } = "main";
+    public bool OnIntegrationBranch { get; init; }
+    public bool OnReleaseBranch { get; init; }
+    public string? Detail { get; init; }
 }
 
 /// <summary>

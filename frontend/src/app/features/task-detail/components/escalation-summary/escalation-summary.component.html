@@ -104,6 +104,13 @@
                 · {{ v.delivery.filesChanged }} {{ v.delivery.filesChanged === 1 ? 'file' : 'files' }}
               }
             </span>
+            @if (v.delivery.repositories.length > 0) {
+              <span data-testid="escalation-delivery-repositories">
+                @for (repository of v.delivery.repositories; track repository.key) {
+                  <span [cacTooltip]="repository.detail">{{ repository.text }}</span>@if (!$last) { · }
+                }
+              </span>
+            }
           </div>
         }
 

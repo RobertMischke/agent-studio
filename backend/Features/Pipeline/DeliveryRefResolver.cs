@@ -48,7 +48,7 @@ public static class DeliveryRefResolver
         }
 
         var attributed = card.Commits
-            .Where(commit => !string.IsNullOrWhiteSpace(commit.Branch))
+            .Where(commit => IsDeliveryCarrier(commit.Branch))
             .LastOrDefault();
         var attributedRef = NormalizeBranch(attributed?.Branch);
         if (attributedRef is not null)
@@ -59,7 +59,7 @@ public static class DeliveryRefResolver
                 attributedRef,
                 expectedSha,
                 DeliveryRefSource.AttributedCommit,
-                IsRemote: true);
+                IsRemote: !attributedRef.StartsWith("task/", StringComparison.OrdinalIgnoreCase));
         }
 
         var taskKey = string.IsNullOrWhiteSpace(card.Key)
@@ -133,6 +133,16 @@ public static class DeliveryRefResolver
         if (string.IsNullOrWhiteSpace(value)) return null;
         var branch = TaskIntegrationBranch.Name(value, fallback: "");
         return string.IsNullOrWhiteSpace(branch) ? null : branch;
+    }
+
+    private static bool IsDeliveryCarrier(string? value)
+    {
+        var branch = NormalizeBranch(value);
+        return branch is not null
+            && (branch.StartsWith("task/", StringComparison.OrdinalIgnoreCase)
+                || branch.StartsWith("runner/", StringComparison.OrdinalIgnoreCase)
+                || branch.Contains("/results/", StringComparison.OrdinalIgnoreCase)
+                || branch.Contains("/salvage/", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool ValidFullSha(string? value)

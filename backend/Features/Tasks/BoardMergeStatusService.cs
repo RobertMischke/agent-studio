@@ -33,6 +33,7 @@ public sealed class BoardMergeStatusService
     private readonly GitService _git;
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<BoardMergeStatusService> _logger;
+    private readonly TaskIntegrationStatusService? _integrationStatus;
 
     public const string ReleaseBranch = "main";
 
@@ -54,8 +55,9 @@ public sealed class BoardMergeStatusService
     public BoardMergeStatusService(
         GitService git,
         ProjectSettingsService settings,
-        ILogger<BoardMergeStatusService> logger)
-        : this(git, settings, logger, TimeProvider.System)
+        ILogger<BoardMergeStatusService> logger,
+        TaskIntegrationStatusService? integrationStatus = null)
+        : this(git, settings, logger, TimeProvider.System, integrationStatus)
     {
     }
 
@@ -63,11 +65,13 @@ public sealed class BoardMergeStatusService
         GitService git,
         ProjectSettingsService settings,
         ILogger<BoardMergeStatusService> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        TaskIntegrationStatusService? integrationStatus = null)
     {
         _git = git;
         _settings = settings;
         _logger = logger;
+        _integrationStatus = integrationStatus;
         _cache = new GenerationSingleFlightCache<RepoReachability>(timeProvider);
     }
 
@@ -84,6 +88,8 @@ public sealed class BoardMergeStatusService
         if (jobs.Count == 0) return result;
 
         using var _t = GitProcessTelemetry.BeginRequest("board/merge-status", _logger);
+        var repositoryStatuses = _integrationStatus?.BuildLookup(jobs)
+            ?? new Dictionary<string, TaskIntegrationStatus>(StringComparer.Ordinal);
 
         // Group the anchored cards by resolved repo root so the batched ancestor
         // sets are computed ONCE per repository, not per card.
@@ -121,7 +127,8 @@ public sealed class BoardMergeStatusService
                 var anchor = commits[^1];
                 var branch = !string.IsNullOrWhiteSpace(job.Provenance?.Branch)
                     ? job.Provenance!.Branch
-                    : WorktreeTaskLifecycle.BranchFor(job.Id);
+                    : job.Commits.LastOrDefault(commit => !string.IsNullOrWhiteSpace(commit.Branch))?.Branch
+                        ?? WorktreeTaskLifecycle.BranchFor(job.Id);
 
                 var inIntegration = commits.All(sha =>
                     TaskIntegrationStatusService.AncestorSetContains(reach.Integration, sha));
@@ -139,6 +146,30 @@ public sealed class BoardMergeStatusService
                     ReleaseSha = inRelease ? Short(anchor) : null,
                 };
             }
+        }
+
+        foreach (var job in jobs)
+        {
+            if (!repositoryStatuses.TryGetValue(job.TaskKey, out var status)
+                || status.Repositories.Count == 0) continue;
+            var commits = TaskIntegrationStatusService.AttributedCommits(job);
+            if (commits.Count == 0) continue;
+            var anchor = commits[^1];
+            var inIntegration = status.Repositories.All(repository => repository.OnIntegrationBranch);
+            var inRelease = status.Repositories.All(repository => repository.OnReleaseBranch);
+            result[job.TaskKey] = new TaskMergeSignal
+            {
+                Branch = status.DeliveryRef
+                    ?? job.Commits.LastOrDefault(commit => !string.IsNullOrWhiteSpace(commit.Branch))?.Branch
+                    ?? string.Empty,
+                InIntegration = inIntegration,
+                InRelease = inRelease,
+                IntegrationBranch = status.IntegrationBranch,
+                ReleaseBranch = ReleaseBranch,
+                IntegrationSha = inIntegration ? Short(anchor) : null,
+                ReleaseSha = inRelease ? Short(anchor) : null,
+                Repositories = status.Repositories,
+            };
         }
 
         return result;

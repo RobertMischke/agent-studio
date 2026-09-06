@@ -1,4 +1,4 @@
-
+using System.Text.Json;
 
 namespace AgentStudio.Pipeline;
 
@@ -250,6 +250,12 @@ public sealed class MergeIntoDevelopRunner
                 result = MergeIntoIntegrationResult.Of(
                     MergeIntoIntegrationOutcome.Error,
                     error: synchronized.Error);
+            }
+            else if (!delivery.IsRemote
+                     && !_git.BranchExists(repoRoot, taskBranch)
+                     && DirectDeliveryEvidence(jobFolderPath, repoRoot, branch) is { Count: > 0 } evidence)
+            {
+                result = MergeIntoIntegrationResult.AlreadyOnIntegrationBranch(evidence);
             }
             else if (lineage?.Mode == ImmediateIntegrationLineageMode.Blocked)
             {
@@ -1572,6 +1578,13 @@ public sealed class MergeIntoDevelopRunner
                     "already-merged",
                     $"Task branch already contained in {integrationBranch}; no merge needed.{exactGate}",
                     preDevelopResult?.Reason);
+            case MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch:
+                var evidence = string.Join(", ", result.EvidenceShas.Select(Short));
+                return (
+                    PipelineStepStatus.Passed,
+                    "already-on-integration-branch",
+                    $"No task branch exists, but every attributed commit is already in {integrationBranch}.",
+                    $"Evidence SHAs: {evidence}.");
             case MergeIntoIntegrationOutcome.NoTaskBranch:
                 return (PipelineStepStatus.Skipped, "no-branch", result.Error ?? "No task branch to merge.", null);
             case MergeIntoIntegrationOutcome.PushedForReview:
@@ -1600,6 +1613,66 @@ public sealed class MergeIntoDevelopRunner
                     $"A bounded automatic steer round is required. Conflicted files: {ambiguousFiles}.");
             default:
                 return (PipelineStepStatus.Failed, "error", result.Error ?? "Merge failed.", null);
+        }
+    }
+    private IReadOnlyList<string> DirectDeliveryEvidence(
+        string jobFolderPath,
+        string repoRoot,
+        string integrationBranch)
+    {
+        try
+        {
+            var path = Path.Combine(jobFolderPath, "task.json");
+            if (!File.Exists(path)) return [];
+            var raw = JsonSerializer.Deserialize<JsonElement>(
+                File.ReadAllText(path), TaskJsonFile.ReadOpts);
+            var commits = new List<TaskCommitInfo>();
+            if (raw.TryGetProperty("commits", out var chain)
+                && chain.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in chain.EnumerateArray())
+                {
+                    var commit = item.Deserialize<TaskCommitInfo>(TaskJsonFile.ReadOpts);
+                    if (commit is not null) commits.Add(commit);
+                }
+            }
+            else if (raw.TryGetProperty("commit", out var legacy)
+                     && legacy.ValueKind == JsonValueKind.Object
+                     && legacy.Deserialize<TaskCommitInfo>(TaskJsonFile.ReadOpts) is { } commit)
+            {
+                commits.Add(commit);
+            }
+
+            var repositoryId = _git.RepositoryIdentityForWatchPath(repoRoot);
+            var origin = _git.ReadOriginUrl(repoRoot);
+            var label = CommitRepositoryMetadata.Label(origin ?? repoRoot);
+            var evidence = commits
+                .Where(commit => !TaskCommitSupersession.IsSuperseded(commit))
+                .Where(commit =>
+                {
+                    var repository = commit.Repository
+                        ?? CommitRepositoryMetadata.LegacyRepositoryPrefix(commit.Message);
+                    return string.IsNullOrWhiteSpace(repository)
+                        || string.Equals(repository, repositoryId, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(repository, origin, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(
+                            CommitRepositoryMetadata.Label(repository),
+                            label,
+                            StringComparison.OrdinalIgnoreCase);
+                })
+                .Select(commit => commit.Sha)
+                .Where(ReviewSubjectStore.IsValidResultSha)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return evidence.Count > 0
+                   && evidence.All(sha => _git.IsAncestor(repoRoot, sha, integrationBranch))
+                ? evidence
+                : [];
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "MergeIntoDevelopRunner: direct-delivery evidence is best-effort");
+            return [];
         }
     }
 

@@ -340,6 +340,8 @@ export interface TaskCommitInfo {
   sha: string;
   shortSha: string;
   message: string;
+  /** Registered repository id or repository URL owning this commit. */
+  repository?: string | null;
   filesChanged: number;
   files: string[];
   at: string;
@@ -477,6 +479,18 @@ export interface TaskMergeSignal {
   integrationSha: string | null;
   /** Short SHA of the anchor that reached main; null when not in main. */
   releaseSha: string | null;
+  repositories?: TaskRepositoryIntegrationStatus[];
+}
+
+export interface TaskRepositoryIntegrationStatus {
+  repository: string;
+  label: string;
+  commits: string[];
+  integrationBranch: string;
+  releaseBranch: string;
+  onIntegrationBranch: boolean;
+  onReleaseBranch: boolean;
+  detail: string | null;
 }
 
 /** One of the discrete integration verdicts (AGT-2202; `partial` added AGT-2171 fix). */
@@ -511,6 +525,8 @@ export interface TaskIntegrationStatus {
   detail: string | null;
   /** Typed current failure from the durable accepted-integration pipeline step. */
   failure?: TaskIntegrationFailure | null;
+  /** Repository-scoped membership for multi-repository deliveries. */
+  repositories?: TaskRepositoryIntegrationStatus[];
 }
 
 export interface TaskIntegrationFailure {

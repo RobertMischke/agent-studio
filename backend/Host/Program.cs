@@ -1099,6 +1099,18 @@ catch (Exception ex)
     crashRecorder.Record("CommitMetadataBackfill", ex);
 }
 
+// One-time migration from legacy [repository] commit-message decoration to
+// structured repository and branch attribution. The prefix remains readable
+// history but is not consulted after the fields have been persisted.
+try
+{
+    app.Services.GetRequiredService<TaskMutationService>().BackfillCommitDeliveryMetadata();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("CommitDeliveryMetadataBackfill", ex);
+}
+
 // One-time, conservative repair of historical rebase/steer generations. The
 // persisted report is also the completion marker. Ambiguous file-breadth cases
 // remain untouched and visible in that report.

@@ -65,6 +65,9 @@ public static class CommitAttributionRunner
         {
             TaskId = info.Id,
             Candidates = candidates,
+            Repository = git.RepositoryIdentityForWatchPath(watchPath),
+            Branch = git.ReadCurrentBranchAt(
+                git.ResolveRepoRootForWatchPath(watchPath) ?? watchPath ?? string.Empty),
             // The platform-stamped auto-commit(s) are the task's accepted work
             // by construction - pin them to full confidence.
             PlatformStampShas = info.Commits

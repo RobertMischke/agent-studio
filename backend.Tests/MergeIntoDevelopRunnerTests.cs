@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -779,6 +780,44 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         var step = ReadMergeStep(log, jobFolder);
         Assert.NotNull(step);
         Assert.Equal(PipelineStepStatus.Skipped, step!.Status);
+    }
+
+    [Fact]
+    public void Run_NoTaskBranchWithAttributedCommitAlreadyOnDevelop_IsIntegrated()
+    {
+        var repo = SeedRepo("runner-direct-delivery");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "direct.txt"), "direct delivery");
+        Commit(repo, "feat: direct delivery");
+        var sha = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "direct-delivery");
+        File.WriteAllText(Path.Combine(jobFolder, "task.json"), JsonSerializer.Serialize(new
+        {
+            commits = new[]
+            {
+                new TaskCommitInfo
+                {
+                    Sha = sha,
+                    ShortSha = sha[..7],
+                    Message = "feat: direct delivery",
+                    Branch = "develop",
+                    FilesChanged = 1,
+                },
+            },
+        }));
+
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+        var outcome = runner.Run("Fixture", "direct-delivery", jobFolder, repo, "develop");
+
+        Assert.Equal(MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch, outcome.Outcome);
+        Assert.Equal([sha], outcome.EvidenceShas);
+        Assert.Null(outcome.MergedSha);
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.Equal(PipelineStepStatus.Passed, step?.Status);
+        Assert.Equal("already-on-integration-branch", step?.Verdict);
+        Assert.Contains(sha[..7], step?.VerdictSummary);
     }
 
     [Fact]

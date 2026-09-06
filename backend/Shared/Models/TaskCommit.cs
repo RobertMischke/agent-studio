@@ -22,6 +22,12 @@ public record TaskCommitInfo
     public string ShortSha { get; init; } = "";
     public string Message { get; init; } = "";
     /// <summary>
+    /// Repository that owns this commit. New attribution writes the registered
+    /// repository id when one is available, otherwise the repository URL. Null
+    /// is retained only for legacy records that have not yet been migrated.
+    /// </summary>
+    public string? Repository { get; init; }
+    /// <summary>
     /// Delivery branch that carried this attributed commit. Remote attribution
     /// persists the exact runner/result ref here so acceptance can resolve the
     /// reviewed source from card data without reconstructing it from the task

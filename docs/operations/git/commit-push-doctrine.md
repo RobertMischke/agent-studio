@@ -51,6 +51,8 @@ Coding tasks use an isolated, task-owned worktree on `task/<id>` even in the pri
 
 Interactive operator edits may still exist directly on `develop`. Read-only tasks, legacy repositories, and unknown recovery paths may also lack a task worktree. Those paths never receive an implicit add-all commit: the platform must capture and supply the exact reviewed pathspecs, including for an operator-confirmed crash-recovery item, or leave the changes dirty for attribution. A file that appears after the pending recovery manifest was shown remains dirty and cannot join that snapshot.
 
+A direct-to-branch or historical delivery can legitimately have no `task/<id>` branch. In that case acceptance succeeds as `AlreadyOnIntegrationBranch` only when every attributed commit for the integration repository is an ancestor of the configured integration branch. The evidence record lists those SHAs. Multi-repository cards retain repository and branch on each commit and evaluate ancestry in each registered repository; another repository's SHA can never make the current repository look partially integrated. This recovery rule records existing Git truth and performs no commit, merge, or push.
+
 The boundary is the same in both modes: worker CLIs do not create branches, switch branches, merge, commit, or push. The platform owns those operations. PR-shaped review remains a future integration strategy; the current implemented path is direct merge plus visible conflict or unpushed-branch outcomes.
 
 ## What models / CLIs should leave to the platform

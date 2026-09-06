@@ -72,12 +72,29 @@ export class IntegrationStatusBadgeComponent {
     if (!value) return '';
     switch (value.status) {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
-      case 'partial': return 'teilweise integriert';
-      case 'pending': return 'NICHT integriert';
+      case 'partial': return 'partially integrated';
+      case 'pending': return 'NOT integrated';
       case 'conflict-skipped': return value.failure?.label ?? 'Integration failed';
-      default: return 'kein Branch';
+      default: return 'no branch';
     }
   });
+
+  readonly repositoryLines = computed(() => (this.integration()?.repositories ?? []).map(repository => {
+    const count = repository.commits.length;
+    const integrationCount = repository.onIntegrationBranch ? count : this.integratedCount(repository.detail);
+    const targets = repository.integrationBranch === repository.releaseBranch
+      ? repository.integrationBranch
+      : [
+          repository.onIntegrationBranch ? repository.integrationBranch : null,
+          repository.onReleaseBranch ? repository.releaseBranch : null,
+        ].filter(Boolean).join(' and ') || repository.integrationBranch;
+    return {
+      key: repository.repository,
+      label: `${repository.label} ${integrationCount}/${count} ${targets}`,
+      detail: repository.detail ?? '',
+      integrated: repository.onIntegrationBranch,
+    };
+  }));
 
   readonly glyph = computed(() => {
     switch (this.kind()) {
@@ -146,5 +163,10 @@ export class IntegrationStatusBadgeComponent {
         this.notifications.error('Could not queue the integration recovery round.');
       },
     });
+  }
+
+  private integratedCount(detail: string | null): number {
+    const match = detail?.match(/:\s*(\d+)\/(\d+)\s+attributed commits/i);
+    return match ? Number(match[1]) : 0;
   }
 }

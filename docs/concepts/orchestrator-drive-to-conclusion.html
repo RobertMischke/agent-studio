@@ -245,6 +245,25 @@
       </thead>
       <tbody>
         <tr>
+          <td>2026-09-06</td>
+          <td><code>AGT-2307</code><br><span class="small">externalization sweep</span></td>
+          <td>
+            Twenty commits were delivered directly to integration or release branches across seven repositories. The card
+            reported only 5/20 integrated, then acceptance failed with <code>NoTaskBranch</code> and left the otherwise
+            complete delivery in Human Review.
+          </td>
+          <td>
+            Commit attribution stored repository identity only in an informational <code>[repo]</code> message prefix. The
+            projection tested every SHA against the agent-studio checkout, while acceptance and merge signal required a
+            task branch that never existed.
+          </td>
+          <td>
+            <span class="pill ok">fixed</span> attribution now stores repository and branch, legacy prefixes migrate once,
+            integration and merge evidence are evaluated per repository, and complete attributed ancestry without a task
+            branch terminates as <code>AlreadyOnIntegrationBranch</code> with evidence SHAs.
+          </td>
+        </tr>
+        <tr>
           <td><strong>Running</strong></td>
           <td><span class="pill transient">transient</span></td>
           <td class="lane">3-progress</td>

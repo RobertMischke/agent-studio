@@ -1606,11 +1606,14 @@ public sealed class TaskTransitionService
             }
 
             var files = _git.GetCommitFiles(jobId, watchPath, result.Sha);
+            var repositoryRoot = _git.ResolveRepoRootForWatchPath(watchPath);
             return new TaskCommitInfo
             {
                 Sha = result.Sha,
                 ShortSha = result.Sha.Length > 7 ? result.Sha[..7] : result.Sha,
                 Message = message,
+                Repository = _git.RepositoryIdentityForWatchPath(watchPath),
+                Branch = repositoryRoot is null ? null : _git.ReadCurrentBranchAt(repositoryRoot),
                 FilesChanged = files.Count,
                 Files = files.Select(f => f.Path).ToList(),
                 At = DateTime.UtcNow

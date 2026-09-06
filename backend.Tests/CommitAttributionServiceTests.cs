@@ -303,4 +303,28 @@ public class CommitAttributionServiceTests
         Assert.Single(a.Attributed);
         Assert.Equal(2, a.Excluded.Count);
     }
+
+    [Fact]
+    public void Attribution_StampsRepositoryAndBranchForIndependentRepositories()
+    {
+        var studio = CommitAttributionService.Attribute(new AttributionInput
+        {
+            TaskId = TaskId,
+            Repository = "repo_agent_studio",
+            Branch = "develop",
+            Candidates = [Candidate("f201", "[agent-studio] feat: studio delivery")],
+        });
+        var runner = CommitAttributionService.Attribute(new AttributionInput
+        {
+            TaskId = TaskId,
+            Repository = "https://example.test/runner.git",
+            Branch = "main",
+            Candidates = [Candidate("f202", "[runner] feat: runner delivery")],
+        });
+
+        Assert.Equal("repo_agent_studio", Assert.Single(studio.Attributed).Repository);
+        Assert.Equal("develop", studio.Attributed[0].Branch);
+        Assert.Equal("https://example.test/runner.git", Assert.Single(runner.Attributed).Repository);
+        Assert.Equal("main", runner.Attributed[0].Branch);
+    }
 }

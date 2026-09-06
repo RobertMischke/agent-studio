@@ -11,6 +11,15 @@
     <span class="integration-badge__glyph" aria-hidden="true">{{ glyph() }}</span>
     <span class="integration-badge__label">{{ label() }}</span>
   </span>
+  @if (repositoryLines().length > 0) {
+    <span class="integration-repositories" data-testid="integration-repositories">
+      @for (repository of repositoryLines(); track repository.key) {
+        <span class="integration-repositories__entry"
+              [attr.data-integrated]="repository.integrated"
+              [cacTooltip]="repository.detail">{{ repository.label }}</span>
+      }
+    </span>
+  }
   @if (recoveryAvailable() && jobId()) {
     <button type="button"
             class="integration-recovery"

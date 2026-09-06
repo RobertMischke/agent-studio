@@ -94,6 +94,8 @@ export interface EscalationDelivery {
   commitCount: number;
   /** Distinct changed files across those commits (0 when unknown). */
   filesChanged: number;
+  /** Compact repository-scoped integration lines. */
+  repositories: { key: string; text: string; detail: string }[];
 }
 
 /** The single structured line that remains visible when details are closed. */
@@ -524,7 +526,23 @@ export function buildDelivery(info: TaskInfo): EscalationDelivery {
     for (const f of c.files ?? []) distinctFiles.add(f);
   }
   const filesChanged = distinctFiles.size > 0 ? distinctFiles.size : filesChangedSum;
-  return { merge, commitCount: commits.length, filesChanged };
+  const repositories = (info.integration?.repositories ?? []).map(repository => {
+    const total = repository.commits.length;
+    const match = repository.detail?.match(/:\s*(\d+)\/(\d+)\s+attributed commits/i);
+    const integrated = repository.onIntegrationBranch ? total : Number(match?.[1] ?? 0);
+    const branches = repository.integrationBranch === repository.releaseBranch
+      ? repository.integrationBranch
+      : [
+          repository.onIntegrationBranch ? repository.integrationBranch : null,
+          repository.onReleaseBranch ? repository.releaseBranch : null,
+        ].filter(Boolean).join(' and ') || repository.integrationBranch;
+    return {
+      key: repository.repository,
+      text: `${repository.label} ${integrated}/${total} ${branches}`,
+      detail: repository.detail ?? '',
+    };
+  });
+  return { merge, commitCount: commits.length, filesChanged, repositories };
 }
 
 /**

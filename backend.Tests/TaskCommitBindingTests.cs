@@ -267,6 +267,30 @@ public class TaskCommitBindingTests : IDisposable
     }
 
     [Fact]
+    public void CommitDeliveryMetadataBackfill_ParsesLegacyRepositoryPrefixOnce()
+    {
+        SeedGitCommit("delivery.txt", "delivered");
+        var legacy = MakeCommit(
+            "9999999",
+            "[runner] feat: externalize runner",
+            filesChanged: 1,
+            atIso: "2026-08-04T10:00:00Z");
+        var (scanner, mutations) = Build(withGit: true);
+        SeedJobFolder("repository-migration", "5-human-review", legacyCommit: legacy);
+
+        var first = mutations.BackfillCommitDeliveryMetadata();
+        var second = mutations.BackfillCommitDeliveryMetadata();
+        var info = scanner.FindJob("repository-migration", _watchPath);
+
+        Assert.Equal(1, first.RepairedTasks);
+        Assert.Equal(1, first.RepairedCommits);
+        Assert.Equal(0, second.RepairedTasks);
+        Assert.Equal("runner", Assert.Single(info!.Commits).Repository);
+        Assert.Equal("main", info.Commits[0].Branch);
+        Assert.StartsWith("[runner]", info.Commits[0].Message);
+    }
+
+    [Fact]
     public void AppendJobCommit_FailsCleanly_OnMissingFolder()
     {
         var (_, mutations) = Build();

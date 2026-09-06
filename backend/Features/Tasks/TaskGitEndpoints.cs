@@ -154,11 +154,14 @@ public static class TaskGitEndpoints
             }
 
             var files = git.GetCommitFiles(jobId, watchPath, sha);
+            var repositoryRoot = git.ResolveRepoRootForWatchPath(watchPath);
             var commit = new TaskCommitInfo
             {
                 Sha = sha,
                 ShortSha = sha[..8],
                 Message = commitMeta.Body.Trim(),
+                Repository = git.RepositoryIdentityForWatchPath(watchPath),
+                Branch = repositoryRoot is null ? null : git.ReadCurrentBranchAt(repositoryRoot),
                 FilesChanged = files.Count,
                 Files = files.Select(file => file.Path).ToList(),
                 At = commitMeta.AuthorDateUtc,
@@ -330,11 +333,14 @@ public static class TaskGitEndpoints
             }
 
             var files = git.GetCommitFiles(jobId, watchPath, result.Sha);
+            var repositoryRoot = git.ResolveRepoRootForWatchPath(watchPath);
             var commitInfo = new TaskCommitInfo
             {
                 Sha = result.Sha,
                 ShortSha = result.Sha.Length > 7 ? result.Sha[..7] : result.Sha,
                 Message = message ?? "",
+                Repository = git.RepositoryIdentityForWatchPath(watchPath),
+                Branch = repositoryRoot is null ? null : git.ReadCurrentBranchAt(repositoryRoot),
                 FilesChanged = files.Count,
                 Files = files.Select(f => f.Path).ToList(),
                 At = DateTime.UtcNow

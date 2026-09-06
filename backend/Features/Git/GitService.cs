@@ -4,6 +4,7 @@ using System.Formats.Tar;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AgentStudio.TaskServer.Contracts;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentStudio.Git;
@@ -84,6 +85,11 @@ public enum MergeIntoIntegrationOutcome
     MergedAfterRebase,
     /// <summary>The task branch was already contained in the integration branch; no-op.</summary>
     AlreadyMerged,
+    /// <summary>
+    /// No task branch exists, but every attributed commit for this repository
+    /// is already contained in the configured integration branch.
+    /// </summary>
+    AlreadyOnIntegrationBranch,
     /// <summary>No <c>task/&lt;id&gt;</c> branch exists (e.g. a sequential run); nothing to merge.</summary>
     NoTaskBranch,
     /// <summary>The configured pull-request strategy deliberately left the delivery ref for external review.</summary>
@@ -116,7 +122,8 @@ public static class MergeIntoIntegrationOutcomePolicy
 
     public static bool IsSuccessfulIntegration(this MergeIntoIntegrationOutcome outcome)
         => outcome.IsFreshMerge()
-            || outcome == MergeIntoIntegrationOutcome.AlreadyMerged;
+            || outcome is MergeIntoIntegrationOutcome.AlreadyMerged
+                or MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch;
 }
 
 /// <summary>
@@ -139,6 +146,9 @@ public record MergeIntoIntegrationResult(
     IReadOnlyList<RebasedCommitReplacement> RebasedCommits,
     string? PreviousIntegrationSha)
 {
+    /// <summary>Attributed SHAs proving a direct-to-branch delivery.</summary>
+    public IReadOnlyList<string> EvidenceShas { get; init; } = [];
+
     public static MergeIntoIntegrationResult Of(MergeIntoIntegrationOutcome outcome, string? mergedSha = null, string? error = null)
         => new(
             outcome,
@@ -147,6 +157,13 @@ public record MergeIntoIntegrationResult(
             Array.Empty<string>(),
             Array.Empty<RebasedCommitReplacement>(),
             null);
+
+    public static MergeIntoIntegrationResult AlreadyOnIntegrationBranch(
+        IReadOnlyList<string> evidenceShas)
+        => Of(MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch) with
+        {
+            EvidenceShas = evidenceShas,
+        };
 
     public static MergeIntoIntegrationResult Conflicted(IReadOnlyList<string> conflictedFiles, string? error)
         => new(
@@ -563,6 +580,10 @@ public class GitService
     // warm. Only successful resolutions are cached, so a path that is not yet a
     // repository keeps being probed until it becomes one.
     private static readonly ConcurrentDictionary<string, string> _toplevelCache =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, object> _remoteReadCacheGates =
+        new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, DateTime> _remoteReadCacheFetchedAt =
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -5169,6 +5190,105 @@ public class GitService
         if (code != 0) return null;
         var branch = output.Trim();
         return string.IsNullOrWhiteSpace(branch) || !IsLikelyBranchName(branch) ? null : branch;
+    }
+
+    /// <summary>
+    /// Returns the canonical repository identity for the checkout selected by a
+    /// task watch path. Attribution persists this value so later projections do
+    /// not infer repository ownership from commit-message decoration.
+    /// </summary>
+    public string? RepositoryIdentityForWatchPath(string? watchPath)
+    {
+        var root = ResolveRepoRootForWatchPath(watchPath)
+            ?? (string.IsNullOrWhiteSpace(watchPath) ? null : watchPath);
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return null;
+        var (origin, _, code) = RunGitArgs(root, "config", "--get", "remote.origin.url");
+        return code == 0
+            ? RepositoryIdentityContract.FromUrl(origin.Trim())
+            : null;
+    }
+
+    /// <summary>Reads the configured origin URL for a repository checkout.</summary>
+    public string? ReadOriginUrl(string? repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return null;
+        var (origin, _, code) = RunGitArgs(repoRoot, "config", "--get", "remote.origin.url");
+        return code == 0 && !string.IsNullOrWhiteSpace(origin) ? origin.Trim() : null;
+    }
+
+    /// <summary>
+    /// Materializes a bounded bare read cache for a structured repository URL
+    /// that has no registered local checkout. Only the named target branches
+    /// are fetched, at most once per integration-status cache window. Legacy
+    /// commit-message prefixes never call this path.
+    /// </summary>
+    public string? PrepareRemoteReadRepository(
+        string? repositoryUrl,
+        IReadOnlyCollection<string> branches)
+    {
+        if (!IsUsableReadRemote(repositoryUrl)) return null;
+        var taskRepository = _config["TaskRepository"];
+        if (string.IsNullOrWhiteSpace(taskRepository)) return null;
+
+        var url = repositoryUrl!.Trim();
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(url)))[..16];
+        var root = Path.Combine(
+            Path.GetFullPath(taskRepository),
+            ".runtime",
+            "integration-repositories",
+            hash);
+        var gate = _remoteReadCacheGates.GetOrAdd(root, _ => new object());
+        lock (gate)
+        {
+            Directory.CreateDirectory(root);
+            if (!File.Exists(Path.Combine(root, "HEAD")))
+            {
+                var (_, _, initCode) = RunGitArgs(root, "init", "--bare", "--quiet");
+                if (initCode != 0) return null;
+            }
+
+            var (_, _, remoteCode) = RunGitArgs(root, "remote", "get-url", "origin");
+            var (_, _, configureCode) = remoteCode == 0
+                ? RunGitArgs(root, "remote", "set-url", "origin", url)
+                : RunGitArgs(root, "remote", "add", "origin", url);
+            if (configureCode != 0) return null;
+
+            if (_remoteReadCacheFetchedAt.TryGetValue(root, out var fetchedAt)
+                && DateTime.UtcNow - fetchedAt < TimeSpan.FromMinutes(10))
+            {
+                return root;
+            }
+
+            var fetched = false;
+            foreach (var branch in branches
+                         .Where(IsLikelyBranchName)
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var (_, _, fetchCode) = RunGitArgs(
+                    root,
+                    "fetch",
+                    "--quiet",
+                    "--prune",
+                    "origin",
+                    $"+refs/heads/{branch}:refs/remotes/origin/{branch}");
+                fetched |= fetchCode == 0;
+            }
+            if (!fetched) return null;
+            _remoteReadCacheFetchedAt[root] = DateTime.UtcNow;
+            return root;
+        }
+    }
+
+    private static bool IsUsableReadRemote(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var candidate = value.Trim();
+        if (candidate.Contains('@', StringComparison.Ordinal)
+            && candidate.Contains(':', StringComparison.Ordinal)
+            && !candidate.Contains(' ')) return true;
+        return Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
+               && uri.Scheme is "https" or "http" or "ssh" or "git" or "file";
     }
 
     /// <summary>
