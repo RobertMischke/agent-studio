@@ -293,6 +293,122 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_TwoRepositories_EvaluatesEachRepositoryIndependently()
+    {
+        var primary = SeedDevelopMainRepo();
+        var secondary = SeedDevelopMainRepo();
+        RunGit(primary, "checkout -q develop");
+        File.WriteAllText(Path.Combine(primary, "primary.txt"), "primary");
+        Commit(primary, "feat: primary delivery");
+        var primarySha = RunGit(primary, "rev-parse develop").Out.Trim();
+        RunGit(secondary, "checkout -q main");
+        File.WriteAllText(Path.Combine(secondary, "secondary.txt"), "secondary");
+        Commit(secondary, "feat: secondary delivery");
+        var secondarySha = RunGit(secondary, "rev-parse main").Out.Trim();
+
+        var svc = BuildService(primary, out var project, out var log);
+        var job = Job("multi-repo", "AGT-2307", project, primary, log, commits:
+        [
+            Commit(primarySha) with { Repository = primary, Branch = "develop", Message = "[agent-studio] feat: primary" },
+            Commit(secondarySha) with { Repository = secondary, Branch = "main", Message = "[runner] feat: secondary" },
+        ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(2, status.Repositories.Count);
+        Assert.All(status.Repositories, repository => Assert.True(repository.OnIntegrationBranch));
+        Assert.Equal(CommitRepositoryMetadata.Label(primary), status.Repositories.Single(repository => repository.Repository == primary).Label);
+        Assert.Equal(CommitRepositoryMetadata.Label(secondary), status.Repositories.Single(repository => repository.Repository == secondary).Label);
+    }
+
+    [Fact]
+    public void BuildLookup_Agt2307Shape_ProjectsSevenIntegratedRepositoriesAndTwentyCommits()
+    {
+        var expected = new (string Name, int Count)[]
+        {
+            ("agent-studio", 5),
+            ("runner", 4),
+            ("token-economy", 4),
+            ("chat", 3),
+            ("ai-patterns.dev", 2),
+            ("quality-studio", 1),
+            (".github", 1),
+        };
+        var repositories = expected.ToDictionary(
+            item => item.Name,
+            item => SeedNamedRepo(item.Name),
+            StringComparer.Ordinal);
+        var commits = new List<TaskCommitInfo>();
+        foreach (var (name, count) in expected)
+        {
+            var repository = repositories[name];
+            var branch = name == "agent-studio" ? "develop" : "main";
+            if (branch == "develop") RunGit(repository, "checkout -q -b develop");
+            for (var index = 1; index <= count; index++)
+            {
+                File.WriteAllText(Path.Combine(repository, $"delivery-{index}.txt"), $"{name}-{index}");
+                Commit(repository, $"feat: {name} delivery {index}");
+                var sha = RunGit(repository, $"rev-parse {branch}").Out.Trim();
+                commits.Add(Commit(sha) with
+                {
+                    Repository = repository,
+                    Branch = branch,
+                    Message = $"[{name}] feat: delivery {index}",
+                });
+            }
+            if (branch == "develop")
+            {
+                RunGit(repository, "checkout -q main");
+                RunGit(repository, "merge -q --no-ff --no-edit develop");
+            }
+        }
+
+        var primary = repositories["agent-studio"];
+        var svc = BuildService(primary, out var project, out var log);
+        var job = Job("externalization-sweep", "AGT-2307", project, primary, log, commits: commits.ToArray());
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(7, status.Repositories.Count);
+        Assert.Equal(20, status.Repositories.Sum(repository => repository.Commits.Count));
+        foreach (var (name, count) in expected)
+        {
+            var repository = Assert.Single(status.Repositories, entry => entry.Label == name);
+            Assert.Equal(count, repository.Commits.Count);
+            Assert.True(repository.OnIntegrationBranch);
+            Assert.True(repository.OnReleaseBranch);
+        }
+    }
+
+    [Fact]
+    public void BuildLookup_PartialNamesOnlyTheRepositoryAndCommitsThatAreMissing()
+    {
+        var primary = SeedDevelopMainRepo();
+        var secondary = SeedDevelopMainRepo();
+        RunGit(primary, "checkout -q develop");
+        File.WriteAllText(Path.Combine(primary, "primary.txt"), "primary");
+        Commit(primary, "feat: primary delivery");
+        var primarySha = RunGit(primary, "rev-parse develop").Out.Trim();
+        const string missingSecondary = "9999999999999999999999999999999999999999";
+
+        var svc = BuildService(primary, out var project, out var log);
+        var job = Job("multi-partial", "AGT-2308", project, primary, log, commits:
+        [
+            Commit(primarySha) with { Repository = primary, Branch = "develop", Message = "[agent-studio] feat: landed" },
+            Commit(missingSecondary) with { Repository = secondary, Branch = "main", Message = "[runner] feat: missing" },
+        ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Partial, status.Status);
+        Assert.Contains(CommitRepositoryMetadata.Label(secondary), status.Detail);
+        Assert.Contains(missingSecondary[..7], status.Detail);
+        Assert.DoesNotContain(primarySha[..7], status.Detail);
+    }
+
+    [Fact]
     public void BuildLookup_SupersededConflictRoundMissingButReplacementLanded_IsIntegrated()
     {
         var repo = SeedDevelopMainRepo();
@@ -777,6 +893,19 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         RunGit(repo, "commit -q -m seed");
         RunGit(repo, "checkout -q -b develop");
         RunGit(repo, "checkout -q main");
+        return repo;
+    }
+
+    private string SeedNamedRepo(string name)
+    {
+        var repo = Path.Combine(_tempDir, name);
+        Directory.CreateDirectory(repo);
+        RunGit(repo, "init -q -b main");
+        RunGit(repo, "config user.email test@example.com");
+        RunGit(repo, "config user.name test");
+        File.WriteAllText(Path.Combine(repo, "README.md"), "seed");
+        RunGit(repo, "add -A");
+        RunGit(repo, "commit -q -m seed");
         return repo;
     }
 

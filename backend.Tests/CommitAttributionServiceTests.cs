@@ -43,6 +43,40 @@ public class CommitAttributionServiceTests
     }
 
     [Fact]
+    public void TwoRepositories_PersistStructuredRepositoryAndBranchPerPass()
+    {
+        var first = CommitAttributionService.Attribute(new AttributionInput
+        {
+            TaskId = TaskId,
+            Repository = "https://github.com/example/agent-studio.git",
+            TaskBranch = "develop",
+            Candidates = [Candidate("a101", "[agent-studio] feat: first")],
+        });
+        var second = CommitAttributionService.Attribute(new AttributionInput
+        {
+            TaskId = TaskId,
+            Repository = "https://github.com/example/runner.git",
+            TaskBranch = "main",
+            Candidates = [Candidate("b202", "[runner] feat: second")],
+        });
+
+        Assert.Equal("https://github.com/example/agent-studio.git", Assert.Single(first.Attributed).Repository);
+        Assert.Equal("develop", Assert.Single(first.Attributed).Branch);
+        Assert.Equal("https://github.com/example/runner.git", Assert.Single(second.Attributed).Repository);
+        Assert.Equal("main", Assert.Single(second.Attributed).Branch);
+        Assert.StartsWith("[runner]", Assert.Single(second.Attributed).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LegacyRepositoryPrefix_IsParsedWithoutChangingInformationalMessage()
+    {
+        const string message = "[runner] feat: publish reusable runner package";
+
+        Assert.Equal("runner", CommitRepositoryMetadata.LegacyRepositoryFromMessage(message));
+        Assert.Null(CommitRepositoryMetadata.LegacyRepositoryFromMessage("feat: ordinary commit"));
+    }
+
+    [Fact]
     public void OwnCrashRecovery_IsAttributed_NotExcluded()
     {
         var result = CommitAttributionService.Attribute(new AttributionInput

@@ -275,6 +275,51 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void ApplyRepositoryIntegration_DirectMultiRepositoryDeliveryRequiresEveryRepository()
+    {
+        var job = Job("multi", commits:
+        [
+            Commit("aaaaaaaa") with { Repository = "agent-studio", Branch = "develop" },
+            Commit("bbbbbbbb") with { Repository = "runner", Branch = "main" },
+        ]);
+        var merge = new Dictionary<string, TaskMergeSignal>();
+        var integration = new Dictionary<string, TaskIntegrationStatus>
+        {
+            [job.TaskKey] = new()
+            {
+                Status = IntegrationStatuses.Partial,
+                Repositories =
+                [
+                    new TaskRepositoryIntegrationStatus
+                    {
+                        Repository = "agent-studio",
+                        IntegrationBranch = "develop",
+                        ReleaseBranch = "main",
+                        OnIntegrationBranch = true,
+                        OnReleaseBranch = true,
+                    },
+                    new TaskRepositoryIntegrationStatus
+                    {
+                        Repository = "runner",
+                        IntegrationBranch = "main",
+                        ReleaseBranch = "main",
+                        OnIntegrationBranch = false,
+                        OnReleaseBranch = false,
+                    },
+                ],
+            },
+        };
+
+        BoardMergeStatusService.ApplyRepositoryIntegration([job], merge, integration);
+
+        var signal = merge[job.TaskKey];
+        Assert.False(signal.InIntegration);
+        Assert.False(signal.InRelease);
+        Assert.Equal("develop", signal.Branch);
+        Assert.Null(signal.IntegrationSha);
+    }
+
+    [Fact]
     public void BuildLookup_SkipsCardsWithoutAnchor()
     {
         var repo = SeedDevelopMainRepo(out _, out _);

@@ -56,6 +56,7 @@ public sealed class TaskIntegrationStatusService
     private readonly ProjectSettingsService _settings;
     private readonly PipelineExecutionLog _pipelineLog;
     private readonly ILogger<TaskIntegrationStatusService> _logger;
+    private readonly AgentStudio.Registry.ProjectRegistry? _projects;
 
     /// <summary>The delivered lanes this verdict applies to. Cards outside get no entry.</summary>
     internal static readonly HashSet<string> DeliveredLanes = new(StringComparer.Ordinal)
@@ -78,8 +79,9 @@ public sealed class TaskIntegrationStatusService
         GitService git,
         ProjectSettingsService settings,
         PipelineExecutionLog pipelineLog,
-        ILogger<TaskIntegrationStatusService> logger)
-        : this(git, settings, pipelineLog, logger, TimeProvider.System)
+        ILogger<TaskIntegrationStatusService> logger,
+        AgentStudio.Registry.ProjectRegistry? projects = null)
+        : this(git, settings, pipelineLog, logger, TimeProvider.System, projects)
     {
     }
 
@@ -88,12 +90,14 @@ public sealed class TaskIntegrationStatusService
         ProjectSettingsService settings,
         PipelineExecutionLog pipelineLog,
         ILogger<TaskIntegrationStatusService> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AgentStudio.Registry.ProjectRegistry? projects = null)
     {
         _git = git;
         _settings = settings;
         _pipelineLog = pipelineLog;
         _logger = logger;
+        _projects = projects;
         _cache = new GenerationSingleFlightCache<RepoIntegration>(timeProvider);
     }
 
@@ -110,58 +114,273 @@ public sealed class TaskIntegrationStatusService
 
         using var _t = GitProcessTelemetry.BeginRequest("board/integration-status", _logger);
 
-        var byRepo = new Dictionary<RepoBranchKey, List<TaskInfo>>();
-        var noRepo = new List<TaskInfo>();
-        foreach (var job in jobs)
-        {
-            if (!DeliveredLanes.Contains(job.State)) continue;
-            var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
-            if (string.IsNullOrWhiteSpace(root))
-            {
-                noRepo.Add(job);
-                continue;
-            }
-            var key = new RepoBranchKey(root!, ConfiguredIntegrationBranch(job));
-            if (!byRepo.TryGetValue(key, out var list))
-            {
-                list = new List<TaskInfo>();
-                byRepo[key] = list;
-            }
-            list.Add(job);
-        }
-
-        // Cards with no resolvable repo can still be honestly classified: a card
-        // with no anchor commit and no branch is no-branch, anything else pending.
-        foreach (var job in noRepo)
-            result[job.TaskKey] = ClassifyNotIntegrated(
-                job,
-                ConfiguredIntegrationBranch(job));
+        var delivered = jobs.Where(job => DeliveredLanes.Contains(job.State)).ToList();
+        var primaryRemotes = delivered
+            .Select(job => _git.ResolveRepoRootForWatchPath(job.WatchPath))
+            .Where(root => !string.IsNullOrWhiteSpace(root))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                root => root!,
+                root => _git.ReadRemoteUrlAt(root!),
+                StringComparer.OrdinalIgnoreCase);
+        var groupsByTask = delivered.ToDictionary(
+            job => job.TaskKey,
+            job => BuildRepositoryGroups(job, primaryRemotes),
+            StringComparer.Ordinal);
+        var repoKeys = groupsByTask.Values
+            .SelectMany(groups => groups)
+            .Where(group => group.Target.Root is not null)
+            .Select(group => group.Target.Key)
+            .Distinct()
+            .Concat(delivered
+                .Where(job => groupsByTask[job.TaskKey].Count == 0)
+                .Select(job => new
+                {
+                    Root = _git.ResolveRepoRootForWatchPath(job.WatchPath),
+                    Branch = ConfiguredIntegrationBranch(job),
+                })
+                .Where(value => !string.IsNullOrWhiteSpace(value.Root))
+                .Select(value => new RepoBranchKey(
+                    value.Root!,
+                    value.Branch,
+                    BoardMergeStatusService.ReleaseBranch)))
+            .Distinct()
+            .ToList();
 
         var reaches = new ConcurrentDictionary<RepoBranchKey, RepoIntegration>();
         Parallel.ForEach(
-            byRepo,
+            repoKeys,
             new ParallelOptions { MaxDegreeOfParallelism = ReadOnlyGitConcurrencyLimiter.MaxConcurrency },
-            pair =>
+            key =>
             {
-                var cacheKey = $"{pair.Key.Root}\0{pair.Key.Branch}";
-                var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(pair.Key.Root, [pair.Key.Branch]);
-                reaches[pair.Key] = _cache.GetOrCreateVersioned(
+                var cacheKey = $"{key.Root}\0{key.IntegrationBranch}\0{key.ReleaseBranch}";
+                var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(
+                    key.Root,
+                    [key.IntegrationBranch, key.ReleaseBranch]);
+                reaches[key] = _cache.GetOrCreateVersioned(
                     cacheKey,
                     refFingerprint.Value,
                     value => value.Succeeded
                         ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
                         : FailureCacheTtl,
-                    () => ComputeRepoIntegration(pair.Key.Root, pair.Key.Branch));
+                    () => ComputeRepoIntegration(
+                        key.Root,
+                        key.IntegrationBranch,
+                        key.ReleaseBranch));
             });
 
-        foreach (var (repoBranch, repoJobs) in byRepo)
-        {
-            var reach = reaches[repoBranch];
-            foreach (var job in repoJobs)
-                result[job.TaskKey] = ClassifyWithRepo(job, reach);
-        }
+        foreach (var job in delivered)
+            result[job.TaskKey] = ClassifyRepositories(
+                job,
+                groupsByTask[job.TaskKey],
+                reaches);
 
         return result;
+    }
+
+    private List<CommitRepositoryGroup> BuildRepositoryGroups(
+        TaskInfo job,
+        IReadOnlyDictionary<string, string?> primaryRemotes)
+    {
+        var commits = AttributedCommitInfos(job);
+        if (commits.Count == 0) return [];
+        var primaryRoot = _git.ResolveRepoRootForWatchPath(job.WatchPath);
+        var primaryUrl = !string.IsNullOrWhiteSpace(primaryRoot)
+                         && primaryRemotes.TryGetValue(primaryRoot!, out var remote)
+            ? remote
+            : null;
+        var primaryReference = string.IsNullOrWhiteSpace(primaryRoot)
+            ? job.ProjectName
+            : primaryUrl ?? primaryRoot!;
+
+        return commits
+            .GroupBy(
+                commit => commit.Repository
+                          ?? primaryReference,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => new CommitRepositoryGroup(
+                ResolveRepositoryTarget(
+                    job,
+                    group.Key,
+                    primaryRoot,
+                    primaryUrl,
+                    group.Select(commit => commit.Branch).FirstOrDefault(branch => !string.IsNullOrWhiteSpace(branch))),
+                group.ToList()))
+            .ToList();
+    }
+
+    private RepositoryTarget ResolveRepositoryTarget(
+        TaskInfo job,
+        string repository,
+        string? primaryRoot,
+        string? primaryUrl,
+        string? recordedBranch)
+    {
+        if (!string.IsNullOrWhiteSpace(primaryRoot))
+        {
+            if (CommitRepositoryMetadata.Same(repository, primaryRoot)
+                || CommitRepositoryMetadata.Same(repository, primaryUrl)
+                || string.Equals(repository, job.ProjectName, StringComparison.OrdinalIgnoreCase))
+            {
+                return new RepositoryTarget(
+                    primaryUrl ?? primaryRoot!,
+                    CommitRepositoryMetadata.Label(primaryUrl ?? primaryRoot),
+                    primaryRoot,
+                    ConfiguredIntegrationBranch(job),
+                    BoardMergeStatusService.ReleaseBranch);
+            }
+        }
+
+        if (_projects is not null)
+        {
+            foreach (var project in _projects.List().Where(project => !project.Archived))
+            {
+                var url = project.Urls.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Id, "repo", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(candidate.Label, "repo", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(candidate.Label, "repository", StringComparison.OrdinalIgnoreCase))?.Url;
+                var root = project.RepositoryPath;
+                if (!CommitRepositoryMetadata.Same(repository, url)
+                    && !CommitRepositoryMetadata.Same(repository, root)
+                    && !string.Equals(repository, project.Id, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(repository, project.DisplayName, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(repository, project.ShortCode, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                root = !string.IsNullOrWhiteSpace(root)
+                    ? root
+                    : _git.ResolveRepoRootForProject(project.DisplayName);
+                return new RepositoryTarget(
+                    !string.IsNullOrWhiteSpace(url) ? url : root ?? repository,
+                    CommitRepositoryMetadata.Label(!string.IsNullOrWhiteSpace(url) ? url : root ?? repository),
+                    Directory.Exists(root) ? root : null,
+                    _settings.Get(project.DisplayName).IntegrationBranch,
+                    BoardMergeStatusService.ReleaseBranch);
+            }
+        }
+
+        var localRoot = LocalRepositoryPath(repository);
+        var branch = NormalizeRecordedBranch(recordedBranch) ?? BoardMergeStatusService.ReleaseBranch;
+        return new RepositoryTarget(
+            repository,
+            CommitRepositoryMetadata.Label(repository),
+            localRoot,
+            branch,
+            BoardMergeStatusService.ReleaseBranch);
+    }
+
+    private static string? LocalRepositoryPath(string repository)
+    {
+        if (Directory.Exists(repository)) return Path.GetFullPath(repository);
+        if (Uri.TryCreate(repository, UriKind.Absolute, out var uri)
+            && uri.IsFile
+            && Directory.Exists(uri.LocalPath))
+            return Path.GetFullPath(uri.LocalPath);
+        return null;
+    }
+
+    private static string? NormalizeRecordedBranch(string? branch)
+    {
+        var normalized = TaskIntegrationBranch.NormalizeRef(branch);
+        if (string.IsNullOrWhiteSpace(normalized)
+            || normalized.StartsWith("task/", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("/results/", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return normalized;
+    }
+
+    private TaskIntegrationStatus ClassifyRepositories(
+        TaskInfo job,
+        IReadOnlyList<CommitRepositoryGroup> groups,
+        IReadOnlyDictionary<RepoBranchKey, RepoIntegration> reaches)
+    {
+        if (groups.Count == 0)
+        {
+            var primaryRoot = _git.ResolveRepoRootForWatchPath(job.WatchPath);
+            if (!string.IsNullOrWhiteSpace(primaryRoot))
+            {
+                var key = new RepoBranchKey(
+                    primaryRoot!,
+                    ConfiguredIntegrationBranch(job),
+                    BoardMergeStatusService.ReleaseBranch);
+                if (reaches.TryGetValue(key, out var reach))
+                    return ClassifyWithRepo(job, reach);
+            }
+            return ClassifyNotIntegrated(job, ConfiguredIntegrationBranch(job));
+        }
+
+        var entries = new List<TaskRepositoryIntegrationStatus>(groups.Count);
+        foreach (var group in groups)
+        {
+            reaches.TryGetValue(group.Target.Key, out var reach);
+            var commits = group.Commits.Select(commit => new TaskRepositoryCommitStatus
+            {
+                Sha = commit.Sha,
+                OnIntegrationBranch = reach is not null
+                    && AncestorSetContains(reach.DevelopAncestors, commit.Sha),
+                OnReleaseBranch = reach is not null
+                    && AncestorSetContains(reach.ReleaseAncestors, commit.Sha),
+            }).ToList();
+            var onIntegration = commits.Count > 0 && commits.All(commit => commit.OnIntegrationBranch);
+            var onRelease = commits.Count > 0 && commits.All(commit => commit.OnReleaseBranch);
+            var landed = commits.Count(commit => commit.OnIntegrationBranch);
+            var missing = commits.Where(commit => !commit.OnIntegrationBranch).Select(commit => Short(commit.Sha)).ToList();
+            var detail = reach is null
+                ? $"{group.Target.Label}: repository could not be resolved; missing: {string.Join(", ", missing)}"
+                : missing.Count == 0
+                    ? $"{group.Target.Label}: {landed}/{commits.Count} commits on {reach.IntegrationBranch}."
+                    : $"{group.Target.Label}: {landed}/{commits.Count} commits on {reach.IntegrationBranch}; missing: {string.Join(", ", missing)}";
+            entries.Add(new TaskRepositoryIntegrationStatus
+            {
+                Repository = group.Target.Repository,
+                Label = group.Target.Label,
+                IntegrationBranch = reach?.IntegrationBranch ?? group.Target.IntegrationBranch,
+                ReleaseBranch = reach?.ReleaseBranch ?? group.Target.ReleaseBranch,
+                Commits = commits,
+                OnIntegrationBranch = onIntegration,
+                OnReleaseBranch = onRelease,
+                Detail = detail,
+            });
+        }
+
+        var allIntegrated = entries.All(entry => entry.OnIntegrationBranch);
+        var anyIntegrated = entries.Any(entry => entry.Commits.Any(commit => commit.OnIntegrationBranch));
+        if (allIntegrated)
+        {
+            var newest = groups.SelectMany(group => group.Commits).OrderBy(commit => commit.At).Last();
+            return Integrated(
+                Short(newest.Sha),
+                entries.Count == 1 ? entries[0].IntegrationBranch : "multiple repositories",
+                DeliveryRefFor(job),
+                entries.Count == 1 ? "anchor-ancestor" : "all-repositories-integrated") with
+            {
+                Repositories = entries,
+            };
+        }
+
+        if (anyIntegrated)
+        {
+            return new TaskIntegrationStatus
+            {
+                Status = IntegrationStatuses.Partial,
+                DeliveryRef = DeliveryRefFor(job),
+                IntegrationBranch = entries.Count == 1 ? entries[0].IntegrationBranch : "multiple repositories",
+                Detail = string.Join(" · ", entries.Where(entry => !entry.OnIntegrationBranch).Select(entry => entry.Detail)),
+                Repositories = entries,
+            };
+        }
+
+        var notIntegrated = ClassifyNotIntegrated(
+            job,
+            entries.Count == 1 ? entries[0].IntegrationBranch : "multiple repositories",
+            DeliveryRefFor(job));
+        return notIntegrated with
+        {
+            Repositories = entries,
+            Detail = notIntegrated.Status == IntegrationStatuses.ConflictSkipped
+                ? notIntegrated.Detail
+                : string.Join(" · ", entries.Select(entry => entry.Detail)),
+        };
     }
 
     /// <summary>
@@ -569,8 +788,13 @@ public sealed class TaskIntegrationStatusService
     internal static IReadOnlyList<string> AttributedCommits(
         TaskInfo job,
         IReadOnlySet<string>? integrationAncestors)
+        => AttributedCommitInfos(job, integrationAncestors).Select(commit => commit.Sha).ToList();
+
+    internal static IReadOnlyList<TaskCommitInfo> AttributedCommitInfos(
+        TaskInfo job,
+        IReadOnlySet<string>? integrationAncestors = null)
     {
-        var result = new List<string>(job.Commits.Count);
+        var result = new List<TaskCommitInfo>(job.Commits.Count);
         if (job.Commits.Count > 0)
         {
             foreach (var c in job.Commits)
@@ -579,7 +803,7 @@ public sealed class TaskIntegrationStatusService
                     && (!IsZeroFileLifecycleMarker(c)
                         || integrationAncestors is not null
                         && AncestorSetContains(integrationAncestors, c.Sha)))
-                    result.Add(c.Sha);
+                    result.Add(c);
         }
         else if (!string.IsNullOrWhiteSpace(job.Commit?.Sha)
                  && !TaskCommitSupersession.IsSuperseded(job.Commit!)
@@ -587,7 +811,7 @@ public sealed class TaskIntegrationStatusService
                      || integrationAncestors is not null
                      && AncestorSetContains(integrationAncestors, job.Commit!.Sha)))
         {
-            result.Add(job.Commit!.Sha);
+            result.Add(job.Commit!);
         }
         return result;
     }
@@ -627,7 +851,10 @@ public sealed class TaskIntegrationStatusService
     /// The target-branch ancestor SHA set for one repository, cached per target
     /// HEAD fingerprint and computed under the read-only concurrency limiter.
     /// </summary>
-    private RepoIntegration ComputeRepoIntegration(string root, string configuredBranch)
+    private RepoIntegration ComputeRepoIntegration(
+        string root,
+        string configuredBranch,
+        string configuredReleaseBranch)
     {
         Interlocked.Increment(ref _computationCount);
         return ReadOnlyGitConcurrencyLimiter.Run(() =>
@@ -642,7 +869,29 @@ public sealed class TaskIntegrationStatusService
                 [integrationBranch, "origin/" + integrationBranch],
                 out var ancestors);
 
-            return new RepoIntegration(integrationBranch, ancestors, succeeded);
+            var releaseRef = _git.ResolveIntegrationReadRef(root, configuredReleaseBranch);
+            var releaseBranch = releaseRef.StartsWith("origin/", StringComparison.Ordinal)
+                ? releaseRef["origin/".Length..]
+                : releaseRef;
+            HashSet<string> releaseAncestors = [];
+            var sameBranch = string.Equals(
+                releaseBranch,
+                integrationBranch,
+                StringComparison.OrdinalIgnoreCase);
+            var releaseSucceeded = sameBranch
+                ? succeeded
+                : _git.TryGetAncestorShaSet(
+                    root,
+                    [releaseBranch, "origin/" + releaseBranch],
+                    out releaseAncestors);
+            if (sameBranch) releaseAncestors = ancestors;
+
+            return new RepoIntegration(
+                integrationBranch,
+                releaseBranch,
+                ancestors,
+                releaseAncestors,
+                succeeded && releaseSucceeded);
         });
     }
 
@@ -658,10 +907,32 @@ public sealed class TaskIntegrationStatusService
 
     private sealed record RepoIntegration(
         string IntegrationBranch,
+        string ReleaseBranch,
         HashSet<string> DevelopAncestors,
+        HashSet<string> ReleaseAncestors,
         bool Succeeded);
 
-    private sealed record RepoBranchKey(string Root, string Branch);
+    private sealed record RepoBranchKey(
+        string Root,
+        string IntegrationBranch,
+        string ReleaseBranch);
+
+    private sealed record RepositoryTarget(
+        string Repository,
+        string Label,
+        string? Root,
+        string IntegrationBranch,
+        string ReleaseBranch)
+    {
+        public RepoBranchKey Key => new(
+            Root ?? $"unresolved:{Repository}",
+            IntegrationBranch,
+            ReleaseBranch);
+    }
+
+    private sealed record CommitRepositoryGroup(
+        RepositoryTarget Target,
+        IReadOnlyList<TaskCommitInfo> Commits);
 }
 
 internal enum AcceptedIntegrationRecoveryAction

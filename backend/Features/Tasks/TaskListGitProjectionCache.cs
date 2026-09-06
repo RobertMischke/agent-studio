@@ -223,9 +223,12 @@ public sealed class TaskListGitProjectionCache
         var testRunTask = testRunLookup(tasks);
 
         await Task.WhenAll(mergeTask, integrationTask, publishTask, testRunTask);
+        var merge = await mergeTask;
+        var integration = await integrationTask;
+        BoardMergeStatusService.ApplyRepositoryIntegration(tasks, merge, integration);
         return new TaskListGitProjection(
-            await mergeTask,
-            await integrationTask,
+            merge,
+            integration,
             await publishTask,
             await testRunTask);
     }

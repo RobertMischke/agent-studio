@@ -275,6 +275,33 @@ public record TaskIntegrationStatus
     /// <see cref="IntegrationStatuses.ConflictSkipped"/>.
     /// </summary>
     public TaskIntegrationFailure? Failure { get; init; }
+
+    /// <summary>
+    /// Repository-scoped delivery evidence. The card-level <see cref="Status"/>
+    /// is integrated only when every entry is on its integration branch.
+    /// </summary>
+    public List<TaskRepositoryIntegrationStatus> Repositories { get; init; } = [];
+}
+
+/// <summary>One repository's attributed commits and live branch membership.</summary>
+public sealed record TaskRepositoryIntegrationStatus
+{
+    public string Repository { get; init; } = "";
+    public string Label { get; init; } = "repository";
+    public string IntegrationBranch { get; init; } = "main";
+    public string ReleaseBranch { get; init; } = "main";
+    public List<TaskRepositoryCommitStatus> Commits { get; init; } = [];
+    public bool OnIntegrationBranch { get; init; }
+    public bool OnReleaseBranch { get; init; }
+    public string? Detail { get; init; }
+}
+
+/// <summary>Branch membership for one attributed commit within its repository.</summary>
+public sealed record TaskRepositoryCommitStatus
+{
+    public string Sha { get; init; } = "";
+    public bool OnIntegrationBranch { get; init; }
+    public bool OnReleaseBranch { get; init; }
 }
 
 /// <summary>

@@ -98,12 +98,18 @@
         @if (v.delivery.commitCount > 0 || v.delivery.filesChanged > 0) {
           <div class="escalation__delivery" data-testid="escalation-delivery">
             <strong>Delivery</strong>
-            <span data-testid="escalation-delivery-counts">
-              {{ v.delivery.commitCount }} {{ v.delivery.commitCount === 1 ? 'commit' : 'commits' }}
-              @if (v.delivery.filesChanged > 0) {
-                · {{ v.delivery.filesChanged }} {{ v.delivery.filesChanged === 1 ? 'file' : 'files' }}
+            @if (v.delivery.repositoryLines.length > 0) {
+              @for (line of v.delivery.repositoryLines; track line) {
+                <span data-testid="escalation-delivery-repository">{{ line }}</span>
               }
-            </span>
+            } @else {
+              <span data-testid="escalation-delivery-counts">
+                {{ v.delivery.commitCount }} {{ v.delivery.commitCount === 1 ? 'commit' : 'commits' }}
+                @if (v.delivery.filesChanged > 0) {
+                  · {{ v.delivery.filesChanged }} {{ v.delivery.filesChanged === 1 ? 'file' : 'files' }}
+                }
+              </span>
+            }
           </div>
         }
 

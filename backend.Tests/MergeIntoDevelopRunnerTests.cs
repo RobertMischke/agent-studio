@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -779,6 +780,48 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
         var step = ReadMergeStep(log, jobFolder);
         Assert.NotNull(step);
         Assert.Equal(PipelineStepStatus.Skipped, step!.Status);
+    }
+
+    [Fact]
+    public void Run_NoTaskBranchWithAttributedCommitsOnDevelop_RecordsAlreadyOnIntegrationBranch()
+    {
+        var repo = SeedRepo("runner-direct-delivery");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "direct.txt"), "direct delivery");
+        Commit(repo, "feat: direct delivery");
+        var deliveredSha = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "direct-delivery");
+        File.WriteAllText(
+            Path.Combine(jobFolder, "task.json"),
+            JsonSerializer.Serialize(new
+            {
+                commits = new[]
+                {
+                    new TaskCommitInfo
+                    {
+                        Sha = deliveredSha,
+                        ShortSha = deliveredSha[..7],
+                        Message = "[runner-direct-delivery] feat: direct delivery",
+                        Repository = repo,
+                        Branch = "develop",
+                        FilesChanged = 1,
+                    },
+                },
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+        var outcome = runner.Run("Fixture", "direct-delivery", jobFolder, repo, "develop");
+
+        Assert.True(
+            outcome.Outcome == MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch,
+            outcome.Error);
+        Assert.Equal([deliveredSha], outcome.EvidenceShas);
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.Equal(PipelineStepStatus.Passed, step?.Status);
+        Assert.Equal("already-on-integration-branch", step?.Verdict);
+        Assert.Contains(deliveredSha[..7], step?.VerdictSummary);
     }
 
     [Fact]

@@ -1064,6 +1064,68 @@ public class TaskMutationService
     }
 
     /// <summary>
+    /// One-time, idempotent migration of legacy <c>[repo]</c> commit-message
+    /// prefixes into structured repository metadata. Registered project
+    /// repositories win; an unmatched prefix is retained as the remote name.
+    /// The informational prefix is deliberately left in the message.
+    /// </summary>
+    public CommitRepositoryBackfillResult BackfillCommitRepositories()
+    {
+        var repairedTasks = 0;
+        var repairedCommits = 0;
+        foreach (var task in _scanner.ScanAllJobs())
+        {
+            var persisted = ReadPersistedCommitChain(task.FolderPath);
+            if (persisted is null || persisted.Count == 0) continue;
+            var changed = 0;
+            var migrated = persisted.Select(commit =>
+            {
+                if (!string.IsNullOrWhiteSpace(commit.Repository)) return commit;
+                var prefix = CommitRepositoryMetadata.LegacyRepositoryFromMessage(commit.Message);
+                if (prefix is null) return commit;
+                changed++;
+                return commit with { Repository = ResolveRepositoryReference(prefix) };
+            }).ToList();
+            if (changed == 0 || !WriteCommitState(task.FolderPath, migrated)) continue;
+            repairedTasks++;
+            repairedCommits += changed;
+        }
+
+        if (repairedTasks > 0)
+        {
+            _logger.LogInformation(
+                "commit-repository-backfill repairedTasks={Tasks} repairedCommits={Commits}",
+                repairedTasks,
+                repairedCommits);
+        }
+        return new CommitRepositoryBackfillResult(repairedTasks, repairedCommits);
+    }
+
+    private string ResolveRepositoryReference(string prefix)
+    {
+        foreach (var project in _projectRegistry.List())
+        {
+            var repoUrl = project.Urls.FirstOrDefault(url =>
+                string.Equals(url.Id, "repo", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(url.Label, "repo", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(url.Label, "repository", StringComparison.OrdinalIgnoreCase))?.Url;
+            var root = project.RepositoryPath;
+            if (CommitRepositoryMetadata.Same(prefix, repoUrl)
+                || CommitRepositoryMetadata.Same(prefix, root)
+                || string.Equals(prefix, project.DisplayName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(prefix, project.ShortCode, StringComparison.OrdinalIgnoreCase))
+            {
+                return !string.IsNullOrWhiteSpace(repoUrl)
+                    ? repoUrl.Trim()
+                    : !string.IsNullOrWhiteSpace(root)
+                        ? _git?.ReadRemoteUrlAt(root) ?? root
+                        : prefix;
+            }
+        }
+        return prefix;
+    }
+
+    /// <summary>
     /// Normalizes every commit object at the persistence boundary from Git
     /// truth. This keeps attribution, salvage, operator, recovery, and sweep
     /// producers from drifting according to which metadata they happened to
@@ -2074,3 +2136,7 @@ public sealed record CommitMetadataBackfillResult(
     int RepairedTasks,
     int RepairedCommits,
     int UnresolvedTasks);
+
+public sealed record CommitRepositoryBackfillResult(
+    int RepairedTasks,
+    int RepairedCommits);

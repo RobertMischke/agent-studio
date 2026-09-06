@@ -145,6 +145,59 @@ public sealed class BoardMergeStatusService
     }
 
     /// <summary>
+    /// Reconciles the compact card signal with the repository-aware integration
+    /// projection. The legacy signal has room for only one pair of booleans, so
+    /// each segment is true only when every attributed repository reached that
+    /// branch. This also supplies a signal for direct deliveries that never had
+    /// a task branch.
+    /// </summary>
+    public static void ApplyRepositoryIntegration(
+        IReadOnlyCollection<TaskInfo> jobs,
+        IDictionary<string, TaskMergeSignal> mergeLookup,
+        IReadOnlyDictionary<string, TaskIntegrationStatus> integrationLookup)
+    {
+        foreach (var job in jobs)
+        {
+            if (!integrationLookup.TryGetValue(job.TaskKey, out var integration)
+                || integration.Repositories.Count == 0)
+                continue;
+
+            mergeLookup.TryGetValue(job.TaskKey, out var current);
+            var commits = TaskIntegrationStatusService.AttributedCommitInfos(job);
+            var anchor = commits.Count == 0 ? null : commits[^1].Sha;
+            var inIntegration = integration.Repositories.All(repository => repository.OnIntegrationBranch);
+            var inRelease = integration.Repositories.All(repository => repository.OnReleaseBranch);
+            var integrationBranches = integration.Repositories
+                .Select(repository => repository.IntegrationBranch)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var releaseBranches = integration.Repositories
+                .Select(repository => repository.ReleaseBranch)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            mergeLookup[job.TaskKey] = new TaskMergeSignal
+            {
+                Branch = current?.Branch
+                    ?? job.Provenance?.Branch
+                    ?? commits.Select(commit => commit.Branch)
+                        .FirstOrDefault(branch => !string.IsNullOrWhiteSpace(branch))
+                    ?? "",
+                InIntegration = inIntegration,
+                InRelease = inRelease,
+                IntegrationBranch = integrationBranches.Count == 1
+                    ? integrationBranches[0]
+                    : current?.IntegrationBranch ?? "multiple repositories",
+                ReleaseBranch = releaseBranches.Count == 1
+                    ? releaseBranches[0]
+                    : current?.ReleaseBranch ?? "multiple repositories",
+                IntegrationSha = inIntegration && !string.IsNullOrWhiteSpace(anchor) ? Short(anchor) : null,
+                ReleaseSha = inRelease && !string.IsNullOrWhiteSpace(anchor) ? Short(anchor) : null,
+            };
+        }
+    }
+
+    /// <summary>
     /// Resolves develop/main presence for an arbitrary bounded commit set using
     /// the exact same ref-fingerprinted reachability projection as
     /// <see cref="BuildLookup"/>. The Project Hub Git graph calls this once per

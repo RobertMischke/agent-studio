@@ -1,6 +1,6 @@
 # Tasks Domain Map
 
-Version: 2026-08-27
+Version: 2026-09-06
 Status: System-of-record map for task storage, lanes, and API mutation changes.
 
 Use this when a change touches job folders, lane states, task metadata,
@@ -180,6 +180,12 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   path. Startup performs an idempotent, Git-read-only repair of missing commit
   metadata on non-archived cards and writes only the affected `task.json` files
   through `TaskMutationService`.
+- Commit attribution records the repository identity or remote URL and the
+  delivery branch as structured `repository` and `branch` fields. A leading
+  `[repo]` message prefix remains informational. Startup performs one
+  idempotent compatibility migration that copies a legacy prefix into
+  `repository` without changing the message; later projections do not depend
+  on the prefix.
 - Remote commit attribution is evaluated independently for every fenced run
   attempt. Each attempt's verified delivery range passes through the
   foreign-task guard before persistence. Card-level `commits[]` is the
@@ -217,14 +223,25 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   token receipts from that attempt's CLI-log window. Ambiguous cards remain
   unchanged and are listed in the durable migration report.
 - Accepted-card `integration.status` is a read-time projection of attributed
-  commit membership in the configured target branch, cached against that
-  branch's current HEAD. Lane state, provenance merge records, pipeline success,
-  and curated merge subjects do not force `integrated`; an out-of-band merge is
-  detected on the next read.
+  commit membership, grouped by repository. Registered project repositories
+  resolve first; otherwise the structured remote or local repository reference
+  on the commit is used. Each `integration.repositories[]` entry reports its
+  repository, commits, integration and release membership, and a repository
+  local detail. The card is `integrated` only when every repository entry is on
+  its integration branch. A partial detail names the affected repository and
+  only that repository's missing commits. Lane state, provenance merge records,
+  pipeline success, and curated merge subjects do not force `integrated`; an
+  out-of-band merge is detected on the next read. The compact merge signal
+  folds the repository entries together, so a segment is true only when every
+  attributed repository reached that branch.
 - Human acceptance is transactional. A coding card remains in
   `5-human-review` with phase `integrating` until the delivery reaches `Merged`,
-  `MergedAfterRebase`, or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure,
-  and error return it
+  `MergedAfterRebase`, `AlreadyMerged`, or `AlreadyOnIntegrationBranch`. When no
+  task branch exists and every attributed commit for the integration repository
+  is already an ancestor of the refreshed integration branch, acceptance emits
+  `AlreadyOnIntegrationBranch` with the proving SHAs and continues as integrated.
+  `NoTaskBranch` remains a failure when that ancestry proof is incomplete.
+  Conflict, gate failure, and error return it
   to ordinary Human Review with an Integration failed badge and timeline
   evidence. Before the already-integrated decision, acceptance fetches the
   configured origin integration ref and evaluates refreshed local plus remote

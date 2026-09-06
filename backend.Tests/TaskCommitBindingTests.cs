@@ -162,6 +162,42 @@ public class TaskCommitBindingTests : IDisposable
     }
 
     [Fact]
+    public void BackfillCommitRepositories_ParsesLegacyPrefixExactlyOnce()
+    {
+        var (_, mutations) = Build();
+        var jobDir = SeedJobFolder("repository-backfill", "5-human-review", legacyCommit: null);
+        File.WriteAllText(Path.Combine(jobDir, "task.json"), """
+            {
+              "id": "repository-backfill",
+              "title": "Fixture",
+              "state": "5-human-review",
+              "agent": "claude",
+              "createdAt": "2026-05-09T08:00:00Z",
+              "commits": [
+                {
+                  "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "shortSha": "aaaaaaa",
+                  "message": "[runner] feat: publish runner",
+                  "filesChanged": 1,
+                  "files": ["runner.cs"],
+                  "at": "2026-08-03T08:00:00Z"
+                }
+              ]
+            }
+            """);
+
+        var first = mutations.BackfillCommitRepositories();
+        var second = mutations.BackfillCommitRepositories();
+
+        Assert.Equal(new CommitRepositoryBackfillResult(1, 1), first);
+        Assert.Equal(new CommitRepositoryBackfillResult(0, 0), second);
+        using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(jobDir, "task.json")));
+        var commit = Property(json.RootElement, "commits").EnumerateArray().Single();
+        Assert.Equal("runner", Property(commit, "repository").GetString());
+        Assert.Equal("[runner] feat: publish runner", Property(commit, "message").GetString());
+    }
+
+    [Fact]
     public void AppendCommit_TwiceWithDifferentShas_GrowsChain_LegacyTracksNewest()
     {
         var (scanner, mutations) = Build();

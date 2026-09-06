@@ -257,6 +257,20 @@ public sealed class MergeIntoDevelopRunner
                     MergeIntoIntegrationOutcome.Error,
                     error: lineage.Reason);
             }
+            else if (((!delivery.IsRemote && !_git.BranchExists(repoRoot, taskBranch))
+                      || (delivery.Source == DeliveryRefSource.AttributedCommit
+                          && string.Equals(taskBranch, branch, StringComparison.OrdinalIgnoreCase)
+                          && !_git.BranchExists(
+                              repoRoot,
+                              WorktreeTaskLifecycle.BranchFor(jobId))))
+                     && TryDirectDeliveryEvidence(
+                         jobFolderPath,
+                         repoRoot,
+                         branch,
+                         out var evidenceShas))
+            {
+                result = MergeIntoIntegrationResult.AlreadyOnIntegrationBranch(evidenceShas);
+            }
             else if (isPullRequest)
             {
                 result = MergeIntoIntegrationResult.Of(
@@ -1572,6 +1586,13 @@ public sealed class MergeIntoDevelopRunner
                     "already-merged",
                     $"Task branch already contained in {integrationBranch}; no merge needed.{exactGate}",
                     preDevelopResult?.Reason);
+            case MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch:
+                var evidence = string.Join(", ", result.EvidenceShas.Select(Short));
+                return (
+                    PipelineStepStatus.Passed,
+                    "already-on-integration-branch",
+                    $"Attributed commits already exist on {integrationBranch}; no task branch is required.",
+                    $"Evidence SHAs: {evidence}.");
             case MergeIntoIntegrationOutcome.NoTaskBranch:
                 return (PipelineStepStatus.Skipped, "no-branch", result.Error ?? "No task branch to merge.", null);
             case MergeIntoIntegrationOutcome.PushedForReview:
@@ -1604,4 +1625,32 @@ public sealed class MergeIntoDevelopRunner
     }
 
     private static string Short(string sha) => sha.Length > 7 ? sha[..7] : sha;
+
+    private bool TryDirectDeliveryEvidence(
+        string jobFolderPath,
+        string repoRoot,
+        string integrationBranch,
+        out IReadOnlyList<string> evidenceShas)
+    {
+        evidenceShas = [];
+        var persisted = CommitRepositoryMetadata.ReadPersistedCommits(jobFolderPath);
+        if (persisted.Count == 0) return false;
+        var commits = TaskIntegrationStatusService.AttributedCommitInfos(new TaskInfo
+        {
+            Commits = persisted.ToList(),
+        });
+        var origin = _git.ReadRemoteUrlAt(repoRoot);
+        var applicable = commits
+            .Where(commit => string.IsNullOrWhiteSpace(commit.Repository)
+                             || CommitRepositoryMetadata.Same(commit.Repository, origin)
+                             || CommitRepositoryMetadata.Same(commit.Repository, repoRoot))
+            .Where(commit => !string.IsNullOrWhiteSpace(commit.Sha))
+            .Select(commit => commit.Sha)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (applicable.Count == 0) return false;
+        if (!applicable.All(sha => _git.IsAncestor(repoRoot, sha, integrationBranch))) return false;
+        evidenceShas = applicable;
+        return true;
+    }
 }

@@ -94,6 +94,8 @@ export interface EscalationDelivery {
   commitCount: number;
   /** Distinct changed files across those commits (0 when unknown). */
   filesChanged: number;
+  /** Repository-scoped integration lines when the backend provides them. */
+  repositoryLines: string[];
 }
 
 /** The single structured line that remains visible when details are closed. */
@@ -524,7 +526,19 @@ export function buildDelivery(info: TaskInfo): EscalationDelivery {
     for (const f of c.files ?? []) distinctFiles.add(f);
   }
   const filesChanged = distinctFiles.size > 0 ? distinctFiles.size : filesChangedSum;
-  return { merge, commitCount: commits.length, filesChanged };
+  const repositoryLines = (info.integration?.repositories ?? []).map(repository => {
+    const landed = repository.commits.filter(commit => commit.onIntegrationBranch).length;
+    const total = repository.commits.length;
+    const branches = repository.onReleaseBranch
+      && repository.releaseBranch !== repository.integrationBranch
+      ? `${repository.integrationBranch} and ${repository.releaseBranch}`
+      : repository.integrationBranch;
+    const missing = repository.commits
+      .filter(commit => !commit.onIntegrationBranch)
+      .map(commit => commit.sha.slice(0, 7));
+    return `${repository.label} ${landed}/${total} ${branches}${missing.length ? ` · missing ${missing.join(', ')}` : ''}`;
+  });
+  return { merge, commitCount: commits.length, filesChanged, repositoryLines };
 }
 
 /**

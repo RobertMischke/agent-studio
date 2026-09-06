@@ -84,6 +84,11 @@ public enum MergeIntoIntegrationOutcome
     MergedAfterRebase,
     /// <summary>The task branch was already contained in the integration branch; no-op.</summary>
     AlreadyMerged,
+    /// <summary>
+    /// No task branch exists, but every attributed commit for this repository
+    /// is already an ancestor of the integration branch.
+    /// </summary>
+    AlreadyOnIntegrationBranch,
     /// <summary>No <c>task/&lt;id&gt;</c> branch exists (e.g. a sequential run); nothing to merge.</summary>
     NoTaskBranch,
     /// <summary>The configured pull-request strategy deliberately left the delivery ref for external review.</summary>
@@ -116,7 +121,8 @@ public static class MergeIntoIntegrationOutcomePolicy
 
     public static bool IsSuccessfulIntegration(this MergeIntoIntegrationOutcome outcome)
         => outcome.IsFreshMerge()
-            || outcome == MergeIntoIntegrationOutcome.AlreadyMerged;
+            || outcome is MergeIntoIntegrationOutcome.AlreadyMerged
+                or MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch;
 }
 
 /// <summary>
@@ -139,6 +145,8 @@ public record MergeIntoIntegrationResult(
     IReadOnlyList<RebasedCommitReplacement> RebasedCommits,
     string? PreviousIntegrationSha)
 {
+    public IReadOnlyList<string> EvidenceShas { get; init; } = [];
+
     public static MergeIntoIntegrationResult Of(MergeIntoIntegrationOutcome outcome, string? mergedSha = null, string? error = null)
         => new(
             outcome,
@@ -156,6 +164,14 @@ public record MergeIntoIntegrationResult(
             conflictedFiles,
             Array.Empty<RebasedCommitReplacement>(),
             null);
+
+    public static MergeIntoIntegrationResult AlreadyOnIntegrationBranch(
+        IReadOnlyList<string> evidenceShas)
+        => Of(
+            MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch) with
+        {
+            EvidenceShas = evidenceShas.ToList(),
+        };
 
     public static MergeIntoIntegrationResult MergedAfterRebase(
         string mergedSha,
@@ -5169,6 +5185,21 @@ public class GitService
         if (code != 0) return null;
         var branch = output.Trim();
         return string.IsNullOrWhiteSpace(branch) || !IsLikelyBranchName(branch) ? null : branch;
+    }
+
+    /// <summary>
+    /// Reads a configured remote URL at an explicit repository root. Used to
+    /// persist repository identity with commit attribution and to match legacy
+    /// <c>[repo]</c> prefixes to registered checkouts.
+    /// </summary>
+    public string? ReadRemoteUrlAt(string root, string remote = "origin")
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)
+            || string.IsNullOrWhiteSpace(remote)) return null;
+        var (output, _, code) = RunGitArgs(root, "config", "--get", $"remote.{remote.Trim()}.url");
+        if (code != 0) return null;
+        var url = output.Trim();
+        return string.IsNullOrWhiteSpace(url) ? null : url;
     }
 
     /// <summary>

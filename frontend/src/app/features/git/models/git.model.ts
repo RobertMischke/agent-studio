@@ -340,6 +340,8 @@ export interface TaskCommitInfo {
   sha: string;
   shortSha: string;
   message: string;
+  /** Stable repository identity or URL captured by attribution. */
+  repository?: string | null;
   filesChanged: number;
   files: string[];
   at: string;
@@ -511,6 +513,25 @@ export interface TaskIntegrationStatus {
   detail: string | null;
   /** Typed current failure from the durable accepted-integration pipeline step. */
   failure?: TaskIntegrationFailure | null;
+  /** Per-repository ancestry evidence; absent on legacy server payloads. */
+  repositories?: TaskRepositoryIntegrationStatus[];
+}
+
+export interface TaskRepositoryIntegrationStatus {
+  repository: string;
+  label: string;
+  integrationBranch: string;
+  releaseBranch: string;
+  commits: TaskRepositoryCommitStatus[];
+  onIntegrationBranch: boolean;
+  onReleaseBranch: boolean;
+  detail: string | null;
+}
+
+export interface TaskRepositoryCommitStatus {
+  sha: string;
+  onIntegrationBranch: boolean;
+  onReleaseBranch: boolean;
 }
 
 export interface TaskIntegrationFailure {

@@ -1099,6 +1099,18 @@ catch (Exception ex)
     crashRecorder.Record("CommitMetadataBackfill", ex);
 }
 
+// One-time, idempotent migration from informational [repo] commit-message
+// prefixes to structured repository attribution. The mutation boundary keeps
+// both commits[] and the legacy singular commit field aligned.
+try
+{
+    app.Services.GetRequiredService<TaskMutationService>().BackfillCommitRepositories();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("CommitRepositoryBackfill", ex);
+}
+
 // One-time, conservative repair of historical rebase/steer generations. The
 // persisted report is also the completion marker. Ambiguous file-breadth cases
 // remain untouched and visible in that report.

@@ -21,6 +21,7 @@ public static class TaskCrudEndpoints
             HttpContext context,
             TaskScannerService scanner,
             BoardMergeStatusService mergeStatus,
+            TaskIntegrationStatusService integrationStatus,
             AgentStudio.Registry.ProjectRegistry projects,
             ILoggerFactory loggerFactory) =>
         {
@@ -47,6 +48,8 @@ public static class TaskCrudEndpoints
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
             var matched = requested.Where(byKey.ContainsKey).Select(k => byKey[k]).ToArray();
             var merges = mergeStatus.BuildLookup(matched);
+            var integrations = integrationStatus.BuildLookup(matched);
+            BoardMergeStatusService.ApplyRepositoryIntegration(matched, merges, integrations);
 
             var items = requested.Select(key =>
             {
@@ -302,12 +305,14 @@ public static class TaskCrudEndpoints
             // AGT-2046: fold the batched merge signal onto the detail's info too, so
             // a card opened from the board keeps the same [develop|main] indicator.
             var mergeLookup = mergeStatus.BuildLookup(new[] { withRuntime.Info });
-            if (mergeLookup.TryGetValue(withRuntime.Info.TaskKey, out var signal))
-                withRuntime = withRuntime with { Info = withRuntime.Info with { MergeSignal = signal } };
             // AGT-2202: fold the integration verdict so a completed/archived card
             // opened from the board keeps the same "integrated / not integrated"
             // badge as its board card.
             var integrationLookup = integrationStatus.BuildLookup(new[] { withRuntime.Info });
+            BoardMergeStatusService.ApplyRepositoryIntegration(
+                new[] { withRuntime.Info }, mergeLookup, integrationLookup);
+            if (mergeLookup.TryGetValue(withRuntime.Info.TaskKey, out var signal))
+                withRuntime = withRuntime with { Info = withRuntime.Info with { MergeSignal = signal } };
             if (integrationLookup.TryGetValue(withRuntime.Info.TaskKey, out var integration))
                 withRuntime = withRuntime with { Info = withRuntime.Info with { Integration = integration } };
             // PUB-1: fold the per-task publish chip signal so a completed card opened

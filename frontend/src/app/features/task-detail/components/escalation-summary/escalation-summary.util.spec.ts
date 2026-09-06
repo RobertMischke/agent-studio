@@ -227,6 +227,25 @@ describe('buildDelivery', () => {
     );
     expect(d.filesChanged).toBe(3);
   });
+
+  it('builds repository-scoped delivery lines', () => {
+    const d = buildDelivery(info({
+      commits: [
+        { sha: 'a', shortSha: 'a', message: '[runner] feat', filesChanged: 1, files: [], at: '' },
+      ],
+      integration: {
+        status: 'integrated', deliveryRef: null, sha: 'a', integrationBranch: 'main', detail: null,
+        repositories: [{
+          repository: 'https://github.com/example/runner.git', label: 'runner',
+          integrationBranch: 'main', releaseBranch: 'main',
+          commits: [{ sha: 'aaaaaaa1', onIntegrationBranch: true, onReleaseBranch: true }],
+          onIntegrationBranch: true, onReleaseBranch: true, detail: null,
+        }],
+      },
+    } as Partial<TaskInfo>));
+
+    expect(d.repositoryLines).toEqual(['runner 1/1 main']);
+  });
 });
 
 describe('deriveRecommendation', () => {

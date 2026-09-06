@@ -10,14 +10,14 @@ import { TaskService } from '../../services/task.service';
  * {@link TaskIntegrationStatus} on an accepted card (5-human-review / 6-completed
  * / 7-archive) so "Accept != Merge" is impossible to miss:
  *   - green  "merged @sha"          — every attributed commit is provably in develop,
- *   - orange "teilweise integriert" — some attributed commits are in develop, some are not,
- *   - amber  "NICHT integriert"     — accepted work is still not in develop,
+ *   - orange "partially integrated" — some attributed commits are in develop, some are not,
+ *   - amber  "not integrated"       — accepted work is still not in develop,
  *   - red    "Integration failed"   — the integration step reached a failed outcome,
- *   - grey   "kein Branch"          — nothing to integrate (read-only / no code).
+ *   - grey   "no branch"            — nothing to integrate (read-only / no code).
  *
  * Membership is derived from the SAME attributed `commits[]` list the card's
  * commit widget renders. Branch presence comes from the acceptance resolver's
- * projected `deliveryRef`, so a remote delivery cannot render as "kein Branch".
+ * projected `deliveryRef`, so a remote delivery cannot render as "no branch".
  *
  * Follows the {@link ExecutionLocationBadgeComponent} pill pattern. Purely
  * presentational; hidden when the card carries no integration verdict.
@@ -41,16 +41,66 @@ export class IntegrationStatusBadgeComponent {
   /** The card renders the badge only when a verdict is present. */
   readonly visible = computed(() => !!this.integration());
 
+  readonly chips = computed(() => {
+    const value = this.integration();
+    if (!value) return [];
+    if (!value.repositories?.length) {
+      return [{
+        key: 'legacy',
+        kind: this.kindFor(value.status),
+        glyph: this.glyphFor(this.kindFor(value.status)),
+        label: this.legacyLabel(value),
+        tooltip: this.legacyTooltip(value),
+        ariaLabel: this.legacyAriaLabel(value),
+        detail: value.detail,
+      }];
+    }
+    return value.repositories.map(repository => {
+      const total = repository.commits.length;
+      const landed = repository.commits.filter(commit => commit.onIntegrationBranch).length;
+      const missing = repository.commits
+        .filter(commit => !commit.onIntegrationBranch)
+        .map(commit => commit.sha.slice(0, 7));
+      const status = repository.onIntegrationBranch
+        ? 'integrated'
+        : landed > 0
+          ? 'partial'
+          : value.status === 'conflict-skipped' ? 'conflict-skipped' : 'pending';
+      const branchText = repository.onReleaseBranch
+        && repository.releaseBranch !== repository.integrationBranch
+        ? `${repository.integrationBranch} and ${repository.releaseBranch}`
+        : repository.integrationBranch;
+      const reason = missing.length > 0 ? ` · missing ${missing.join(', ')}` : '';
+      return {
+        key: repository.repository,
+        kind: this.kindFor(status),
+        glyph: this.glyphFor(this.kindFor(status)),
+        label: `${repository.label} ${landed}/${total} ${branchText}${reason}`,
+        tooltip: repository.detail ?? `${landed}/${total} commits on ${repository.integrationBranch}`,
+        ariaLabel: `${repository.label}: ${landed} of ${total} commits on ${repository.integrationBranch}`,
+        detail: repository.detail,
+      };
+    });
+  });
+  readonly label = computed(() => this.chips()[0]?.label ?? '');
+  readonly glyph = computed(() => this.chips()[0]?.glyph ?? '');
+  readonly tooltip = computed(() => this.chips()[0]?.tooltip ?? '');
+  readonly ariaLabel = computed(() => this.chips()[0]?.ariaLabel ?? '');
+
   /** Coarse visual kind for colour theming. */
   readonly kind = computed<'integrated' | 'partial' | 'pending' | 'conflict' | 'no-branch'>(() => {
-    switch (this.integration()?.status) {
+    return this.kindFor(this.integration()?.status);
+  });
+
+  private kindFor(status: TaskIntegrationStatus['status'] | undefined): 'integrated' | 'partial' | 'pending' | 'conflict' | 'no-branch' {
+    switch (status) {
       case 'integrated': return 'integrated';
       case 'partial': return 'partial';
       case 'pending': return 'pending';
       case 'conflict-skipped': return 'conflict';
       default: return 'no-branch';
     }
-  });
+  }
 
   /** True for the states that mean "accepted, but the code is NOT (fully) in develop". */
   readonly acute = computed(() => {
@@ -67,31 +117,27 @@ export class IntegrationStatusBadgeComponent {
     return value.failure?.rebaseRecoveryAvailable ?? true;
   });
 
-  readonly label = computed(() => {
-    const value = this.integration();
-    if (!value) return '';
+  private legacyLabel(value: TaskIntegrationStatus): string {
     switch (value.status) {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
-      case 'partial': return 'teilweise integriert';
-      case 'pending': return 'NICHT integriert';
+      case 'partial': return 'partially integrated';
+      case 'pending': return 'not integrated';
       case 'conflict-skipped': return value.failure?.label ?? 'Integration failed';
-      default: return 'kein Branch';
+      default: return 'no branch';
     }
-  });
+  }
 
-  readonly glyph = computed(() => {
-    switch (this.kind()) {
+  private glyphFor(kind: 'integrated' | 'partial' | 'pending' | 'conflict' | 'no-branch'): string {
+    switch (kind) {
       case 'integrated': return '✓'; // check
       case 'partial': return '◐';    // half-filled circle
       case 'conflict': return '⚠';   // warning
       case 'pending': return '○';    // hollow circle
       default: return '–';           // en dash
     }
-  });
+  }
 
-  readonly tooltip = computed(() => {
-    const value = this.integration();
-    if (!value) return '';
+  private legacyTooltip(value: TaskIntegrationStatus): string {
     const branch = value.integrationBranch || 'develop';
     const head = (() => {
       switch (value.status) {
@@ -112,11 +158,9 @@ export class IntegrationStatusBadgeComponent {
       }
     })();
     return [...new Set([head, value.failure?.reason, value.detail].filter(Boolean))].join('\n');
-  });
+  }
 
-  readonly ariaLabel = computed(() => {
-    const value = this.integration();
-    if (!value) return '';
+  private legacyAriaLabel(value: TaskIntegrationStatus): string {
     const branch = value.integrationBranch || 'develop';
     switch (value.status) {
       case 'integrated': return `Integrated into ${branch}`;
@@ -125,7 +169,7 @@ export class IntegrationStatusBadgeComponent {
       case 'conflict-skipped': return `${value.failure?.label ?? 'Integration failed'}; not integrated into ${branch}`;
       default: return 'No branch to integrate';
     }
-  });
+  }
 
   queueRecovery(event: Event): void {
     event.stopPropagation();

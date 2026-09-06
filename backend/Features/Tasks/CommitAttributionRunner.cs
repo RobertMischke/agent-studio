@@ -40,6 +40,19 @@ public static class CommitAttributionRunner
 
         if (aggregate.Commits.Count == 0) return null;
 
+        var repoRoot = git.ResolveRepoRootForWatchPath(watchPath);
+        var repository = string.IsNullOrWhiteSpace(repoRoot)
+            ? null
+            : git.ReadRemoteUrlAt(repoRoot!) ?? repoRoot;
+        var branch = info.Commits
+            .Select(commit => commit.Branch)
+            .LastOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate))
+            ?? (!string.IsNullOrWhiteSpace(info.Provenance?.Branch)
+                ? info.Provenance!.Branch
+                : string.IsNullOrWhiteSpace(repoRoot)
+                    ? null
+                    : git.ReadCurrentBranchAt(repoRoot!));
+
         // Enrich with the full commit body (for Co-Authored-By detection) and
         // the merge flag (parent count) in one git call, so the rule engine
         // works off the real message body rather than the subject line.
@@ -64,6 +77,9 @@ public static class CommitAttributionRunner
         var input = new AttributionInput
         {
             TaskId = info.Id,
+            Repository = repository,
+            TaskBranch = branch,
+            HeadBranch = branch,
             Candidates = candidates,
             // The platform-stamped auto-commit(s) are the task's accepted work
             // by construction - pin them to full confidence.
