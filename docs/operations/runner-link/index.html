@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runner link | Concept dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #f2f1ee;
+    --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8983;
+    --line: #d8d6cf;
+    --develop: #2a78d6;
+    --taskbr: #4a3aa7;
+    --salvage: #eb6834;
+    --rescue: #b58500;
+    --ok: #008300;
+    --bad: #c93736;
+    --warn: #9a6b00;
+    --accent-soft: #eaf1fb;
+    --bad-soft: #fbecec;
+    --ok-soft: #eaf4ea;
+    --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --surface-3: #2c2c2a;
+      --ink-1: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #8a8983;
+      --line: #3d3d3a;
+      --develop: #3987e5;
+      --taskbr: #9085e9;
+      --salvage: #e5723f;
+      --rescue: #d0a02a;
+      --ok: #4eae4e;
+      --bad: #e66767;
+      --warn: #d9a63f;
+      --accent-soft: #1e2a3a;
+      --bad-soft: #382222;
+      --ok-soft: #1f2f1f;
+      --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p  { max-width: 76ch; }
+  p.dim { color: var(--ink-2); }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad    { background: var(--bad-soft);    border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok     { background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn   { background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .s-node   { fill: var(--surface-2); stroke: var(--line); rx: 8; }
+  .s-node2  { fill: var(--surface-3); stroke: var(--line); }
+  .s-label  { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub    { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny   { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow   { stroke: var(--ink-3); stroke-width: 1.6; fill: none; }
+  .s-lane   { stroke: var(--line); stroke-dasharray: 4 5; stroke-width: 1; }
+  .badge-bad  { fill: var(--bad-soft); stroke: var(--bad); }
+  .badge-ok   { fill: var(--ok-soft); stroke: var(--ok); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .badge-accent { fill: var(--accent-soft); stroke: var(--develop); }
+  .t-bad  { fill: var(--bad);  font: 600 12px system-ui, sans-serif; }
+  .t-ok   { fill: var(--ok);   font: 600 12px system-ui, sans-serif; }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  .t-accent { fill: var(--develop); font: 600 12px system-ui, sans-serif; }
+  .stx { margin:10px 0 0; padding:7px 12px; border-radius:8px; font-size:13px; border:1px solid; }
+  .stx-ok { border-color:color-mix(in srgb, var(--ok) 35%, var(--line)); background:var(--ok-soft); color:var(--ok); }
+  .stx-part { border-color:color-mix(in srgb, var(--warn) 35%, var(--line)); background:var(--warn-soft); color:var(--warn); }
+  .stx-open { border-color:color-mix(in srgb, var(--bad) 35%, var(--line)); background:var(--bad-soft); color:var(--bad); }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Concept dossier · Agent Studio</p>
+  <h1>Runner link as part of the application</h1>
+  <p class="lede">The connection between the control plane and the remote runner host is today an
+  operations script next to the product. This dossier makes it a supervised component: owned by a
+  service, probed functionally, healed automatically, visible and operable in Studio, and finally
+  retired together with the reverse tunnel.</p>
+  <div class="meta">
+    <span><b>State:</b> 06.09.2026, decision-ready</span>
+    <span><b>Trigger:</b> Ready lane stalled behind "Waiting for Codex sign-in on agent-runner-01" while the real fault was a disabled tunnel keeper task (02.09. to 06.09.)</span>
+    <span><b>Evidence:</b> keeper log, runner journal, Windows scheduler state, the August death diagnosis</span>
+  </div>
+</header>
+
+<nav class="box" aria-label="Contents">
+  <h4>Contents</h4>
+  <ul class="toc">
+    <li><a href="#tldr">Key statements</a></li>
+    <li><a href="#today">§1 The link today</a></li>
+    <li><a href="#failures">§2 Failure classes and why they stall the fleet</a></li>
+    <li><a href="#requirements">§3 What "part of the application" has to mean</a></li>
+    <li><a href="#options">§4 Options</a></li>
+    <li><a href="#recommendation">§5 Recommendation: two stages</a></li>
+    <li><a href="#design">§6 LinkSupervisor design</a></li>
+    <li><a href="#programme">§7 Programme</a></li>
+    <li><a href="#decisions">§8 Decisions</a></li>
+    <li><a href="#sources">Sources</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>Key statements</h4>
+  <p class="stx stx-open"><b>State 06.09.:</b> The tunnel has no owner inside the application. Studio
+  neither observes it nor can it restart it, and a dead link is reported to the operator as a provider
+  sign-in problem. Six outages since 01.08. share this shape.</p>
+  <ul>
+    <li><b>The link is only useful while the Task Server process runs.</b> Therefore the Task Server
+        process should own it: a hosted <code>LinkSupervisor</code> spawns and supervises the SSH forward,
+        probes it functionally through the runner heartbeat, and exposes state and a reconnect action.
+        No scheduled task, no second supervisor.</li>
+    <li><b>Honesty first.</b> A stale runner snapshot means "runner unreachable since", never
+        "waiting for sign-in". This part is already in flight as AGT-2711 and is re-scoped onto the
+        supervisor's state.</li>
+    <li><b>The tunnel is interim by design.</b> The remote Task Server (Phase B of
+        <code>remote-task-server-local-studio.md</code>) removes it: runner and Studio become ordinary
+        outbound clients over WireGuard, and a sleeping laptop no longer stops the fleet.</li>
+    <li><b>Immediate measure applied 06.09.:</b> keeper task enabled and started, battery and logon
+        settings corrected. This restores service; it does not change ownership.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<h2 id="today"><span class="no">§1</span>The link today</h2>
+<p>The Task Server runs inside the Windows Studio backend on <code>127.0.0.1:5031</code>. It is not
+reachable from the network on purpose. The remote runner host <code>agent-runner-01</code> reaches it only
+through an SSH reverse forward that the Windows machine initiates: <code>ssh -R 15031:127.0.0.1:5031
+agent-runner</code>. On the host, both runner units poll <code>http://127.0.0.1:15031</code>.</p>
+
+<figure>
+<svg viewBox="0 0 1040 400" role="img" aria-label="Topology today: Windows laptop with Studio backend and keeper task, SSH reverse forward, runner host with listener and two runner units">
+  <defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-3)"/>
+    </marker>
+  </defs>
+  <!-- Windows laptop -->
+  <rect class="s-node" x="30" y="40" width="420" height="320" rx="10"/>
+  <text class="s-label" x="52" y="70">Windows laptop (control plane)</text>
+  <text class="s-sub" x="52" y="92">sleeps, roams Wi-Fi, reboots for updates</text>
+  <rect class="s-node2" x="52" y="110" width="376" height="60" rx="6"/>
+  <text class="s-label" x="64" y="132">Studio backend = Task Server</text>
+  <text class="s-tiny" x="64" y="152">127.0.0.1:5031 · knows nothing about the tunnel</text>
+  <rect class="badge-warn" x="52" y="184" width="376" height="60" rx="6" stroke-width="1.2"/>
+  <text class="t-warn" x="64" y="206">Scheduled task AgentRunner-TunnelKeeper</text>
+  <text class="s-tiny" x="64" y="226">every 5 min: probe route, restart ssh -R · outside the product</text>
+  <rect class="s-node2" x="52" y="258" width="376" height="40" rx="6"/>
+  <text class="s-tiny" x="64" y="283">ssh.exe -N -R 15031:127.0.0.1:5031 agent-runner  (child of the task)</text>
+  <rect class="badge-bad" x="52" y="310" width="376" height="34" rx="6" stroke-width="1.2"/>
+  <text class="t-bad" x="64" y="332">✗ prepared watchdog not registered (needs admin)</text>
+
+  <!-- SSH -->
+  <path class="s-flow" d="M450 278 H590" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="470" y="268">SSH, outbound from the laptop</text>
+  <text class="s-tiny" x="470" y="298">dies with sleep, roam, reboot</text>
+
+  <!-- Runner host -->
+  <rect class="s-node" x="590" y="40" width="420" height="320" rx="10"/>
+  <text class="s-label" x="612" y="70">agent-runner-01 (Hetzner, public IP)</text>
+  <text class="s-sub" x="612" y="92">up 46 days, never the cause</text>
+  <rect class="s-node2" x="612" y="110" width="376" height="40" rx="6"/>
+  <text class="s-tiny" x="624" y="135">sshd listener 127.0.0.1:15031  (zombie after abrupt loss)</text>
+  <rect class="s-node2" x="612" y="164" width="376" height="60" rx="6"/>
+  <text class="s-label" x="624" y="186">agent-runner.service (coding)</text>
+  <text class="s-tiny" x="624" y="206">agent-host --poll → http://127.0.0.1:15031</text>
+  <rect class="s-node2" x="612" y="238" width="376" height="60" rx="6"/>
+  <text class="s-label" x="624" y="260">agent-runner-review.service</text>
+  <text class="s-tiny" x="624" y="280">same route, same failure</text>
+  <rect class="badge-bad" x="612" y="310" width="376" height="34" rx="6" stroke-width="1.2"/>
+  <text class="t-bad" x="624" y="332">✗ link down: exit 4 every 10 s, no heartbeat, snapshot stale</text>
+</svg>
+<figcaption><b>Fig. 1: The link today.</b> The only path into the Task Server is an SSH forward that a
+scheduled task on the laptop keeps alive. The Task Server itself has no notion of the link. When the
+forward dies, the runner units restart in a loop and Studio's capability snapshot goes stale.</figcaption>
+</figure>
+
+<h3>§1.1 What Studio sees when the link is down</h3>
+<p>The capability snapshot from <code>GET /api/v1/management/remote-hosts</code> is empty or stale.
+<code>providerAuthWaitReason</code> in the frontend treats every non-OK badge alike and renders
+"Waiting for Codex sign-in on agent-runner-01" on each Ready card. The tooltip promises a retry
+"after a fresh provider probe", which cannot happen because no probe reaches Studio. On 06.09. the
+operator therefore looked for a sign-in problem; the host was logged in the whole time.</p>
+
+<h3>§1.2 What exists but is not wired</h3>
+<ul>
+  <li><b>Repository-owned keeper and watchdog</b> under <code>deploy/windows/agent-runner-tunnel/</code>:
+      functional probe through the host, zombie-listener cleanup, two-probe recovery, alarm log. The
+      watchdog is not registered because registration needs an elevated shell; the live keeper is the
+      older copy under <code>C:\Users\rmisc\ops\</code>.</li>
+  <li><b>Runner-side health check</b> in <code>agent-host</code>: it reports "could not reach the task
+      server" honestly and exits with code 4, so systemd restarts it. The report never reaches an
+      operator surface because the channel that would carry it is the one that is down.</li>
+  <li><b>Provider-auth probes and capability snapshots</b> (60 s cadence) that could carry a link
+      timestamp but today only carry provider state.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="failures"><span class="no">§2</span>Failure classes and why they stall the fleet</h2>
+<p class="stx stx-open"><b>State 06.09.:</b> Every class below has occurred at least once since
+01.08.; none is detected inside the product.</p>
+<table>
+  <thead><tr><th>Class</th><th>Trigger</th><th>Current detection</th><th>Current recovery</th><th>Operator visibility</th></tr></thead>
+  <tbody>
+    <tr><td><b>Transport loss</b></td><td>laptop sleep, Wi-Fi roam, reboot (05.08., 12.08., 13.08., 16.08.)</td>
+        <td>keeper probe every 5 min, only while awake and on AC</td><td>keeper restarts <code>ssh -R</code></td>
+        <td>none in Studio; Ready cards show a provider wait</td></tr>
+    <tr><td><b>Zombie listener</b></td><td>abrupt loss leaves sshd holding 15031</td>
+        <td>keeper sees <code>ExitOnForwardFailure</code></td><td>keeper kills the holder since 23.08.</td>
+        <td>none</td></tr>
+    <tr><td><b>Supervisor dead or disabled</b></td><td>task disabled (02.09.), keeper crash on network error (16.08., fixed 23.08.), 72 h execution limit</td>
+        <td>nothing</td><td>manual: <code>Enable-ScheduledTask</code>, <code>Start-ScheduledTask</code></td>
+        <td>none; misleading sign-in text for days</td></tr>
+    <tr><td><b>Task Server down</b></td><td>backend restart, watchdog cycle (02.09. evening)</td>
+        <td>keeper logs "local backend not answering" and does nothing</td><td>backend watchdog restarts the API; tunnel usually survives</td>
+        <td>Studio itself is down, so correct by accident</td></tr>
+    <tr><td><b>Runner service loop</b></td><td>route down for hours: exit 4 every 10 s</td>
+        <td>systemd only</td><td>self-heals once the route returns</td>
+        <td>none</td></tr>
+  </tbody>
+</table>
+<div class="box warn">
+  <h4>The common denominator</h4>
+  <p>Every recovery path lives outside the application, and every operator-facing symptom is a
+  side effect somewhere else: a provider wait reason, a stale snapshot, an empty host list. The
+  product has no fact "link to agent-runner-01 is down since 02.09. 18:53" and therefore cannot show,
+  alert, or act on it.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="requirements"><span class="no">§3</span>What "part of the application" has to mean</h2>
+<table>
+  <thead><tr><th>#</th><th>Requirement</th><th>Test</th></tr></thead>
+  <tbody>
+    <tr><td><b>R1</b></td><td>One owner inside a supervised service; the link's lifecycle is bound to the Task Server process, not to a user session or a scheduler entry.</td><td>Stopping the Task Server tears the link down; starting it brings the link up without operator steps.</td></tr>
+    <tr><td><b>R2</b></td><td>Functional health, not process presence: the link is "up" only when the runner's heartbeat arrives through it.</td><td>A live ssh process with a dead route is reported as down within 90 seconds.</td></tr>
+    <tr><td><b>R3</b></td><td>Self-healing with bounded backoff, including zombie-listener cleanup on the host, without operator involvement.</td><td>After laptop sleep the link is back within one minute of wake without any manual action.</td></tr>
+    <tr><td><b>R4</b></td><td>Honest state everywhere: Execution Hosts, Ready-card wait reason, operator feed, notification. Provider text only for provider facts.</td><td>With the link down, no surface mentions sign-in.</td></tr>
+    <tr><td><b>R5</b></td><td>Operator actions in the UI: reconnect, pause, view last probe and last error.</td><td>One click restores a killed link; the outcome is shown with a timestamp.</td></tr>
+    <tr><td><b>R6</b></td><td>No credential exposure: the SSH key stays a file the service reads; nothing is copied into tasks, logs, or evidence.</td><td>Task artifacts and logs contain neither key material nor host secrets.</td></tr>
+    <tr><td><b>R7</b></td><td>Fleet independence from the laptop as the end state: remote execution must survive sleep and reboot of the operator device.</td><td>Laptop closed for 12 hours; remote cards progress and integrate.</td></tr>
+  </tbody>
+</table>
+<p class="dim">R1 to R6 are reachable with the tunnel kept. R7 is not: as long as the Task Server
+lives on the laptop, a sleeping laptop is a stopped fleet by definition. R7 is the argument for the
+second stage.</p>
+
+<!-- ============================================================ -->
+<h2 id="options"><span class="no">§4</span>Options</h2>
+<table>
+  <thead><tr><th>Option</th><th>Owner of the link</th><th>Meets</th><th>Fails</th><th>Effort</th></tr></thead>
+  <tbody>
+    <tr><td><b>A</b> Register the repository-owned keeper plus watchdog as S4U scheduled tasks (the prepared deploy assets)</td>
+        <td>Windows Task Scheduler</td><td>R2, R3, R6</td><td>R1 (still a second supervisor), R4, R5, R7; needs an elevated registration once</td><td>small</td></tr>
+    <tr><td><b>B</b> <code>LinkSupervisor</code> hosted service inside the Task Server process; scheduled task retired</td>
+        <td>Task Server process</td><td>R1 to R6</td><td>R7</td><td>medium: one backend service, two endpoints, one UI panel, one docs pass</td></tr>
+    <tr><td><b>C</b> Runner-initiated channel to the laptop (host dials the studio)</td>
+        <td>Runner</td><td>R1 to R3 on the host side</td><td>needs an inbound path to a NAT laptop; not available without a relay, which is Option D in disguise</td><td>not viable as is</td></tr>
+    <tr><td><b>D</b> Remote Task Server on <code>task-server-01</code> with WireGuard; Studio and runner are outbound clients (Phase B of the existing concept)</td>
+        <td>nobody: there is no tunnel; two client connections with their own health</td><td>R1 to R7</td><td>requires the five Phase B gates (API coverage, inventory, scoped credentials, Windows fallback, connector security)</td><td>large, already specified</td></tr>
+  </tbody>
+</table>
+<p>Option A is what the August diagnosis recommended and it is still worth less than B: it keeps
+the link outside the product and cannot satisfy R4 and R5 without B's endpoints anyway. Option D is
+the end state and does not need a new decision; it is waiting for approval and the gates. Option B
+is the missing middle: it makes the interim honest and self-healing, and its state model carries over
+unchanged into D as "connection to the Task Server".</p>
+
+<!-- ============================================================ -->
+<h2 id="recommendation"><span class="no">§5</span>Recommendation: two stages</h2>
+<div class="box ok">
+  <h4>Stage 1, now: LinkSupervisor in the Task Server process (Option B)</h4>
+  <p>The Task Server owns the forward it needs. It starts <code>ssh -R</code> as a child, judges health
+  by the runner heartbeat, cleans the host listener, reconnects with backoff, and exposes one link
+  resource per runner with state, timestamps, last error, and a reconnect action. The scheduled task
+  is disabled once the supervisor has held the link for a week. AGT-2711 (honest wait reason,
+  link health in Execution Hosts, reconnect) is re-scoped to read this resource instead of probing
+  the scheduler.</p>
+</div>
+<div class="box accent">
+  <h4>Stage 2, on approval: retire the tunnel with the remote Task Server (Option D)</h4>
+  <p>With <code>task-server-01</code> on WireGuard, the runner reaches the control plane directly and
+  the Studio connector is an outbound client. The LinkSupervisor's resource becomes the connector's
+  "Task Server connection" state; the SSH forward remains an emergency administration path only.
+  Nothing from Stage 1 is thrown away: state model, UI, wait reasons, and notifications stay.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="design"><span class="no">§6</span>LinkSupervisor design</h2>
+<h3>§6.1 Configuration</h3>
+<p>One entry per runner link in the Task Server configuration, next to the registered runner
+identity, for example:</p>
+<pre class="mono" style="padding:12px 16px;border-radius:8px;overflow:auto">"RunnerLinks": [
+  { "runnerId": "agent-runner-01", "kind": "ssh-reverse",
+    "sshTarget": "agent-runner", "remotePort": 15031, "localPort": 5031,
+    "extraForwards": [ "5031:127.0.0.1:5031", "4011:localhost:4011" ],
+    "heartbeatTimeoutSeconds": 90, "backoffSeconds": [5, 10, 30, 60, 120] } ]</pre>
+<p>The SSH alias and key stay in the service account's <code>~/.ssh</code>. The supervisor never reads
+key material; it only passes the alias to <code>ssh</code>. On Linux hosts the same component can run
+an <code>ssh -L</code> or an autossh-equivalent for Option B of the persistent-connection runbook.</p>
+
+<h3>§6.2 State machine</h3>
+<figure>
+<svg viewBox="0 0 1040 330" role="img" aria-label="Link state machine: Down, Connecting, Up, Degraded, Reconnecting, Paused">
+  <rect class="badge-bad" x="40" y="120" width="150" height="60" rx="10" stroke-width="1.4"/>
+  <text class="s-label" x="65" y="146">Down</text>
+  <text class="s-tiny" x="65" y="166">no process, no route</text>
+
+  <rect class="badge-warn" x="250" y="120" width="170" height="60" rx="10" stroke-width="1.4"/>
+  <text class="s-label" x="275" y="146">Connecting</text>
+  <text class="s-tiny" x="275" y="166">ssh started, waiting for heartbeat</text>
+
+  <rect class="badge-ok" x="480" y="120" width="150" height="60" rx="10" stroke-width="1.4"/>
+  <text class="s-label" x="505" y="146">Up</text>
+  <text class="s-tiny" x="505" y="166">heartbeat ≤ 90 s</text>
+
+  <rect class="badge-warn" x="690" y="120" width="170" height="60" rx="10" stroke-width="1.4"/>
+  <text class="s-label" x="715" y="146">Degraded</text>
+  <text class="s-tiny" x="715" y="166">process alive, heartbeat late</text>
+
+  <rect class="badge-warn" x="480" y="230" width="170" height="60" rx="10" stroke-width="1.4"/>
+  <text class="s-label" x="505" y="256">Reconnecting</text>
+  <text class="s-tiny" x="505" y="276">kill child, clear host listener, backoff</text>
+
+  <rect class="s-node2" x="40" y="230" width="150" height="60" rx="10"/>
+  <text class="s-label" x="65" y="256">Paused</text>
+  <text class="s-tiny" x="65" y="276">operator action</text>
+
+  <path class="s-flow" d="M190 150 H250" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="196" y="142">start</text>
+  <path class="s-flow" d="M420 150 H480" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="426" y="142">heartbeat</text>
+  <path class="s-flow" d="M630 150 H690" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="636" y="142">late</text>
+  <path class="s-flow" d="M775 180 C775 260 660 260 650 260" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="720" y="230">timeout or exit</text>
+  <path class="s-flow" d="M480 260 C400 260 335 250 335 180" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="360" y="235">after backoff</text>
+  <path class="s-flow" d="M335 120 C335 60 555 60 555 120" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="410" y="66">exit before heartbeat → Reconnecting</text>
+  <path class="s-flow" d="M190 260 H480" stroke-dasharray="4 4"/>
+  <text class="s-tiny" x="230" y="252">resume → Connecting</text>
+  <path class="s-flow" d="M115 230 V180" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+  <text class="s-tiny" x="122" y="210">pause</text>
+  <text class="s-tiny" x="40" y="40">Every transition writes one operator-feed line and updates GET /api/v1/management/links/{runnerId}.</text>
+  <text class="s-tiny" x="40" y="58">Down for longer than 5 minutes with Ready cards targeting the runner raises one notification with the last error.</text>
+</svg>
+<figcaption><b>Fig. 2: Link state machine.</b> Health is the runner heartbeat, not the ssh process.
+Reconnecting always clears the host's listener first, so a zombie cannot block the new forward. Paused
+is the only state an operator sets by hand.</figcaption>
+</figure>
+
+<h3>§6.3 Probes and recovery</h3>
+<ul>
+  <li><b>Heartbeat probe.</b> The Task Server already receives runner heartbeats and capability
+      snapshots. The supervisor subscribes to them: a snapshot younger than
+      <code>heartbeatTimeoutSeconds</code> means Up. No extra SSH round trip in the healthy case.</li>
+  <li><b>Route probe on doubt.</b> When the heartbeat is late, one bounded <code>ssh agent-runner
+      curl --max-time 5 http://127.0.0.1:15031/healthz</code> distinguishes a dead route from a stopped
+      runner service. The verdict goes into the link resource as <code>lastProbe</code>.</li>
+  <li><b>Recovery.</b> Terminate the child, ask the host to free the listener (the keeper's proven
+      non-sudo <code>ss</code> and <code>kill</code> sequence), wait for the port to clear, start
+      <code>ssh -R</code> with <code>ExitOnForwardFailure=yes</code>, verbose stderr captured to a bounded
+      per-link log. Backoff follows the configured ladder and resets on the first heartbeat.</li>
+  <li><b>Process ownership.</b> The child is created with a job object on Windows so it dies with the
+      Task Server; on Linux it runs in the service's cgroup. Nothing survives the parent.</li>
+  <li><b>Sleep and resume.</b> A resume is a late heartbeat, nothing special. The first probe after
+      wake fails fast on the dead socket and the ladder starts at 5 seconds.</li>
+</ul>
+
+<h3>§6.4 API and UI</h3>
+<table>
+  <thead><tr><th>Surface</th><th>Contract</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET /api/v1/management/links</code></td><td>one resource per configured link: <code>state</code>, <code>since</code>, <code>lastHeartbeatAt</code>, <code>lastProbe</code>, <code>lastError</code>, <code>attempt</code>, <code>nextRetryAt</code>, <code>childPid</code></td></tr>
+    <tr><td><code>POST /api/v1/management/links/{runnerId}/reconnect</code></td><td>forces Reconnecting; returns the resource after the first probe</td></tr>
+    <tr><td><code>POST /api/v1/management/links/{runnerId}/pause</code>, <code>/resume</code></td><td>operator control, audited</td></tr>
+    <tr><td>Execution Hosts</td><td>a "Link" column with state and age, the last error in the tooltip, reconnect and pause actions</td></tr>
+    <tr><td>Ready-card wait reason</td><td>"agent-runner-01 unreachable since 18:53 (link down, reconnecting, attempt 7)"; provider text only when the link is Up and the provider capability says unavailable</td></tr>
+    <tr><td>Operator feed and notification</td><td><code>link_down</code>, <code>link_up</code>, <code>link_reconnect_failed</code> with runner id and error; one notification after 5 minutes Down with targeted Ready cards</td></tr>
+  </tbody>
+</table>
+
+<h3>§6.5 Migration from the scheduled task</h3>
+<ol>
+  <li>Ship the supervisor disabled by default; enable it for <code>agent-runner-01</code> in stable.</li>
+  <li>The supervisor adopts an existing matching forward once (same rule the repository keeper uses)
+      so the link does not flap during the switch.</li>
+  <li>After seven days without a manual intervention, disable <code>AgentRunner-TunnelKeeper</code> and
+      record the date in the persistent-connection runbook. Keep the deploy assets as the documented
+      emergency path.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="programme"><span class="no">§7</span>Programme</h2>
+<table>
+  <thead><tr><th>Step</th><th>Content</th><th>Card</th><th>State</th></tr></thead>
+  <tbody>
+    <tr><td><b>S0</b></td><td>Immediate measure: keeper task enabled and started, battery and logon settings corrected, runner units back, seven Ready cards claimed</td><td>none (operator action 06.09.)</td><td><span class="pill done">done</span></td></tr>
+    <tr><td><b>S1</b></td><td>Honest wait reason, link health in Execution Hosts, reconnect action, client heartbeat projection</td><td>AGT-2711</td><td><span class="pill queued">in progress</span> re-scope onto S2's resource when S2 exists</td></tr>
+    <tr><td><b>S2</b></td><td><code>LinkSupervisor</code> hosted service: configuration, state machine, probes, recovery, links API, operator-feed events, tests with a fake ssh</td><td>new card after decision D1</td><td><span class="pill new">decision pending</span></td></tr>
+    <tr><td><b>S3</b></td><td>Migration: adopt the running forward, seven-day soak, disable the scheduled task, runbook update</td><td>new card after S2</td><td><span class="pill new">decision pending</span></td></tr>
+    <tr><td><b>S4</b></td><td>Codex sign-in from Execution Hosts (device-auth over SSH), the real provider case</td><td>AGT-2712</td><td><span class="pill queued">ready</span></td></tr>
+    <tr><td><b>S5</b></td><td>Phase B: <code>task-server-01</code>, WireGuard, scoped credentials, connector, cutover and rollback rehearsal; gates 1 to 5 of the remote Task Server concept</td><td>Phase B cards after decision D2</td><td><span class="pill open">approval pending since 09.08.</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="decisions"><span class="no">§8</span>Decisions</h2>
+<table>
+  <thead><tr><th>#</th><th>Question</th><th>Recommendation</th></tr></thead>
+  <tbody>
+    <tr><td><b>D1</b></td><td>Who owns the link in the interim: the Task Server process (Option B) or the Windows scheduler with the prepared assets (Option A)?</td><td>Option B. It is the only interim that makes the link a product fact with UI and self-healing, and its state carries into Phase B.</td></tr>
+    <tr><td><b>D2</b></td><td>Start Phase B now in parallel to S2, or after S2 and S3 have proven the state model?</td><td>Start the Phase B gate work now (credentials, connector, Windows fallback); they do not depend on S2. Cutover only after S3.</td></tr>
+    <tr><td><b>D3</b></td><td>Keep the SSH forward as an emergency administration path after Phase B?</td><td>Yes, as a documented manual path, never as a second monitored production route.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="sources"><span class="no">§</span>Sources</h2>
+<ul>
+  <li><code>docs/operations/tunnel-keeper-diagnosis.md</code>: death diagnosis 23.08., root causes A to C, applied hardening.</li>
+  <li><code>docs/operations/setup/remote-runner-persistent-connection.md</code>: Option A and B runbooks, prepared keeper and watchdog.</li>
+  <li><code>docs/operations/remote-task-server-local-studio.md</code>: Phase A concept for the remote Task Server, WireGuard, credentials, gates, threat model.</li>
+  <li><code>docs/concepts/distributed-agent-studio-target-architecture.md</code>: component boundaries, outbound runner channel.</li>
+  <li>Keeper log <code>C:\Users\rmisc\ops\tunnel-keeper.log</code>, runner journal <code>agent-runner.service</code>, Windows scheduler state on 06.09.2026.</li>
+  <li>Frontend <code>features/remote-hosts/models/provider-auth.model.ts</code> (<code>providerAuthWaitReason</code>), runner <code>agent-host</code> route check.</li>
+</ul>
+
+</main>
+</body>
+</html>

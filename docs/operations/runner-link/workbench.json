@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "runner-link",
+  "title": "Runner link as part of the application",
+  "summary": "The SSH reverse tunnel between the Windows control plane and agent-runner-01 is today an operations script outside the product: a scheduled task that nothing in Studio observes, supervises, or can restart. Evidence from six outages (August stalls, 05.08. sleep outage, the disabled keeper task on 02.09. that Ready reported as a missing Codex sign-in), the failure classes, requirements for a link the application owns, four options, a two-stage recommendation (LinkSupervisor inside the Task Server process now, tunnel retired with the remote Task Server in Phase B), the LinkSupervisor design, the programme table, and three decisions.",
+  "entrypoint": "index.html",
+  "status": "active",
+  "phase": "decision-ready",
+  "updatedAt": "2026-09-06T18:30:00Z",
+  "sourceTaskKeys": [],
+  "relatedTaskKeys": [
+    "AGT-2711",
+    "AGT-2712",
+    "AGT-2404",
+    "AGT-2505"
+  ],
+  "key": "AGT-W43"
+}
