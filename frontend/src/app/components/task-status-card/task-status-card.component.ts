@@ -1,10 +1,9 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, computed, input } from '@angular/core';
 import type { TaskInfo } from '../../models/task.model';
-import { TaskState } from '../../models/task.model';
+import { lanePresentation, laneTone } from '../../models/lane-presentation';
 import { projectIdentity } from '../../services/project-identity.util';
 import { cliTypeLabel } from '../../services/format.util';
 import { InfoButtonComponent } from '../info-button/info-button.component';
-import { laneDocTopic } from '../info-button/lane-doc-topic';
 
 /**
  * Shared compact task status card. Used as:
@@ -34,10 +33,12 @@ export class TaskStatusCardComponent {
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 
-  readonly laneLabel = computed(() => laneLabelFor(this.job().state));
+  readonly lane = computed(() => lanePresentation(this.job().state));
+  readonly laneLabel = computed(() => this.lane()?.shortName ?? this.job().state);
+  readonly laneTone = computed(() => laneTone(this.job().state));
 
   /** Concept-doc topic for the lane-info modal, or null when none exists. */
-  readonly laneTopic = computed(() => laneDocTopic(this.job().state));
+  readonly laneTopic = computed(() => this.lane()?.docTopic ?? null);
   readonly cliLabel = computed(() => {
     const t = this.job().cliType;
     return t ? cliTypeLabel(t) : null;
@@ -63,26 +64,6 @@ export class TaskStatusCardComponent {
 
   readonly relativeLastActivity = computed(() => formatRelative(this.job().lastActivity));
   readonly absoluteLastActivity = computed(() => formatAbsolute(this.job().lastActivity));
-}
-
-/**
- * Lane label resolver. Matches the labels used in the overview pane so the
- * card and the Overview tab agree on terminology.
- */
-function laneLabelFor(state: string): string {
-  switch (state) {
-    case TaskState.Preparation:    return 'Preparation';
-    case TaskState.OrchestratorPrep: return 'Orchestrator Prep';
-    case TaskState.Ready:          return 'Ready';
-    case TaskState.Progress:       return 'In Progress';
-    case '4-review':               return 'Review';
-    case TaskState.AutoReview:     return 'Post Processing';
-    case TaskState.HumanReview:    return 'Review';
-    case TaskState.Escalated:      return 'Escalated';
-    case TaskState.Completed:      return 'Delivered';
-    case TaskState.Archive:        return 'Archive';
-    default:                       return state || '';
-  }
 }
 
 function formatRelative(iso: string): string {

@@ -86,6 +86,7 @@ import { OverviewRunsComponent } from './overview-runs/overview-runs.component';
 import { distinctStepVerdict } from './pipeline-status-verdict.util';
 import type { ProtocolVerdict } from '../../protocol-pane/protocol-verdict';
 import { outcomeDecisionBadge, type DecisionBadgeVm } from './outcome-decision-badge.util';
+import { laneTone } from '../../../../../models/lane-presentation';
 
 interface PipelineRowVm {
   id: string;
@@ -505,6 +506,7 @@ function buildStepExplanation(stepId: string, label: string, kind: StepKind): St
   styleUrl: './overview-pane.component.scss',
 })
 export class OverviewPaneComponent {
+  readonly laneTone = laneTone;
   readonly stepKindLabel = stepKindLabel;
   readonly stepKindIcon = stepKindIcon;
   readonly stepStatusIcon = stepStatusIcon;
@@ -1278,6 +1280,7 @@ export class OverviewPaneComponent {
         label,
         tone,
         severity,
+        toneToken: null,
         tooltip: {
           title: `Remote Review Plane · ${label.replace('Review ', '')}`,
           body: `${row.remoteReviewDetail}${resultLine}`,

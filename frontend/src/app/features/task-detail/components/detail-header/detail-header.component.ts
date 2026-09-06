@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
 import { TaskInfo, TaskState } from '../../../../models/task.model';
+import { laneDisplayName, laneShortName, laneTone } from '../../../../models/lane-presentation';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
-  stateLabel as fmtStateLabel,
   cliTypeLabel,
   taskModeIcon,
   taskModeLabel,
@@ -165,13 +165,15 @@ export class DetailHeaderComponent {
    * lane is omitted too (prep runs in-place on 1-preparation now).
    */
   readonly laneOptions: readonly { state: string; label: string }[] = [
-    { state: TaskState.Preparation,   label: 'Preparation' },
-    { state: TaskState.Ready,         label: 'Ready' },
-    { state: TaskState.HumanReview,   label: 'Review' },
-    { state: TaskState.Escalated,     label: 'Escalated' },
-    { state: TaskState.Completed,     label: 'Delivered' },
-    { state: TaskState.Archive,       label: 'Archive' },
-  ];
+    TaskState.Preparation,
+    TaskState.Ready,
+    TaskState.HumanReview,
+    TaskState.Escalated,
+    TaskState.Completed,
+    TaskState.Archive,
+  ].map((state) => ({ state, label: laneShortName(state) }));
+
+  readonly selectedLaneTone = computed(() => laneTone(this.selectedLane()));
 
   isStandardLane(state: string): boolean {
     return this.laneOptions.some(o => o.state === state);
@@ -435,7 +437,7 @@ export class DetailHeaderComponent {
     };
   });
 
-  stateLabel(state: string): string { return fmtStateLabel(state); }
+  stateLabel(state: string): string { return laneDisplayName(state); }
 
   // Title right-click context menu for copy actions
   private readonly notifs = inject(NotificationService);

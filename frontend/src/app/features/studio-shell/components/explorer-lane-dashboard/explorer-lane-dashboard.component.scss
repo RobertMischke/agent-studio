@@ -18,17 +18,17 @@
   text-align: center;
 
   &--ready {
-    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-ready-fg);
+    --studio-board-nav-lane-fg: var(--studio-lane-ready);
     --studio-board-nav-lane-bg: var(--studio-board-nav-lane-ready-bg);
     --studio-board-nav-lane-border: var(--studio-board-nav-lane-ready-border);
   }
   &--progress {
-    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-progress-fg);
+    --studio-board-nav-lane-fg: var(--studio-lane-progress);
     --studio-board-nav-lane-bg: var(--studio-board-nav-lane-progress-bg);
     --studio-board-nav-lane-border: var(--studio-board-nav-lane-progress-border);
   }
   &--human-review {
-    --studio-board-nav-lane-fg: var(--studio-board-nav-lane-human-review-fg);
+    --studio-board-nav-lane-fg: var(--studio-lane-human-review);
     --studio-board-nav-lane-bg: var(--studio-board-nav-lane-human-review-bg);
     --studio-board-nav-lane-border: var(--studio-board-nav-lane-human-review-border);
   }
@@ -49,9 +49,9 @@
   border-radius: 50%;
   background: currentColor;
 
-  &--ready { color: var(--studio-board-nav-lane-ready-fg); }
-  &--progress { color: var(--studio-board-nav-lane-progress-fg); }
-  &--human-review { color: var(--studio-board-nav-lane-human-review-fg); }
+  &--ready { color: var(--studio-lane-ready); }
+  &--progress { color: var(--studio-lane-progress); }
+  &--human-review { color: var(--studio-lane-human-review); }
 }
 
 .studio-board-lane-dots__overflow {

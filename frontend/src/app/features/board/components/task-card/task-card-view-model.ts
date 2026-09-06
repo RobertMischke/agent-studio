@@ -1,5 +1,6 @@
 import { TaskState } from '../../../../models/task.model';
 import type { TaskInfo, ClientSummary, CliType, TagRegistryEntry, EpicRollup, AutoLoopSnapshot, PendingIntent, TaskMode } from '../../../../models/task.model';
+import { laneShortName } from '../../../../models/lane-presentation';
 import type { TaskCommitInfo } from '../../../../features/git';
 import type { StructuredTooltip } from 'coding-agent-chat/shared';
 import type { MenuItem } from '../../../../components/menu';
@@ -1005,7 +1006,7 @@ function pipelineView(
     pre: 'Pre steps',
     run: 'Core agent work',
     post: 'Post steps',
-    review: 'Review',
+    review: laneShortName(TaskState.HumanReview),
   };
   const doneIndex = doneThrough ? order.indexOf(doneThrough) : -1;
   const dots = order.map((id, index): PipelineDot => ({
@@ -1409,7 +1410,7 @@ export function buildDecisionDamBadge(job: TaskInfo): HumanReviewBadge | null {
 export function buildHumanReviewBadge(job: TaskInfo): HumanReviewBadge | null {
   if (job.state !== TaskState.Escalated) return null;
   return {
-    label: 'Escalated',
+    label: laneShortName(TaskState.Escalated),
     tone: 'attention',
     tooltip: 'This task is currently in the Escalated lane and needs an operator decision.'
   };

@@ -277,16 +277,34 @@
   // ---------------------------------------------------------------------------
   // Lane palette — kanban / board states
   // ---------------------------------------------------------------------------
-  --lane-backlog:      #9d9d9d;
-  --lane-prep:         #d1bfa5;
-  --lane-ready:        var(--color-green-vscode);
-  --lane-progress:     var(--studio-accent-warn-strong);
-  --lane-auto-review:  var(--color-yellow-200);
-  --lane-human-review: var(--color-purple-vscode);
-  --lane-escalated:    var(--studio-accent-6);
-  --lane-completed:    #5fbf80;
-  --lane-archive:      #6e6e6e;
-  --lane-failed:       var(--color-mocha-red);
+  // Canonical lane tones. LanePresentation points at these --studio-lane-*
+  // tokens, and every lane-bearing surface consumes that presentation instead
+  // of choosing a local status colour.
+  --studio-lane-backlog:          #9d9d9d;
+  --studio-lane-preparation:      #d1bfa5;
+  --studio-lane-orchestrator-prep: var(--studio-lane-preparation);
+  --studio-lane-ready:            var(--color-green-vscode);
+  --studio-lane-progress:         var(--studio-accent-warn-strong);
+  --studio-lane-failed-pickup:    var(--color-mocha-red);
+  --studio-lane-code-not-complete: var(--color-mocha-red);
+  --studio-lane-auto-review:      var(--color-yellow-200);
+  --studio-lane-human-review:     var(--color-purple-vscode);
+  --studio-lane-escalated:        var(--studio-accent-6);
+  --studio-lane-completed:        #5fbf80;
+  --studio-lane-archive:          #6e6e6e;
+
+  // Compatibility aliases for older consumers while lane presentation is
+  // adopted beyond the board and task-detail surfaces.
+  --lane-backlog:      var(--studio-lane-backlog);
+  --lane-prep:         var(--studio-lane-preparation);
+  --lane-ready:        var(--studio-lane-ready);
+  --lane-progress:     var(--studio-lane-progress);
+  --lane-auto-review:  var(--studio-lane-auto-review);
+  --lane-human-review: var(--studio-lane-human-review);
+  --lane-escalated:    var(--studio-lane-escalated);
+  --lane-completed:    var(--studio-lane-completed);
+  --lane-archive:      var(--studio-lane-archive);
+  --lane-failed:       var(--studio-lane-failed-pickup);
 
   // Board nav lane counters. Subtle, titlebar/sidebar-grade pigments distinct
   // from the saturated kanban lane colours so the Explorer stays calm.
@@ -780,16 +798,18 @@
   --severity-pending: var(--color-violet-700);
 
   // Lane palette — desaturated for the white shell.
-  --lane-backlog:      #6e6e6e;
-  --lane-prep:         #92745a;
-  --lane-ready:        var(--color-green-700);
-  --lane-progress:     var(--color-amber-700);
-  --lane-auto-review:  var(--color-yellow-700);
-  --lane-human-review: #7c3aed;
-  --lane-escalated:    var(--color-red-700);
-  --lane-completed:    var(--color-green-700);
-  --lane-archive:      var(--color-grey-850);
-  --lane-failed:       var(--color-red-700);
+  --studio-lane-backlog:           #6e6e6e;
+  --studio-lane-preparation:       #92745a;
+  --studio-lane-orchestrator-prep: var(--studio-lane-preparation);
+  --studio-lane-ready:             var(--color-green-700);
+  --studio-lane-progress:          var(--color-amber-700);
+  --studio-lane-failed-pickup:     var(--color-red-700);
+  --studio-lane-code-not-complete: var(--color-red-700);
+  --studio-lane-auto-review:       var(--color-yellow-700);
+  --studio-lane-human-review:      #7c3aed;
+  --studio-lane-escalated:         var(--color-red-700);
+  --studio-lane-completed:         var(--color-green-700);
+  --studio-lane-archive:           var(--color-grey-850);
 
   --studio-board-nav-lane-ready-fg:        var(--color-slate-600);
   --studio-board-nav-lane-ready-bg:        color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 10%, transparent);

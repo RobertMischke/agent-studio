@@ -1,5 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { TaskInfo, TaskState } from '../../../models/task.model';
+import { TaskInfo } from '../../../models/task.model';
+import { laneDisplayName } from '../../../models/lane-presentation';
 import { taskUrlKey } from './task-url';
 
 /**
@@ -34,20 +35,6 @@ export interface LanePagerSnapshot {
 
 const STORAGE_KEY = 'app:lanePager:v2';
 
-export const LANE_LABELS: Record<string, string> = {
-  [TaskState.Backlog]:          'Backlog',
-  [TaskState.Preparation]:      'Preparation',
-  [TaskState.OrchestratorPrep]: 'Orchestrator Prep',
-  [TaskState.Ready]:            'Ready',
-  [TaskState.Progress]:         'In Progress',
-  [TaskState.CodeNotComplete]:  'Code not complete',
-  [TaskState.AutoReview]:       'Post Processing',
-  [TaskState.HumanReview]:      'Review',
-  [TaskState.Escalated]:        'Escalated',
-  [TaskState.Completed]:        'Delivered',
-  [TaskState.Archive]:          'Archive',
-};
-
 @Injectable({ providedIn: 'root' })
 export class LanePagerService {
   /**
@@ -78,7 +65,7 @@ export class LanePagerService {
   readonly laneLabel = computed(() => {
     const s = this.snapshot();
     if (!s) return '';
-    return LANE_LABELS[s.lane] ?? s.lane;
+    return laneDisplayName(s.lane);
   });
 
   /**

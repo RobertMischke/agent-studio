@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import type { TaskInfo } from '../../../../models/task.model';
-import { stateLabel } from '../../../../services/format.util';
+import { laneDisplayName } from '../../../../models/lane-presentation';
 import { buildEpicGroups, EpicGroupView } from '../epic-grouping.util';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -55,7 +55,7 @@ export class EpicGroupBoardComponent {
   }
 
   laneLabel(state: string): string {
-    return stateLabel(state).replace(/-/g, ' ');
+    return laneDisplayName(state);
   }
 
   progressTooltip(group: EpicGroupView): string {

@@ -3,10 +3,12 @@
 <div class="protocol-verdict"
      [attr.data-kind]="v.kind"
      [attr.data-status]="v.status || null"
+     [attr.data-lane-tone]="v.toneToken"
+     [style.--studio-current-lane-tone]="v.toneToken ? 'var(' + v.toneToken + ')' : null"
      [class.protocol-verdict--expanded]="expanded()"
      [attr.data-testid]="'protocol-verdict-' + v.kind"
      role="status">
-  <span class="protocol-verdict__emoji" aria-hidden="true">{{ v.emoji }}</span>
+  <span class="protocol-verdict__emoji" data-testid="protocol-verdict-tone" aria-hidden="true">{{ v.emoji }}</span>
   <span class="protocol-verdict__label">{{ v.label }}</span>
   @if (expandable()) {
     <!-- BEFUND 1: the reason can be a long blocker sentence. Clicking it

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
-import type { CliType, EpicRollup, EpicSubTaskRef, TaskInfo } from '../../../../models/task.model';
+import { ALL_TASK_STATES, type CliType, type EpicRollup, type EpicSubTaskRef, type TaskInfo } from '../../../../models/task.model';
+import { laneDisplayName } from '../../../../models/lane-presentation';
 import type { CliModelInfo } from '../../../cli';
 import { TaskService } from '../../../../services/task.service';
 import { TooltipDirective } from 'coding-agent-chat/shared';
@@ -7,7 +8,6 @@ import { MarkdownRichEditorComponent } from '../../../../components/markdown-ric
 import { MarkdownViewComponent } from 'coding-agent-chat/markdown';
 import { CliModelSelectorComponent } from '../../../../components/cli-model-selector';
 import { ReferencesSectionComponent } from '../references-section/references-section.component';
-import { LANE_LABELS } from '../../state/lane-pager.service';
 
 /** One lane column in the epic mini-board: a state plus the sub-tasks that sit in it. */
 export interface EpicLaneGroup {
@@ -16,8 +16,8 @@ export interface EpicLaneGroup {
   subTasks: EpicSubTaskRef[];
 }
 
-/** Canonical kanban lane order; `LANE_LABELS` is authored in that order. */
-const LANE_ORDER = Object.keys(LANE_LABELS);
+/** Canonical task-state order from the shared task model. */
+const LANE_ORDER: readonly string[] = ALL_TASK_STATES;
 
 /**
  * Epic detail pane: shown in the task-detail view when the open card is an
@@ -104,7 +104,7 @@ export class EpicRollupPaneComponent {
     const unknown = [...byState.keys()].filter((s) => !LANE_ORDER.includes(s)).sort();
     return [...known, ...unknown].map((state) => ({
       state,
-      label: LANE_LABELS[state] ?? this.laneLabel(state),
+      label: laneDisplayName(state),
       subTasks: [...byState.get(state)!].sort((a, b) => a.order - b.order),
     }));
   });
@@ -163,12 +163,6 @@ export class EpicRollupPaneComponent {
   onDescSave(content: string): void {
     this.saveDescription.emit(content);
     this.editingDesc.set(false);
-  }
-
-  /** "6-completed" -> "completed" for an unknown lane label fallback. */
-  laneLabel(state: string): string {
-    const name = state.includes('-') ? state.substring(state.indexOf('-') + 1) : state;
-    return name.replace(/-/g, ' ');
   }
 
   openSub(sub: EpicSubTaskRef): void {

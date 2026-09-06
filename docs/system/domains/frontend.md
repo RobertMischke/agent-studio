@@ -461,6 +461,11 @@ unseen again, and renders missing reviewed artifacts as no longer actionable.
 ## Invariants
 
 - Angular components are standalone. Do not introduce NgModules.
+- Lane presentation is a single frontend model. Board columns, detail chips,
+  Result verdicts, workflow rows, badges, and lane help buttons read names,
+  sentence copy, `--studio-lane-*` tone tokens, glyphs, and doc topics from
+  `frontend/src/app/models/lane-presentation.ts`. Do not add a local lane label
+  or colour map. `npm run lint:structure` enforces canonical name ownership.
 - State should use Angular signals and existing stores before new state
   mechanisms.
 - Durable user-owned frontend mutations are optimistic by default: snapshot,

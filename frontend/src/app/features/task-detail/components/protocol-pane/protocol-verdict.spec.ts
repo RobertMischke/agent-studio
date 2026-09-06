@@ -97,6 +97,19 @@ describe('deriveProtocolVerdict', () => {
     expect(v.label).toBe('Running');
   });
 
+  it('projects the human-review lane name, sentence, and tone without badge rewriting', () => {
+    const v = deriveProtocolVerdict(baseInputs({
+      laneState: '5-human-review',
+      hasActivity: false,
+      summaryStatus: 'none',
+    }));
+
+    expect(v.label).toBe('Human review');
+    expect(v.detail).toBe('Waiting for a human decision');
+    expect(v.toneToken).toBe('--studio-lane-human-review');
+    expect(v.emoji).toBe('●');
+  });
+
   it('keeps the run unclear when summary generation itself failed', () => {
     const v = deriveProtocolVerdict(baseInputs({ summaryStatus: 'failed', statusMarkdown: null }));
     expect(v.kind).toBe('unclear');

@@ -1,4 +1,5 @@
-import { TaskInfo } from '../../../models/task.model';
+import { TaskState, type TaskInfo } from '../../../models/task.model';
+import { laneShortName } from '../../../models/lane-presentation';
 
 /**
  * Lane phases for the 2-ready filesystem state. Mirrors backend
@@ -65,7 +66,7 @@ export function splitReadyByPhase(jobs: readonly TaskInfo[]): ReadyLaneSplit {
  */
 export function readyPhaseLabel(phase: string | null | undefined): string | null {
   switch (phase) {
-    case READY_PHASES.humanReady: return 'Ready';
+    case READY_PHASES.humanReady: return laneShortName(TaskState.Ready);
     case READY_PHASES.intakeRunning: return 'Preparing';
     case READY_PHASES.intakeBlocked: return 'Prep blocked';
     case READY_PHASES.intakePassed: return 'Prep passed';

@@ -1,5 +1,7 @@
 import { excludeEpics } from '../board';
 import type { GroupedJobs, TaskInfo } from '../../models/task.model';
+import { TaskState } from '../../models/task.model';
+import { laneDisplayName } from '../../models/lane-presentation';
 import { projectIdentity } from '../../services/project-identity.util';
 import type { StructuredTooltip } from 'coding-agent-chat/shared';
 
@@ -18,15 +20,15 @@ export interface ExplorerLaneCounts {
  */
 export const BOARD_LANE_COUNT_TOOLTIPS: Record<keyof ExplorerLaneCounts, StructuredTooltip> = {
   ready: {
-    title: 'Ready',
+    title: laneDisplayName(TaskState.Ready),
     body: 'Refined tasks queued for a coding agent. The orchestrator runs the top card next when a slot frees up.',
   },
   progress: {
-    title: 'In Progress',
+    title: laneDisplayName(TaskState.Progress),
     body: 'Tasks the orchestrator is actively running now, or resuming between attempts. One per project at a time.',
   },
   humanReview: {
-    title: 'Human Review',
+    title: laneDisplayName(TaskState.HumanReview),
     body: 'Finished runs waiting for your review, including escalations that need a decision. Accept the work or send it back for another pass.',
   },
 };
@@ -56,7 +58,9 @@ export function laneCountsFor(project: { laneCounts?: ExplorerLaneCounts }): Exp
 
 export function boardLaneCountsLabel(project: { laneCounts?: ExplorerLaneCounts }): string {
   const counts = laneCountsFor(project);
-  return `${counts.ready} ready, ${counts.progress} in progress, ${counts.humanReview} human review`;
+  return `${counts.ready} ${laneDisplayName(TaskState.Ready).toLowerCase()}, `
+    + `${counts.progress} ${laneDisplayName(TaskState.Progress).toLowerCase()}, `
+    + `${counts.humanReview} ${laneDisplayName(TaskState.HumanReview).toLowerCase()}`;
 }
 
 export function buildProjectSidebarRows(

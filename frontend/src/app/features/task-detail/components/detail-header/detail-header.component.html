@@ -117,6 +117,7 @@
   <select #stateSelect
           class="detail__state detail__state--select"
           [class]="'detail__state detail__state--select state--' + selectedLane()"
+          [style.--studio-current-lane-tone]="selectedLaneTone()"
           [value]="selectedLane()"
           [cacTooltip]="'Select which lane to page through'"
           data-testid="detail-state-select"

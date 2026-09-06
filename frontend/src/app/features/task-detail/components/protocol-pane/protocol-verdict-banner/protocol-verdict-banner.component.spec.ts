@@ -10,6 +10,7 @@ function verdict(overrides: Partial<ProtocolVerdict> = {}): ProtocolVerdict {
     status: 'succeeded',
     signals: [],
     emoji: '🟢',
+    toneToken: null,
     label: 'Success',
     detail: 'Last run completed successfully.',
     duration: null,

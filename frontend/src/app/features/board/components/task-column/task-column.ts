@@ -28,7 +28,7 @@ import { cliTypeIcon } from '../../../../services/format.util';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { groupReviewJobs } from '../review-grouping.util';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
-import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
+import { lanePresentation, laneTone } from '../../../../models/lane-presentation';
 import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
 import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { PostProcessingSummaryComponent } from '../post-processing-summary/post-processing-summary.component';
@@ -374,10 +374,10 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
    * concept doc under <c>docs/app/help/lane-guides/lane-*.md</c>, served by
    * <c>GET /api/concept-docs/{topic}</c> and shown in the lane-info
    * modal. Virtual sub-lanes (e.g. <c>2-ready-intake</c>, <c>4-review</c>)
-   * collapse to their parent's doc. Returns <c>null</c> only for a state
-   * with no doc, in which case the trigger is hidden.
+   * collapse to their parent's doc.
    */
-  readonly infoTopic = computed<string | null>(() => laneDocTopic(this.state()));
+  readonly infoTopic = computed<string | null>(() => lanePresentation(this.state())?.docTopic ?? null);
+  readonly tone = computed<string | null>(() => laneTone(this.state()));
 
   /**
    * The ADR-0025 swim-lanes are now real columns; the in-column

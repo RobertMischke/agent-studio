@@ -30,10 +30,16 @@
     background: color-mix(in srgb, var(--severity-warn) 8%, transparent);
   }
 
+  &[data-lane-tone] {
+    border-color: color-mix(in srgb, var(--studio-current-lane-tone) 44%, var(--studio-border));
+    background: color-mix(in srgb, var(--studio-current-lane-tone) 10%, transparent);
+  }
+
   &__emoji {
     font-size: 14px;
     line-height: 1;
     flex: 0 0 auto;
+    color: var(--studio-current-lane-tone, currentColor);
   }
 
   &__label {

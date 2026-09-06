@@ -24,7 +24,8 @@
         <span class="ov-subline__sep" aria-hidden="true">·</span>
       }
       <span class="ov-lane-pill ov-subline__lane" data-testid="overview-title-lane"
-            [class]="'ov-lane-pill state--' + job().state" [attr.data-state]="job().state">
+            [class]="'ov-lane-pill state--' + job().state" [attr.data-state]="job().state"
+            [style.--studio-current-lane-tone]="laneTone(job().state)">
         <span class="ov-lane-pill__dot" aria-hidden="true">●</span>
         {{ laneLabel(job().state) }}
       </span>
@@ -400,12 +401,14 @@
                     tabindex="0"
                     [attr.data-tone]="badge?.tone"
                     [attr.data-verdict]="badge?.verdict"
+                    [style.--studio-current-lane-tone]="badge?.toneToken ? 'var(' + badge?.toneToken + ')' : null"
                     [cacTooltip]="badge?.tooltip ?? 'Decision pending'"
                     [tooltipSeverity]="badge?.severity ?? 'info'"
                     [attr.aria-label]="badge ? 'Final verdict: ' + badge.label : 'Final verdict'"
                     data-testid="overview-pipeline-step-final-verdict">
                 Final verdict@if (badge) { → <span class="ov-pl-step__final-decision-route"
                                                [attr.data-verdict]="badge.verdict"
+                                               [class.ov-pl-step__final-decision-route--lane]="badge.toneToken"
                                                data-testid="overview-pipeline-step-decision">{{ badge.label }}@if (row.historical) { · superseded }</span>
                 } @else if (row.historical) { · superseded }
               </span>

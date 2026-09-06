@@ -4,9 +4,8 @@ export const CLI_TYPES: CliType[] = ['claude', 'codex', 'gemini'];
 /**
  * Single source of truth for lane / task-state keys. Mirrors backend
  * `TaskStates` (src/AgentTaskboard.Shared/Models/TaskModels.cs) one-for-one.
- * Every lane literal in frontend prod code routes through this constant so a
- * future lane rename is a two-place value change (here + backend `TaskStates`)
- * plus a data migration, not a 27-file string hunt.
+ * Every lane key in frontend production code routes through this constant.
+ * User-facing lane identity lives separately in `lane-presentation.ts`.
  */
 export const TaskState = {
   Backlog: '0-backlog',

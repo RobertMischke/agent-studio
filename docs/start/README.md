@@ -56,6 +56,7 @@ path either under `app/` or registered in `WikiProducerTargets`.
 | Runtime prompt registry, review companions, call telemetry, and costs | [contracts/runtime-prompts.md](../system/contracts/runtime-prompts.md) |
 | Tasks | [domains/tasks.md](../system/domains/tasks.md) |
 | Frontend | [domains/frontend.md](../system/domains/frontend.md) |
+| Code-not-complete lane help | [lane guide](../app/help/lane-guides/lane-3b-code-not-complete.md) |
 | Stable view URL contract | [contracts/stable-view-urls.md](../system/contracts/stable-view-urls.md) |
 | Global search palette and API | [domains/frontend.md#global-search](../system/domains/frontend.md#global-search) |
 | Frontend navigation style guide | [frontend/style-guide/navigation.md](../quality/frontend/style-guide/navigation.md) |

@@ -3,8 +3,8 @@ import { test, expect, Page } from '@playwright/test';
 /**
  * Regression guard for the lane-rename task: the board used to surface the
  * 2-ready and 5-human-review lanes as "Human Ready" and "Human Review".
- * The user dropped the human/non-human distinction entirely - those lanes
- * now read simply "Ready" and "Review". The orchestrator-owned pass
+ * The current presentation keeps Ready concise and names the decision lane
+ * "Human review". The orchestrator-owned pass
  * (4-auto-review) now reads "Post Processing".
  *
  * The underlying state keys (2-ready, 5-human-review, 4-auto-review) are
@@ -101,25 +101,24 @@ async function installBoardMocks(page: Page): Promise<void> {
   });
 }
 
-test.describe('lane rename - no "Human" prefix', () => {
+test.describe('canonical lane presentation', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test.beforeEach(async ({ page }) => {
     await installBoardMocks(page);
   });
 
-  test('renders Ready / Review / Post Processing headings and never legacy human or auto-review headings', async ({ page }) => {
+  test('renders canonical lane headings and never legacy auto-review headings', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('[data-testid="studio-board"], [data-testid="kanban-dashboard"]').first())
       .toBeVisible({ timeout: 10_000 });
 
     // The renamed lanes.
-    await expect(page.getByRole('heading', { name: 'Review', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Human review', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Ready', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Post Processing' })).toBeVisible();
 
     // The dropped labels must be gone from every heading on the board.
-    await expect(page.getByRole('heading', { name: /Human Review/ })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /Human Ready/ })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /Auto Review/ })).toHaveCount(0);
 

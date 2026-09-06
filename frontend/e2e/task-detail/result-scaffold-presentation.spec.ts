@@ -238,6 +238,52 @@ test.describe('Result scaffold presentation', () => {
   test.use({ serviceWorkers: 'block' });
 
   for (const theme of ['light', 'dark'] as const) {
+    test(`human review keeps one name and tone across board, task header, and Result in ${theme} theme`, async ({ page }) => {
+      await page.addInitScript((selectedTheme) => {
+        localStorage.setItem('atp.studio.theme', selectedTheme);
+      }, theme);
+      await installRoutes(page);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      mkdirSync(SHOTS_DIR, { recursive: true });
+
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      const boardTitle = page.getByTestId('lane-title-5-human-review');
+      await expect(boardTitle).toHaveText('Human review');
+      const boardTone = await boardTitle.evaluate((element) => getComputedStyle(element).color);
+      await page.screenshot({
+        path: join(SHOTS_DIR, `lane-presentation-board-${theme}--mocked.png`),
+        fullPage: false,
+      });
+
+      const fixture = FIXTURES[0];
+      await page.goto(
+        `/?job=${encodeURIComponent(fixture.id)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+        { waitUntil: 'domcontentloaded' },
+      );
+      const headerChip = page.getByTestId('studio-lane-select');
+      await expect(headerChip.locator('option:checked')).toHaveText('Human review');
+
+      const resultTab = page.getByTestId('inspector-tab-protocol');
+      if (await resultTab.getAttribute('aria-selected') !== 'true') await resultTab.click();
+      const resultHeader = page.getByTestId('result-case-badge');
+      await expect(resultHeader).toContainText('Human review');
+      const resultDot = page.getByTestId('result-case-dot');
+
+      const [headerTone, resultTone] = await Promise.all([
+        headerChip.evaluate((element) => getComputedStyle(element).color),
+        resultDot.evaluate((element) => getComputedStyle(element).color),
+      ]);
+      expect(headerTone).toBe(boardTone);
+      expect(resultTone).toBe(boardTone);
+
+      await page.screenshot({
+        path: join(SHOTS_DIR, `lane-presentation-detail-${theme}--mocked.png`),
+        fullPage: false,
+      });
+    });
+  }
+
+  for (const theme of ['light', 'dark'] as const) {
     test(`AGT-2514 and a second marked scaffold render one understandable origin notice in ${theme} theme`, async ({ page }) => {
       await page.addInitScript((selectedTheme) => {
         localStorage.setItem('atp.studio.theme', selectedTheme);

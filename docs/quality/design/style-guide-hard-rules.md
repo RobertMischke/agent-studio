@@ -124,6 +124,20 @@ and do not contain `Tab` or `Escape`. The detailed embedding contract and its
 CAC-22 precedent are recorded in the
 [Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html#panel-keyboard-containment).
 
+### R9 - Lane identity has one presentation
+
+Every surface that names a task lane reads its display name, compact name,
+sentence, tone token, glyph, and help topic from
+`frontend/src/app/models/lane-presentation.ts`. A component must not define a
+lane name or choose a status colour for a lane locally.
+
+Lane colours use the theme-aware `--studio-lane-*` semantic tokens from
+`frontend/src/styles/_tokens-semantic.scss`. The board column header, task
+header chip, Result status, workflow list, and compact lane projections must
+therefore show the same name and hue for the same `TaskState` in both themes.
+`npm run lint:structure` rejects canonical lane-name literals outside the
+presentation module.
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../../AGENTS.md) and

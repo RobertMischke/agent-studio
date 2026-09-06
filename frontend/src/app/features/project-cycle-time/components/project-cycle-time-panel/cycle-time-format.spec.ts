@@ -49,6 +49,7 @@ describe('cycle-time formatting', () => {
 
   it('labels lanes and bands matrix counts on a square-root scale', () => {
     expect(laneLabel('4-auto-review')).toBe('Post Processing');
+    expect(laneLabel('5-human-review')).toBe('Human review');
     expect(laneLabel('5e-escalated')).toBe('Escalated');
     expect(laneLabel('')).toBe('unknown');
     expect(laneLabel('9-custom')).toBe('9-custom');

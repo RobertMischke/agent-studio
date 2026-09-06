@@ -385,19 +385,7 @@
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--studio-bg-hover);
-  color: var(--lane-backlog);
-
-  &.state--0-backlog              { color: var(--lane-backlog); }
-  &.state--1-preparation          { color: var(--lane-prep); }
-  &.state--1a-orchestrator-prep   { color: var(--lane-prep); }
-  &.state--1b-needs-human-review  { color: var(--lane-human-review); }
-  &.state--2-ready                { color: var(--lane-ready); }
-  &.state--3-progress             { color: var(--lane-progress); }
-  &.state--4-auto-review          { color: var(--lane-auto-review); }
-  &.state--5-human-review         { color: var(--lane-human-review); }
-  &.state--5e-escalated           { color: var(--lane-escalated); }
-  &.state--6-completed            { color: var(--lane-completed); }
-  &.state--7-archive              { color: var(--lane-archive); }
+  color: var(--studio-current-lane-tone, var(--studio-fg-dim));
 
   &__dot {
     font-size: 0.65em;
@@ -901,6 +889,12 @@
       color: var(--severity-high);
       border-color: color-mix(in srgb, var(--severity-high) 58%, var(--studio-border));
       background: color-mix(in srgb, var(--severity-high) 18%, transparent);
+    }
+
+    &:has(.ov-pl-step__final-decision-route--lane) {
+      color: var(--studio-current-lane-tone);
+      border-color: color-mix(in srgb, var(--studio-current-lane-tone) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--studio-current-lane-tone) 16%, transparent);
     }
 
     &:focus-visible {
