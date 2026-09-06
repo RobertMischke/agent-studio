@@ -124,6 +124,7 @@ Dossier <i>Task-Logs: Aufbewahrung, Deckelung und Bereinigung</i> (AGT-W11, 27.0
     <li><a href="#migration">§9 Zusammenspiel mit Phase B</a></li>
     <li><a href="#programm">§10 Umsetzungsprogramm</a></li>
     <li><a href="#entscheidungen">§11 Entscheidungen</a></li>
+    <li><a href="#nachtrag-verduennung"><b>§12 Nachtrag 06.09.: Verdünnung in Altersstufen und Vollsicherung</b></a></li>
   </ul>
 </nav>
 
@@ -447,8 +448,64 @@ lösen. Jede Entscheidung ist in der Admin-UI änderbar, außer den mit „fest"
     <tr><td><span class="dnum">E8</span></td><td>Log-Commit-Kadenz</td><td>nur am Run-Ende, fest</td><td>95 % des Wachstums stammen aus Zwischenständen</td></tr>
     <tr><td><span class="dnum">E9</span></td><td>Eigentümer der Schnittstelle</td><td>Task-Server; OrchestratorApi hostet bis zum Cutover dieselbe Engine</td><td>Roberts Vorgabe; eine Engine, zwei Adapter, keine Doppelimplementierung</td></tr>
     <tr><td><span class="dnum">E10</span></td><td>Reihenfolge</td><td>R1, dann R2 und R4, R3 sobald R2 liegt</td><td>Erst Wachstum bremsen und Bestand entlasten, dann Schnittstelle, dann UI</td></tr>
+    <tr><td><span class="dnum">E11</span></td><td>Verdünnung großer Blobs in Altersstufen, inhaltsbezogen</td><td>Stufe 0 voll heiß · Stufe 1 kalt voll plus heißer Auszug · Stufe 2 nur Stub und Auszug · Stufe 3 optionale Löschfrist</td><td>Roberts Nachtrag 06.09.; siehe §12</td></tr>
+    <tr><td><span class="dnum">E12</span></td><td>Vollsicherung als Feature</td><td>Sicherungssatz im Dateisystem, vollständig wiederherstellbar, als Auswertungsbasis nutzbar, extern sicherbar</td><td>Roberts Nachtrag 06.09.; siehe §12</td></tr>
   </tbody>
 </table></div>
+
+<!-- ============================================================ -->
+<h2 id="nachtrag-verduennung"><span class="no">§12</span>Nachtrag 06.09.: Verdünnung in Altersstufen und Vollsicherung</h2>
+<p class="stx stx-part"><b>Stand 06.09. 23:00:</b> Roberts Ergänzung nach der ersten Fassung: große Blobs mit dem Alter
+verdünnen und dabei auf den Inhalt schauen, nicht nur auf die Größe; Sicherungen der vollen Daten als Feature, zuerst im
+Dateisystem, dann extern sicherbar, auch als Grundlage für Auswertungen. Beides ist in R1, R2 und R4 eingearbeitet
+(Nachtrag in den Karten-Prompts).</p>
+
+<h3>Verdünnung in Altersstufen (Klasse C)</h3>
+<p>Die Regel „nach 30 Tagen kalt" aus §4 wird zu einer Leiter. Jede Stufe ist eine Regel mit eigener Frist in der
+Richtlinie; die Standardwerte stehen in der Tabelle. Der Übergang zwischen Stufen ist idempotent und im Manifest
+protokolliert.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Stufe</th><th>Standardfrist ab Terminal</th><th>Heißer Store</th><th>Kaltes Archiv</th></tr></thead>
+  <tbody>
+    <tr><td><b>0 voll</b></td><td>0 bis 30 Tage</td><td>Alle Dateien vollständig (Deckelung 10 MiB je Log gilt weiter)</td><td>nichts</td></tr>
+    <tr><td><b>1 verdünnt</b></td><td>30 bis 180 Tage</td><td>Je schwerer Datei ein <b>Auszug</b> (siehe unten) als kleines Evidenzartefakt der Klasse B; die Originale verlassen den heißen Store</td><td>Originale vollständig, Manifest mit Hashes</td></tr>
+    <tr><td><b>2 Stub</b></td><td>180 Tage bis 2 Jahre</td><td>Stub aus <code>task.json</code>, <code>status.md</code>, Auszügen und Manifestzeiger</td><td>Ganzer Task (B und C)</td></tr>
+    <tr><td><b>3 Frist</b></td><td>ab 2 Jahren, standardmäßig aus</td><td>Stub bleibt</td><td>Löschung der Nutzlast mit Grabstein-Manifest, nur mit zweistufiger Bestätigung</td></tr>
+  </tbody>
+</table></div>
+<p><b>Auszug heißt inhaltsbezogen:</b> Der Verdünner liest die Datei und behält, was später gefragt wird. Für
+<code>cli-output.log</code>: Kopf (erste 200 Zeilen), Schluss (letzte 500 Zeilen), jedes Fehlerfenster (50 Zeilen um
+<code>error</code>, <code>exception</code>, <code>failed</code>, nicht-null Exit), Zeitmarken und Dauer, Zähler für
+Tool-Aufrufe, Test-Läufe, Commits und Token-Zeilen, sowie eine Liste der ausgeführten Kommandos. Für Review-Stdout-Logs:
+das Urteil und die Findings-Zeilen. Für <code>results/</code>: die Dateiliste mit Größen und Hashes, Reports und
+Markdown vollständig, Traces und Bilder nur als Eintrag. Strukturierte JSONL-Dateien (Session-Events, Timeline) bleiben
+vollständig, sie sind klein. Der Auszug ist ein Markdown-Artefakt mit festen Überschriften, damit Suche und Dossiers
+darauf zugreifen können; Auszüge älterer Aufzeichnungen werden bei einer Regeländerung nicht neu erzeugt, dafür lässt
+sich jeder Task wiederherstellen.</p>
+
+<h3>Vollsicherung als Feature</h3>
+<ul>
+  <li><b>Sicherungssatz:</b> <code>BACKUP_PATH/full/&lt;zeitstempel&gt;/</code> mit der SQLite-Sicherung (nach dem Cutover) oder dem
+      Dateibaum-Bundle (heute: <code>git bundle</code> des Workspace-Repositories plus ungetrackte Evidenz), allen Manifesten und
+      allen kalten Nutzlasten, die der Sicherungsstand referenziert, und einer <code>inventory.json</code> mit Zählungen und einer
+      SHA-256 über den Satz. Ein Satz ist vollständig: aus ihm allein lässt sich der gesamte Stand auf einer leeren Maschine
+      wiederherstellen, geprüft durch den Inventar-Hash.</li>
+  <li><b>Zeitplan und Aufbewahrung:</b> täglich nach dem Archivlauf; Sätze werden nach Alter verdünnt (7 Tagessätze, 4 Wochensätze,
+      12 Monatssätze als Standard); die Verdünnung der Sätze ist eine eigene Regel in derselben Richtlinie.</li>
+  <li><b>Extern sicherbar:</b> das Verzeichnis ist so gebaut, dass ein externes Werkzeug (rsync, restic, Objektspeicher-Sync) es
+      unverändert kopieren kann; unveränderliche Dateinamen, keine offenen Handles nach Abschluss, Abschlussmarker
+      <code>complete.json</code> zuletzt geschrieben. R4 fügt die S3-Kopie hinzu.</li>
+  <li><b>Wiederherstellung:</b> Management-Route <code>POST /api/v1/management/backups/full/{id}/restore</code> im Maintenance-Modus,
+      mit Verifikation und Rollback wie die bestehende SQLite-Wiederherstellung; CLI <code>TaskServer backup full|restore-full|verify-full</code>.</li>
+  <li><b>Auswertungsbasis:</b> jeder Sicherungssatz enthält zusätzlich einen <b>Auswertungsexport</b>: normalisierte JSONL-Dateien
+      (Tasks mit Lanes und Zeiten, Runs mit Modell, Dauer und Tokens, Reviews mit Urteil, Integrationen, Kosten je Projekt), so
+      dass Analysen über die ganze Historie ohne den Task-Server laufen (DuckDB, Notebooks, Reports). Das Schema ist versioniert
+      und in <code>docs/operations/setup/task-server.md</code> dokumentiert.</li>
+  <li><b>Admin-UI:</b> die Seite „Aufbewahrung" bekommt einen Abschnitt „Sicherungen" mit Sätzen (Zeit, Größe, Inventar-Hash,
+      Verifikationsstand), „Jetzt sichern", „Prüfen" und „Wiederherstellen" (letzteres nur im Maintenance-Modus).</li>
+</ul>
+<p>Zuordnung: Verdünnung und Auszug in R1 (Engine) und R2 (SQLite-Adapter); Sicherungssatz und Auswertungsexport in R2;
+Sätze-Verdünnung, externe Kopie und S3 in R4; UI-Abschnitt in R3.</p>
 
 </main>
 </body>
