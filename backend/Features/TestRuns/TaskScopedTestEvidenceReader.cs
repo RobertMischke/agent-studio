@@ -32,7 +32,7 @@ internal static class TaskScopedTestEvidenceReader
                          SearchOption.TopDirectoryOnly))
             {
                 AddSignature(path, signature);
-                if (ReadRemoteReview(path) is { } review) sources.Add(review);
+                sources.AddRange(ReadRemoteReview(path));
             }
 
             var postSteps = Path.Combine(task.FolderPath, "post-steps");
@@ -58,58 +58,82 @@ internal static class TaskScopedTestEvidenceReader
             string.Join('|', signature.OrderBy(value => value, StringComparer.Ordinal)));
     }
 
-    private static TaskTestEvidenceSource? ReadRemoteReview(string path)
+    private static IReadOnlyList<TaskTestEvidenceSource> ReadRemoteReview(string path)
     {
         string text;
         try { text = File.ReadAllText(path); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
 
         var frontmatter = ReadFrontmatter(text);
         if (!string.Equals(frontmatter.GetValueOrDefault("type"), "remote-review-grade", StringComparison.OrdinalIgnoreCase))
-            return null;
+            return [];
 
-        var buildStatuses = text.Split('\n')
+        var verdicts = text.Split('\n')
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("|", StringComparison.Ordinal))
             .Select(ParseTableRow)
-            .Where(columns => columns.Count >= 2
-                              && string.Equals(columns[0], "build-tests", StringComparison.OrdinalIgnoreCase))
-            .Select(columns => columns[1])
+            .Where(columns => columns.Count >= 4
+                              && !string.Equals(columns[0], "Aspect", StringComparison.OrdinalIgnoreCase)
+                              && !string.Equals(columns[0], "---", StringComparison.Ordinal))
             .ToList();
-        if (buildStatuses.Count == 0) return null;
-
-        var outcome = frontmatter.GetValueOrDefault("outcome") ?? "";
-        var failed = buildStatuses.Any(status =>
-            status.Equals("fail", StringComparison.OrdinalIgnoreCase)
-            || status.Equals("failed", StringComparison.OrdinalIgnoreCase))
-            || outcome.Equals("Fail", StringComparison.OrdinalIgnoreCase)
-            || outcome.Equals("Failed", StringComparison.OrdinalIgnoreCase);
-        var passed = !failed
-                     && buildStatuses.All(status => status.Equals("pass", StringComparison.OrdinalIgnoreCase))
-                     && outcome.Equals("Pass", StringComparison.OrdinalIgnoreCase);
-        var result = failed ? "failed" : passed ? "passed" : "not-proven";
         var commit = frontmatter.GetValueOrDefault("actualHead")
                      ?? frontmatter.GetValueOrDefault("expectedResultSha")
                      ?? "";
-        if (string.IsNullOrWhiteSpace(commit)) return null;
+        if (string.IsNullOrWhiteSpace(commit)) return [];
 
         var observedAt = ParseDate(frontmatter.GetValueOrDefault("receivedAt"))
                          ?? File.GetLastWriteTimeUtc(path);
+        var attemptId = frontmatter.GetValueOrDefault("attemptId") ?? Path.GetFileNameWithoutExtension(path);
+        var reportRef = Path.GetFileName(path);
+        var sources = new List<TaskTestEvidenceSource>();
+        var buildRows = verdicts
+            .Where(columns => string.Equals(columns[0], "build-tests", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var result = BuildTestResult(buildRows);
         var resultLabel = result switch
         {
             "passed" => "Pass",
             "failed" => "Failed",
+            "not-applicable" => "Not applicable",
             _ => "Not proven",
         };
-        return new TaskTestEvidenceSource
+        var commands = buildRows
+            .Select(columns => CommandName(columns[3]))
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var commandSuffix = commands.Count > 0 ? $" ({string.Join(", ", commands)})" : "";
+        sources.Add(new TaskTestEvidenceSource
         {
             Kind = "review-build-tests",
-            Id = frontmatter.GetValueOrDefault("attemptId") ?? Path.GetFileNameWithoutExtension(path),
+            Id = attemptId,
             Commit = commit,
             Result = result,
             ObservedAt = observedAt,
-            Summary = $"Review build-tests {resultLabel} at {Short(commit)}",
-        };
+            Summary = $"Review build-tests {resultLabel} at {Short(commit)}{commandSuffix}",
+            Reason = BuildTestReason(buildRows, commands, result),
+            ReportRef = reportRef,
+        });
+
+        foreach (var blocked in verdicts.Where(columns => IsBlocked(columns[1])
+                                                          && !string.Equals(columns[0], "build-tests", StringComparison.OrdinalIgnoreCase)))
+        {
+            var aspect = blocked[0];
+            var aspectSummary = blocked[3].Trim().TrimEnd('.');
+            sources.Add(new TaskTestEvidenceSource
+            {
+                Kind = "review-aspects",
+                Id = $"{attemptId}:{aspect}",
+                Commit = commit,
+                Result = "blocked",
+                ObservedAt = observedAt,
+                Summary = $"Review blocked by {aspect}",
+                Reason = $"{aspect} blocked: {aspectSummary}",
+                ReportRef = reportRef,
+            });
+        }
+
+        return sources;
     }
 
     private static TaskTestEvidenceSource? ReadGate(string path, string kind, string label)
@@ -167,8 +191,70 @@ internal static class TaskScopedTestEvidenceReader
             Summary = result == "not-applicable" && kind == "build-test-gate"
                 ? "No build/test defined"
                 : $"{label} {resultLabel} at {Short(commit)}",
+            Reason = string.IsNullOrWhiteSpace(reason) ? GateFallbackReason(result) : reason.Trim(),
+            ReportRef = Path.Combine("post-steps", Path.GetFileName(path)).Replace('\\', '/'),
         };
     }
+
+    private static string BuildTestResult(IReadOnlyList<IReadOnlyList<string>> buildRows)
+    {
+        if (buildRows.Count == 0) return "not-proven";
+        if (buildRows.All(columns => IsNotApplicable(columns[1], columns[2])))
+            return "not-applicable";
+        if (buildRows.All(columns => columns[1].Equals("pass", StringComparison.OrdinalIgnoreCase)
+                                     || IsNotApplicable(columns[1], columns[2])))
+            return "passed";
+        return "failed";
+    }
+
+    private static string BuildTestReason(
+        IReadOnlyList<IReadOnlyList<string>> buildRows,
+        IReadOnlyList<string> commands,
+        string result)
+    {
+        if (buildRows.Count == 0)
+            return "build-tests missing: No build-tests command row exists in the review report.";
+        if (result == "passed")
+            return commands.Count switch
+            {
+                0 => "All build-tests rows passed.",
+                1 => $"{commands[0]} passed.",
+                2 => $"{commands[0]} and {commands[1]} passed.",
+                _ => $"{string.Join(", ", commands.Take(commands.Count - 1))}, and {commands[^1]} passed.",
+            };
+        if (result == "not-applicable")
+            return "The review report marks every build-tests command as not applicable.";
+
+        var failed = buildRows.First(columns => !columns[1].Equals("pass", StringComparison.OrdinalIgnoreCase));
+        var summary = failed[3].Trim().TrimEnd('.');
+        return $"build-tests failed: {summary}.";
+    }
+
+    private static string? CommandName(string summary)
+    {
+        var quoteStart = summary.IndexOf('\'');
+        if (quoteStart < 0) return null;
+        var quoteEnd = summary.IndexOf('\'', quoteStart + 1);
+        return quoteEnd > quoteStart + 1 ? summary[(quoteStart + 1)..quoteEnd].Trim() : null;
+    }
+
+    private static bool IsBlocked(string status) =>
+        status.Equals("block", StringComparison.OrdinalIgnoreCase)
+        || status.Equals("blocked", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsNotApplicable(string status, string classification) =>
+        status.Equals("not-applicable", StringComparison.OrdinalIgnoreCase)
+        || status.Equals("not_applicable", StringComparison.OrdinalIgnoreCase)
+        || (status.Equals("skipped", StringComparison.OrdinalIgnoreCase)
+            && classification.Equals("NoCommands", StringComparison.OrdinalIgnoreCase));
+
+    private static string GateFallbackReason(string result) => result switch
+    {
+        "passed" => "All selected build/test commands passed.",
+        "failed" => "At least one selected build/test command failed.",
+        "not-applicable" => "No build/test commands are defined.",
+        _ => "The build/test gate has no completed command proof.",
+    };
 
     private static Dictionary<string, string> ReadFrontmatter(string text)
     {

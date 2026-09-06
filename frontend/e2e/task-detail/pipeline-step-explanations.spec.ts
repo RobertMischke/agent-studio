@@ -72,6 +72,8 @@ function makeDetail(state: string, gateStatus: 'passed' | 'notApplicable' | 'ski
             result: evidenceState,
             observedAt: '2026-06-02T08:00:02Z',
             summary: evidenceSummary,
+            reason: 'Build/test gate evidence reason.',
+            reportRef: 'post-steps/build-test-gate-1.log',
           },
         ],
       },
@@ -187,6 +189,7 @@ async function installRoutes(
   page: Page,
   state: string,
   gateStatus: () => 'passed' | 'notApplicable' | 'skipped' = () => 'passed',
+  detailFactory?: () => ReturnType<typeof makeDetail>,
 ) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -324,7 +327,7 @@ async function installRoutes(
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(makeDetail(state, gateStatus())),
+      body: JSON.stringify(detailFactory?.() ?? makeDetail(state, gateStatus())),
     }),
   );
 }
@@ -493,6 +496,7 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     await expect(gate).toContainText('no build/test defined');
     await expect(gate).not.toHaveAttribute('data-attention-required', 'true');
 
+    await dismissErrorDialog(page);
     await page.getByTestId('studio-pane-toggle-protocol').click();
     await expect(page.getByTestId('pane-protocol')).toBeVisible();
     await page.getByTestId('inspector-tab-protocol').click();
@@ -531,6 +535,7 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     await expandAllPipelineSections(page);
     await expect(gate).toHaveAttribute('data-status', 'skipped');
     await expect(gate).toHaveAttribute('data-attention-required', 'true');
+    await dismissErrorDialog(page);
     await page.getByTestId('studio-pane-toggle-protocol').click();
     await expect(page.getByTestId('pane-protocol')).toBeVisible();
     await page.getByTestId('inspector-tab-protocol').click();
@@ -556,6 +561,96 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
         await resultEvidence.screenshot({ path: resultScreenshotPath });
         await testInfo.attach(`task-result-skipped--${theme}`, {
           path: resultScreenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    }
+  });
+
+  test('Evidence tab keeps AGT-2689 build proof green beside its blocked review aspect', async ({
+    page,
+  }, testInfo) => {
+    const reportRef = 'remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e.md';
+    const detailFactory = () => {
+      const detail = makeDetail('5-human-review');
+      detail.info.testEvidence = {
+        runId: null,
+        runCommit: null,
+        runState: null,
+        runResult: null,
+        matchQuality: 'perfect',
+        direction: 'exact',
+        distance: 0,
+        diffContained: true,
+        evidenceState: 'proven',
+        awaitingEvidence: false,
+        summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+        sources: [
+          {
+            kind: 'review-build-tests',
+            id: 'review_ad5cca8e3178425fb9ba9cabe329d50e',
+            commit: '491ddd64',
+            result: 'passed',
+            observedAt: '2026-08-31T20:41:22Z',
+            summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+            reason: 'verify-1 and verify-2 passed.',
+            reportRef,
+          },
+          {
+            kind: 'review-aspects',
+            id: 'review_ad5cca8e3178425fb9ba9cabe329d50e:documentation-impact',
+            commit: '491ddd64',
+            result: 'blocked',
+            observedAt: '2026-08-31T20:41:22Z',
+            summary: 'Review blocked by documentation-impact',
+            reason: 'documentation-impact blocked: Public API and state-file contract changed without corresponding load-bearing doc updates',
+            reportRef,
+          },
+        ],
+      };
+      return detail;
+    };
+    await installRoutes(page, '5-human-review', () => 'passed', detailFactory);
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+    await page.getByTestId('error-dialog').waitFor({ state: 'visible', timeout: 3_000 }).catch(() => {
+      /* this fixture's generic API fallbacks may or may not trigger the known startup dialog */
+    });
+    await dismissErrorDialog(page);
+    await expect(page.getByTestId('overview-pipeline')).toBeVisible({ timeout: 10_000 });
+    await dismissErrorDialog(page);
+    await page.getByTestId('prompt-tab-evidence').click();
+
+    const evidence = page.getByTestId('evidence-test-evidence');
+    const build = page.getByTestId('test-evidence-source-review_ad5cca8e3178425fb9ba9cabe329d50e');
+    const aspect = page.getByTestId('test-evidence-source-review_ad5cca8e3178425fb9ba9cabe329d50e:documentation-impact');
+    await expect(evidence).toBeVisible();
+    await expect(build).toHaveAttribute('data-tone', 'good');
+    await expect(build).toContainText('verify-1 and verify-2 passed.');
+    await expect(aspect).toHaveAttribute('data-tone', 'warn');
+    await expect(aspect).toContainText('Review blocked by documentation-impact');
+    await expect(aspect).toContainText('Public API and state-file contract changed');
+    await expect(build.getByRole('link', { name: /Open report/ })).toHaveAttribute(
+      'href',
+      `/api/tasks/${JOB_ID}/files/${reportRef}?scope=workspace&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+
+    await aspect.hover();
+    await expect(page.locator('.app-tooltip-overlay')).toHaveText(
+      'documentation-impact blocked: Public API and state-file contract changed without corresponding load-bearing doc updates',
+    );
+
+    if (RESULTS_DIR) {
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2714--evidence-source-reasons--${theme}--mocked.png`,
+        );
+        await evidence.screenshot({ path: screenshotPath });
+        await testInfo.attach(`agt-2714-evidence-source-reasons--${theme}`, {
+          path: screenshotPath,
           contentType: 'image/png',
         });
       }

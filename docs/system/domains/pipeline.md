@@ -756,6 +756,17 @@ operator changes cause the step to fail before its writer runs.
   commit) is documented. `AspectRunInputs` / `CodeReviewStepRequest` carry the
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
+- Task Evidence projects Remote Review build/test proof independently from the
+  overall review outcome. `review-build-tests` is derived only from the report's
+  build-tests verdict rows: all applicable rows passing is `passed`, any failing
+  row is `failed`, and only an absent build-tests row is `not-proven` with the
+  missing command named in its reason. A blocking semantic aspect is a separate
+  `review-aspects` source whose `blocked` result names the aspect and preserves
+  its report summary. Neither source overrides the other. Every task-scoped
+  evidence source carries a one-sentence `reason` and a task-relative
+  `reportRef`; the Evidence tab renders both plus a guarded report link. Blocked
+  aspects use the warning tone, failed builds use the failure tone, and missing
+  proof remains neutral.
 - A fenced remote completion persists `review-subject.json` with its exact
   `RunAttemptId`, `ResultSha`, delivery ref, and actual integration branch ref.
   A reissue or transition into a new local or remote run invalidates the

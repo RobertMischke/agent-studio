@@ -4,16 +4,46 @@
        [attr.data-evidence-state]="evidence.evidenceState"
        [attr.data-match-quality]="evidence.matchQuality"
        [attr.data-testid]="testId()"
-       [appTooltip]="tooltipText()">
+       [attr.aria-label]="tooltipText()"
+       [appTooltip]="variant() === 'card' ? tooltipText() : null">
     <span class="test-evidence__dot" aria-hidden="true"></span>
     <span class="test-evidence__copy">
       <strong>{{ evidence.summary }}</strong>
       @if (evidence.runId) {
         <small>{{ evidence.runId }} · {{ evidence.runState }}{{ evidence.runResult ? ' · ' + evidence.runResult : '' }}</small>
       } @else if (evidence.sources?.length) {
-        <small>{{ sourceDetail() }}</small>
+        @if (variant() === 'card') {
+          <small>{{ sourceDetail() }}</small>
+        }
       } @else {
         <small>No SHA-linked project run, build gate, or review grade is recorded.</small>
+      }
+      @if (variant() === 'panel' && evidence.sources?.length) {
+        <ul class="test-evidence__sources" data-testid="test-evidence-sources">
+          @for (source of evidence.sources; track source.id) {
+            <li class="test-evidence__source"
+                [attr.data-source-kind]="source.kind"
+                [attr.data-source-result]="source.result"
+                [attr.data-tone]="sourceTone(source)"
+                [attr.data-testid]="'test-evidence-source-' + source.id"
+                [attr.aria-label]="source.reason"
+                [appTooltip]="source.reason">
+              <span class="test-evidence__source-dot" aria-hidden="true"></span>
+              <span class="test-evidence__source-copy">
+                <strong>{{ source.summary }}</strong>
+                <small>{{ source.reason }}</small>
+              </span>
+              @if (reportHref(source); as href) {
+                <a class="test-evidence__report"
+                   [href]="href"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   [attr.aria-label]="'Open report. ' + source.reason"
+                   [appTooltip]="source.reason">Report</a>
+              }
+            </li>
+          }
+        </ul>
       }
     </span>
   </div>

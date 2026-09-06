@@ -129,6 +129,12 @@
             </div>
           }
           @if (job(); as j) {
+            @if (j.testEvidence) {
+              <app-test-evidence-status
+                [task]="j"
+                variant="panel"
+                testId="evidence-test-evidence" />
+            }
             <app-review-evidence-panel
               [entries]="reviewEvidence()"
               [job]="j"

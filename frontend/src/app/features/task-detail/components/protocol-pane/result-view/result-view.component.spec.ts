@@ -118,6 +118,8 @@ describe('ResultViewComponent', () => {
           result: state,
           observedAt: null,
           summary,
+          reason: state === 'not-applicable' ? 'No build/test commands are defined.' : 'The build/test gate has no completed command proof.',
+          reportRef: 'post-steps/build-test-gate-1.log',
         }],
       },
     }), verdict());
