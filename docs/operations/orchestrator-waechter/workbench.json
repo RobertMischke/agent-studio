@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "orchestrator-waechter",
   "title": "Global Orchestrator Watcher",
-  "summary": "Decision dossier for a global intelligent exception layer above the mechanical delivery invariants. The central event bus is the shared substrate: the Watcher consumes typed escalation, integration, delivery, starvation, stale, loop, and contradiction signals, then publishes findings, recipe receipts, analyses, and decision needs into the same All-Activity-default stream. Three theme-aware mockups show interleaved Activity entries, persistent Studio-shell presence, and an AGT-2531 NoTaskBranch finding detail. The observe-first recommendation and approval-gated fence policy remain unchanged.",
+  "summary": "Decision dossier for a global intelligent exception layer above the mechanical delivery invariants. The central event bus is the shared substrate: the Watcher consumes typed escalation, integration, delivery, starvation, stale, loop, and contradiction signals, then publishes findings, recipe receipts, analyses, and decision needs into the same All-Activity-default stream. Three theme-aware mockups show interleaved Activity entries, persistent Studio-shell presence, and an AGT-2531 NoTaskBranch finding detail. The observe-first recommendation and approval-gated fence policy remain unchanged. Extended 06.09.2026 (§10): autonomous problem finding with five detector classes (repetition, contradiction, silence, drift, hygiene) seeded from the eight findings the operator made by hand that evening, findings as ticket proposals, a dedicated Watcher contingent, a proposal review mode with operator approval and a promotion rule for auto-approval, and an extended decision request.",
   "entrypoint": "index.html",
   "status": "decision-pending",
   "phase": "decision-ready",
-  "updatedAt": "2026-08-10T01:23:01Z",
+  "updatedAt": "2026-09-06T19:30:00Z",
   "sourceTaskKeys": [
     "AGT-2557",
     "AGT-2581"
@@ -18,7 +18,15 @@
     "AGT-2555",
     "AGT-2565",
     "AGT-2569",
-    "AGT-2579"
+    "AGT-2579",
+    "AGT-2705",
+    "AGT-2706",
+    "AGT-2711",
+    "AGT-2713",
+    "AGT-2714",
+    "AGT-2717",
+    "AGT-2720",
+    "QS-102"
   ],
   "key": "AGT-W15"
 }

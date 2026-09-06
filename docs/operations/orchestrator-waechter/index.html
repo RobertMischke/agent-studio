@@ -184,6 +184,7 @@
     <li><a href="#operations">§7 Operating model</a></li>
     <li><a href="#slices">§8 Slice plan</a></li>
     <li><a href="#decision">§9 Decision request</a></li>
+    <li><a href="#finding"><b>§10 Autonomous problem finding, ticket proposals, contingent and review mode (06.09.)</b></a></li>
   </ul>
 </nav>
 
@@ -868,6 +869,84 @@
 <p><b>Recommended answer:</b> approve all five items. This creates useful visibility and analysis before granting mutation authority, preserves the mechanical guarantees now being added, and turns today's manual rescue pattern into a measured, auditable progression rather than an all-at-once autonomous agent.</p>
 
 <p class="dim">Related reading: <a href="../../system/architecture/bus/agent-message-bus.md">Agent Message Bus</a>, <a href="../project-feed/index.html">Project Feed</a>, <a href="../../concepts/orchestrator-supervision-loop.html">Orchestrator Supervision Loop</a>, <a href="../../concepts/orchestrator-drive-to-conclusion.html">Drive to Conclusion</a>, and <a href="../../concepts/model-escalation-and-companion-routing.md">Model Escalation and Companion Routing</a>.</p>
+
+<!-- ============================================================ -->
+<h2 id="finding"><span class="no">§10</span>Autonomous problem finding, ticket proposals, contingent and review mode</h2>
+<p class="stx stx-open"><b>State 06.09.2026:</b> The operator worked one evening as the Watcher by hand and asked why the
+product had not found the problems itself. Target stated the same evening: the orchestrator finds problems on its
+own and creates new tickets, inside a moderated frame with a dedicated contingent and its own review mode.</p>
+
+<h3>§10.1 What a Watcher would have found on 06.09.</h3>
+<p>Every finding below was reachable from data the Task Server already holds. None needed a model to detect; several
+need a model to explain. The table is the seed of the detector catalogue and doubles as the fixture set for W1.</p>
+<table>
+  <thead><tr><th>Finding</th><th>Signal that was already there</th><th>Detector rule</th><th>Ticket created by hand</th></tr></thead>
+  <tbody>
+    <tr><td>Quota probes stale for 8 h (Claude launcher stub) and 30 h (Codex hook modal)</td><td><code>probeFailedAt</code> set on every cycle, error text constant, <code>CLI version changed</code> log line</td><td>Same probe error fingerprint on N consecutive cycles, or a CLI version change followed by a failing probe</td><td>AGT-2705, AGT-2706</td></tr>
+    <tr><td>Ready lane reported "waiting for sign-in" while the runner link was down for four days</td><td>No runner capability snapshot for &gt; 5 min while Ready cards target the runner; keeper task disabled</td><td>Runner snapshot age above threshold with targeted Ready cards; never render a provider reason from an <code>unknown</code> badge</td><td>AGT-2711, AGT-2712, dossier runner-link</td></tr>
+    <tr><td>Crash recorded as external completion into human review with an empty result</td><td><code>typedOutcome=CliCrash</code> followed by an external completion whose result SHA equals the base</td><td>Completion with <code>resultSha == baseSha</code> or zero attributed commits</td><td>AGT-2713</td></tr>
+    <tr><td>412 remote reviews on one card, 284 in one day, all Pass, never integrated</td><td>Review attempts per task per day; integration status unchanged across them</td><td>More than K review attempts on the same subject SHA without a state change</td><td>AGT-2717 (bound), AGT-2720</td></tr>
+    <tr><td>Nine reviewed deliveries blocked by one dirty integration checkout for six days</td><td>Same integration failure fingerprint (<code>refusing to fast-forward ... dirty files</code>) across cards of one project</td><td>Identical integration failure fingerprint on two or more cards of one project</td><td>QS-102</td></tr>
+    <tr><td>Pre-main gate failing before the first test for weeks (corrupted dependency cache)</td><td>Gate transcript: cache <code>hit</code> followed by a toolchain startup error, repeated on every run</td><td>Gate failure before test discovery after a cache hit; cache entry without install marker</td><td>AGT-2720</td></tr>
+    <tr><td>Escalation banner "0 rounds, grade not recorded" on a card with seven review reports</td><td>Remote review artifacts present, banner projection empty</td><td>Contradiction between artifact count and projected count</td><td>AGT-2714, AGT-2717</td></tr>
+    <tr><td>Fifteen invalid dossier descriptors</td><td>Catalogue validation errors, already computed on every list</td><td>Any descriptor error older than one day</td><td>fixed by hand</td></tr>
+  </tbody>
+</table>
+<div class="box warn">
+  <h4>Reading</h4>
+  <p>Six of eight findings are <b>repetition</b> of an unchanged fingerprint or a <b>contradiction</b> between two
+  sources the server already has. That is exactly the reconciliation sweep of §2, widened from typed failures to
+  "the same thing keeps happening" and "two projections disagree". The Watcher's first job is therefore not
+  intelligence but bookkeeping: fingerprint, count, compare, and stop when the count crosses a threshold.</p>
+</div>
+
+<h3>§10.2 Detector classes for W1</h3>
+<table>
+  <thead><tr><th>Class</th><th>Definition</th><th>Evidence in the finding</th></tr></thead>
+  <tbody>
+    <tr><td><b>Repetition</b></td><td>The same failure fingerprint (probe error, integration failure reason, gate failure head, review outcome on one subject) recurs N times within a window with no state change between occurrences</td><td>Fingerprint, count, first and last occurrence, affected cards</td></tr>
+    <tr><td><b>Contradiction</b></td><td>Two projections disagree: artifacts on disk versus a projected count, a Pass review versus a non-integrated delivery, a wait reason versus the underlying capability state</td><td>Both values with their sources</td></tr>
+    <tr><td><b>Silence</b></td><td>An expected signal stops: runner snapshot, probe, heartbeat, integration after review Pass, rail run</td><td>Last seen, expected cadence, cards affected</td></tr>
+    <tr><td><b>Drift</b></td><td>An installed tool changed (CLI version, model catalog, gate toolchain) and a dependent probe or parser failed afterwards</td><td>Old and new version, first failure after the change</td></tr>
+    <tr><td><b>Hygiene</b></td><td>Validation errors the product already computes (descriptors, references, orphan folders) older than a grace period</td><td>The validation message</td></tr>
+  </tbody>
+</table>
+
+<h3>§10.3 Output: findings become ticket proposals</h3>
+<p>A finding that survives deduplication and a persistence check (two sweeps) becomes a <b>Watcher case</b> (§4). The
+new element is the next step: the case produces a <b>ticket proposal</b>, a card draft with the evidence pack
+inlined in the house prompt style (context with timestamps and file paths, changes, acceptance), a task type, a
+model recommendation from the routing policy, and the detector class and fingerprint as tags. Proposals reference
+the case and the cards they overlap; a proposal for a fingerprint that already has an open card is a comment on
+that card, not a new card.</p>
+
+<h3>§10.4 Moderation: contingent and review mode</h3>
+<table>
+  <thead><tr><th>Control</th><th>Rule</th></tr></thead>
+  <tbody>
+    <tr><td><b>Contingent</b></td><td>A dedicated Watcher budget per day and per week in tokens and in count: model calls (Mini/high for compression, Sol/medium for analysis, §5), proposals created, comments appended. Read from the Token Economy price catalog and shown in Workspace CLI Management next to the quota strips. When the contingent is used up the Watcher keeps detecting and counting but stops calling models and creating proposals; the backlog of unanalysed cases is visible.</td></tr>
+    <tr><td><b>Review mode</b></td><td>Proposals never enter Ready by themselves. They land in a Watcher inbox (a proposal state on the card: <code>1-preparation</code> with tag <code>watcher-proposal</code> and the case link) and in Activity as a Decision entry. The operator approves (card moves to Ready with the recommended model), edits, merges into an existing card, or rejects with a reason that feeds the detector's suppression list. A class can be promoted to auto-approve only after ten accepted proposals without an edit, and only for hygiene and repetition classes; contradictions and drift stay human-approved.</td></tr>
+    <tr><td><b>Suppression</b></td><td>Rejected fingerprints are suppressed for a configurable period; suppression is visible and expires. Known-noise sources (planned maintenance windows, deliberately parked cards) are declared, not guessed.</td></tr>
+    <tr><td><b>Audit</b></td><td>Every proposal carries the detector rule, fingerprint, evidence pack digest, model calls with cost, and the operator decision. Proposals and their outcomes are the evidence for promoting a class.</td></tr>
+  </tbody>
+</table>
+
+<h3>§10.5 Where this lands in the slice plan</h3>
+<ul>
+  <li><b>W1 Observation</b> gains the five detector classes of §10.2 with the 06.09. findings as fixtures, the reconciliation sweep compares projections, and the case inbox shows counts and fingerprints. Still no task or Git mutation.</li>
+  <li><b>W2 Analysis</b> gains the proposal draft as its output and the contingent as its budget. The proposal is written through the normal task API in the proposal state; the Activity Decision entry is the operator's entry point.</li>
+  <li><b>W3 Safe rescue</b> is unchanged; auto-approval of proposal classes is a separate, later promotion with its own evidence.</li>
+</ul>
+<div class="box accent">
+  <h4>Decision request, extended 06.09.</h4>
+  <ol>
+    <li>Approve the detector classes of §10.2 and the 06.09. findings as the W1 fixture set.</li>
+    <li>Approve ticket proposals as the W2 output, in review mode (proposal state, operator approval), with a Watcher contingent per day and week.</li>
+    <li>Approve the promotion rule for auto-approval (ten unedited acceptances, hygiene and repetition classes only).</li>
+  </ol>
+  <p>Recommended answer: approve all three and cut W1 and W2 as one card chain now. The evening of 06.09. is the
+  measured cost of not having it.</p>
+</div>
 
 </main>
 </body>
