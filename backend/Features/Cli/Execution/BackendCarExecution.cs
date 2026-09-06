@@ -57,11 +57,10 @@ public partial class GenericCliExecutionService
             previousExited = existing;
         }
 
-        // Studio still owns model qualification against its live catalog. CAR
-        // then performs the common trim/thinking normalization when it builds
-        // the descriptor launch.
+        // Studio owns model qualification and normalization against its live
+        // catalog before CAR builds the descriptor launch.
         var invocationModel = NormalizeModelForInvocation(model);
-        var invocationThinkingLevel = CliThinkingLevels.Normalize(
+        var invocationThinkingLevel = ModelMetadataRegistry.ResolveThinkingLevel(
             CliType, invocationModel, thinkingLevel);
 
         // Studio's shared host library owns the longer task boundary so Codex

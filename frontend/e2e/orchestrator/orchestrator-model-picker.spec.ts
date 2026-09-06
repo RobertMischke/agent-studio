@@ -6,6 +6,9 @@ import { setTheme } from '../helpers/theme';
 const PROJECT = 'model-picker-project';
 const TASK_KEY = 'AGT-2163';
 const MODELS = [
+  { id: 'gpt-6-astra', label: 'GPT-6 Astra', available: false,
+    availabilityNote: 'Not offered by the installed codex-cli 0.151.0',
+    thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh'], defaultThinkingLevel: 'xhigh' },
   { id: 'gpt-5.4', label: 'GPT-5.4', available: true,
     thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
   { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', isDefault: true, available: true,
@@ -18,6 +21,9 @@ const MODELS = [
   { id: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', available: true,
     thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
   { id: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark', available: true,
+    thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
+  { id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex', available: false, deprecated: true,
+    availabilityNote: 'Not offered by the installed codex-cli 0.151.0',
     thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'high' },
 ];
 
@@ -282,6 +288,9 @@ test('Studio Board picker leads with the latest generation and keeps older model
   })), { project: PROJECT });
   await page.goto('/');
   await expect(page.getByTestId('error-dialog-overlay')).toHaveCount(0);
+  await page.addStyleTag({
+    content: '[data-testid="error-dialog-overlay"], [data-testid="offline-banner"] { display: none !important; }',
+  });
 
   await page.getByTestId('studio-board-add-task').click();
   await page.getByTestId('create-agent').click();
@@ -292,10 +301,12 @@ test('Studio Board picker leads with the latest generation and keeps older model
     'create-agent-picker-model-default',
     'create-agent-picker-model-gpt-5.6-sol',
     'create-agent-picker-model-gpt-5.6-pro',
+    'create-agent-picker-model-gpt-6-astra',
     'create-agent-picker-model-gpt-5.5',
     'create-agent-picker-model-gpt-5.4',
     'create-agent-picker-model-gpt-5.4-mini',
     'create-agent-picker-model-gpt-5.3-codex-spark',
+    'create-agent-picker-model-gpt-5.2-codex',
   ]);
   await expect(page.getByTestId('create-agent-picker-older-heading')).toContainText('Older models');
   const currentModel = page.getByTestId('create-agent-picker-model-gpt-5.6-sol');
@@ -306,14 +317,26 @@ test('Studio Board picker leads with the latest generation and keeps older model
   await expect(deprecatedModel).toContainText('Superseded by GPT-5.6.');
   await expect(deprecatedModel).toBeEnabled();
   expect(Number(await deprecatedModel.evaluate(element => getComputedStyle(element).opacity))).toBeLessThan(1);
+  const unavailableCurrent = page.getByTestId('create-agent-picker-model-gpt-6-astra');
+  const unavailableOlder = page.getByTestId('create-agent-picker-model-gpt-5.2-codex');
+  await expect(unavailableCurrent).toBeDisabled();
+  await expect(unavailableCurrent).toHaveAttribute('aria-disabled', 'true');
+  await expect(unavailableCurrent).toContainText('Not offered by the installed codex-cli 0.151.0');
+  await expect(unavailableOlder).toBeDisabled();
+  await expect(unavailableOlder).toHaveAttribute('data-generation', 'older');
+  await expect(unavailableOlder).toHaveAttribute('aria-disabled', 'true');
+  await unavailableCurrent.hover({ force: true });
+  await expect(page.getByTestId('create-agent-picker-model-gpt-6-astra-availability-tooltip'))
+    .toHaveText('Not offered by the installed codex-cli 0.151.0');
 
   const results = process.env.JOB_RESULTS_DIR ?? testInfo.outputPath('evidence');
   mkdirSync(results, { recursive: true });
   await page.setViewportSize({ width: 760, height: 900 });
   await setTheme(page, 'light');
-  await page.screenshot({ path: path.join(results, 'orchestrator-model-picker-light-compact.png') });
+  await page.screenshot({ path: path.join(results, 'orchestrator-model-picker-light-compact--mocked.png') });
   await setTheme(page, 'dark');
-  await page.screenshot({ path: path.join(results, 'orchestrator-model-picker-dark-compact.png') });
+  await page.screenshot({ path: path.join(results, 'orchestrator-model-picker-dark-compact--mocked.png') });
+  await page.screenshot({ path: path.join(results, 'gpt-6-astra-unavailable--mocked.png') });
 
   await deprecatedModel.click();
   await page.getByTestId('create-agent-picker-done').click();

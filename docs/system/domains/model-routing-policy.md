@@ -32,6 +32,12 @@ should explain when a pin is below the policy floor.
 routes in this policy. Add a default tier only after controlled comparisons
 show a repeatable benefit over `medium` or `xhigh`.
 
+`gpt-6-astra` is present in the model registry and may be selected explicitly
+when the installed Codex CLI offers it. It is not yet tiered: it does not change
+`DefaultForCli`, any route in this table, or the machine-readable routing
+policy. Adding it to a routing tier or making it the product default requires a
+separate operator decision backed by comparative evidence.
+
 ## Weighted decision
 
 Score the task at intake from information available before implementation. Use

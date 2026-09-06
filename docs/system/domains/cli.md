@@ -1,6 +1,6 @@
 # CLI Domain Map
 
-Version: 2026-09-01
+Version: 2026-09-06
 Status: System-of-record map for CLI adapter and quota changes.
 
 Use this when a change touches Claude, Codex, Copilot, Gemini, prompt handoff,
@@ -61,6 +61,11 @@ CLI execution tests.
 - Every driver must satisfy the same contract: start process, stream output,
   capture session identity when available, report completion, surface quota and
   permission issues, and preserve terminal sentinels.
+- A CLI model catalog is the union of the vendor's registry entries and live
+  discovery. Known models omitted by the installed CLI remain visible but
+  disabled with an attributable version note; discovered models missing
+  registry metadata remain available. Known-but-unavailable models are never
+  hidden from a pinned task or picker.
 - CLI skills are required reading before changing the matching driver.
 - Prompt-template edits are behavior changes. String-render tests are not enough
   because the adapter can still hand a bad shape to the live CLI.

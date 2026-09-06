@@ -46,12 +46,12 @@ public class ClaudeModelDiscoveryTests
                 CliTypes.Claude)
         };
 
-        var reconciled = ClaudeModelDiscovery.Reconcile(discovered);
+        var reconciled = ClaudeModelDiscovery.Reconcile(discovered, "2.1.231");
 
         var missing = Assert.Single(reconciled, m => m.Id == ModelIds.ClaudeOpus47);
         Assert.False(missing.Available);
-        Assert.True(missing.Deprecated);
-        Assert.NotNull(missing.AvailabilityNote);
+        Assert.False(missing.Deprecated);
+        Assert.Equal("Not offered by the installed claude 2.1.231", missing.AvailabilityNote);
         Assert.DoesNotContain(reconciled, m => m.Id == ModelIds.ClaudeOpus47 && m.IsDefault);
     }
 

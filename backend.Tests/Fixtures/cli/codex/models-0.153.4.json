@@ -1,0 +1,42 @@
+{
+  "models": [
+    {
+      "slug": "gpt-6-astra",
+      "display_name": "GPT-6-Astra",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        { "effort": "low", "description": "Fast responses with lighter reasoning" },
+        { "effort": "medium", "description": "Balances speed and reasoning depth" },
+        { "effort": "high", "description": "Greater reasoning depth" },
+        { "effort": "xhigh", "description": "Extra high reasoning depth" },
+        { "effort": "max", "description": "Maximum reasoning depth" },
+        { "effort": "ultra", "description": "Ultra reasoning depth" }
+      ],
+      "visibility": "list",
+      "priority": 1,
+      "context_window": 272000
+    },
+    {
+      "slug": "gpt-5.6-sol",
+      "display_name": "GPT-5.6-Sol",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        { "effort": "low" },
+        { "effort": "medium" },
+        { "effort": "high" },
+        { "effort": "xhigh" },
+        { "effort": "max" }
+      ],
+      "visibility": "list",
+      "priority": 2
+    },
+    {
+      "slug": "codex-auto-review",
+      "display_name": "Codex Auto Review",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [{ "effort": "medium" }],
+      "visibility": "hide",
+      "priority": 40
+    }
+  ]
+}

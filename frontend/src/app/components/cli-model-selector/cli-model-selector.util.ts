@@ -1,5 +1,20 @@
 import type { CliModelInfo } from '../../features/cli';
 
+export function modelAvailabilityNote(model: CliModelInfo): string {
+  return model.availabilityNote?.trim() || 'Unavailable for the installed CLI.';
+}
+
+export function modelAriaLabel(model: CliModelInfo): string | null {
+  return model.available === false
+    ? `${model.label || model.id}. Unavailable. ${modelAvailabilityNote(model)}`
+    : null;
+}
+
+export function olderModelAriaLabel(model: CliModelInfo): string {
+  const availability = model.available === false ? 'Unavailable. ' : '';
+  return `${model.label || model.id}. Older generation. ${availability}${model.availabilityNote?.trim() || 'Older generation'}`;
+}
+
 export function normalizeThinkingLevel(
   models: readonly CliModelInfo[],
   modelId: string,
@@ -9,8 +24,14 @@ export function normalizeThinkingLevel(
   const model = models.find((candidate) => candidate.id === modelId);
   const levels = model?.thinkingLevels ?? [];
   if (levels.length === 0) return null;
-  if (requested && levels.includes(requested)) return requested;
-  return model?.defaultThinkingLevel ?? levels[0] ?? null;
+  const requestedLevel = requested
+    ? levels.find((level) => level.toLowerCase() === requested.toLowerCase())
+    : null;
+  if (requestedLevel) return requestedLevel;
+  const defaultLevel = model?.defaultThinkingLevel
+    ? levels.find((level) => level.toLowerCase() === model.defaultThinkingLevel!.toLowerCase())
+    : null;
+  return defaultLevel ?? levels[0] ?? null;
 }
 
 export function moveRadioSelection<T>(

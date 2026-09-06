@@ -12,15 +12,20 @@ public sealed class CodexModelDiscovery
 {
     private readonly ILogger<CodexModelDiscovery> _logger;
     private readonly IConfiguration _config;
+    private readonly CliVersionTracker? _versionTracker;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private CliModelCatalog? _memCache;
     private DateTime _memCacheAt = DateTime.MinValue;
 
-    public CodexModelDiscovery(ILogger<CodexModelDiscovery> logger, IConfiguration config)
+    public CodexModelDiscovery(
+        ILogger<CodexModelDiscovery> logger,
+        IConfiguration config,
+        CliVersionTracker? versionTracker = null)
     {
         _logger = logger;
         _config = config;
+        _versionTracker = versionTracker;
     }
 
     private string CachePath
@@ -113,7 +118,10 @@ public sealed class CodexModelDiscovery
             await pty.WaitForIdleAsync(idleMs: 1000, timeoutMs: 10000, ct);
 
             var output = await WaitForOutputFileAsync(outputPath, pty, ct);
-            var models = ParseDebugModelsJson(output, ReadActiveModel());
+            var models = ParseDebugModelsJson(
+                output,
+                ReadActiveModel(),
+                _versionTracker?.CurrentVersion(CliTypes.Codex));
             if (models.Count == 0)
             {
                 var snapshot = pty.SnapshotStripped();
@@ -135,7 +143,10 @@ public sealed class CodexModelDiscovery
         }
     }
 
-    public static List<CliModelInfo> ParseDebugModelsJson(string output, string? activeModel = null)
+    public static List<CliModelInfo> ParseDebugModelsJson(
+        string output,
+        string? activeModel = null,
+        string? cliVersion = null)
     {
         var json = ExtractJsonObject(output);
         using var doc = JsonDocument.Parse(json);
@@ -165,14 +176,32 @@ public sealed class CodexModelDiscovery
             if (string.IsNullOrWhiteSpace(label)) label = id;
 
             var priority = GetInt(item, "priority") ?? int.MaxValue;
-            parsed.Add((new CliModelInfo
+            var metadata = ModelMetadataRegistry.Find(id);
+            var fallback = metadata != null
+                ? ModelMetadataRegistry.ToCliModelInfo(metadata, CliTypes.Codex)
+                : ModelMetadataRegistry.UnknownCliModel(id, label, "openai", CliTypes.Codex);
+            var thinkingLevels = ParseThinkingLevels(item);
+            var hasCliThinkingLevels = thinkingLevels.Count > 0;
+            if (!hasCliThinkingLevels)
+                thinkingLevels = fallback.ThinkingLevels.ToList();
+            var cliDefault = GetString(item, "default_reasoning_level")?.Trim();
+            var defaultThinkingLevel = thinkingLevels.FirstOrDefault(level =>
+                string.Equals(level, cliDefault, StringComparison.OrdinalIgnoreCase));
+            defaultThinkingLevel ??= cliDefault == null
+                ? hasCliThinkingLevels
+                    ? thinkingLevels.LastOrDefault()
+                    : fallback.DefaultThinkingLevel
+                : thinkingLevels.LastOrDefault();
+
+            parsed.Add((fallback with
             {
                 Id = id,
                 Label = label.Trim(),
                 Vendor = GuessVendor(id),
                 IsDefault = string.Equals(id, activeModel, StringComparison.OrdinalIgnoreCase),
-                ThinkingLevels = CliThinkingLevels.For(CliTypes.Codex, id).ToList(),
-                DefaultThinkingLevel = ModelMetadataRegistry.DefaultThinkingLevelForCli(CliTypes.Codex, id)
+                Available = true,
+                ThinkingLevels = thinkingLevels,
+                DefaultThinkingLevel = defaultThinkingLevel
             }, priority, index++));
         }
 
@@ -187,18 +216,45 @@ public sealed class CodexModelDiscovery
             models[0] = models[0] with { IsDefault = true };
         }
 
-        return models;
+        return Reconcile(models, cliVersion);
     }
 
-    internal static CliModelCatalog WithCurrentCodexCapabilities(CliModelCatalog cat)
+    internal static CliModelCatalog WithCurrentCodexCapabilities(
+        CliModelCatalog cat,
+        string? cliVersion = null)
     {
         var models = cat.Models.Select(m => m with
         {
-            ThinkingLevels = CliThinkingLevels.For(CliTypes.Codex, m.Id).ToList(),
-            DefaultThinkingLevel = ModelMetadataRegistry.DefaultThinkingLevelForCli(CliTypes.Codex, m.Id)
+            ThinkingLevels = m.ThinkingLevels.Count > 0
+                ? m.ThinkingLevels
+                : CliThinkingLevels.For(CliTypes.Codex, m.Id).ToList(),
+            DefaultThinkingLevel = ResolveCachedDefault(m)
         }).ToList();
 
-        return cat with { Models = models };
+        return cat with { Models = Reconcile(models, cliVersion) };
+    }
+
+    public static List<CliModelInfo> Reconcile(
+        IReadOnlyList<CliModelInfo> discovered,
+        string? cliVersion = null)
+    {
+        var discoveredIds = new HashSet<string>(
+            discovered.Select(model => model.Id),
+            StringComparer.OrdinalIgnoreCase);
+        var result = discovered.ToList();
+
+        foreach (var known in ModelMetadataRegistry.ForVendor("openai"))
+        {
+            if (discoveredIds.Contains(known.Id)) continue;
+            result.Add(ModelMetadataRegistry.ToCliModelInfo(known, CliTypes.Codex) with
+            {
+                IsDefault = false,
+                Available = false,
+                AvailabilityNote = UnavailableNote("codex-cli", cliVersion)
+            });
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -240,12 +296,12 @@ public sealed class CodexModelDiscovery
         if (models == null || models.Count == 0) return null;
 
         // Follow the CLI's own default when it already points at a gpt-5.6 model.
-        var flagged = models.FirstOrDefault(m => m.IsDefault && IsGpt56(m.Id));
+        var flagged = models.FirstOrDefault(m => m.Available && m.IsDefault && IsGpt56(m.Id));
         if (flagged != null) return flagged.Id;
 
         // Otherwise: the models are priority-ordered, so the first gpt-5.6 is the
         // highest-priority one the CLI advertises.
-        return models.FirstOrDefault(m => IsGpt56(m.Id))?.Id;
+        return models.FirstOrDefault(m => m.Available && IsGpt56(m.Id))?.Id;
     }
 
     /// <summary>
@@ -257,6 +313,7 @@ public sealed class CodexModelDiscovery
     /// </summary>
     private CliModelCatalog Publish(CliModelCatalog cat)
     {
+        ModelMetadataRegistry.SetDiscoveredThinkingCapabilities(CliTypes.Codex, cat.Models);
         var detected = PickDetectedDefault(cat);
         ModelMetadataRegistry.SetDetectedCodexDefault(detected);
         _logger.LogDebug("Codex detected default published: {Detected} (source={Source})",
@@ -266,7 +323,9 @@ public sealed class CodexModelDiscovery
 
     private CliModelCatalog WithActiveModelApplied(CliModelCatalog cat)
     {
-        cat = WithCurrentCodexCapabilities(cat);
+        cat = WithCurrentCodexCapabilities(
+            cat,
+            _versionTracker?.CurrentVersion(CliTypes.Codex));
         var active = ReadActiveModel();
         if (string.IsNullOrWhiteSpace(active)) return cat;
 
@@ -316,6 +375,51 @@ public sealed class CodexModelDiscovery
         => obj.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var i)
             ? i
             : null;
+
+    private static List<string> ParseThinkingLevels(JsonElement model)
+    {
+        if (!model.TryGetProperty("supported_reasoning_levels", out var levels)
+            || levels.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return levels.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.Object)
+            .Select(item => GetString(item, "effort")?.Trim())
+            .Where(level => !string.IsNullOrWhiteSpace(level))
+            .Select(level => level!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string? ResolveCachedDefault(CliModelInfo model)
+    {
+        if (model.ThinkingLevels.Count > 0)
+        {
+            return model.ThinkingLevels.FirstOrDefault(level => string.Equals(
+                       level,
+                       model.DefaultThinkingLevel,
+                       StringComparison.OrdinalIgnoreCase))
+                   ?? model.ThinkingLevels.LastOrDefault();
+        }
+
+        return ModelMetadataRegistry.DefaultThinkingLevelForCli(CliTypes.Codex, model.Id);
+    }
+
+    internal static string UnavailableNote(string cliName, string? version)
+    {
+        var normalizedVersion = version?.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedVersion)
+            && normalizedVersion.StartsWith(cliName, StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedVersion = normalizedVersion[cliName.Length..].Trim();
+        }
+        normalizedVersion = string.IsNullOrWhiteSpace(normalizedVersion)
+            ? "unknown version"
+            : normalizedVersion;
+        return $"Not offered by the installed {cliName} {normalizedVersion}";
+    }
 
     private static string? GuessVendor(string id)
     {

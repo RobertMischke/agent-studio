@@ -87,6 +87,24 @@ describe('orderModelCatalog', () => {
     expect(ordered[2].available).toBe(false);
   });
 
+  it('places unavailable entries last within current and older picker sections', () => {
+    const ordered = orderModelCatalog([
+      model('gpt-6-astra', { available: false }),
+      model('gpt-5.5', { deprecated: true }),
+      model('gpt-5-codex', { available: false, deprecated: true }),
+      model('gpt-5.6-sol'),
+    ]);
+
+    expect(ordered.filter((item) => !item.deprecated).map((item) => item.id)).toEqual([
+      'gpt-5.6-sol',
+      'gpt-6-astra',
+    ]);
+    expect(ordered.filter((item) => item.deprecated).map((item) => item.id)).toEqual([
+      'gpt-5.5',
+      'gpt-5-codex',
+    ]);
+  });
+
   it('keeps discovery order for ids without a conventional numeric generation', () => {
     const ordered = orderModelCatalog([
       model('claude-latest'),

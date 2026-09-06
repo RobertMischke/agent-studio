@@ -20,15 +20,20 @@ public sealed class ClaudeModelDiscovery
 
     private readonly ILogger<ClaudeModelDiscovery> _logger;
     private readonly IConfiguration _config;
+    private readonly CliVersionTracker? _versionTracker;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private CliModelCatalog? _memCache;
     private DateTime _memCacheAt = DateTime.MinValue;
 
-    public ClaudeModelDiscovery(ILogger<ClaudeModelDiscovery> logger, IConfiguration config)
+    public ClaudeModelDiscovery(
+        ILogger<ClaudeModelDiscovery> logger,
+        IConfiguration config,
+        CliVersionTracker? versionTracker = null)
     {
         _logger = logger;
         _config = config;
+        _versionTracker = versionTracker;
     }
 
     private string CachePath
@@ -50,10 +55,12 @@ public sealed class ClaudeModelDiscovery
     {
         if (!forceRefresh)
         {
-            if (_memCache != null && DateTime.UtcNow - _memCacheAt < Ttl) return _memCache;
+            if (_memCache != null && DateTime.UtcNow - _memCacheAt < Ttl)
+                return WithCurrentRegistry(_memCache);
             var fromDisk = TryLoadDisk();
             if (fromDisk != null && DateTime.UtcNow - fromDisk.FetchedAt < Ttl)
             {
+                fromDisk = WithCurrentRegistry(fromDisk);
                 _memCache = fromDisk;
                 _memCacheAt = fromDisk.FetchedAt;
                 return fromDisk;
@@ -64,7 +71,7 @@ public sealed class ClaudeModelDiscovery
         try
         {
             if (!forceRefresh && _memCache != null && DateTime.UtcNow - _memCacheAt < Ttl)
-                return _memCache;
+                return WithCurrentRegistry(_memCache);
 
             try
             {
@@ -77,10 +84,12 @@ public sealed class ClaudeModelDiscovery
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Claude PTY model discovery failed; falling back to registry catalog");
-                if (_memCache != null) return WithSource(_memCache, "pty-failed-mem-cache");
+                if (_memCache != null)
+                    return WithSource(WithCurrentRegistry(_memCache), "pty-failed-mem-cache");
                 var fromDisk = TryLoadDisk();
                 if (fromDisk != null)
                 {
+                    fromDisk = WithCurrentRegistry(fromDisk);
                     _memCache = fromDisk;
                     _memCacheAt = fromDisk.FetchedAt;
                     return WithSource(fromDisk, "pty-failed-disk-cache");
@@ -136,7 +145,9 @@ public sealed class ClaudeModelDiscovery
 
         return new CliModelCatalog
         {
-            Models = Reconcile(discovered),
+            Models = Reconcile(
+                discovered,
+                _versionTracker?.CurrentVersion(CliTypes.Claude)),
             Source = "cli-pty",
             FetchedAt = DateTime.UtcNow
         };
@@ -160,11 +171,12 @@ public sealed class ClaudeModelDiscovery
         return result;
     }
 
-    public static List<CliModelInfo> Reconcile(IReadOnlyList<CliModelInfo> discovered)
+    public static List<CliModelInfo> Reconcile(
+        IReadOnlyList<CliModelInfo> discovered,
+        string? cliVersion = null)
     {
         var discoveredIds = new HashSet<string>(discovered.Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
         var result = discovered
-            .Where(m => m.Available)
             .Select(m => m with { IsDefault = false })
             .ToList();
 
@@ -175,8 +187,7 @@ public sealed class ClaudeModelDiscovery
             {
                 IsDefault = false,
                 Available = false,
-                Deprecated = true,
-                AvailabilityNote = "Known in registry but not reported by the installed Claude CLI."
+                AvailabilityNote = CodexModelDiscovery.UnavailableNote("claude", cliVersion)
             });
         }
 
@@ -257,6 +268,14 @@ public sealed class ClaudeModelDiscovery
 
     private static CliModelCatalog WithSource(CliModelCatalog cat, string source)
         => cat with { Source = source };
+
+    private CliModelCatalog WithCurrentRegistry(CliModelCatalog cat)
+        => cat with
+        {
+            Models = Reconcile(
+                cat.Models,
+                _versionTracker?.CurrentVersion(CliTypes.Claude))
+        };
 
     private CliModelCatalog? TryLoadDisk()
     {

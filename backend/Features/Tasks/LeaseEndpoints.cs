@@ -2030,7 +2030,7 @@ public static class LeaseEndpoints
         // fail the spawn; CliThinkingLevels falls back to the supported default.
         thinkingLevel = string.IsNullOrWhiteSpace(thinkingLevel)
             ? null
-            : CliThinkingLevels.Normalize(cliType, model, thinkingLevel);
+            : ModelMetadataRegistry.ResolveThinkingLevel(cliType, model, thinkingLevel);
 
         var modeFraming = BuildModeFraming(task, prompts, dossierMaintenance);
 

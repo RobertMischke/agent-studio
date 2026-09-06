@@ -76,22 +76,75 @@ describe('CliModelSelectorComponent', () => {
     expect(chip.textContent).toContain('opus 4.7');
   });
 
-  it('surfaces a codex gpt-5.6 catalog with its display label and ultra ladder (AGT-2025)', async () => {
+  it('surfaces the CLI-derived Astra ladder and default reasoning level', async () => {
     const codexModels: CliModelInfo[] = [
-      { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', multiplier: null, vendor: 'openai', isDefault: true, thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh', 'ultra'], defaultThinkingLevel: 'ultra' },
+      { id: 'gpt-6-astra', label: 'GPT-6-Astra', multiplier: null, vendor: 'openai', isDefault: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], defaultThinkingLevel: 'medium' },
       { id: 'gpt-5.5', label: 'GPT-5.5', multiplier: null, vendor: 'openai', isDefault: false, thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh'], defaultThinkingLevel: 'xhigh' },
     ];
     const store = createStoreMock();
     store.modelsFor.mockReturnValue(codexModels);
     store.ensure.mockReturnValue(of(codexModels));
-    const { fixture, component } = await create({ cliType: 'codex', model: 'gpt-5.6-sol' }, store);
+    const { fixture, component } = await create(
+      { cliType: 'codex', model: 'gpt-6-astra', thinkingLevel: 'max' },
+      store,
+    );
 
     openPicker(fixture);
     await fixture.whenStable();
-    const sol = component.draftAvailableModels().find((m) => m.id === 'gpt-5.6-sol');
-    expect(sol).toBeTruthy();
-    expect(sol!.label).toBe('GPT-5.6-Sol');
-    expect(sol!.thinkingLevels).toContain('ultra');
+    const astra = component.draftAvailableModels().find((m) => m.id === 'gpt-6-astra');
+    expect(astra).toBeTruthy();
+    expect(astra!.label).toBe('GPT-6-Astra');
+    expect(astra!.thinkingLevels).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+    expect(astra!.defaultThinkingLevel).toBe('medium');
+    expect(component.draftThinkingLevel()).toBe('max');
+  });
+
+  it('renders unavailable current and older models last, disabled, and keeps a pinned model visible', async () => {
+    const unavailableNote = 'Not offered by the installed codex-cli 0.151.0';
+    const codexModels: CliModelInfo[] = [
+      { id: 'gpt-6-astra', label: 'GPT-6 Astra', multiplier: null, vendor: 'openai', isDefault: false, available: false, deprecated: false, availabilityNote: unavailableNote, thinkingLevels: ['minimal', 'low', 'medium', 'high', 'xhigh'], defaultThinkingLevel: 'xhigh' },
+      { id: 'gpt-5.5', label: 'GPT-5.5', multiplier: null, vendor: 'openai', isDefault: false, available: true, deprecated: true, availabilityNote: 'Older generation' },
+      { id: 'gpt-5-codex', label: 'GPT-5 Codex', multiplier: null, vendor: 'openai', isDefault: false, available: false, deprecated: true, availabilityNote: unavailableNote },
+      { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', multiplier: null, vendor: 'openai', isDefault: true, available: true, deprecated: false, thinkingLevels: ['low', 'medium', 'high'], defaultThinkingLevel: 'medium' },
+    ];
+    const store = createStoreMock();
+    store.modelsFor.mockReturnValue(codexModels);
+    store.ensure.mockReturnValue(of(codexModels));
+    const { fixture, component } = await create(
+      { cliType: 'codex', model: 'gpt-6-astra', thinkingLevel: 'xhigh' },
+      store,
+    );
+    const commits: string[] = [];
+    component.modelChange.subscribe((modelId) => commits.push(modelId));
+
+    openPicker(fixture);
+    await fixture.whenStable();
+
+    expect(component.currentModels().map((model) => model.id)).toEqual([
+      'gpt-5.6-sol',
+      'gpt-6-astra',
+    ]);
+    expect(component.olderModels().map((model) => model.id)).toEqual([
+      'gpt-5.5',
+      'gpt-5-codex',
+    ]);
+    expect(component.draftModel()).toBe('gpt-6-astra');
+
+    const astra = document.querySelector<HTMLButtonElement>(
+      '[data-testid="cli-model-selector-picker-model-gpt-6-astra"]',
+    );
+    const retired = document.querySelector<HTMLButtonElement>(
+      '[data-testid="cli-model-selector-picker-model-gpt-5-codex"]',
+    );
+    expect(astra?.disabled).toBe(true);
+    expect(astra?.getAttribute('aria-disabled')).toBe('true');
+    expect(astra?.getAttribute('aria-checked')).toBe('true');
+    expect(astra?.textContent).toContain(unavailableNote);
+    expect(retired?.disabled).toBe(true);
+    expect(retired?.getAttribute('aria-disabled')).toBe('true');
+
+    component.onModelPillClick('gpt-6-astra');
+    expect(commits).toEqual([]);
   });
 
   it('passes leading generations first while keeping older models selectable', async () => {

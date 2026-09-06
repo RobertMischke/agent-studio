@@ -25,7 +25,7 @@ import { ModalStackService } from '../../services/modal-stack.service';
 import { ConnectedOverlayDirective } from '../../directives/connected-overlay.directive';
 import { OverlayPortalDirective } from '../../directives/overlay-portal.directive';
 import { AppTooltipDirective } from '../tooltip/app-tooltip.directive';
-import { moveRadioSelection, normalizeThinkingLevel } from './cli-model-selector.util';
+import { modelAriaLabel, modelAvailabilityNote, moveRadioSelection, normalizeThinkingLevel, olderModelAriaLabel } from './cli-model-selector.util';
 
 interface CliOption {
   id: CliType;
@@ -111,7 +111,9 @@ export class CliModelSelectorComponent {
   readonly effectiveModels = computed<readonly CliModelInfo[]>(
     () => orderModelCatalog(this.catalogModels() ?? this.availableModels()),
   );
-  readonly draftAvailableModels = computed(() => this.draftModels());
+  readonly draftAvailableModels = computed(() =>
+    this.draftModels().filter((model) => model.available !== false),
+  );
   readonly currentModels = computed(() =>
     this.draftModels().filter((model) => !model.deprecated),
   );
@@ -254,7 +256,7 @@ export class CliModelSelectorComponent {
     this.draftCliType.set(this.cliType());
     this.draftModel.set(currentModel);
     this.draftModelPinned.set(true);
-    this.draftModels.set(this.selectableModels(this.effectiveModels()));
+    this.draftModels.set(this.effectiveModels());
     this.draftThinkingLevel.set(
       normalizeThinkingLevel(this.draftModels(), currentModel, this.thinkingLevel()),
     );
@@ -294,6 +296,7 @@ export class CliModelSelectorComponent {
   }
 
   onModelPillClick(modelId: string): void {
+    if (this.draftModels().some((model) => model.id === modelId && model.available === false)) return;
     const previousLevel = this.draftThinkingLevel();
     this.draftModel.set(modelId);
     this.draftModelPinned.set(true);
@@ -313,7 +316,7 @@ export class CliModelSelectorComponent {
   onModelPillKeydown(modelId: string, event: KeyboardEvent): void {
     moveRadioSelection(
       event,
-      ['', ...this.draftModels().map((model) => model.id)],
+      ['', ...this.draftAvailableModels().map((model) => model.id)],
       modelId,
       (next) => next === '' ? this.onDefaultModelClick() : this.onModelPillClick(next),
     );
@@ -367,28 +370,26 @@ export class CliModelSelectorComponent {
     return model.availabilityNote?.trim() || 'Older generation';
   }
 
-  olderModelAriaLabel(model: CliModelInfo): string {
-    return `${model.label || model.id}. Older generation. ${this.olderModelNote(model)}`;
-  }
+  readonly olderModelAriaLabel = olderModelAriaLabel;
+  readonly modelAvailabilityNote = modelAvailabilityNote;
+  readonly modelAriaLabel = modelAriaLabel;
 
   private applyCatalog(models: readonly CliModelInfo[]): void {
-    const selectable = this.selectableModels(models);
-    this.draftModels.set(selectable);
+    this.draftModels.set(models);
     const current = this.draftModel();
-    const stillValid = current === '' || selectable.some((model) => model.id === current);
+    const stillValid = current === '' || models.some((model) => model.id === current);
     if (this.draftModelPinned() && stillValid) {
+      const requestedLevel = this.draftThinkingLevel()
+        ?? (current === (this.model() ?? '').trim() ? this.thinkingLevel() : null);
       this.draftThinkingLevel.set(
-        normalizeThinkingLevel(this.draftModels(), current, this.draftThinkingLevel()),
+        normalizeThinkingLevel(this.draftModels(), current, requestedLevel),
       );
       return;
     }
-    const defaultModel = selectable.find((model) => model.isDefault);
+    const available = models.filter((model) => model.available !== false);
+    const defaultModel = available.find((model) => model.isDefault) ?? available[0];
     this.draftModel.set(defaultModel?.id ?? '');
     this.draftThinkingLevel.set(defaultModel?.defaultThinkingLevel ?? null);
-  }
-
-  private selectableModels(models: readonly CliModelInfo[]): readonly CliModelInfo[] {
-    return models.filter((model) => model.available !== false);
   }
 
   private badgeText(

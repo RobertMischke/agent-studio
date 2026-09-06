@@ -9,6 +9,7 @@ export const MODEL_IDS = {
   // Availability follows the live catalog from /api/cli; this id only seeds
   // fixtures and the effective-model display before the catalog hydrates.
   gpt56Sol: 'gpt-5.6-sol',
+  gpt6Astra: 'gpt-6-astra',
 } as const;
 
 export const CLAUDE_FALLBACK_MODEL_ID = MODEL_IDS.claudeHaiku45;

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace AgentStudio.Shared;
 
 public record StartJobRequest
@@ -129,6 +131,9 @@ public static class ModelIds
     /// tests; <see cref="ModelMetadataRegistry.DefaultForCli"/> returns it when
     /// discovery has detected it, otherwise it falls back to <see cref="Gpt55"/>.</summary>
     public const string Gpt56Sol = "gpt-5.6-sol";
+    /// <summary>Known GPT-6 Astra catalog entry. Availability and reasoning
+    /// capabilities still come from the installed Codex CLI.</summary>
+    public const string Gpt6Astra = "gpt-6-astra";
     /// <summary>Economy Codex model for bounded supporting-agent and pipeline work.
     /// Availability still comes from live CLI discovery.</summary>
     public const string Gpt54Mini = "gpt-5.4-mini";
@@ -183,6 +188,8 @@ public static class ModelMetadataRegistry
         // the GPT-4.1 / GPT-4o entries) so no invented cost is asserted.
         new(ModelIds.Gpt55, "GPT-5.5", "openai", IsDefault: true, Deprecated: false, Available: true,
             ContextWindow: 400_000),
+        new(ModelIds.Gpt6Astra, "GPT-6 Astra", "openai", IsDefault: false, Deprecated: false, Available: true,
+            ContextWindow: 272_000),
         // gpt-5-codex is retained (API-key accounts still accept it) but is no
         // longer the default: a ChatGPT-account spawn rejects it outright.
         new(ModelIds.Gpt5Codex, "GPT-5 Codex", "openai", IsDefault: false, Deprecated: false, Available: true,
@@ -207,6 +214,13 @@ public static class ModelMetadataRegistry
     // threads and written from the discovery gate. Null => CLI not yet probed,
     // unavailable, or no gpt-5.6 detected => the static gpt-5.5 baseline holds.
     private static volatile string? _detectedCodexDefaultId;
+
+    private sealed record DiscoveredThinkingCapabilities(
+        IReadOnlyList<string> Levels,
+        string? DefaultLevel);
+
+    private static readonly ConcurrentDictionary<string, DiscoveredThinkingCapabilities> DiscoveredCapabilities =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Publish the Codex default model derived from the installed CLI. Pass null
@@ -242,13 +256,15 @@ public static class ModelMetadataRegistry
 
     /// <summary>
     /// Product default reasoning level for a CLI+model when the user/owner did
-    /// not pick one. For codex the operator directive (AGT-2025) is the biggest
-    /// reasoning value the installed CLI advertises for the model: the top of
-    /// the CLI-derived thinking-level ladder (gpt-5.6 -> ultra, gpt-5.5 ->
-    /// xhigh, gpt-5-codex -> high). Other CLIs keep the ladder's native default.
+    /// not pick one. Live discovery owns both the ladder and its default. The
+    /// static table, including Codex's historical top-of-ladder convention, is
+    /// used only until discovery supplies capabilities for that model.
     /// </summary>
     public static string? DefaultThinkingLevelForCli(string? cliType, string? model)
     {
+        if (TryGetDiscoveredCapabilities(cliType, model, out var discovered))
+            return discovered.DefaultLevel ?? discovered.Levels.LastOrDefault();
+
         if (CliTypes.IsValid(cliType) && CliTypes.Normalize(cliType) == CliTypes.Codex)
         {
             var top = CliThinkingLevels.For(cliType, model).LastOrDefault();
@@ -263,9 +279,54 @@ public static class ModelMetadataRegistry
     /// the product default for the CLI (<see cref="DefaultThinkingLevelForCli"/>).
     /// </summary>
     public static string? ResolveThinkingLevel(string? cliType, string? model, string? requested)
-        => string.IsNullOrWhiteSpace(requested)
+    {
+        if (TryGetDiscoveredCapabilities(cliType, model, out var discovered))
+        {
+            if (string.IsNullOrWhiteSpace(requested))
+                return discovered.DefaultLevel ?? discovered.Levels.LastOrDefault();
+
+            var exact = discovered.Levels.FirstOrDefault(level =>
+                string.Equals(level, requested.Trim(), StringComparison.OrdinalIgnoreCase));
+            return exact ?? discovered.DefaultLevel ?? discovered.Levels.LastOrDefault();
+        }
+
+        return string.IsNullOrWhiteSpace(requested)
             ? DefaultThinkingLevelForCli(cliType, model)
             : CliThinkingLevels.Normalize(cliType, model, requested);
+    }
+
+    /// <summary>
+    /// Replaces the runtime reasoning capabilities for one CLI with the latest
+    /// available catalog entries. This lets task normalization accept new CLI
+    /// levels before the shared static table is updated.
+    /// </summary>
+    public static void SetDiscoveredThinkingCapabilities(
+        string cliType,
+        IReadOnlyList<CliModelInfo> models)
+    {
+        var normalizedCli = CliTypes.Normalize(cliType);
+        var prefix = normalizedCli + "\n";
+        foreach (var key in DiscoveredCapabilities.Keys.Where(key =>
+                     key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            DiscoveredCapabilities.TryRemove(key, out _);
+        }
+
+        foreach (var model in models.Where(model => model.Available && model.ThinkingLevels.Count > 0))
+        {
+            var levels = model.ThinkingLevels
+                .Where(level => !string.IsNullOrWhiteSpace(level))
+                .Select(level => level.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (levels.Count == 0) continue;
+
+            var defaultLevel = levels.FirstOrDefault(level =>
+                string.Equals(level, model.DefaultThinkingLevel, StringComparison.OrdinalIgnoreCase));
+            DiscoveredCapabilities[CapabilityKey(normalizedCli, model.Id)] =
+                new DiscoveredThinkingCapabilities(levels, defaultLevel);
+        }
+    }
 
     public static bool IsCompatibleWithCli(string? cliType, string? model)
     {
@@ -358,4 +419,19 @@ public static class ModelMetadataRegistry
             _ => null
         };
     }
+
+    private static bool TryGetDiscoveredCapabilities(
+        string? cliType,
+        string? model,
+        out DiscoveredThinkingCapabilities capabilities)
+    {
+        capabilities = null!;
+        if (!CliTypes.IsValid(cliType) || string.IsNullOrWhiteSpace(model)) return false;
+        return DiscoveredCapabilities.TryGetValue(
+            CapabilityKey(CliTypes.Normalize(cliType), NormalizeId(model)),
+            out capabilities!);
+    }
+
+    private static string CapabilityKey(string cliType, string model)
+        => $"{cliType}\n{model.Trim()}";
 }
