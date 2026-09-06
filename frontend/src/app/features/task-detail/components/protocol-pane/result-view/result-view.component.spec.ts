@@ -118,6 +118,8 @@ describe('ResultViewComponent', () => {
           result: state,
           observedAt: null,
           summary,
+          reason: state === 'not-proven' ? 'verify-2 did not run.' : 'No verify commands are defined.',
+          reportRef: 'post-steps/build-test-gate-1.log',
         }],
       },
     }), verdict());

@@ -72,6 +72,8 @@ function makeDetail(state: string, gateStatus: 'passed' | 'notApplicable' | 'ski
             result: evidenceState,
             observedAt: '2026-06-02T08:00:02Z',
             summary: evidenceSummary,
+            reason: evidenceSummary,
+            reportRef: 'post-steps/build-test-gate-1.log',
           },
         ],
       },
@@ -187,6 +189,7 @@ async function installRoutes(
   page: Page,
   state: string,
   gateStatus: () => 'passed' | 'notApplicable' | 'skipped' = () => 'passed',
+  detailFactory: (() => ReturnType<typeof makeDetail>) | null = null,
 ) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -324,7 +327,7 @@ async function installRoutes(
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(makeDetail(state, gateStatus())),
+      body: JSON.stringify(detailFactory?.() ?? makeDetail(state, gateStatus())),
     }),
   );
 }
@@ -476,7 +479,82 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
     }
   });
 
-  test('build gate not-applicable stays neutral and a true skip stays conspicuous in task detail', async ({
+  test('Evidence shows passing build proof beside the independently blocked review aspect', async ({
+    page,
+  }, testInfo) => {
+    const reportRef = 'remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e.md';
+    await installRoutes(page, '5-human-review', () => 'passed', () => {
+      const detail = makeDetail('5-human-review');
+      detail.info.testEvidence = {
+        ...detail.info.testEvidence,
+        evidenceState: 'proven',
+        summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+        sources: [
+          {
+            kind: 'review-build-tests',
+            id: 'review_ad5cca8e3178425fb9ba9cabe329d50e',
+            commit: '491ddd64',
+            result: 'passed',
+            observedAt: '2026-08-31T20:41:22Z',
+            summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+            reason: 'verify-1 and verify-2 passed.',
+            reportRef,
+          },
+          {
+            kind: 'review-aspects',
+            id: 'review_ad5cca8e3178425fb9ba9cabe329d50e',
+            commit: '491ddd64',
+            result: 'blocked',
+            observedAt: '2026-08-31T20:41:22Z',
+            summary: 'Review blocked by documentation-impact',
+            reason: 'documentation-impact blocked: Public API and state-file contract changed without corresponding load-bearing doc updates.',
+            reportRef,
+          },
+        ],
+      };
+      return detail;
+    });
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+    await page.getByTestId('error-dialog-overlay')
+      .waitFor({ state: 'visible', timeout: 3_000 })
+      .catch(() => { /* no asynchronous fixture error surfaced */ });
+    await dismissErrorDialog(page);
+    await page.getByTestId('prompt-tab-evidence').click();
+
+    const evidence = page.getByTestId('evidence-test-evidence');
+    await expect(evidence).toBeVisible({ timeout: 10_000 });
+    const build = page.getByTestId('evidence-test-evidence-source-review-build-tests');
+    const aspects = page.getByTestId('evidence-test-evidence-source-review-aspects');
+    await expect(build).toHaveAttribute('data-evidence-result', 'passed');
+    await expect(build).toContainText('Review build-tests Pass at 491ddd64 (verify-1, verify-2)');
+    await expect(build).toContainText('verify-1 and verify-2 passed.');
+    await expect(aspects).toHaveAttribute('data-evidence-result', 'blocked');
+    await expect(aspects).toContainText('Review blocked by documentation-impact');
+    await expect(aspects).toContainText('Public API and state-file contract changed');
+    await expect(aspects.getByRole('link', { name: /Open report/ })).toHaveAttribute(
+      'href',
+      new RegExp(`/api/tasks/${JOB_ID}/files/${reportRef}`),
+    );
+
+    if (RESULTS_DIR) {
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2714--review-evidence-independent-facts--${theme}--mocked.png`,
+        );
+        await evidence.screenshot({ path: screenshotPath });
+        await testInfo.attach(`review-evidence-independent-facts--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    }
+  });
+
+  test('a skipped pipeline gate stays conspicuous while missing Result proof remains explicit', async ({
     page,
   }, testInfo) => {
     let status: 'notApplicable' | 'skipped' = 'notApplicable';

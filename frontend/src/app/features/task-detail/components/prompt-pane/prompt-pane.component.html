@@ -116,6 +116,12 @@
 
       @case ('evidence') {
         <section class="evidence-view" data-testid="evidence-view">
+          @if (job(); as j) {
+            <app-test-evidence-status
+              [task]="j"
+              variant="panel"
+              testId="evidence-test-evidence" />
+          }
           @if (screenshots().length > 0) {
             <div class="ev-section" data-testid="ev-section-visual">
               <div class="ev-section-head">

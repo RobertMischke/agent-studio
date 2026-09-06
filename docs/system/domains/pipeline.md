@@ -756,6 +756,15 @@ operator changes cause the step to fail before its writer runs.
   commit) is documented. `AspectRunInputs` / `CodeReviewStepRequest` carry the
   `ResultsInventory` + `CardMode` fields; the `{{results_inventory}}` and
   `{{card_mode}}` slots render them in every aspect + code-review template.
+- Task test evidence keeps deterministic command proof separate from semantic
+  review outcomes. A Remote Review report projects its `build-tests` verdicts
+  as `review-build-tests`: all recorded rows passing proves the tested SHA, any
+  failed row fails it, and only an absent `build-tests` row is `not-proven`.
+  A blocking semantic verdict is projected independently as `review-aspects`
+  with the blocking aspect name and summary, and never overrides passing build
+  proof. Every task-scoped evidence source includes a one-sentence `reason` and
+  a task-relative `reportRef`, so the Evidence tab can explain the state and
+  open the report or gate log that established it.
 - A fenced remote completion persists `review-subject.json` with its exact
   `RunAttemptId`, `ResultSha`, delivery ref, and actual integration branch ref.
   A reissue or transition into a new local or remote run invalidates the
