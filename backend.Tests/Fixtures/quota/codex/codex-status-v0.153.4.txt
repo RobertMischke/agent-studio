@@ -1,0 +1,9 @@
+OpenAI Codex (v0.153.4)
+Account:        operator@example.com (Pro)
+Weekly limit:   [############........] 62% left
+                (resets 17:12 on 8 Sep)
+GPT-5.3-Codex-Spark limit:
+5h limit:       [####################] 100% left
+                (resets 09:56)
+Weekly limit:   [####################] 100% left
+                (resets 04:56 on 10 Sep)

@@ -93,12 +93,14 @@ public abstract class QuotaProbeBase : IQuotaProbe
     /// <summary>
     /// Spawn the CLI and orchestrate a multi-step interactive sequence. Each <see cref="ProbeStep"/>
     /// optionally waits for a regex pattern to appear, sends keys, then waits for output to settle.
+    /// <paramref name="onPatternMatched"/> observes confirmed matches before their keys are sent.
     /// Returns the final ANSI-stripped snapshot.
     /// </summary>
     protected async Task<string> ProbeWithStepsAsync(
         IEnumerable<ProbeStep> steps,
         int initialIdleMs,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action<ProbeStep>? onPatternMatched = null)
     {
         var cli = _router.Get(CliType);
         var (available, _, resolvedPath) = cli.TestCliPath();
@@ -128,6 +130,7 @@ public abstract class QuotaProbeBase : IQuotaProbe
             {
                 var match = await pty.WaitForPatternAsync(step.WaitForPattern, timeoutMs: step.WaitTimeoutMs, ct);
                 patternMatched = match != null;
+                if (patternMatched) onPatternMatched?.Invoke(step);
                 if (match == null)
                 {
                     _logger.LogDebug("Probe step '{Step}' did not see expected pattern within {Ms}ms",

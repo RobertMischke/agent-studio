@@ -20,6 +20,29 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed class CodexQuotaProbe : QuotaProbeBase
 {
+    private const string HookReviewStepName = "dismiss-hook-review";
+    internal const string HookReviewBlockedError = "Codex hook-trust review dialog blocked /status.";
+
+    private static readonly Regex TrustPattern = new(
+        @"trust\s*the\s*contents|Yes,\s*continue",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex UpdatePattern = new(
+        @"Update\s*available|Skip\s*until\s*next\s*version",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex HookReviewPattern = new(
+        @"hooks?\s*need\s*review|Press\s*t\s*to\s*trust\s*all",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex WelcomePattern = new(
+        @"OpenAI\s*Codex|model:",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex StatusPattern = new(
+        @"5h\s*limit|Weekly\s*limit|Account:",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // Codex 0.149.0 moved the reset onto a following visual row and can omit
     // the reset altogether while the status panel is refreshing. Read the
     // percentage first and make the reset suffix optional. The legacy regexes
@@ -85,35 +108,20 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         var cliVersion = DetectCliVersion();
         try
         {
-            var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
-            var updatePattern  = new Regex(@"Update\s*available|Skip\s*until\s*next\s*version", RegexOptions.IgnoreCase);
-            var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
-            var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
-
             var snap = await ProbeWithStepsAsync(
-            [
-                // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
-                // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
-                // stray "1" in the chat input box, which then prefixes the next slash
-                // command and turns "/status" into a chat message instead of a command.
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 4000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300, SendKeysOnlyIfMatched: true),
-                // 0.149.0 can interpose an update picker before the ready REPL.
-                // Move off "Update now" and persist "Skip until next version"
-                // so a quota probe never attempts to mutate the global CLI.
-                new ProbeStep("dismiss-update", WaitForPattern: updatePattern, WaitTimeoutMs: 4000, SendKeys: "<Down><Enter>", SettleIdleMs: 1000, SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
-                // Clear the buffer so the await-welcome match only sees post-trust content.
-                new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
-                // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
-                // Enter while it's still parsing the slash command.
-                new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
-                new ProbeStep("await-status",  WaitForPattern: statusPattern,  WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
-            ],
-            initialIdleMs: 8000,
-            ct);
+                BuildProbeSteps(),
+                initialIdleMs: 8000,
+                ct,
+                onPatternMatched: step =>
+                {
+                    if (step.Name == HookReviewStepName)
+                    {
+                        _logger.LogWarning(
+                            "Codex hook-trust review modal detected. Trust the hooks once with 't' in an interactive Codex session, or leave them untrusted. The quota probe closes the dialog with Esc and continues.");
+                    }
+                });
 
-            string? plan = ParsePlan(snap);
-
-            var windows = ParseStatusWindows(snap);
+            var snapshot = ParseSnapshot(snap, cliVersion);
 
             // Log the parsed windows next to the raw sample so a future false
             // snapshot (AGT-2064) is diagnosable from logs alone, without having
@@ -122,22 +130,11 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
             var sparkSeen = SparkHeaderRegex.IsMatch(snap);
             _logger.LogInformation(
                 "codex_quota_probe_parsed plan={Plan} sparkBlock={Spark} windows=[{Windows}]",
-                plan ?? "<none>",
+                snapshot.Plan ?? "<none>",
                 sparkSeen,
-                string.Join(", ", windows.Select(w => $"{w.Label}={w.UsedPct}%")));
+                string.Join(", ", snapshot.Windows.Select(w => $"{w.Label}={w.UsedPct}%")));
 
-            return new QuotaSnapshot
-            {
-                CliType   = CliType,
-                CliVersion = cliVersion,
-                Plan      = plan,
-                Source    = "/status",
-                RawSample = TruncateForDebug(snap),
-                Windows   = windows,
-                Error     = (plan == null && windows.Count == 0)
-                    ? "Could not parse Codex /status output."
-                    : null
-            };
+            return snapshot;
         }
         catch (Exception ex)
         {
@@ -150,6 +147,52 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
                 Error = DescribeProbeFailure(ex)
             };
         }
+    }
+
+    internal static IReadOnlyList<ProbeStep> BuildProbeSteps()
+        =>
+        [
+            // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
+            // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
+            // stray "1" in the chat input box, which then prefixes the next slash
+            // command and turns "/status" into a chat message instead of a command.
+            new ProbeStep("await-trust", WaitForPattern: TrustPattern, WaitTimeoutMs: 4000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300, SendKeysOnlyIfMatched: true),
+            // 0.149.0 can interpose an update picker before the ready REPL.
+            // Move off "Update now" and persist "Skip until next version"
+            // so a quota probe never attempts to mutate the global CLI.
+            new ProbeStep("dismiss-update", WaitForPattern: UpdatePattern, WaitTimeoutMs: 4000, SendKeys: "<Down><Enter>", SettleIdleMs: 1000, SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
+            // Hook trust is an operator decision. Close the review dialog without
+            // changing trust, and never leak Esc into the input when it is absent.
+            new ProbeStep(HookReviewStepName, WaitForPattern: HookReviewPattern, WaitTimeoutMs: 3000, SendKeys: "<Esc>", SendKeysOnlyIfMatched: true, SettleIdleMs: 800, SettleTimeoutMs: 4000),
+            // Clear the buffer so the await-welcome match only sees post-gate content.
+            new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: WelcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
+            // Send Enter as a separate keystroke. Codex sometimes drops a fast-following
+            // Enter while it is still parsing the slash command.
+            new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
+            new ProbeStep("await-status", WaitForPattern: StatusPattern, WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
+        ];
+
+    internal static QuotaSnapshot ParseSnapshot(string snap, string? cliVersion = null)
+    {
+        var plan = ParsePlan(snap);
+        var windows = ParseStatusWindows(snap);
+        var hookReviewBlockedStatus = HookReviewPattern.IsMatch(snap)
+            && !StatusPattern.IsMatch(snap);
+
+        return new QuotaSnapshot
+        {
+            CliType = CliTypes.Codex,
+            CliVersion = cliVersion,
+            Plan = plan,
+            Source = "/status",
+            RawSample = TruncateForDebug(snap),
+            Windows = windows,
+            Error = plan != null || windows.Count > 0
+                ? null
+                : hookReviewBlockedStatus
+                    ? HookReviewBlockedError
+                    : "Could not parse Codex /status output."
+        };
     }
 
     public static List<QuotaWindow> ParseStatusWindows(string snap)

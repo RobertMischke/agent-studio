@@ -46,6 +46,50 @@ public class CodexQuotaProbeTests
     }
 
     [Fact]
+    public void ParseSnapshot_V0_151_0HookReview_ReturnsAttributableErrorWithoutWindows()
+    {
+        var snapshot = CodexQuotaProbe.ParseSnapshot(ReadFixture("codex-hooks-v0.151.0.txt"));
+
+        Assert.Equal(CodexQuotaProbe.HookReviewBlockedError, snapshot.Error);
+        Assert.Empty(snapshot.Windows);
+        Assert.Null(snapshot.Plan);
+    }
+
+    [Fact]
+    public void ParseSnapshot_V0_153_4Fixture_ReadsWeeklyAndSparkWithoutInventingFiveHour()
+    {
+        var snapshot = CodexQuotaProbe.ParseSnapshot(ReadFixture("codex-status-v0.153.4.txt"));
+
+        Assert.Equal("Pro", snapshot.Plan);
+        Assert.Null(snapshot.Error);
+        Assert.DoesNotContain(snapshot.Windows, window => window.Label == "5-hour");
+        Assert.Collection(
+            snapshot.Windows,
+            w => { Assert.Equal("Weekly", w.Label); Assert.Equal(38, w.UsedPct); },
+            w => { Assert.Equal("Spark 5-hour", w.Label); Assert.Equal(0, w.UsedPct); },
+            w => { Assert.Equal("Spark Weekly", w.Label); Assert.Equal(0, w.UsedPct); });
+    }
+
+    [Fact]
+    public void BuildProbeSteps_HookReviewDismissal_IsGuardedAndOnlySendsEscape()
+    {
+        var steps = CodexQuotaProbe.BuildProbeSteps();
+
+        var hookReview = Assert.Single(steps, step => step.Name == "dismiss-hook-review");
+        Assert.Equal(3000, hookReview.WaitTimeoutMs);
+        Assert.True(hookReview.SendKeysOnlyIfMatched);
+        Assert.Equal("<Esc>", hookReview.SendKeys);
+        Assert.Equal(800, hookReview.SettleIdleMs);
+        Assert.Equal(4000, hookReview.SettleTimeoutMs);
+        Assert.Matches(hookReview.WaitForPattern!, "HOOKS NEED REVIEW");
+        Assert.Matches(hookReview.WaitForPattern!, "PRESS T TO TRUST ALL");
+        Assert.True(
+            steps.Select(step => step.Name).ToList().IndexOf("dismiss-hook-review")
+            < steps.Select(step => step.Name).ToList().IndexOf("await-welcome"));
+        Assert.DoesNotContain(steps, step => string.Equals(step.SendKeys, "t", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void ParseStatusWindows_ReadsStandardAndSparkLimitBlocks()
     {
         const string snapshot =

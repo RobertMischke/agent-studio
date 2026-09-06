@@ -268,9 +268,10 @@ locks default resolution in both cases plus vendor isolation.
 ## Quirks (and what to do about them)
 
 1. **Trust prompt has "1. Yes, continue" pre-selected and accepts a bare Enter.** Sending `1<Enter>` works but leaves a stray `1` in the input box that prefixes the next slash command. Use `<Enter>` alone when scripting Codex over a PTY (the quota probe does this).
-2. **`/status` PTY probe is fragile.** Trust + welcome + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. See comments in [`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` and lock with a fixture-based test.
-3. **Codex reports % left, we report % used.** The probe inverts the value so the UI's `UsedPct` semantics stay consistent across CLIs. Don't double-invert.
-4. **`--json` is required.** Without it, stdout is a colored panel that can't be parsed. The runner always passes it.
+2. **Hook-trust review is an operator decision.** Enabled plugin hooks that are new or no longer trusted can open a `Hooks` table with `hooks need review` and `Press t to trust all` immediately after startup. The quota probe presses guarded `<Esc>` to close this dialog and continue without changing trust. An operator can press `t` once in an interactive Codex session to trust the hooks, or leave them untrusted. Codex also provides `codex exec --dangerously-bypass-hook-trust`, but Studio does not use that bypass.
+3. **`/status` PTY probe is fragile.** Trust + startup gates + welcome + `/status` is a chained multi-step probe; one extra prompt or layout shift breaks it. See comments in [`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs). When updating, capture the new PTY transcript under `backend.Tests/Fixtures/quota/codex/` and lock with a fixture-based test.
+4. **Codex reports % left, we report % used.** The probe inverts the value so the UI's `UsedPct` semantics stay consistent across CLIs. Don't double-invert.
+5. **`--json` is required.** Without it, stdout is a colored panel that can't be parsed. The runner always passes it.
 
 ## Watchdog parity with Claude (ADR-0030)
 
@@ -369,7 +370,7 @@ locked by:
 
 ## Quota probe
 
-[`CodexQuotaProbe`](../../../backend/Services/Quota/CodexQuotaProbe.cs) returns two windows: a 5-hour bucket and a weekly bucket. Implementation runs `codex` over a PTY, accepts the trust prompt, navigates to `/status`, scrapes the panel.
+[`CodexQuotaProbe`](../../../../backend/Features/Cli/Quota/CodexQuotaProbe.cs) reads the standard and Spark quota windows that the current `/status` panel exposes. Implementation runs `codex` over a PTY, passes guarded startup gates, navigates to `/status`, and scrapes the panel.
 
 The probe reports `% used` (1 - `% left`). Source string is `/status (PTY)`.
 
@@ -382,6 +383,13 @@ dialog appears, and then submits `/status`. Parser fixtures live under
 Keep an older fixture when adding a new layout so compatibility remains an
 explicit test contract. A missing standard 5-hour row is valid; Spark rows must
 never be promoted into that missing standard bucket.
+
+Codex 0.151.0 can also interpose hook-trust review after startup when enabled
+plugin hooks have not been trusted. The probe closes that dialog with a guarded
+`<Esc>` and emits an operator-facing warning; it never presses `t` or makes the
+trust decision. If the final snapshot is still the hooks table rather than the
+status panel, the probe reports a hook-review-specific error so stale quota data
+is attributable.
 
 **Stale-while-revalidate failure contract (AGT-2679).** `GET /api/cli/quota`
 serves the cache immediately and schedules a coalesced, bounded background
