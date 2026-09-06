@@ -1,0 +1,19 @@
+:host { display: contents; }
+
+.provider-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--studio-spacing-1);
+  max-width: 100%;
+  border: 1px solid var(--notify-warning-border);
+  border-radius: 999px;
+  background: var(--notify-warning-tint);
+  color: var(--notify-warning-icon-fg);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+button.provider-wait { cursor: pointer; font-family: inherit; }
+button.provider-wait:hover { background: var(--studio-bg-hover); }
+button.provider-wait:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
+.provider-wait__dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--severity-warn); }

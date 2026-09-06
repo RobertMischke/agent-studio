@@ -56,6 +56,45 @@ public static class ManagementEndpoints
                     statusCode: 502);
             }
         });
+        group.MapPost("/remote-hosts/{id}/codex-sign-in", async (
+            string id,
+            HttpContext context,
+            CodexSignInStartRequest request,
+            CodexDeviceSignInService signIn,
+            IConfiguration configuration,
+            CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            if (!TryAuthorize(context, configuration, out var denied, out var actor, out _)) return denied!;
+            try
+            {
+                return Results.Ok(await signIn.StartAsync(id, request.SshTarget, actor!, ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Json(new { error = "invalid-codex-sign-in-request", message = ex.Message }, statusCode: 400);
+            }
+            catch (CodexSignInConflictException ex)
+            {
+                return Results.Json(new { error = "codex-sign-in-pending", message = ex.Message }, statusCode: 409);
+            }
+            catch (CodexSignInException ex)
+            {
+                return Results.Json(new { error = "codex-sign-in-failed", message = ex.Message }, statusCode: 502);
+            }
+        });
+        group.MapGet("/remote-hosts/{id}/codex-sign-in/{handle}", (
+            string id,
+            string handle,
+            HttpContext context,
+            CodexDeviceSignInService signIn,
+            IConfiguration configuration) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
+            var status = signIn.Get(id, handle);
+            return status is null ? Results.NotFound(new { error = "codex-sign-in-session-not-found" }) : Results.Ok(status);
+        });
         group.MapPost("/commands", (HttpContext context, ManagementCommandRequest request, ManagementService service, IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";

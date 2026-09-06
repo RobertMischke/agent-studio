@@ -1,0 +1,24 @@
+<div class="provider-auth" data-testid="remote-host-provider-auth" aria-label="Provider authentication">
+  @for (auth of badges(); track auth.id) {
+    <span class="provider-auth__badge" [attr.data-state]="auth.state"
+          [attr.data-testid]="'remote-host-provider-auth-' + auth.provider" [appTooltip]="auth.detail">
+      <span class="provider-auth__dot" aria-hidden="true"></span>
+      <strong>{{ auth.providerLabel }}</strong>
+      <span>{{ auth.state }}</span>
+    </span>
+    @if (canSignIn(auth)) {
+      <button class="provider-auth__action" type="button" data-testid="remote-host-codex-sign-in"
+              (click)="codexSignIn.emit({ host: host(), auth })">Sign in Codex</button>
+    }
+    @if (auth.expiresSoon && auth.expiryLabel) {
+      <span class="provider-auth__expiry" [attr.data-testid]="'remote-host-provider-auth-expiry-' + auth.provider">
+        {{ auth.expiryLabel }}
+      </span>
+    }
+    @if (latestTransition(auth); as transition) {
+      <span class="provider-auth__history" [attr.data-testid]="'remote-host-provider-auth-history-' + auth.provider">
+        Last change {{ transition.occurredAt | date:'short' }} · {{ transition.fromState }} → {{ transition.toState }}
+      </span>
+    }
+  }
+</div>

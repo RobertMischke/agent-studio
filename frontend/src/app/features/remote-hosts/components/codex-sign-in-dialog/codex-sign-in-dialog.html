@@ -1,0 +1,42 @@
+<div class="codex-auth-backdrop"
+     data-testid="codex-sign-in-dialog"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="codex-sign-in-title"
+     (click)="closeFromBackdrop($event)"
+     (keydown.escape)="cancelled.emit()">
+  <section class="codex-auth">
+    <header class="codex-auth__header">
+      <div>
+        <span class="codex-auth__eyebrow">Provider authentication</span>
+        <h2 id="codex-sign-in-title">Sign in Codex on {{ hostName() }}</h2>
+        <p>The token stays in the runner user’s Codex credential store on this host. Studio retains only the session handle and outcome.</p>
+      </div>
+      <button class="codex-auth__close" type="button" aria-label="Close Codex sign-in" (click)="cancelled.emit()">×</button>
+    </header>
+
+    <div class="codex-auth__body" [attr.data-state]="phase()">
+      @if (verificationUrl(); as url) {
+        <p class="codex-auth__instruction">Open the official verification page:</p>
+        <a class="codex-auth__link" data-testid="codex-sign-in-url" [href]="url" target="_blank" rel="noopener noreferrer">{{ url }}</a>
+      }
+      @if (userCode(); as code) {
+        <div class="codex-auth__code-wrap">
+          <span>One-time code</span>
+          <code data-testid="codex-sign-in-code">{{ code }}</code>
+          <button type="button" data-testid="codex-sign-in-copy" (click)="copyCode()">{{ copied() ? 'Copied' : 'Copy code' }}</button>
+        </div>
+      }
+
+      <div class="codex-auth__status" data-testid="codex-sign-in-status" [attr.data-state]="phase()" role="status">
+        <span class="codex-auth__dot" aria-hidden="true"></span>
+        <span>{{ statusLabel() }}</span>
+      </div>
+      <p class="codex-auth__detail">{{ detail() }}</p>
+
+      @if (phase() === 'failed') {
+        <button class="codex-auth__retry" type="button" data-testid="codex-sign-in-retry" (click)="start()">Try again</button>
+      }
+    </div>
+  </section>
+</div>

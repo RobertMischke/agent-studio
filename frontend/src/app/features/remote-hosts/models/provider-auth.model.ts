@@ -33,6 +33,27 @@ export interface ProviderAuthWaitReason {
   label: string;
   tooltip: string;
   hostNames: readonly string[];
+  signInTarget: ProviderAuthBadge | null;
+}
+
+export interface CodexSignInChallenge {
+  handle: string;
+  host: string;
+  provider: 'codex';
+  state: 'pending';
+  verificationUrl: string;
+  userCode: string;
+  expiresAt: string;
+}
+
+export interface CodexSignInStatus {
+  handle: string;
+  host: string;
+  provider: 'codex';
+  state: 'pending' | 'completed' | 'failed';
+  detail: string;
+  expiresAt: string;
+  completedAt: string | null;
 }
 
 export interface ProviderAuthProvisioningRequest {
@@ -131,6 +152,9 @@ export function providerAuthWaitReason(
       ? `${limited.detail}\nThe task stays Ready and retries automatically after the provider limit.`
       : `${detail}\nThe task stays Ready until a fresh provider probe reports OK.`,
     hostNames: hostNames.length > 0 ? hostNames : configuredRunner ? [configuredRunner] : [],
+    signInTarget: provider === 'codex'
+      ? candidates.find(status => status.state === 'unavailable' || status.state === 'expiring') ?? null
+      : null,
   };
 }
 

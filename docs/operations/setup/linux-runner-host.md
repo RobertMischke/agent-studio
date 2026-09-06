@@ -179,13 +179,16 @@ The controller is intentionally repeatable after a host wipe:
    from the host.
 2. Install or update the `CodingAgentRunner` NuGet global tool and require
    version `0.5.0` or newer, then install the Codex and Claude CLIs.
-3. Before the visible setup task starts, provision Claude authentication from
-   the Studio dialog. Studio sends `CLAUDE_CODE_OAUTH_TOKEN` or
-   `ANTHROPIC_API_KEY` only through SSH stdin. The host atomically writes
-   `/etc/agent-runner/provider-auth.env` as `root:agent` mode `640`. The value is
-   never persisted in Studio, a task, or the repository. Codex uses its
-   host-owned `codex login --device-auth` flow; credential files are never
-   copied from the operator workstation.
+3. Before the visible setup task starts, provision provider authentication from
+   the Studio dialog. Claude credentials travel only through SSH stdin into the
+   protected `/etc/agent-runner/provider-auth.env` file. For Codex, choose
+   **Sign in Codex** on the unavailable or expiring provider badge. Studio starts
+   `codex login --device-auth` as the systemd runner user over the same SSH
+   target, displays the official verification URL and one-time code, and polls
+   the session to completion. The Codex token remains in the runner user's
+   host-owned credential store. Credential files are never copied from the
+   operator workstation, and no credential value enters Studio storage, a task,
+   a log, or review evidence.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
    stable runner identity, optional `RUNNER_CLIENT_ID`, credential-file path,
    and fallback git origin. Install and start `agent-host.service` through
@@ -195,6 +198,12 @@ The controller is intentionally repeatable after a host wipe:
 5. Prove `systemctl is-enabled`, `systemctl is-active`, agent-host health, the
    variable name in `/proc/<MainPID>/environ`, a fresh provider-auth probe, and
    an authenticated claim or empty-queue response before setup completes.
+
+After a successful Codex browser approval, Studio confirms `codex login status`
+on the host and restarts each active Coding or Review unit. Startup performs a
+fresh provider probe, publishes `runner-provider-auth status=ok binary=codex`,
+and restores `provider-auth:codex` without a separate operator SSH session. The
+device-auth process is limited to 15 minutes and is terminated on timeout.
 
 The NuGet package must be published with package type `DotnetTool` and expose
 the `agent-host` command. A library-only `CodingAgentRunner` package cannot be

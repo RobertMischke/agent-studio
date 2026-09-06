@@ -576,27 +576,6 @@
         border-color 0.12s ease;
     }
 
-    .task-card__provider-auth-wait {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--studio-spacing-1);
-      max-width: 100%;
-      border: 1px solid var(--notify-warning-border);
-      border-radius: 999px;
-      background: var(--notify-warning-tint);
-      color: var(--notify-warning-icon-fg);
-      font-size: 10px;
-      font-weight: 650;
-      line-height: 1.35;
-    }
-
-    .task-card__provider-auth-dot {
-      width: 6px;
-      height: 6px;
-      flex: 0 0 auto;
-      border-radius: 50%;
-      background: var(--severity-warn);
-    }
     .task-card__waiting-glyph {
       font-size: 11px;
       line-height: 1;

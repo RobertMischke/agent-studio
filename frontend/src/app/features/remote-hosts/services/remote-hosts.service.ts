@@ -42,6 +42,16 @@ export class RemoteHostsService {
     this.reload();
   }
 
+  /** Resolve the same configured SSH target used by the Claude setup path. */
+  configuredHostForAliases(aliases: readonly string[]): RemoteHost | null {
+    const normalized = new Set(aliases.filter(Boolean).map(alias => alias.toLowerCase()));
+    const configured = this.hosts().length ? this.hosts() : seedRemoteHosts(Date.now());
+    return configured.find(host => host.role === 'remote'
+      && !!host.address
+      && [host.id, host.clientId, host.capacityHostId ?? '', host.name]
+        .some(alias => normalized.has(alias.toLowerCase()))) ?? null;
+  }
+
   /**
    * Refresh the compact live view without replacing a longer telemetry series
    * already loaded by the Execution Hosts page.

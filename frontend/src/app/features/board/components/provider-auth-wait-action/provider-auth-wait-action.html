@@ -1,0 +1,25 @@
+@if (wait(); as authWait) {
+  @if (target()) {
+    <button type="button" class="provider-wait" data-testid="task-card-provider-auth-wait"
+            [cacTooltip]="authWait.tooltip" (click)="open($event)">
+      <span class="provider-wait__dot" aria-hidden="true"></span>
+      {{ authWait.label }} · Sign in Codex
+    </button>
+  } @else {
+    <span class="provider-wait" data-testid="task-card-provider-auth-wait" role="status"
+          [cacTooltip]="authWait.tooltip">
+      <span class="provider-wait__dot" aria-hidden="true"></span>
+      {{ authWait.label }}
+    </span>
+  }
+}
+
+@if (dialogOpen() && target(); as signIn) {
+  <app-codex-sign-in-dialog
+    [hostId]="signIn.auth.runnerId"
+    [hostName]="signIn.auth.hostName"
+    [sshTarget]="signIn.host.address!"
+    [baselineAdvertisedAt]="signIn.auth.advertisedAt"
+    (cancelled)="close()"
+    (signedIn)="complete()" />
+}

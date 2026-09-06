@@ -1331,7 +1331,6 @@ describe('TaskCardComponent (smoke)', () => {
       '[data-testid="task-card-provider-auth-wait"]',
     ) as HTMLElement | null;
     expect(wait?.textContent).toContain('Waiting for Claude sign-in on linux-host');
-    expect(fixture.componentInstance.providerAuthWait()?.tooltip).toContain('Not logged in');
   });
 
   it('renders a compact family code and named thinking level without model text', async () => {

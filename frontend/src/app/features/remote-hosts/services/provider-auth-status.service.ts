@@ -7,6 +7,8 @@ import {
   type ProviderAuthBadge,
   type ProviderAuthProvisioningRequest,
   type ProviderAuthProvisioningResponse,
+  type CodexSignInChallenge,
+  type CodexSignInStatus,
 } from '../models/provider-auth.model';
 import type { TaskServerRunnerCapabilitySnapshot } from '../models/remote-host.model';
 
@@ -83,6 +85,21 @@ export class ProviderAuthStatusService implements OnDestroy {
     return this.http.post<ProviderAuthProvisioningResponse>(
       '/api/v1/management/remote-hosts/provider-auth',
       request,
+    );
+  }
+
+  startCodexSignIn(hostId: string, sshTarget: string): Observable<CodexSignInChallenge> {
+    if (!this.http) throw new Error('Codex sign-in requires the Studio HTTP client.');
+    return this.http.post<CodexSignInChallenge>(
+      `/api/v1/management/remote-hosts/${encodeURIComponent(hostId)}/codex-sign-in`,
+      { sshTarget },
+    );
+  }
+
+  codexSignInStatus(hostId: string, handle: string): Observable<CodexSignInStatus> {
+    if (!this.http) throw new Error('Codex sign-in requires the Studio HTTP client.');
+    return this.http.get<CodexSignInStatus>(
+      `/api/v1/management/remote-hosts/${encodeURIComponent(hostId)}/codex-sign-in/${encodeURIComponent(handle)}`,
     );
   }
 

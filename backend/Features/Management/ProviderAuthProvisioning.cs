@@ -48,10 +48,10 @@ public static partial class ProviderAuthProvisioningPolicy
     public static string? Validate(ProviderAuthProvisioningRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.SshTarget)
-            || !SshTargetPattern().IsMatch(request.SshTarget.Trim()))
+            || !IsValidSshTarget(request.SshTarget))
             return "SSH target must be a configured alias or user@host without shell characters.";
         if (string.IsNullOrWhiteSpace(request.RunnerId)
-            || !RunnerIdPattern().IsMatch(request.RunnerId.Trim()))
+            || !IsValidRunnerId(request.RunnerId))
             return "Runner identity is required and may contain letters, numbers, dots, underscores, and hyphens.";
         if (!SupportedEnvironmentVariables.Contains(request.EnvironmentVariable?.Trim() ?? ""))
             return "Choose CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY.";
@@ -66,6 +66,12 @@ public static partial class ProviderAuthProvisioningPolicy
         => environmentVariable is "CLAUDE_CODE_OAUTH_TOKEN" or "ANTHROPIC_API_KEY"
             ? "claude"
             : "unknown";
+
+    public static bool IsValidSshTarget(string? value)
+        => !string.IsNullOrWhiteSpace(value) && SshTargetPattern().IsMatch(value.Trim());
+
+    public static bool IsValidRunnerId(string? value)
+        => !string.IsNullOrWhiteSpace(value) && RunnerIdPattern().IsMatch(value.Trim());
 
     [GeneratedRegex(@"^([A-Za-z0-9][A-Za-z0-9._-]*@)?[A-Za-z0-9][A-Za-z0-9._-]*$")]
     private static partial Regex SshTargetPattern();

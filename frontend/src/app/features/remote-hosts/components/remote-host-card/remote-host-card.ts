@@ -37,6 +37,7 @@ import {
 } from '../../models/remote-host.model';
 import { freshHostTelemetry, latestHostTelemetry } from '../../models/running-truth';
 import { providerAuthBadgesForHost, type ProviderAuthBadge } from '../../models/provider-auth.model';
+import { ProviderAuthBadgesComponent } from '../provider-auth-badges/provider-auth-badges';
 
 /** One meter row (RAM / CPU / Disk) resolved for the template. */
 interface Meter {
@@ -70,6 +71,7 @@ interface Meter {
     RuntimeCapacityEditorComponent,
     RemoteHostRoleRowComponent,
     RemoteHostDetailSummaryComponent,
+    ProviderAuthBadgesComponent,
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',
@@ -100,6 +102,7 @@ export class RemoteHostCardComponent {
   readonly capacityChange = output<RuntimeCapacityChange>();
   readonly projectPolicyChange = output<HostProjectPolicyChange>();
   readonly setup = output<RemoteHost>();
+  readonly codexSignIn = output<{ host: RemoteHost; auth: ProviderAuthBadge }>();
   readonly expandedChange = output<boolean>();
   readonly expandedSections = signal<readonly DetailSection[]>([]);
 
@@ -196,6 +199,7 @@ export class RemoteHostCardComponent {
     (this.host().projectPreflights ?? []).filter(preflight => preflight.status === 'failed'),
   );
   readonly providerAuthBadges = computed(() => providerAuthBadgesForHost(this.host(), this.now()));
+
   readonly slotTotal = computed(() => roleSlotTotal(this.host()));
   readonly roleSlotCapacity = computed(() => {
     const totals = this.roles().map(roleSlotTotal).filter((value): value is number => value !== null);
@@ -250,10 +254,6 @@ export class RemoteHostCardComponent {
   });
   readonly hostWorkSummary = computed(() => this.runSlotsLabel());
   readonly systemLoadSummary = computed(() => this.loadLabel() ?? 'System load not reported');
-
-  latestAuthTransition(badge: ProviderAuthBadge) {
-    return badge.history.at(-1) ?? null;
-  }
 
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }

@@ -45,4 +45,20 @@ public sealed class ProviderAuthProvisioningTests
         Assert.Contains("/proc/${main_pid}/environ", standardInput);
         Assert.DoesNotContain("claude.env", standardInput, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void CodexDeviceAuthTransport_UsesOnlyFixedSshArgumentsAndBoundedRemoteLogin()
+    {
+        var startInfo = SshCodexDeviceAuthTransport.BuildStartInfo("agent@runner-01");
+        var arguments = startInfo.ArgumentList.ToArray();
+
+        Assert.Equal("ssh", startInfo.FileName);
+        Assert.Contains("-tt", arguments);
+        Assert.Contains("agent@runner-01", arguments);
+        Assert.DoesNotContain(arguments, argument => argument.Contains("device", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("timeout --signal=TERM --kill-after=5s 900s codex login --device-auth", SshCodexDeviceAuthTransport.RemoteScript);
+        Assert.Contains("trap cleanup EXIT HUP INT TERM", SshCodexDeviceAuthTransport.RemoteScript);
+        Assert.Contains("codex login status >/dev/null", SshCodexDeviceAuthTransport.RemoteScript);
+        Assert.Contains("systemctl restart", SshCodexDeviceAuthTransport.RemoteScript);
+    }
 }

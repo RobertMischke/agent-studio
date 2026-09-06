@@ -50,15 +50,18 @@ public static class RunnerEndpoints
         // force every other project out before timestamps are compared.
         runnerGroup.MapGet("/orchestrator-feed",
             (HttpContext context, TaskScannerService scanner, OrchestratorLog log,
-                AgentStudio.Registry.ProjectRegistry projects) =>
+                AgentStudio.Registry.ProjectRegistry projects,
+                AgentStudio.Bus.AgentMessageBusStore bus,
+                IConfiguration configuration,
+                CancellationToken ct) =>
             {
-                var entries = scanner.GetWatchPaths()
+                var projectEntries = scanner.GetWatchPaths()
                     .Where(project => context.Items[AccessSecurityMiddleware.HumanPrincipalItem] is not HumanPrincipal human
                                       || ProjectAccessAuthorization.Allows(human.User, project.Name, projects))
                     .SelectMany(project => log.Read(project.Path).Select(entry => new
                     {
-                        project = project.Name,
-                        watchPath = project.Path,
+                        project = (string?)project.Name,
+                        watchPath = (string?)project.Path,
                         entry.Ts,
                         entry.Kind,
                         entry.Topic,
@@ -68,7 +71,28 @@ public static class RunnerEndpoints
                         entry.ParticipantId,
                         entry.TokenUsage,
                         entry.UserOverride
-                    }))
+                    }));
+                var workspace = configuration["TaskRepository"];
+                var workspaceEntries = string.IsNullOrWhiteSpace(workspace)
+                    ? []
+                    : bus.Recent(workspace!, null, 500, ct)
+                        .Where(message => string.Equals(message.Topic, "provider_sign_in", StringComparison.Ordinal))
+                        .Select(message => new
+                        {
+                            project = (string?)"Workspace",
+                            watchPath = (string?)null,
+                            Ts = message.CreatedAt,
+                            Kind = OrchestratorLogKinds.Action,
+                            Topic = message.Topic ?? OrchestratorLogTopics.General,
+                            Summary = message.Summary ?? "Provider sign-in completed.",
+                            Reasoning = (string?)null,
+                            JobId = message.JobId,
+                            ParticipantId = (string?)message.ParticipantId,
+                            TokenUsage = (OrchestratorTokenUsage?)null,
+                            UserOverride = (OrchestratorIntervention?)null,
+                        });
+                var entries = projectEntries
+                    .Concat(workspaceEntries)
                     .OrderByDescending(entry => entry.Ts)
                     .Take(500)
                     .ToList();
