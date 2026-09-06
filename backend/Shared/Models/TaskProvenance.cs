@@ -275,6 +275,32 @@ public record TaskIntegrationStatus
     /// <see cref="IntegrationStatuses.ConflictSkipped"/>.
     /// </summary>
     public TaskIntegrationFailure? Failure { get; init; }
+
+    /// <summary>
+    /// Repository-scoped membership evidence. A multi-repository delivery has
+    /// one row per attributed repository, so a SHA is never tested against a
+    /// different repository's object graph.
+    /// </summary>
+    public IReadOnlyList<TaskRepositoryIntegration> Repositories { get; init; } = [];
+}
+
+/// <summary>Git membership for the attributed commits of one repository.</summary>
+public sealed record TaskRepositoryIntegration
+{
+    /// <summary>Stable repository label or URL carried by the attribution.</summary>
+    public string Repository { get; init; } = "repository";
+    /// <summary>All current attributed commit SHAs for this repository.</summary>
+    public IReadOnlyList<string> Commits { get; init; } = [];
+    /// <summary>Subset of <see cref="Commits"/> reachable from the integration branch.</summary>
+    public IReadOnlyList<string> OnIntegrationBranch { get; init; } = [];
+    /// <summary>Subset of <see cref="Commits"/> reachable from the release branch.</summary>
+    public IReadOnlyList<string> OnReleaseBranch { get; init; } = [];
+    /// <summary>Integration target used for this repository.</summary>
+    public string IntegrationBranch { get; init; } = "develop";
+    /// <summary>Release target used for this repository.</summary>
+    public string ReleaseBranch { get; init; } = "main";
+    /// <summary>Repository-local evidence or missing-commit reason.</summary>
+    public string? Detail { get; init; }
 }
 
 /// <summary>

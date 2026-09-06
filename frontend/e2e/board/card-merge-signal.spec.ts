@@ -31,6 +31,15 @@ interface IntegrationStatus {
   sha: string | null;
   integrationBranch: string;
   detail: string;
+  repositories?: Array<{
+    repository: string;
+    commits: string[];
+    onIntegrationBranch: string[];
+    onReleaseBranch: string[];
+    integrationBranch: string;
+    releaseBranch: string;
+    detail: string;
+  }>;
 }
 
 function mergeSignal(inDev: boolean, inMain: boolean): MergeSignal {
@@ -120,14 +129,37 @@ const IN_DEVELOP = makeTask(
   true,
   integrationStatus(true),
 );
+const repositoryEntry = (repository: string, count: number, integrationBranch: string) => {
+  const commits = Array.from({ length: count }, (_, index) => `${repository}-${index}`);
+  return {
+    repository,
+    commits,
+    onIntegrationBranch: commits,
+    onReleaseBranch: commits,
+    integrationBranch,
+    releaseBranch: 'main',
+    detail: `${count}/${count} on ${integrationBranch}`,
+  };
+};
 const RELEASED = makeTask(
   'ms-released',
   '6-completed',
-  'Merge signal released to main',
+  'AGT-2307 seven-repository delivery',
   mergeSignal(true, true),
   true,
   true,
-  integrationStatus(true),
+  {
+    ...integrationStatus(true),
+    repositories: [
+      repositoryEntry('agent-studio', 5, 'develop'),
+      repositoryEntry('runner', 4, 'main'),
+      repositoryEntry('token-economy', 4, 'main'),
+      repositoryEntry('chat', 3, 'main'),
+      repositoryEntry('ai-patterns.dev', 2, 'main'),
+      repositoryEntry('quality-studio', 1, 'main'),
+      repositoryEntry('.github', 1, 'main'),
+    ],
+  },
 );
 const ONLY_MAIN = makeTask(
   'ms-onlymain',
@@ -346,6 +378,24 @@ test.describe('AGT-2046 board card merge signal', () => {
       .toHaveAttribute('data-integration-status', 'integrated');
     await expect(salvaged.getByTestId('task-card-merge-signal'))
       .toHaveAttribute('data-develop', 'true');
+  });
+
+  test('renders one integration chip for each AGT-2307 repository', async ({ page }) => {
+    await gotoBoard(page);
+
+    const badges = cardByTitle(page, RELEASED.title).getByTestId('integration-status-badge');
+    await expect(badges).toHaveCount(7);
+    for (const [index, label] of [
+      'agent-studio 5/5 develop and main',
+      'runner 4/4 main',
+      'token-economy 4/4 main',
+      'chat 3/3 main',
+      'ai-patterns.dev 2/2 main',
+      'quality-studio 1/1 main',
+      '.github 1/1 main',
+    ].entries()) {
+      await expect(badges.nth(index)).toContainText(label);
+    }
   });
 
   test('replaces the cryptic "BR" chip with a branch icon + name', async ({ page }) => {

@@ -84,6 +84,11 @@ public enum MergeIntoIntegrationOutcome
     MergedAfterRebase,
     /// <summary>The task branch was already contained in the integration branch; no-op.</summary>
     AlreadyMerged,
+    /// <summary>
+    /// No task branch exists, but every attributed commit from this repository
+    /// is already reachable from the integration branch.
+    /// </summary>
+    AlreadyOnIntegrationBranch,
     /// <summary>No <c>task/&lt;id&gt;</c> branch exists (e.g. a sequential run); nothing to merge.</summary>
     NoTaskBranch,
     /// <summary>The configured pull-request strategy deliberately left the delivery ref for external review.</summary>
@@ -116,7 +121,8 @@ public static class MergeIntoIntegrationOutcomePolicy
 
     public static bool IsSuccessfulIntegration(this MergeIntoIntegrationOutcome outcome)
         => outcome.IsFreshMerge()
-            || outcome == MergeIntoIntegrationOutcome.AlreadyMerged;
+            || outcome is MergeIntoIntegrationOutcome.AlreadyMerged
+                or MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch;
 }
 
 /// <summary>
@@ -139,6 +145,9 @@ public record MergeIntoIntegrationResult(
     IReadOnlyList<RebasedCommitReplacement> RebasedCommits,
     string? PreviousIntegrationSha)
 {
+    /// <summary>Attributed SHAs proving a direct-to-branch delivery.</summary>
+    public IReadOnlyList<string> EvidenceShas { get; init; } = [];
+
     public static MergeIntoIntegrationResult Of(MergeIntoIntegrationOutcome outcome, string? mergedSha = null, string? error = null)
         => new(
             outcome,
@@ -518,6 +527,13 @@ public record TaskHygieneContext(
     bool TaskInfoCommitPresent,
     string? StampedCommitSha,
     bool AcceptedTaskUncommitted);
+
+/// <summary>Registered local checkout selected for one attributed repository.</summary>
+public sealed record AttributedRepositoryCheckout(
+    string Root,
+    string Repository,
+    string Label,
+    string? ProjectName);
 
 /// <summary>
 /// Thin wrapper around git CLI for the per-task Git view. Operates on the
@@ -1784,6 +1800,146 @@ public class GitService
         var configured = ResolveConfiguredRepositoryPath(entry);
         if (string.IsNullOrWhiteSpace(configured)) return null;
         return ResolveGitToplevel(configured) ?? configured;
+    }
+
+    /// <summary>
+    /// Returns the durable repository identity used by commit attribution. A
+    /// registered remote identity wins; local-only repositories fall back to
+    /// their origin URL and finally their canonical checkout path.
+    /// </summary>
+    public string? ResolveRepositoryIdentityForWatchPath(string? watchPath)
+    {
+        var root = ResolveRepoRootForWatchPath(watchPath);
+        if (string.IsNullOrWhiteSpace(root)) return null;
+        var registered = _registry.List().FirstOrDefault(project =>
+        {
+            var configured = !string.IsNullOrWhiteSpace(project.RepositoryPath)
+                ? project.RepositoryPath
+                : project.RootPath;
+            if (string.IsNullOrWhiteSpace(configured)) return false;
+            var registeredRoot = ResolveGitToplevel(configured) ?? configured;
+            return string.Equals(registeredRoot, root, StringComparison.OrdinalIgnoreCase);
+        });
+        if (registered is not null)
+        {
+            var remote = AgentStudio.Tasks.RemoteProjectRepositoryResolver.Resolve(registered, null);
+            if (!string.IsNullOrWhiteSpace(remote?.RepositoryId)) return remote.RepositoryId;
+            if (!string.IsNullOrWhiteSpace(remote?.RepositoryUrl)) return remote.RepositoryUrl;
+            return registered.Id;
+        }
+        var origin = ReadOriginUrlAt(root);
+        return AgentStudio.TaskServer.Contracts.RepositoryIdentityContract.FromUrl(origin)
+               ?? origin
+               ?? new Uri(root).AbsoluteUri;
+    }
+
+    /// <summary>
+    /// Resolves an attributed repository id, URL, path, or legacy display name
+    /// to a registered local checkout. Registry records are preferred; the
+    /// task's own checkout is the compatibility fallback for unscoped commits.
+    /// </summary>
+    public AttributedRepositoryCheckout? ResolveAttributedRepository(
+        string? repository,
+        string? fallbackWatchPath)
+    {
+        var fallbackRoot = ResolveRepoRootForWatchPath(fallbackWatchPath);
+        foreach (var project in _registry.List())
+        {
+            var configured = !string.IsNullOrWhiteSpace(project.RepositoryPath)
+                ? project.RepositoryPath
+                : project.RootPath;
+            if (string.IsNullOrWhiteSpace(configured) || !Directory.Exists(configured)) continue;
+            var root = ResolveGitToplevel(configured) ?? configured;
+            var remote = AgentStudio.Tasks.RemoteProjectRepositoryResolver.Resolve(project, null);
+            var origin = ReadOriginUrlAt(root);
+            var matches = string.IsNullOrWhiteSpace(repository)
+                ? string.Equals(root, fallbackRoot, StringComparison.OrdinalIgnoreCase)
+                : string.Equals(repository, project.Id, StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(repository, project.DisplayName, StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(repository, remote?.RepositoryId, StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(repository, remote?.RepositoryUrl, StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(repository, origin, StringComparison.OrdinalIgnoreCase)
+                  || AgentStudio.Tasks.CommitRepositoryAttribution.SameName(repository, project.DisplayName)
+                  || AgentStudio.Tasks.CommitRepositoryAttribution.SameName(repository, root)
+                  || AgentStudio.Tasks.CommitRepositoryAttribution.SameName(repository, origin);
+            if (!matches) continue;
+            return new AttributedRepositoryCheckout(
+                root,
+                remote?.RepositoryId ?? origin ?? repository ?? root,
+                AgentStudio.Tasks.CommitRepositoryAttribution.DisplayName(origin ?? root),
+                project.DisplayName);
+        }
+
+        // Legacy installations can have configured watch paths without a
+        // materialized project-registry record. They are still registered
+        // repository checkouts and therefore outrank URL-only fallback.
+        foreach (var entry in _scanner.GetWatchPaths())
+        {
+            var configured = !string.IsNullOrWhiteSpace(entry.RepositoryPath)
+                ? entry.RepositoryPath
+                : entry.RootPath;
+            if (string.IsNullOrWhiteSpace(configured) || !Directory.Exists(configured)) continue;
+            var root = ResolveGitToplevel(configured) ?? configured;
+            var origin = ReadOriginUrlAt(root);
+            var originIdentity = AgentStudio.TaskServer.Contracts.RepositoryIdentityContract.FromUrl(origin);
+            var matches = string.IsNullOrWhiteSpace(repository)
+                ? string.Equals(root, fallbackRoot, StringComparison.OrdinalIgnoreCase)
+                : string.Equals(repository, entry.Name, StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(repository, origin, StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(repository, originIdentity, StringComparison.OrdinalIgnoreCase)
+                  || AgentStudio.Tasks.CommitRepositoryAttribution.SameName(repository, entry.Name)
+                  || AgentStudio.Tasks.CommitRepositoryAttribution.SameName(repository, root)
+                  || AgentStudio.Tasks.CommitRepositoryAttribution.SameName(repository, origin);
+            if (!matches) continue;
+            return new AttributedRepositoryCheckout(
+                root,
+                originIdentity
+                    ?? origin
+                    ?? root,
+                AgentStudio.Tasks.CommitRepositoryAttribution.DisplayName(origin ?? root),
+                entry.Name);
+        }
+
+        if (!string.IsNullOrWhiteSpace(repository))
+        {
+            var direct = repository;
+            if (Uri.TryCreate(repository, UriKind.Absolute, out var uri) && uri.IsFile)
+                direct = uri.LocalPath;
+            if (Directory.Exists(direct))
+            {
+                var root = ResolveGitToplevel(direct) ?? direct;
+                return new AttributedRepositoryCheckout(
+                    root,
+                    repository,
+                    AgentStudio.Tasks.CommitRepositoryAttribution.DisplayName(repository),
+                    null);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(fallbackRoot)) return null;
+        var fallbackOrigin = ReadOriginUrlAt(fallbackRoot);
+        if (!string.IsNullOrWhiteSpace(repository)
+            && !AgentStudio.Tasks.CommitRepositoryAttribution.SameName(repository, fallbackRoot)
+            && !AgentStudio.Tasks.CommitRepositoryAttribution.SameName(repository, fallbackOrigin))
+        {
+            return null;
+        }
+        return new AttributedRepositoryCheckout(
+            fallbackRoot,
+            AgentStudio.TaskServer.Contracts.RepositoryIdentityContract.FromUrl(fallbackOrigin)
+                ?? fallbackOrigin
+                ?? fallbackRoot,
+            AgentStudio.Tasks.CommitRepositoryAttribution.DisplayName(fallbackOrigin ?? fallbackRoot),
+            null);
+    }
+
+    /// <summary>Reads <c>remote.origin.url</c> at an explicit repository root.</summary>
+    public string? ReadOriginUrlAt(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return null;
+        var (output, _, code) = RunGitArgs(root, "config", "--get", "remote.origin.url");
+        var value = output.Trim();
+        return code == 0 && value.Length > 0 ? value : null;
     }
 
     /// <summary>
@@ -3491,6 +3647,27 @@ public class GitService
         if (!IsLikelyBranchName(branch)) return false;
         var (_, _, code) = RunGitArgs(repoRoot, "rev-parse", "--verify", "--quiet", $"refs/heads/{branch}");
         return code == 0;
+    }
+
+    /// <summary>
+    /// Proves whether a delivery branch exists locally, as a remote-tracking
+    /// ref, or on origin. Lookup failures are treated conservatively as an
+    /// existing branch so acceptance does not mistake an unavailable remote
+    /// for a direct-to-branch delivery.
+    /// </summary>
+    public bool DeliveryBranchExists(string repoRoot, string branch)
+    {
+        if (BranchExists(repoRoot, branch) || RemoteBranchExists(repoRoot, branch))
+            return true;
+        if (!HasRemote(repoRoot, "origin")) return false;
+        var (_, _, code) = RunGitArgs(
+            repoRoot,
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            "origin",
+            branch);
+        return code != 2;
     }
 
     /// <summary>

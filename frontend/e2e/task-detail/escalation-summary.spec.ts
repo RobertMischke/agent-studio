@@ -67,6 +67,33 @@ function buildInfo(state: string, emptyContext = false) {
       integrationSha: 'b2ed3f4',
       releaseSha: '1a526e9',
     },
+    integration: emptyContext ? null : {
+      status: 'integrated',
+      deliveryRef: null,
+      sha: '1a526e9',
+      integrationBranch: 'develop',
+      detail: null,
+      repositories: [
+        {
+          repository: 'agent-studio',
+          commits: ['b2ed3f47'],
+          onIntegrationBranch: ['b2ed3f47'],
+          onReleaseBranch: ['b2ed3f47'],
+          integrationBranch: 'develop',
+          releaseBranch: 'main',
+          detail: '1/1 on develop and main',
+        },
+        {
+          repository: 'runner',
+          commits: ['1a526e97'],
+          onIntegrationBranch: ['1a526e97'],
+          onReleaseBranch: ['1a526e97'],
+          integrationBranch: 'main',
+          releaseBranch: 'main',
+          detail: '1/1 on main',
+        },
+      ],
+    },
     tags: [],
     ownerClientId: 'local-default',
     lastUsage: null,
@@ -419,9 +446,10 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     );
     await expect(page.getByTestId('escalation-essence')).not.toContainText('Council finding 1');
     const mergeSegments = page.getByTestId('escalation-merge-segment');
-    await expect(mergeSegments).toHaveCount(1);
-    await expect(mergeSegments).toHaveText('main ✓ merged');
-    await expect(mergeSegments).toHaveAttribute('data-state', 'merged');
+    await expect(mergeSegments).toHaveCount(2);
+    await expect(mergeSegments).toHaveText(['develop ✓ merged', 'main ✓ merged']);
+    await expect(mergeSegments.nth(0)).toHaveAttribute('data-state', 'merged');
+    await expect(mergeSegments.nth(1)).toHaveAttribute('data-state', 'merged');
     // Recommendation stays on the header.
     await expect(page.getByTestId('escalation-recommendation')).toHaveText('Needs decision');
     await expect(panel.getByTestId('escalation-action-reissue-escalated')).toHaveCount(0);
@@ -474,10 +502,14 @@ test.describe('Escalation summary panel — collapsible + compact', () => {
     // Delivery context: deduped file count across both commits.
     await expect(page.getByTestId('escalation-delivery-counts')).toContainText('2 commits');
     await expect(page.getByTestId('escalation-delivery-counts')).toContainText('4 files');
+    await expect(page.getByTestId('escalation-delivery-repositories')).toHaveText(
+      'agent-studio 1/1 develop and main · runner 1/1 main',
+    );
     // Raw timeline prose stays out of both the header and the expanded summary.
     await expect(page.getByTestId('escalation-reason')).toHaveCount(0);
     const reissues = page.getByTestId('escalation-reissues');
     await expect(reissues).toBeVisible();
+    await dismissAppErrorDialog(page);
     await reissues.locator('summary').click();
     await expect(page.getByTestId('escalation-reissue-1')).toContainText('npm test exit 1');
     await expect(page.getByTestId('escalation-reissue-2')).toContainText('bundle budget and apply_patch stderr');

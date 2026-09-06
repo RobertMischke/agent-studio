@@ -61,9 +61,18 @@ public static class CommitAttributionRunner
             };
         }).ToList();
 
+        var repositoryRoot = git.ResolveRepoRootForWatchPath(watchPath);
+        var managedTaskBranch = WorktreeTaskLifecycle.BranchFor(info.Id);
+        var attributedBranch = repositoryRoot is null
+            ? null
+            : git.BranchExists(repositoryRoot, managedTaskBranch)
+                ? managedTaskBranch
+                : git.ReadCurrentBranchAt(repositoryRoot);
         var input = new AttributionInput
         {
             TaskId = info.Id,
+            Repository = git.ResolveRepositoryIdentityForWatchPath(watchPath),
+            TaskBranch = attributedBranch,
             Candidates = candidates,
             // The platform-stamped auto-commit(s) are the task's accepted work
             // by construction - pin them to full confidence.

@@ -305,6 +305,7 @@ public class TaskMutationService
                 if (!producerBySha.TryGetValue(commit.Sha, out var producer)) return commit;
                 return commit with
                 {
+                    Repository = commit.Repository ?? producer.Repository,
                     Branch = commit.Branch ?? producer.Branch,
                     RunAttemptId = commit.RunAttemptId ?? producer.RunAttemptId,
                     RunnerId = commit.RunnerId ?? producer.RunnerId,

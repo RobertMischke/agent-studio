@@ -737,6 +737,78 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.Equal(IntegrationStatuses.Integrated, lookup[completed.TaskKey].Status);
     }
 
+    [Fact]
+    public void BuildLookup_MultiRepositoryDelivery_EvaluatesEachRepositoryGraph()
+    {
+        var agentStudio = SeedDevelopMainRepo("agent-studio");
+        RunGit(agentStudio, "checkout -q develop");
+        File.WriteAllText(Path.Combine(agentStudio, "studio.txt"), "studio");
+        Commit(agentStudio, "feat: studio delivery");
+        var studioSha = RunGit(agentStudio, "rev-parse develop").Out.Trim();
+        RunGit(agentStudio, "checkout -q main");
+        RunGit(agentStudio, "merge -q --no-ff develop -m release");
+
+        var runner = SeedDevelopMainRepo("runner");
+        RunGit(runner, "checkout -q main");
+        File.WriteAllText(Path.Combine(runner, "runner.txt"), "runner");
+        Commit(runner, "feat: runner delivery");
+        var runnerSha = RunGit(runner, "rev-parse main").Out.Trim();
+
+        var service = BuildService(agentStudio, out var project, out var log);
+        var job = Job("multi", "AGT-2307", project, agentStudio, log, commits:
+        [
+            Commit(studioSha) with { Repository = agentStudio, Branch = "develop", Message = "[agent-studio] feat: studio" },
+            Commit(runnerSha) with { Repository = runner, Branch = "main", Message = "[runner] feat: runner" },
+        ]);
+
+        var status = service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(2, status.Repositories.Count);
+        Assert.All(status.Repositories, entry => Assert.Equal(entry.Commits, entry.OnIntegrationBranch));
+        Assert.Contains(status.Repositories, entry => entry.Repository == "agent-studio"
+            && entry.OnReleaseBranch.Count == 1);
+        Assert.Contains(status.Repositories, entry => entry.Repository == "runner"
+            && entry.IntegrationBranch == "main");
+    }
+
+    [Fact]
+    public void BuildLookup_RealPartial_NamesOnlyTheRepositoryAndItsMissingCommit()
+    {
+        var agentStudio = SeedDevelopMainRepo("partial-agent-studio");
+        RunGit(agentStudio, "checkout -q develop");
+        File.WriteAllText(Path.Combine(agentStudio, "studio.txt"), "studio");
+        Commit(agentStudio, "feat: studio delivery");
+        var studioSha = RunGit(agentStudio, "rev-parse develop").Out.Trim();
+
+        var runner = SeedDevelopMainRepo("partial-runner");
+        RunGit(runner, "checkout -q main");
+        File.WriteAllText(Path.Combine(runner, "runner.txt"), "runner");
+        Commit(runner, "feat: runner delivery");
+        var runnerSha = RunGit(runner, "rev-parse main").Out.Trim();
+        const string missingRunner = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        var service = BuildService(agentStudio, out var project, out var log);
+        var job = Job("partial-multi", "AGT-2307", project, agentStudio, log, commits:
+        [
+            Commit(studioSha) with { Repository = agentStudio, Branch = "develop" },
+            Commit(runnerSha) with { Repository = runner, Branch = "main" },
+            Commit(missingRunner) with { Repository = runner, Branch = "main" },
+        ]);
+
+        var status = service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Partial, status.Status);
+        Assert.Contains("partial-runner", status.Detail);
+        Assert.Contains(missingRunner[..7], status.Detail);
+        Assert.DoesNotContain(studioSha[..7], status.Detail);
+        var runnerEntry = Assert.Single(
+            status.Repositories,
+            entry => entry.Repository == "partial-runner");
+        Assert.Equal(2, runnerEntry.Commits.Count);
+        Assert.Single(runnerEntry.OnIntegrationBranch);
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private TaskIntegrationStatusService BuildService(string repo, out string projectName, out PipelineExecutionLog log)
@@ -765,9 +837,9 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     private static IConfiguration EmptyConfig()
         => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
 
-    private string SeedDevelopMainRepo()
+    private string SeedDevelopMainRepo(string? name = null)
     {
-        var repo = Path.Combine(_tempDir, "repo-" + Guid.NewGuid().ToString("N")[..8]);
+        var repo = Path.Combine(_tempDir, name ?? "repo-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(repo);
         RunGit(repo, "init -q -b main");
         RunGit(repo, "config user.email test@example.com");

@@ -104,6 +104,9 @@
                 · {{ v.delivery.filesChanged }} {{ v.delivery.filesChanged === 1 ? 'file' : 'files' }}
               }
             </span>
+            @if (v.delivery.repositoryLine; as repositoryLine) {
+              <span data-testid="escalation-delivery-repositories">{{ repositoryLine }}</span>
+            }
           </div>
         }
 

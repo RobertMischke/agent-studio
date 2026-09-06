@@ -1,16 +1,33 @@
 @if (visible() && integration(); as value) {
-  <span class="integration-badge"
-        [class.integration-badge--acute]="acute()"
-        [attr.data-integration-status]="value.status"
-        [attr.data-integration-failure-code]="value.failure?.code ?? null"
-        [attr.data-kind]="kind()"
-        data-testid="integration-status-badge"
-        role="img"
-        [attr.aria-label]="ariaLabel()"
-        [cacTooltip]="tooltip()">
-    <span class="integration-badge__glyph" aria-hidden="true">{{ glyph() }}</span>
-    <span class="integration-badge__label">{{ label() }}</span>
-  </span>
+  @if (repositoryBadges(); as repositories) {
+    @for (repository of repositories; track repository.key) {
+      <span class="integration-badge"
+            [class.integration-badge--acute]="repository.acute"
+            [attr.data-integration-status]="value.status"
+            [attr.data-repository]="repository.repository"
+            [attr.data-kind]="repository.kind"
+            data-testid="integration-status-badge"
+            role="img"
+            [attr.aria-label]="repository.ariaLabel"
+            [cacTooltip]="repository.tooltip">
+        <span class="integration-badge__glyph" aria-hidden="true">{{ repository.glyph }}</span>
+        <span class="integration-badge__label">{{ repository.label }}</span>
+      </span>
+    } @empty {
+      <span class="integration-badge"
+            [class.integration-badge--acute]="acute()"
+            [attr.data-integration-status]="value.status"
+            [attr.data-integration-failure-code]="value.failure?.code ?? null"
+            [attr.data-kind]="kind()"
+            data-testid="integration-status-badge"
+            role="img"
+            [attr.aria-label]="ariaLabel()"
+            [cacTooltip]="tooltip()">
+        <span class="integration-badge__glyph" aria-hidden="true">{{ glyph() }}</span>
+        <span class="integration-badge__label">{{ label() }}</span>
+      </span>
+    }
+  }
   @if (recoveryAvailable() && jobId()) {
     <button type="button"
             class="integration-recovery"

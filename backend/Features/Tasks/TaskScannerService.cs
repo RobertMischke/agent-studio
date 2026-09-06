@@ -624,7 +624,7 @@ public class TaskScannerService : ITaskScanner
                 : GetLastActivityTime(jobDir);
 
             var ownerClientId = ResolveOwnerClientId(raw, jobDir);
-            var (commitChain, legacyCommit) = ReadCommitChain(raw);
+            var (commitChain, legacyCommit) = ReadCommitChain(raw, jobDir, entry);
 
             var info = new TaskInfo
             {
@@ -1633,7 +1633,10 @@ public class TaskScannerService : ITaskScanner
     /// <item>Neither field present -&gt; chain = [], legacy = null.</item>
     /// </list>
     /// </summary>
-    private static (List<TaskCommitInfo> chain, TaskCommitInfo? legacy) ReadCommitChain(JsonElement raw)
+    private (List<TaskCommitInfo> chain, TaskCommitInfo? legacy) ReadCommitChain(
+        JsonElement raw,
+        string jobDir,
+        WatchPathEntry entry)
     {
         var chain = new List<TaskCommitInfo>();
         if (raw.TryGetProperty("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
@@ -1656,11 +1659,53 @@ public class TaskScannerService : ITaskScanner
         }
         if (chain.Count > 0)
         {
+            var configuredBranch = raw.TryGetProperty("integrationBranch", out var integrationBranch)
+                && integrationBranch.ValueKind == JsonValueKind.String
+                    ? TaskIntegrationBranch.NormalizeRef(integrationBranch.GetString())
+                    : null;
+            var migrated = false;
+            chain = chain.Select(commit =>
+            {
+                if (!string.IsNullOrWhiteSpace(commit.Repository)) return commit;
+                var repository = CommitRepositoryAttribution.ParseLegacyPrefix(commit.Message);
+                if (repository is null) return commit;
+                migrated = true;
+                var isPrimary = CommitRepositoryAttribution.SameName(repository, entry.Name)
+                                || CommitRepositoryAttribution.SameName(repository, entry.RepositoryPath)
+                                || CommitRepositoryAttribution.SameName(repository, entry.RootPath);
+                return commit with
+                {
+                    Repository = ResolveLegacyRepositoryIdentity(repository),
+                    Branch = commit.Branch ?? (isPrimary ? configuredBranch ?? "develop" : "main"),
+                };
+            }).ToList();
+
+            // This is the sole compatibility read of the message prefix. Once
+            // written, every later scan and projection uses structured fields.
+            if (migrated)
+            {
+                TaskJsonFile.UpdateField(jobDir, "commits", chain, _logger);
+                TaskJsonFile.UpdateField(jobDir, "commit", chain[^1], _logger);
+                _logger.LogInformation(
+                    "Migrated legacy commit repository prefixes for task folder {Folder}",
+                    jobDir);
+            }
             // Singular field always tracks the newest entry so legacy
             // consumers see the latest commit, not a stale first one.
             legacy = chain[^1];
         }
         return (chain, legacy);
+    }
+
+    private string ResolveLegacyRepositoryIdentity(string legacyName)
+    {
+        var registered = _projectRegistry?.List().FirstOrDefault(project =>
+            CommitRepositoryAttribution.SameName(legacyName, project.DisplayName)
+            || CommitRepositoryAttribution.SameName(legacyName, project.RepositoryPath)
+            || CommitRepositoryAttribution.SameName(legacyName, project.RootPath));
+        if (registered is null) return legacyName;
+        var remote = RemoteProjectRepositoryResolver.Resolve(registered, null);
+        return remote?.RepositoryId ?? remote?.RepositoryUrl ?? registered.Id;
     }
 
     private static List<string> ReadSessionChain(JsonElement raw)

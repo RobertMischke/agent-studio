@@ -20,6 +20,33 @@ public class CommitAttributionServiceTests
 {
     private const string TaskId = "feature-alpha";
 
+    [Fact]
+    public void Attribute_StampsRepositoryAndBranchOnEveryAttributedCommit()
+    {
+        var result = CommitAttributionService.Attribute(new AttributionInput
+        {
+            TaskId = TaskId,
+            Repository = "repo_agent_studio",
+            TaskBranch = "develop",
+            Candidates = [Candidate("a1", "feat: one"), Candidate("a2", "fix: two")],
+        });
+
+        Assert.Equal(2, result.Attributed.Count);
+        Assert.All(result.Attributed, commit =>
+        {
+            Assert.Equal("repo_agent_studio", commit.Repository);
+            Assert.Equal("develop", commit.Branch);
+        });
+    }
+
+    [Fact]
+    public void LegacyRepositoryPrefixParser_ExtractsOnlyTheHistoricalPrefix()
+    {
+        Assert.Equal("agent-studio", CommitRepositoryAttribution.ParseLegacyPrefix(
+            "[agent-studio] feat: structured repository attribution"));
+        Assert.Null(CommitRepositoryAttribution.ParseLegacyPrefix("feat: no legacy prefix"));
+    }
+
     private static AttributionCandidate Candidate(
         string sha, string subject, string author = "dev", string? message = null,
         DateTime? at = null, IReadOnlyList<string>? files = null) => new()

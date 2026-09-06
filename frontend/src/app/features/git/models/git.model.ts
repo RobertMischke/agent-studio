@@ -358,6 +358,8 @@ export interface TaskCommitInfo {
   resultSha?: string | null;
   /** Result or task branch used to derive this commit. */
   branch?: string | null;
+  /** Registered project repository id or remote URL that received the commit. */
+  repository?: string | null;
   /**
    * Attempt that replaced this historical commit. Superseded commits remain
    * selectable as history but are excluded from the current aggregate diff.
@@ -511,6 +513,18 @@ export interface TaskIntegrationStatus {
   detail: string | null;
   /** Typed current failure from the durable accepted-integration pipeline step. */
   failure?: TaskIntegrationFailure | null;
+  /** Per-repository commit membership; empty on legacy single-repository payloads. */
+  repositories?: TaskRepositoryIntegration[];
+}
+
+export interface TaskRepositoryIntegration {
+  repository: string;
+  commits: string[];
+  onIntegrationBranch: string[];
+  onReleaseBranch: string[];
+  integrationBranch: string;
+  releaseBranch: string;
+  detail: string | null;
 }
 
 export interface TaskIntegrationFailure {

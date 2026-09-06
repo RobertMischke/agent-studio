@@ -49,24 +49,63 @@ describe('IntegrationStatusBadgeComponent', () => {
     expect(badge.classList.contains('integration-badge--acute')).toBe(false);
   });
 
-  it('renders pending as amber "NICHT integriert" and flags acute', () => {
+  it('renders pending as amber "NOT integrated" and flags acute', () => {
     const fixture = render(integration('pending'));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('NICHT integriert');
+    expect(badge.textContent).toContain('NOT integrated');
     expect(badge.dataset['kind']).toBe('pending');
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
   });
 
-  it('renders partial as an orange "teilweise integriert" badge with missing SHAs in the tooltip', () => {
+  it('renders partial as an orange badge with missing SHAs in the tooltip', () => {
     const fixture = render(
       integration('partial', { detail: '1/2 attributed commits integrated; missing: beef123' }),
     );
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('teilweise integriert');
+    expect(badge.textContent).toContain('partially integrated');
     expect(badge.dataset['kind']).toBe('partial');
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
     expect(fixture.componentInstance.tooltip()).toContain('Partially integrated');
     expect(fixture.componentInstance.tooltip()).toContain('beef123');
+  });
+
+  it('renders the seven-repository AGT-2307 delivery counts and branches', () => {
+    const entry = (repository: string, count: number, integrationBranch: string, releaseBranch = 'main') => {
+      const commits = Array.from({ length: count }, (_, index) => `${repository}-${index}`);
+      return {
+        repository,
+        commits,
+        onIntegrationBranch: commits,
+        onReleaseBranch: commits,
+        integrationBranch,
+        releaseBranch,
+        detail: `${count}/${count} on ${integrationBranch}`,
+      };
+    };
+    const fixture = render(integration('integrated', {
+      repositories: [
+        entry('agent-studio', 5, 'develop'),
+        entry('runner', 4, 'main'),
+        entry('token-economy', 4, 'main'),
+        entry('chat', 3, 'main'),
+        entry('ai-patterns.dev', 2, 'main'),
+        entry('quality-studio', 1, 'main'),
+        entry('.github', 1, 'main'),
+      ],
+    }));
+
+    const badges = fixture.nativeElement.querySelectorAll('[data-testid="integration-status-badge"]');
+    expect(badges).toHaveLength(7);
+    const labels = Array.from(badges, badge => (badge as HTMLElement).textContent ?? '');
+    expect(labels).toEqual([
+      '✓agent-studio 5/5 develop and main',
+      '✓runner 4/4 main',
+      '✓token-economy 4/4 main',
+      '✓chat 3/3 main',
+      '✓ai-patterns.dev 2/2 main',
+      '✓quality-studio 1/1 main',
+      '✓.github 1/1 main',
+    ]);
   });
 
   it('renders conflict-skipped as a hard red integration-failed badge', () => {
@@ -177,10 +216,10 @@ describe('IntegrationStatusBadgeComponent', () => {
     http.verify();
   });
 
-  it('renders no-branch as grey "kein Branch"', () => {
+  it('renders no-branch as grey "no branch"', () => {
     const fixture = render(integration('no-branch'));
     const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
-    expect(badge.textContent).toContain('kein Branch');
+    expect(badge.textContent).toContain('no branch');
     expect(badge.dataset['kind']).toBe('no-branch');
     expect(badge.classList.contains('integration-badge--acute')).toBe(false);
   });

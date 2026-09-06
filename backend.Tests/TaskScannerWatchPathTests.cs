@@ -126,6 +126,47 @@ public class TaskScannerWatchPathTests
         }
     }
 
+    [Fact]
+    public void ScanAllJobsRaw_LegacyRepositoryPrefix_IsPersistedOnlyOnce()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "atp-commit-repository-migration-" + Guid.NewGuid().ToString("N"));
+        var watchPath = Path.Combine(root, "jobs");
+        var taskPath = Path.Combine(watchPath, TaskStates.HumanReview, "agt-2307");
+        Directory.CreateDirectory(taskPath);
+        var taskJson = Path.Combine(taskPath, "task.json");
+        File.WriteAllText(taskJson,
+            $$"""{"id":"agt-2307","key":"AGT-2307","title":"Externalization sweep","state":"{{TaskStates.HumanReview}}","order":1,"projectName":"agent-studio","commits":[{"sha":"dcb54c7","shortSha":"dcb54c7","message":"[agent-studio] externalize package","filesChanged":1,"files":["package.json"],"at":"2026-08-04T12:00:00Z"}]}""");
+
+        try
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["WatchPaths:0:Name"] = "agent-studio",
+                    ["WatchPaths:0:Path"] = watchPath,
+                    ["WatchPaths:0:RootPath"] = root,
+                })
+                .Build();
+            var scanner = BuildScanner(config, NullLogger<TaskScannerService>.Instance);
+
+            var migrated = Assert.Single(scanner.ScanAllJobsRaw());
+            var commit = Assert.Single(migrated.Commits);
+            Assert.Equal("agent-studio", commit.Repository);
+            Assert.Equal("develop", commit.Branch);
+            var firstWrite = File.ReadAllText(taskJson);
+
+            scanner.InvalidateCache();
+            var rescanned = Assert.Single(scanner.ScanAllJobsRaw());
+
+            Assert.Equal("agent-studio", Assert.Single(rescanned.Commits).Repository);
+            Assert.Equal(firstWrite, File.ReadAllText(taskJson));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static TaskScannerService BuildScanner(string watchPath, ILogger<TaskScannerService> logger)
     {
         var config = new ConfigurationBuilder()

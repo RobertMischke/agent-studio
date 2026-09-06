@@ -257,6 +257,21 @@ public sealed class MergeIntoDevelopRunner
                     MergeIntoIntegrationOutcome.Error,
                     error: lineage.Reason);
             }
+            else if ((!DeliveryBranchExists(repoRoot, delivery)
+                      || string.Equals(taskBranch, branch, StringComparison.OrdinalIgnoreCase))
+                     && DirectDeliveryAlreadyOnIntegrationBranch(
+                         jobFolderPath,
+                         watchPath,
+                         repoRoot,
+                         branch) is { Count: > 0 } directEvidence)
+            {
+                result = MergeIntoIntegrationResult.Of(
+                    MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch,
+                    mergedSha: directEvidence[^1]) with
+                {
+                    EvidenceShas = directEvidence,
+                };
+            }
             else if (isPullRequest)
             {
                 result = MergeIntoIntegrationResult.Of(
@@ -314,7 +329,8 @@ public sealed class MergeIntoDevelopRunner
                     jobFolderPath,
                     repoRoot,
                     branch,
-                    () => _git.MergeBranchIntoIntegration(repoRoot, taskBranch, branch, ct)).ConfigureAwait(false);
+                    () => MergeLocalDeliveryOrRecognizeDirect(
+                        jobFolderPath, watchPath, repoRoot, taskBranch, branch, ct)).ConfigureAwait(false);
             }
 
             if (!mechanicalAttributionHandled
@@ -393,6 +409,108 @@ public sealed class MergeIntoDevelopRunner
                 SilentCatch.Note(__ex, "MergeIntoDevelopRunner: recording is best-effort");
             }
             return errored;
+        }
+    }
+
+    private MergeIntoIntegrationResult MergeLocalDeliveryOrRecognizeDirect(
+        string jobFolderPath,
+        string? watchPath,
+        string repoRoot,
+        string taskBranch,
+        string integrationBranch,
+        CancellationToken ct)
+    {
+        var result = _git.MergeBranchIntoIntegration(repoRoot, taskBranch, integrationBranch, ct);
+        if (result.Outcome != MergeIntoIntegrationOutcome.NoTaskBranch) return result;
+        var evidence = DirectDeliveryAlreadyOnIntegrationBranch(
+            jobFolderPath,
+            watchPath,
+            repoRoot,
+            integrationBranch);
+        return evidence.Count == 0
+            ? result
+            : MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch,
+                mergedSha: evidence[^1]) with
+            {
+                EvidenceShas = evidence,
+            };
+    }
+
+    private bool DeliveryBranchExists(string repoRoot, DeliveryRefResolution delivery)
+    {
+        return delivery.IsRemote
+            ? _git.DeliveryBranchExists(repoRoot, delivery.Ref)
+            : _git.BranchExists(repoRoot, delivery.Ref);
+    }
+
+    /// <summary>
+    /// Selects only the attributed commits belonging to the integration
+    /// repository and proves them against the target graph. Commits attributed
+    /// to sibling repositories are deliberately ignored here: their own
+    /// repository projection proves them independently.
+    /// </summary>
+    private IReadOnlyList<string> DirectDeliveryAlreadyOnIntegrationBranch(
+        string jobFolderPath,
+        string? watchPath,
+        string repoRoot,
+        string integrationBranch)
+    {
+        try
+        {
+            var path = Path.Combine(jobFolderPath, "task.json");
+            if (!File.Exists(path)) return [];
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            if (!document.RootElement.TryGetProperty("commits", out var commits)
+                || commits.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var evidence = new List<string>();
+            foreach (var item in commits.EnumerateArray())
+            {
+                if (!item.TryGetProperty("sha", out var shaValue)) continue;
+                var sha = shaValue.GetString();
+                if (string.IsNullOrWhiteSpace(sha)) continue;
+                if (item.TryGetProperty("supersededBySha", out var supersededSha)
+                    && supersededSha.ValueKind == System.Text.Json.JsonValueKind.String
+                    || item.TryGetProperty("supersededByAttempt", out var supersededAttempt)
+                    && supersededAttempt.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                string? repository = null;
+                if (item.TryGetProperty("repository", out var repositoryValue)
+                    && repositoryValue.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    repository = repositoryValue.GetString();
+                }
+                if (!string.IsNullOrWhiteSpace(repository))
+                {
+                    var checkout = _git.ResolveAttributedRepository(repository, watchPath);
+                    if (checkout is null
+                        || !string.Equals(
+                            Path.GetFullPath(checkout.Root),
+                            Path.GetFullPath(repoRoot),
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                }
+                evidence.Add(sha);
+            }
+
+            return evidence.Count > 0
+                   && evidence.All(sha => _git.IsAncestor(repoRoot, sha, integrationBranch))
+                ? evidence
+                : [];
+        }
+        catch (Exception ex)
+        {
+            SilentCatch.Note(ex, "MergeIntoDevelopRunner: direct-delivery attribution proof is best-effort");
+            return [];
         }
     }
 
@@ -1572,6 +1690,15 @@ public sealed class MergeIntoDevelopRunner
                     "already-merged",
                     $"Task branch already contained in {integrationBranch}; no merge needed.{exactGate}",
                     preDevelopResult?.Reason);
+            case MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch:
+                var evidence = result.EvidenceShas.Count == 0
+                    ? result.MergedSha is null ? "none" : Short(result.MergedSha)
+                    : string.Join(", ", result.EvidenceShas.Select(Short));
+                return (
+                    PipelineStepStatus.Passed,
+                    "already-on-integration-branch",
+                    $"Attributed commits are already on {integrationBranch}; no task branch or merge is required.",
+                    $"Evidence SHAs: {evidence}.");
             case MergeIntoIntegrationOutcome.NoTaskBranch:
                 return (PipelineStepStatus.Skipped, "no-branch", result.Error ?? "No task branch to merge.", null);
             case MergeIntoIntegrationOutcome.PushedForReview:

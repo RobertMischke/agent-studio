@@ -33,6 +33,7 @@ public sealed class BoardMergeStatusService
     private readonly GitService _git;
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<BoardMergeStatusService> _logger;
+    private readonly TaskIntegrationStatusService? _integrationStatus;
 
     public const string ReleaseBranch = "main";
 
@@ -54,8 +55,9 @@ public sealed class BoardMergeStatusService
     public BoardMergeStatusService(
         GitService git,
         ProjectSettingsService settings,
-        ILogger<BoardMergeStatusService> logger)
-        : this(git, settings, logger, TimeProvider.System)
+        ILogger<BoardMergeStatusService> logger,
+        TaskIntegrationStatusService? integrationStatus = null)
+        : this(git, settings, logger, TimeProvider.System, integrationStatus)
     {
     }
 
@@ -63,11 +65,13 @@ public sealed class BoardMergeStatusService
         GitService git,
         ProjectSettingsService settings,
         ILogger<BoardMergeStatusService> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        TaskIntegrationStatusService? integrationStatus = null)
     {
         _git = git;
         _settings = settings;
         _logger = logger;
+        _integrationStatus = integrationStatus;
         _cache = new GenerationSingleFlightCache<RepoReachability>(timeProvider);
     }
 
@@ -84,6 +88,7 @@ public sealed class BoardMergeStatusService
         if (jobs.Count == 0) return result;
 
         using var _t = GitProcessTelemetry.BeginRequest("board/merge-status", _logger);
+        var repositoryStatuses = _integrationStatus?.BuildLookup(jobs);
 
         // Group the anchored cards by resolved repo root so the batched ancestor
         // sets are computed ONCE per repository, not per card.
@@ -121,12 +126,17 @@ public sealed class BoardMergeStatusService
                 var anchor = commits[^1];
                 var branch = !string.IsNullOrWhiteSpace(job.Provenance?.Branch)
                     ? job.Provenance!.Branch
-                    : WorktreeTaskLifecycle.BranchFor(job.Id);
+                    : TaskIntegrationStatusService.DeliveryRefFor(job) ?? string.Empty;
 
-                var inIntegration = commits.All(sha =>
-                    TaskIntegrationStatusService.AncestorSetContains(reach.Integration, sha));
-                var inRelease = commits.All(sha =>
-                    TaskIntegrationStatusService.AncestorSetContains(reach.Release, sha));
+                var repositoryEntries = repositoryStatuses?.GetValueOrDefault(job.TaskKey)?.Repositories;
+                var inIntegration = repositoryEntries is { Count: > 0 }
+                    ? repositoryEntries.All(entry => entry.OnIntegrationBranch.Count == entry.Commits.Count)
+                    : commits.All(sha =>
+                        TaskIntegrationStatusService.AncestorSetContains(reach.Integration, sha));
+                var inRelease = repositoryEntries is { Count: > 0 }
+                    ? repositoryEntries.All(entry => entry.OnReleaseBranch.Count == entry.Commits.Count)
+                    : commits.All(sha =>
+                        TaskIntegrationStatusService.AncestorSetContains(reach.Release, sha));
 
                 result[job.TaskKey] = new TaskMergeSignal
                 {

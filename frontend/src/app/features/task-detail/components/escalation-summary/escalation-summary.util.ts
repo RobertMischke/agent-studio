@@ -94,6 +94,8 @@ export interface EscalationDelivery {
   commitCount: number;
   /** Distinct changed files across those commits (0 when unknown). */
   filesChanged: number;
+  /** Repository-scoped delivery summary from the canonical integration projection. */
+  repositoryLine: string | null;
 }
 
 /** The single structured line that remains visible when details are closed. */
@@ -524,7 +526,23 @@ export function buildDelivery(info: TaskInfo): EscalationDelivery {
     for (const f of c.files ?? []) distinctFiles.add(f);
   }
   const filesChanged = distinctFiles.size > 0 ? distinctFiles.size : filesChangedSum;
-  return { merge, commitCount: commits.length, filesChanged };
+  const repositoryLine = (info.integration?.repositories ?? []).map(repository => {
+    const total = repository.commits.length;
+    const integrated = repository.onIntegrationBranch.length;
+    const released = repository.onReleaseBranch.length;
+    if (integrated !== total) {
+      const missing = repository.commits
+        .filter(sha => !repository.onIntegrationBranch.includes(sha))
+        .map(sha => sha.slice(0, 7))
+        .join(', ');
+      return `${repository.repository} ${integrated}/${total} ${repository.integrationBranch}; missing ${missing}`;
+    }
+    if (released === total && repository.releaseBranch !== repository.integrationBranch) {
+      return `${repository.repository} ${total}/${total} ${repository.integrationBranch} and ${repository.releaseBranch}`;
+    }
+    return `${repository.repository} ${total}/${total} ${repository.integrationBranch}`;
+  }).join(' · ') || null;
+  return { merge, commitCount: commits.length, filesChanged, repositoryLine };
 }
 
 /**

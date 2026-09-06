@@ -227,6 +227,40 @@ describe('buildDelivery', () => {
     );
     expect(d.filesChanged).toBe(3);
   });
+
+  it('builds the escalation delivery line per repository', () => {
+    const d = buildDelivery(info({
+      integration: {
+        status: 'integrated',
+        deliveryRef: null,
+        sha: 'abc1234',
+        integrationBranch: 'develop',
+        detail: null,
+        repositories: [
+          {
+            repository: 'agent-studio',
+            commits: ['a'],
+            onIntegrationBranch: ['a'],
+            onReleaseBranch: ['a'],
+            integrationBranch: 'develop',
+            releaseBranch: 'main',
+            detail: null,
+          },
+          {
+            repository: 'runner',
+            commits: ['b'],
+            onIntegrationBranch: ['b'],
+            onReleaseBranch: ['b'],
+            integrationBranch: 'main',
+            releaseBranch: 'main',
+            detail: null,
+          },
+        ],
+      },
+    } as Partial<TaskInfo>));
+
+    expect(d.repositoryLine).toBe('agent-studio 1/1 develop and main · runner 1/1 main');
+  });
 });
 
 describe('deriveRecommendation', () => {

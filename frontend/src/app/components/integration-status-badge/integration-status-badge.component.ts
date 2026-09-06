@@ -72,11 +72,45 @@ export class IntegrationStatusBadgeComponent {
     if (!value) return '';
     switch (value.status) {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
-      case 'partial': return 'teilweise integriert';
-      case 'pending': return 'NICHT integriert';
+      case 'partial': return 'partially integrated';
+      case 'pending': return 'NOT integrated';
       case 'conflict-skipped': return value.failure?.label ?? 'Integration failed';
-      default: return 'kein Branch';
+      default: return 'no branch';
     }
+  });
+
+  readonly repositoryBadges = computed(() => {
+    const value = this.integration();
+    if (!value) return [];
+    return (value.repositories ?? []).map(repository => {
+      const total = repository.commits.length;
+      const integrated = repository.onIntegrationBranch.length;
+      const complete = total > 0 && integrated === total;
+      const kind = complete
+        ? 'integrated'
+        : value.status === 'conflict-skipped'
+          ? 'conflict'
+          : integrated > 0
+            ? 'partial'
+            : 'pending';
+      const missing = repository.commits
+        .filter(sha => !repository.onIntegrationBranch.includes(sha))
+        .map(sha => sha.slice(0, 7));
+      return {
+        key: repository.repository,
+        repository: repository.repository,
+        kind,
+        acute: !complete,
+        glyph: complete ? '✓' : kind === 'conflict' ? '⚠' : integrated > 0 ? '◐' : '○',
+        label: this.repositoryLabel(value, repository),
+        tooltip: [repository.detail, missing.length > 0 ? `Missing: ${missing.join(', ')}` : null]
+          .filter(Boolean)
+          .join('\n'),
+        ariaLabel: complete
+          ? `${repository.repository} is integrated into ${repository.integrationBranch}`
+          : `${repository.repository} is missing ${missing.join(', ')} from ${repository.integrationBranch}`,
+      };
+    });
   });
 
   readonly glyph = computed(() => {
@@ -93,6 +127,9 @@ export class IntegrationStatusBadgeComponent {
     const value = this.integration();
     if (!value) return '';
     const branch = value.integrationBranch || 'develop';
+    const repositoryDetails = (value.repositories ?? [])
+      .map(repository => repository.detail)
+      .filter(Boolean);
     const head = (() => {
       switch (value.status) {
         case 'integrated':
@@ -111,7 +148,7 @@ export class IntegrationStatusBadgeComponent {
           return 'No task branch or commit to integrate';
       }
     })();
-    return [...new Set([head, value.failure?.reason, value.detail].filter(Boolean))].join('\n');
+    return [...new Set([head, value.failure?.reason, value.detail, ...repositoryDetails].filter(Boolean))].join('\n');
   });
 
   readonly ariaLabel = computed(() => {
@@ -126,6 +163,28 @@ export class IntegrationStatusBadgeComponent {
       default: return 'No branch to integrate';
     }
   });
+
+  private repositoryLabel(
+    value: TaskIntegrationStatus,
+    repository: NonNullable<TaskIntegrationStatus['repositories']>[number],
+  ): string {
+    const total = repository.commits.length;
+    const integrated = repository.onIntegrationBranch.length;
+    const released = repository.onReleaseBranch.length;
+    const integrationBranch = repository.integrationBranch || value.integrationBranch || 'develop';
+    const releaseBranch = repository.releaseBranch || 'main';
+    if (integrated !== total) {
+      const missing = repository.commits
+        .filter(sha => !repository.onIntegrationBranch.includes(sha))
+        .map(sha => sha.slice(0, 7))
+        .join(', ');
+      return `${repository.repository} ${integrated}/${total} ${integrationBranch}; missing ${missing}`;
+    }
+    if (released === total && releaseBranch !== integrationBranch) {
+      return `${repository.repository} ${total}/${total} ${integrationBranch} and ${releaseBranch}`;
+    }
+    return `${repository.repository} ${total}/${total} ${integrationBranch}`;
+  }
 
   queueRecovery(event: Event): void {
     event.stopPropagation();

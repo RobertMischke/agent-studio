@@ -782,6 +782,47 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void Run_NoTaskBranchWithAttributedCommitOnDevelop_ReportsAlreadyOnIntegrationBranch()
+    {
+        var repo = SeedRepo("runner-direct-delivery");
+        RunGit(repo, "checkout -q -b develop");
+        File.WriteAllText(Path.Combine(repo, "direct.txt"), "delivered directly");
+        Commit(repo, "feat: direct delivery");
+        var sha = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var (git, log) = Build(repo);
+        var jobFolder = BeginRun(log, repo, jobId: "direct");
+        File.WriteAllText(Path.Combine(jobFolder, "task.json"), System.Text.Json.JsonSerializer.Serialize(new
+        {
+            commits = new[]
+            {
+                new
+                {
+                    sha,
+                    shortSha = sha[..7],
+                    message = "[runner-direct-delivery] feat: direct delivery",
+                    repository = repo,
+                    branch = "develop",
+                    filesChanged = 1,
+                    files = new[] { "direct.txt" },
+                },
+            },
+        }, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
+
+        var runner = new MergeIntoDevelopRunner(git, log, NullLogger<MergeIntoDevelopRunner>.Instance);
+        var outcome = runner.Run("Fixture", "direct", jobFolder, repo, "develop");
+
+        Assert.True(
+            outcome.Outcome == MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch,
+            $"Expected direct-delivery recognition, got {outcome.Outcome}: {outcome.Error}");
+        Assert.Equal([sha], outcome.EvidenceShas);
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.Equal(PipelineStepStatus.Passed, step!.Status);
+        Assert.Equal("already-on-integration-branch", step.Verdict);
+        Assert.Contains(sha[..7], step.VerdictSummary);
+    }
+
+    [Fact]
     public void Run_Conflict_RecordsStepFailed_WithConflictedFilesVisible()
     {
         var repo = SeedRepo("runner-conflict");
