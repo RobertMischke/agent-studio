@@ -39,6 +39,7 @@ public sealed class WorkspaceSettingsServiceTests : IDisposable
         Assert.Null(s.OrchestratorThinkingLevel);
         Assert.Null(s.CliExecutionEngine);
         Assert.Null(s.AutonomyLevel);
+        Assert.True(s.AutoApplyModelMigrations);
     }
 
     [Fact]
@@ -99,6 +100,16 @@ public sealed class WorkspaceSettingsServiceTests : IDisposable
 
         var reloaded = Build();
         Assert.Equal(3, reloaded.Get("ws-default").AutonomyLevel);
+    }
+
+    [Fact]
+    public void SetAutoApplyModelMigrations_PersistsAcrossReload()
+    {
+        var svc = Build();
+
+        svc.SetAutoApplyModelMigrations("ws-default", false);
+
+        Assert.False(Build().Get("ws-default").AutoApplyModelMigrations);
     }
 
     [Fact]

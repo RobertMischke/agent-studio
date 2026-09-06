@@ -82,6 +82,16 @@
                           [cacTooltip]="'Effective model: ' + modelSummary(step) + ' (' + modelSourceLabel(step.effectiveModelSource) + ')'">
                       {{ modelSummary(step) }}
                     </span>
+                    @if (step.modelMigration; as migration) {
+                      <button type="button"
+                              class="pp__chip pp__chip--action"
+                              [attr.data-testid]="'pipeline-step-model-update-' + step.id"
+                              [disabled]="!!stepBusy[step.id]"
+                              [cacTooltip]="stepModelMigrationTooltip(step)"
+                              (click)="applyStepModelMigration(step); $event.preventDefault(); $event.stopPropagation()">
+                        Update available
+                      </button>
+                    }
                   }
                   @if (step.usesPrompt) {
                     <button type="button"

@@ -1,6 +1,6 @@
 # Model Routing Policy
 
-Version: 2026-07-24
+Version: 2026-09-06
 
 Status: Canonical policy, initial hypothesis based on the 2026-07-23 historical benchmark
 
@@ -186,6 +186,31 @@ and new-card suggestions without rewriting existing cards or turning a
 suggestion into an explicit pin. The decision log must retain the policy
 version, recommended tier and route, selected route, selection source, score,
 economy state, correctness floor, and reason.
+
+## Model families and migrations
+
+Runtime defaults name a family, not a concrete release. The supported family
+ids are `claude-haiku`, `claude-sonnet`, `claude-opus`, `gpt-mini`, and
+`gpt-flagship`. `ModelFamilyResolver` chooses the newest available generation
+from the installed CLI catalogue. The registry supplies the fallback when live
+discovery is stale or unavailable. Haiku currently remains
+`claude-haiku-4-5`, while the Opus and Sonnet families advance independently.
+Moving a low-cost role from Haiku to Sonnet is a Token Economy recommendation,
+not a latest-in-family decision.
+
+Concrete values in task cards, project pipeline steps, and configuration are
+explicit pins. The Token Economy project owns the versioned migration catalogue.
+Studio caches that file and uses its embedded snapshot if the project checkout
+is offline. Workspace CLI Management shows the active catalogue version and
+offers superseded pins together with their cost-class and reasoning-ladder
+change. Applying an offered update is an operator action and preserves the pin.
+
+At run admission the orchestrator may apply a rule marked `safeAuto` only when
+the selected model is not explicit and automatic migration is enabled for the
+workspace. Explicit task, pipeline, and configuration pins are never rewritten
+silently. Every automatic application emits a `model_migrated` task timeline
+event and a model-routing operator-feed entry containing the source model,
+target model, rule, and catalogue version.
 
 ## Roadmap: what happens next
 

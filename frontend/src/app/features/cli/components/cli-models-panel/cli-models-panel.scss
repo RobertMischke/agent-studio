@@ -49,6 +49,43 @@
   font-size: 9px;
 }
 
+.cli-models__migrations {
+  display: grid;
+  gap: var(--studio-spacing-2);
+  margin-bottom: var(--studio-spacing-3);
+}
+
+.cli-models__migration {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1fr) minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: var(--studio-spacing-3);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-hover);
+  font-size: 10px;
+}
+
+.cli-models__migration-key,
+.cli-models__migration-change {
+  color: var(--studio-fg-strong);
+  font-family: var(--font-mono, monospace);
+}
+
+.cli-models__migration-diff { color: var(--studio-fg-muted); }
+
+.cli-models__migration button {
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 6px;
+  background: var(--studio-bg-surface);
+  color: var(--studio-fg);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  cursor: pointer;
+}
+
+.cli-models__migration button:disabled { cursor: default; opacity: 0.6; }
+
 /* One stacked, compact row per CLI. Collapsed rows answer "what's present";
    expanding reveals the route editor + full model list. No left accent bar
    (style-guide R1): status/hierarchy reads from weight and a caret, not a stripe. */

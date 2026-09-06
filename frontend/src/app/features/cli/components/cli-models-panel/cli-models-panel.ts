@@ -4,6 +4,9 @@ import type { CliModelInfo } from '../../models/cli.model';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService, type CliModelRouteProfile, type ModelRoutingPolicyView } from '../../../quota';
+import { TaskService } from '../../../../services/task.service';
+import { WorkspaceOrchestratorSettingsService } from '../../../../services/workspace-orchestrator-settings.service';
+import type { ModelMigrationProposal } from '../../../../models/task.model';
 
 interface CliModelGroup {
   cliType: CliType;
@@ -11,6 +14,12 @@ interface CliModelGroup {
   icon: string;
   models: readonly CliModelInfo[];
   defaultModel: CliModelInfo | null;
+}
+
+interface ConfigurationModelMigration {
+  key: string;
+  model: string;
+  proposal: ModelMigrationProposal;
 }
 
 /**
@@ -35,10 +44,19 @@ interface CliModelGroup {
 export class CliModelsPanelComponent implements OnInit {
   private readonly catalog = inject(CliCatalogStore);
   private readonly routesApi = inject(QuotaApiService);
+  private readonly tasks = inject(TaskService);
+  private readonly workspaceSettings = inject(WorkspaceOrchestratorSettingsService);
   readonly routes = signal<Record<string, CliModelRouteProfile>>({});
   readonly savingCli = signal<string | null>(null);
   readonly policy = signal<ModelRoutingPolicyView | null>(null);
   readonly savingEconomyMode = signal(false);
+  readonly migrationCatalogVersion = signal<string | null>(null);
+  readonly configurationMigrations = signal<ConfigurationModelMigration[]>([]);
+  readonly configurationMigrationCount = computed(() => this.configurationMigrations().length);
+  readonly savingConfigurationMigration = signal<string | null>(null);
+  readonly migrationWorkspaceId = signal<string | null>(null);
+  readonly autoApplyModelMigrations = signal(true);
+  readonly savingAutoApplyModelMigrations = signal(false);
   readonly cliTypes = CLI_TYPES;
 
   /** CLIs whose per-row details (route editor + full model list) are expanded.
@@ -66,6 +84,22 @@ export class CliModelsPanelComponent implements OnInit {
     });
     this.routesApi.getModelRoutingPolicy().subscribe({
       next: (policy) => this.policy.set(policy),
+    });
+    this.tasks.getModelMigrations().subscribe({
+      next: (catalog) => {
+        this.migrationCatalogVersion.set(catalog.version);
+        this.configurationMigrations.set(catalog.configurationPins ?? []);
+      },
+    });
+    this.tasks.getRegistryWorkspaces().subscribe({
+      next: (workspaces) => {
+        const workspace = workspaces.find((candidate) => candidate.isDefault) ?? workspaces[0];
+        if (!workspace) return;
+        this.migrationWorkspaceId.set(workspace.id);
+        this.workspaceSettings.get(workspace.id).subscribe({
+          next: (settings) => this.autoApplyModelMigrations.set(settings.autoApplyModelMigrations !== false),
+        });
+      },
     });
   }
 
@@ -164,6 +198,41 @@ export class CliModelsPanelComponent implements OnInit {
         this.savingEconomyMode.set(false);
       },
     });
+  }
+
+  setAutoApplyModelMigrations(enabled: boolean): void {
+    const workspaceId = this.migrationWorkspaceId();
+    if (!workspaceId || this.savingAutoApplyModelMigrations()) return;
+    const previous = this.autoApplyModelMigrations();
+    this.autoApplyModelMigrations.set(enabled);
+    this.savingAutoApplyModelMigrations.set(true);
+    this.workspaceSettings.setModelMigrationAutoApply(workspaceId, enabled).subscribe({
+      next: (result) => {
+        this.autoApplyModelMigrations.set(result.enabled);
+        this.savingAutoApplyModelMigrations.set(false);
+      },
+      error: () => {
+        this.autoApplyModelMigrations.set(previous);
+        this.savingAutoApplyModelMigrations.set(false);
+      },
+    });
+  }
+
+  applyConfigurationMigration(pin: ConfigurationModelMigration): void {
+    if (this.savingConfigurationMigration()) return;
+    this.savingConfigurationMigration.set(pin.key);
+    this.tasks.applyConfigurationModelMigration(pin.key).subscribe({
+      next: () => {
+        this.configurationMigrations.update((pins) => pins.filter((candidate) => candidate.key !== pin.key));
+        this.savingConfigurationMigration.set(null);
+      },
+      error: () => this.savingConfigurationMigration.set(null),
+    });
+  }
+
+  configurationMigrationDiff(pin: ConfigurationModelMigration): string {
+    const proposal = pin.proposal;
+    return `Cost ${proposal.costClassFrom} to ${proposal.costClassTo}; reasoning ${proposal.reasoningLadderFrom} to ${proposal.reasoningLadderTo}; catalog ${proposal.catalogVersion}`;
   }
 
   private save(cliType: CliType, changes: Partial<CliModelRouteProfile>): void {

@@ -6,6 +6,9 @@
         <span class="cli-models__policy-detail">
           Policy {{ routingPolicy.policyVersion }} derives the default tier from task type.
           Correctness floors still apply.
+          @if (migrationCatalogVersion(); as version) {
+            Token Economy migration catalog {{ version }}@if (configurationMigrationCount()) { · {{ configurationMigrationCount() }} configuration update{{ configurationMigrationCount() === 1 ? '' : 's' }} available }.
+          }
         </span>
       </div>
       <label class="cli-models__economy">
@@ -17,7 +20,39 @@
         <span>Economy mode {{ routingPolicy.economyMode ? 'on' : 'off' }}</span>
         <small>Lower eligible tiers by one step</small>
       </label>
+      @if (migrationWorkspaceId()) {
+        <label class="cli-models__economy">
+          <input type="checkbox"
+                 data-testid="model-migration-auto-apply"
+                 [checked]="autoApplyModelMigrations()"
+                 [disabled]="savingAutoApplyModelMigrations()"
+                 (change)="setAutoApplyModelMigrations($any($event.target).checked)" />
+          <span>Safe model updates {{ autoApplyModelMigrations() ? 'on' : 'off' }}</span>
+          <small>Non-explicit defaults only</small>
+        </label>
+      }
     </section>
+    @if (configurationMigrations().length) {
+      <section class="cli-models__migrations" aria-label="Configuration model updates">
+        @for (pin of configurationMigrations(); track pin.key) {
+          <div class="cli-models__migration" [attr.data-testid]="'configuration-model-migration-' + pin.key">
+            <span class="cli-models__migration-key">{{ pin.key }}</span>
+            <span class="cli-models__migration-change" [title]="configurationMigrationDiff(pin)">
+              {{ pin.proposal.from }} → {{ pin.proposal.to }}
+            </span>
+            <span class="cli-models__migration-diff">
+              {{ pin.proposal.costClassFrom }} → {{ pin.proposal.costClassTo }} ·
+              {{ pin.proposal.reasoningLadderFrom }} → {{ pin.proposal.reasoningLadderTo }}
+            </span>
+            <button type="button"
+                    [disabled]="savingConfigurationMigration() !== null"
+                    (click)="applyConfigurationMigration(pin)">
+              {{ savingConfigurationMigration() === pin.key ? 'Applying...' : 'Apply update' }}
+            </button>
+          </div>
+        }
+      </section>
+    }
   }
   @for (g of groups(); track g.cliType) {
     <article class="cli-models__row"

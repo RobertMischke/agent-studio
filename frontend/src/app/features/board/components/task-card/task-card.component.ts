@@ -364,6 +364,24 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   });
 
   readonly effectiveModelChip = computed(() => buildEffectiveModelChip(this.job(), this.clients.resolve(this.job().ownerClientId)));
+  readonly applyingModelMigration = signal(false);
+
+  applyModelMigration(event: Event): void {
+    event.stopPropagation();
+    const proposal = this.job().modelMigration;
+    if (!proposal || this.applyingModelMigration()) return;
+    this.applyingModelMigration.set(true);
+    this.jobs.setJobModel(this.job().id, proposal.to, this.job().watchPath).subscribe({
+      next: () => this.applyingModelMigration.set(false),
+      error: () => this.applyingModelMigration.set(false),
+    });
+  }
+
+  modelMigrationTooltip(): string {
+    const migration = this.job().modelMigration;
+    if (!migration) return '';
+    return `Update available: ${migration.from} to ${migration.to}. Cost: ${migration.costClassFrom} to ${migration.costClassTo}; reasoning: ${migration.reasoningLadderFrom} to ${migration.reasoningLadderTo}. Catalog ${migration.catalogVersion}.`;
+  }
 
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 

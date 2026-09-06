@@ -23,7 +23,7 @@ public sealed class WikiMaintenanceModelService
     public const string FileName = "wiki-maintenance-model.json";
 
     /// <summary>Platform strong default when no workspace value is stored.</summary>
-    public const string DefaultModel = ModelIds.ClaudeSonnet5;
+    public static string DefaultModel => ModelFamilyResolver.ResolveAvailable(ModelFamilies.ClaudeSonnet);
     public const string DefaultCli = "claude";
 
     private static readonly JsonSerializerOptions JsonOpts = new()

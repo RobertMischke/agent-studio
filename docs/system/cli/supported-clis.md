@@ -74,6 +74,17 @@ The frontend's model dropdown reads `/api/cli/{cliType}/models`. No CLI-specific
 
 **Selected model.** Studio first qualifies the chosen model against its live catalog. Claude and Codex then pass the qualified model and thinking level to CAR, which applies its common normalization and descriptor flags. The legacy Antigravity adapter maps the model to its `agentapi` vocabulary.
 
+**Family defaults and migration updates.** Workspace CLI Management displays
+the active Token Economy migration catalogue version and every superseded
+supporting-agent configuration pin. Each proposal includes its source and
+target model plus the cost-class and reasoning-ladder change. `Apply update`
+persists only the selected configuration pin in the active checkout. Task-card
+and project pipeline-step pins expose the same one-click proposal without
+silently changing an explicit choice. The workspace `Safe model updates`
+switch independently controls admission-time application of `safeAuto` rules
+to non-explicit defaults; each such application is recorded in the task
+timeline and operator feed.
+
 ### 2.4 Quota probe
 
 **Contract.** A `QuotaProbeBase` subclass returns a `QuotaSnapshot` with:

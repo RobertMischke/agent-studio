@@ -37,7 +37,7 @@ public sealed class WorkspaceSettingsService
     }
 
     /// <summary>
-    /// Current defaults for a workspace. Returns a fresh (all-null)
+    /// Current defaults for a workspace. Returns a fresh platform-default
     /// <see cref="WorkspaceSettings"/> on a miss so callers never null-check.
     /// </summary>
     public WorkspaceSettings Get(string? workspaceId)
@@ -129,6 +129,19 @@ public sealed class WorkspaceSettingsService
         _logger.LogInformation(
             "workspace-settings autonomy level set to {Level} for workspace {Workspace}",
             clamped, workspaceId);
+    }
+
+    public void SetAutoApplyModelMigrations(string workspaceId, bool enabled)
+    {
+        if (string.IsNullOrWhiteSpace(workspaceId)) return;
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(workspaceId, out var settings) ? settings : new WorkspaceSettings();
+            _cache[workspaceId] = current with { AutoApplyModelMigrations = enabled };
+            Persist();
+        }
+        _logger.LogInformation("workspace-settings model migration auto-apply set to {Enabled} for workspace {Workspace}", enabled, workspaceId);
     }
 
     private void EnsureLoaded()

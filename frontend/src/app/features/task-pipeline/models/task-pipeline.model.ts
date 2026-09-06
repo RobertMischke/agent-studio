@@ -280,6 +280,7 @@ export interface PipelineCatalogueStep {
   model?: string | null;
   resolvedModel?: string | null;
   modelSource?: string | null;
+  modelMigration?: import('../../../models/task.model').ModelMigrationProposal | null;
   resolvedThinkingLevel?: string | null;
   thinkingLevelSource?: string | null;
   usesModel: boolean;

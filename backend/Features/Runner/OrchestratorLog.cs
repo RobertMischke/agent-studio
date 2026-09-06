@@ -178,6 +178,7 @@ public static class OrchestratorLogTopics
     public const string Recovery = "recovery";
     public const string TaskPicked = "task-picked";
     public const string General = "general";
+    public const string ModelRouting = "model-routing";
     /// <summary>
     /// AGT-2055: the algorithmic pre-launch quota / load-steering decisions
     /// (switch model / throttle / quiet wait / normal launch) with their

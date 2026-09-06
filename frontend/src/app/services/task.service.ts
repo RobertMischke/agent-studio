@@ -2073,6 +2073,28 @@ export class TaskService {
     );
   }
 
+  getModelMigrations(model?: string | null) {
+    let params = new HttpParams();
+    if (model) params = params.set('model', model);
+    return this.http.get<{
+      version: string;
+      proposal: import('../models/task.model').ModelMigrationProposal | null;
+      configurationPins: {
+        key: string;
+        model: string;
+        proposal: import('../models/task.model').ModelMigrationProposal;
+      }[];
+    }>(`${this.baseUrl}/cli/model-migrations`, { params });
+  }
+
+  applyConfigurationModelMigration(key: string) {
+    return this.http.post<{
+      key: string;
+      model: string;
+      proposal: import('../models/task.model').ModelMigrationProposal;
+    }>(`${this.baseUrl}/cli/model-migrations/configuration-pin/apply`, { key });
+  }
+
   /** Visibility-only pipeline health signals; this endpoint never mutates a task. */
   getProjectPipelineHealth(projectName: string) {
     return this.http.get<PipelineHealthSnapshot>(

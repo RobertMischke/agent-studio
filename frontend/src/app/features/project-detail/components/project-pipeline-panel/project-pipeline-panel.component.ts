@@ -116,6 +116,7 @@ export class ProjectPipelinePanelComponent {
         effectiveModel: ov?.model ?? step.resolvedModel ?? step.model ?? '',
         effectiveModelSource: ov?.model ? 'step' : (step.modelSource ?? ''),
         effectiveThinkingLevel: ov?.thinkingLevel ?? step.resolvedThinkingLevel ?? '',
+        modelMigration: step.modelMigration ?? null,
         prompt: ov?.prompt ?? '',
         promptTemplate: step.promptTemplate ?? '',
         mode: ov?.mode ?? '',
@@ -465,6 +466,17 @@ export class ProjectPipelinePanelComponent {
     if (!step.usesModel) return 'no model';
     if (step.economyModel && !step.model) return 'Spark auto';
     return step.effectiveModel || 'runtime default';
+  }
+
+  applyStepModelMigration(step: PipelineAdminRow): void {
+    if (!step.modelMigration || this.stepBusy[step.id]) return;
+    this.writeStep(step.id, { model: step.modelMigration.to });
+  }
+
+  stepModelMigrationTooltip(step: PipelineAdminRow): string {
+    const migration = step.modelMigration;
+    if (!migration) return '';
+    return `Update available: ${migration.from} to ${migration.to}. Cost: ${migration.costClassFrom} to ${migration.costClassTo}; reasoning: ${migration.reasoningLadderFrom} to ${migration.reasoningLadderTo}. Catalog ${migration.catalogVersion}.`;
   }
 
   modelSourceLabel(source: string | null | undefined): string {

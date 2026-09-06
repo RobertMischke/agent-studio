@@ -55,6 +55,9 @@ public record WorkspaceSettings
     /// platform default (balanced, level 2).
     /// </summary>
     public int? AutonomyLevel { get; init; }
+
+    /// <summary>False disables safe model migrations at run admission for this workspace.</summary>
+    public bool AutoApplyModelMigrations { get; init; } = true;
 }
 
 /// <summary>

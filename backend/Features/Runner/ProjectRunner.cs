@@ -103,6 +103,7 @@ public class ProjectRunner
     private readonly AgentStudio.Pipeline.PipelineExecutionLog? _pipelineLog;
     private readonly AgentStudio.Pipeline.IConceptWorkbenchPublisher? _conceptWorkbenchPublisher;
     private readonly AgentStudio.Pipeline.ModelQualificationService? _modelQualification;
+    private readonly AgentStudio.Pipeline.ModelMigrationCatalog? _modelMigrations;
     private readonly AgentStudio.Pipeline.IntegrationPushQueue? _integrationPushQueue;
     private readonly PromptEnrichmentService? _promptEnrichment;
     private readonly DossierMaintenanceService? _dossierMaintenance;
@@ -455,7 +456,8 @@ public class ProjectRunner
         PromptEnrichmentService? promptEnrichment = null,
         DossierMaintenanceService? dossierMaintenance = null,
         VisualQaService? visualQa = null,
-        ProviderLimitRegistry? providerLimits = null)
+        ProviderLimitRegistry? providerLimits = null,
+        AgentStudio.Pipeline.ModelMigrationCatalog? modelMigrations = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -498,6 +500,7 @@ public class ProjectRunner
         _timeline = timeline;
         _pipelineLog = pipelineLog;
         _modelQualification = modelQualification;
+        _modelMigrations = modelMigrations;
         _integrationPushQueue = integrationPushQueue;
         _conceptWorkbenchPublisher = conceptWorkbenchPublisher;
         _promptEnrichment = promptEnrichment;
@@ -2505,6 +2508,24 @@ public class ProjectRunner
             }
             var runModel = route?.Model ?? qualification?.SelectedModel ?? info.Model;
             var runThinkingLevel = route?.ThinkingLevel ?? qualification?.SelectedThinkingLevel ?? info.ThinkingLevel;
+            var migration = _modelMigrations?.Propose(runModel);
+            var autoMigrations = _orchestratorDefaults?.AutoApplyModelMigrations(ProjectName) ?? true;
+            if (AgentStudio.Pipeline.ModelMigrationAdmissionPolicy.ShouldApply(
+                    info.ModelExplicit, autoMigrations, migration))
+            {
+                var from = runModel!;
+                runModel = migration!.To;
+                _timeline?.Append(info.FolderPath,
+                    AgentStudio.Pipeline.ModelMigrationAdmissionPolicy.CreateTimelineEvent(migration));
+                _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Action,
+                    Topic = OrchestratorLogTopics.ModelRouting,
+                    JobId = info.Id,
+                    Summary = $"Model migrated: {from} to {runModel}",
+                    Reasoning = $"Safe automatic rule {migration.Rule}, catalog {migration.CatalogVersion}."
+                });
+            }
             if (isEpicPlanningRun)
             {
                 plan = plan with { PromptTemplate = RuntimePromptService.EpicDecomposition, PromptOverride = null };

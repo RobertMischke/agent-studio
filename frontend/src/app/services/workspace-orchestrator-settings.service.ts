@@ -20,6 +20,7 @@ export interface WorkspaceOrchestratorSettings {
   autonomyLevel: number | null;
   defaultOrchestratorModel: string;
   defaultAutonomyLevel: number;
+  autoApplyModelMigrations: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -49,6 +50,13 @@ export class WorkspaceOrchestratorSettingsService {
     return this.http.put<{ autonomyLevel: number | null }>(
       `/api/workspaces/${encodeURIComponent(workspaceId)}/autonomy`,
       { level },
+    );
+  }
+
+  setModelMigrationAutoApply(workspaceId: string, enabled: boolean): Observable<{ enabled: boolean }> {
+    return this.http.put<{ enabled: boolean }>(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/model-migration-auto-apply`,
+      { enabled },
     );
   }
 }

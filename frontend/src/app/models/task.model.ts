@@ -301,6 +301,7 @@ export interface TaskInfo {
   model: string | null;
   /** False when model qualification derives the route from task type + policy. */
   modelExplicit?: boolean;
+  modelMigration?: ModelMigrationProposal | null;
   thinkingLevel?: string | null;
   /** False when the policy supplies the reasoning level together with the model tier. */
   thinkingLevelExplicit?: boolean;
@@ -554,6 +555,19 @@ export interface TaskInfo {
   planningSpawn?: PlanningSpawnSummary | null;
   /** Concept dossier link or deliberate no-dossier decision. Null outside concept mode. */
   conceptDossier?: ConceptDossierSummary | null;
+}
+
+export interface ModelMigrationProposal {
+  from: string;
+  to: string;
+  family: string;
+  safeAuto: boolean;
+  costClassFrom: string;
+  costClassTo: string;
+  reasoningLadderFrom: string;
+  reasoningLadderTo: string;
+  rule: string;
+  catalogVersion: string;
 }
 
 export interface LifecycleCheck {

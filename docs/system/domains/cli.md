@@ -89,8 +89,9 @@ CLI execution tests.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.
-- Review-decision and supporting aspect calls default to Codex with
-  `gpt-5.4-mini`. The configured `ReviewDecisionOrchestrator:Cli` must be passed
+- Review-decision and supporting aspect calls default to the newest available
+  member of the `gpt-mini` family. The configured
+  `ReviewDecisionOrchestrator:Cli` must be passed
   through to `CliOneShotRegistry`; never replace it with an implicit Claude
   lookup. Project pipeline-step overrides and Token Economy recommendations may
   select another compatible GPT model explicitly.
@@ -99,6 +100,12 @@ CLI execution tests.
   `cli-model-routing.json`. `CliQuotaFallbackService` resolves that policy
   against the latest quota snapshot for every new run; it must not rewrite the
   task's configured CLI or model.
+- Workspace CLI Management also shows the active Token Economy migration
+  catalogue version and the number of configuration pins with an update. Task
+  cards and project pipeline rows show the same proposal as an `Update
+  available` action, including the cost-class and reasoning-ladder diff.
+  Applying a proposal remains explicit. The workspace migration switch governs
+  safe automatic admission changes for non-explicit defaults.
 - A quota fallback is run-scoped and must never be silent. Keep the
   `quota_fallback_activated` timeline event, task chat note, task-card badge,
   and status-bar warning aligned. When the primary is below its cap again, the

@@ -1,0 +1,38 @@
+{
+  "version": "2026-09-06.1",
+  "rules": [
+    {
+      "from": "claude-opus-4-8",
+      "to": "claude-opus-5",
+      "family": "claude-opus",
+      "safeAuto": true,
+      "costClassFrom": "premium",
+      "costClassTo": "premium",
+      "reasoningLadderFrom": "standard",
+      "reasoningLadderTo": "standard",
+      "rule": "latest-generation-same-family"
+    },
+    {
+      "from": "claude-sonnet-4-6",
+      "to": "claude-sonnet-5",
+      "family": "claude-sonnet",
+      "safeAuto": true,
+      "costClassFrom": "standard",
+      "costClassTo": "standard",
+      "reasoningLadderFrom": "standard",
+      "reasoningLadderTo": "standard",
+      "rule": "latest-generation-same-family"
+    },
+    {
+      "from": "claude-haiku-4-5",
+      "to": "claude-sonnet-5",
+      "family": "claude-haiku",
+      "safeAuto": false,
+      "costClassFrom": "economy",
+      "costClassTo": "standard",
+      "reasoningLadderFrom": "fast",
+      "reasoningLadderTo": "standard",
+      "rule": "token-economy-capability-upgrade"
+    }
+  ]
+}

@@ -32,6 +32,7 @@ public static class WorkspaceSettingsEndpoints
                 cliExecutionEngineSource = OrchestratorSettingsResolver
                     .ResolveCliExecutionEngine(null, s).Source,
                 autonomyLevel = s.AutonomyLevel,
+                autoApplyModelMigrations = s.AutoApplyModelMigrations,
                 // Platform fallbacks so the UI can render the effective "inherited"
                 // value without hardcoding it or a second round-trip.
                 defaultOrchestratorModel = OrchestratorRunner.DefaultModel,
@@ -120,6 +121,16 @@ public static class WorkspaceSettingsEndpoints
             settings.SetAutonomyLevel(id, req.Level);
             return Results.Ok(new { autonomyLevel = settings.Get(id).AutonomyLevel });
         });
+
+        app.MapPut("/api/workspaces/{id}/model-migration-auto-apply", (
+            string id, SetModelMigrationAutoApplyRequest req,
+            WorkspaceRegistry workspaces, WorkspaceSettingsService settings) =>
+        {
+            if (workspaces.Find(id) is null)
+                return Results.NotFound(new { error = $"Unknown workspaceId '{id}'" });
+            settings.SetAutoApplyModelMigrations(id, req.Enabled);
+            return Results.Ok(new { enabled = settings.Get(id).AutoApplyModelMigrations });
+        });
     }
 }
 
@@ -137,4 +148,9 @@ public sealed record SetWorkspaceAutonomyLevelRequest
 {
     /// <summary>Autonomy level 0..4; null clears the workspace default.</summary>
     public int? Level { get; init; }
+}
+
+public sealed record SetModelMigrationAutoApplyRequest
+{
+    public bool Enabled { get; init; }
 }

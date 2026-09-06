@@ -75,6 +75,9 @@ function contracts() {
 }
 
 async function stub(page: Page) {
+  await page.route('**/api/auth/status', json({
+    profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
+  }));
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/tasks/grouped*', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
   await page.route('**/api/watch-paths', json([]));
@@ -109,6 +112,24 @@ async function stub(page: Page) {
     const p = new URL(route.request().url()).pathname;
     let body: unknown = {};
     if (p.endsWith('/quota/model-routes')) body = modelRoutes;
+    else if (p.endsWith('/model-routing/policy')) body = {
+      version: '2026-09-06', wikiPath: 'docs/system/domains/model-routing-policy.md',
+      economyMode: false, economyModeLabel: 'Economy mode', tiers: [], taskTypeDefaults: {},
+    };
+    else if (p.endsWith('/model-migrations')) body = {
+      version: '2026-09-06.1', proposal: null, rules: [],
+      configurationPins: [{
+        key: 'ClaudeCli:SummaryModel', model: 'claude-opus-4-8',
+        proposal: {
+          from: 'claude-opus-4-8', to: 'claude-opus-5', family: 'claude-opus', safeAuto: true,
+          costClassFrom: 'premium', costClassTo: 'premium', reasoningLadderFrom: 'standard',
+          reasoningLadderTo: 'standard', rule: 'latest-generation-same-family', catalogVersion: '2026-09-06.1',
+        },
+      }],
+    };
+    else if (p.endsWith('/model-migrations/configuration-pin/apply')) body = {
+      key: 'ClaudeCli:SummaryModel', model: 'claude-opus-5', proposal: null,
+    };
     else if (p.endsWith('/quota/caps')) body = { defaultCapPct: 95, caps: {} };
     else if (p.endsWith('/quota')) body = quotaReport;
     else if (p.endsWith('/usage')) body = usageReport();
@@ -123,7 +144,17 @@ async function stub(page: Page) {
   await page.route('**/api/clients', json([]));
   await page.route('**/api/dev-tools/flags', json({ updateStableEnabled: false, deleteE2EJobsEnabled: false }));
   await page.route('**/api/admin/prompts', json({ overrideDirectory: 'stub', items: [] }));
-  await page.route('**/api/workspaces*', json([]));
+  await page.route('**/api/workspaces/**', async (route) => {
+    const p = new URL(route.request().url()).pathname;
+    const body = p.endsWith('/settings')
+      ? { autoApplyModelMigrations: true, defaultOrchestratorModel: 'claude-haiku-4-5', defaultAutonomyLevel: 2 }
+      : { enabled: false };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.route('**/api/workspaces', json([{
+    id: 'workspace-1', displayName: 'Default', sortOrder: 0, isDefault: true,
+    color: null, createdAt: new Date().toISOString(), projects: [],
+  }]));
 }
 
 async function openHome(page: Page) {
@@ -160,6 +191,11 @@ test.describe('CLI Management restructure (AGT-2101)', () => {
     const overlay = page.getByTestId('cli-admin-overlay');
     await expect(overlay).toBeVisible();
     await expect(overlay.getByRole('heading', { name: 'CLI Management' })).toBeVisible();
+    await expect(overlay).toContainText('Token Economy migration catalog 2026-09-06.1');
+    const migration = overlay.getByTestId('configuration-model-migration-ClaudeCli:SummaryModel');
+    await expect(migration).toContainText('claude-opus-4-8 → claude-opus-5');
+    await expect(migration).toContainText('premium → premium');
+    await expect(overlay.getByTestId('model-migration-auto-apply')).toBeChecked();
 
     // Leads with the catalog rows (what CLIs / models / routes).
     await expect(overlay.getByTestId('cli-admin-models')).toBeVisible();

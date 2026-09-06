@@ -208,4 +208,7 @@ public sealed class OrchestratorDefaultsProvider
     public int ResolveAutonomyLevel(string projectName, int platformDefault = 2)
         => OrchestratorSettingsResolver.ResolveAutonomy(
             _projectSettings.Get(projectName), WorkspaceForProject(projectName), platformDefault).Level;
+
+    public bool AutoApplyModelMigrations(string projectName)
+        => WorkspaceForProject(projectName).AutoApplyModelMigrations;
 }

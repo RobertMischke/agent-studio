@@ -1,4 +1,4 @@
-
+using AgentStudio.Pipeline;
 
 namespace AgentStudio.Cli;
 
@@ -93,6 +93,39 @@ public static class CliEndpoints
             SetModelRoutingEconomyModeRequest request,
             ModelRoutingPolicyStateStore state) =>
             Results.Ok(state.SetEconomyMode(request.EconomyMode)));
+
+        cliGroup.MapGet("/model-migrations", (
+            string? model,
+            ModelMigrationCatalog migrations,
+            ModelMigrationConfigurationPinService configurationPins) =>
+        {
+            var document = migrations.Current;
+            return Results.Ok(new
+            {
+                version = document.Version,
+                proposal = migrations.Propose(model),
+                rules = document.Rules,
+                configurationPins = configurationPins.GetProposals(),
+            });
+        });
+
+        cliGroup.MapPost("/model-migrations/configuration-pin/apply", (
+            ApplyModelMigrationConfigurationPinRequest request,
+            ModelMigrationConfigurationPinService configurationPins) =>
+        {
+            try
+            {
+                return Results.Ok(configurationPins.Apply(request.Key));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+        });
 
         cliGroup.MapGet("/model-routing/recommendation", async (
             string taskType,
@@ -321,3 +354,5 @@ public sealed record SetCliQuotaWaitPolicyRequest
     public bool Enabled { get; init; }
     public int ThresholdMinutes { get; init; } = CliQuotaWaitPolicyService.DefaultThresholdMinutes;
 }
+
+public sealed record ApplyModelMigrationConfigurationPinRequest(string Key);

@@ -63,6 +63,8 @@ public record TaskInfo
     /// execution model unexpectedly.
     /// </summary>
     public bool ModelExplicit { get; init; } = true;
+    /// <summary>Token Economy update proposal for the current explicit model pin.</summary>
+    public AgentStudio.Pipeline.ModelMigrationProposal? ModelMigration { get; init; }
     /// <summary>Optional thinking / reasoning effort level for the selected CLI model.</summary>
     public string? ThinkingLevel { get; init; }
     /// <summary>True when the card explicitly pins its reasoning level.</summary>
