@@ -107,6 +107,7 @@ public sealed class CodexModelDiscovery
                 cwd: scratch,
                 cols: 220,
                 rows: 80,
+                extraEnv: CliEnvironment.ProbeEnvironment(),
                 verbatimCommandLine: verbatimCommandLine,
                 ct: ct);
 

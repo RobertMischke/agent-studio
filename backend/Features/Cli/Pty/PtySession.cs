@@ -66,7 +66,7 @@ public sealed class PtySession : IAsyncDisposable
         string app,
         IEnumerable<string>? args = null,
         string? cwd = null,
-        IDictionary<string, string>? extraEnv = null,
+        IReadOnlyDictionary<string, string>? extraEnv = null,
         int cols = 160,
         int rows = 40,
         bool verbatimCommandLine = false,

@@ -104,6 +104,7 @@ public sealed class ClaudeModelDiscovery
             cwd: scratch,
             cols: 220,
             rows: 80,
+            extraEnv: CliEnvironment.ProbeEnvironment(),
             verbatimCommandLine: verbatimCommandLine,
             ct: ct);
 

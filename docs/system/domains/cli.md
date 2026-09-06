@@ -1,6 +1,6 @@
 # CLI Domain Map
 
-Version: 2026-09-01
+Version: 2026-09-06
 Status: System-of-record map for CLI adapter and quota changes.
 
 Use this when a change touches Claude, Codex, Copilot, Gemini, prompt handoff,
@@ -35,9 +35,10 @@ CLI execution tests.
 - `backend/Services/Quota/QuotaService.cs`: aggregate quota surface.
 - `backend/Features/Cli/Repair/LocalCliRepairService.cs`: Windows local-host
   detection and bounded repair when a configured Claude or Codex global npm
-  package is absent or its required `.cmd` command shim disappeared. It selects
-  a plain install or forced relink from that state and persists repair and
-  nearby npm-activity evidence to
+  package is absent, its required `.cmd` command shim disappeared, or Claude's
+  package launcher remained the small native-binary placeholder. It selects a
+  plain install, forced relink, or package postinstall replay from that state
+  and persists repair and nearby npm-activity evidence to
   `<TaskRepository>/logs/cli-self-heal.jsonl`.
 - `backend/Features/Cli/CliEndpoints.cs`: sessions, versions, quota, and model
   endpoints. The CLI-session tool (AGT-2102) adds `GET /api/cli/{cliType}/session-detail`
@@ -68,6 +69,10 @@ CLI execution tests.
   permission block behind a generic failure.
 - Quota probes are observability surfaces. Preserve stable event names and
   useful error context when editing nearby code.
+- Every observability-only PTY spawn, including quota probes, Claude and Codex
+  model discovery, and the diagnostic `_probe` endpoint, sets both
+  `CLAUDE_CODE_DISABLE_AUTOUPDATER=1` and `DISABLE_AUTOUPDATER=1`. A probe or
+  discovery must never update or otherwise mutate the globally installed CLI.
 - Quota reads are cache-only request paths. `GET /api/cli/quota` must never
   await CLI startup or PTY parsing. Failed refreshes retain the last good
   values and expose `probeFailedAt`, `cliVersion`, and the probe error so the UI
@@ -75,17 +80,21 @@ CLI execution tests.
 - Claude and Codex version changes are checked after startup and periodically.
   Keep the structured `CLI version changed` log line when editing version or
   self-heal behavior.
-- Local CLI repair handles two recognized global npm states: a truly absent
-  configured package receives a plain install, while a present package with an
-  absent Windows `.cmd` command shim receives a forced relink so an unchanged
-  package version still regenerates bin shims. Custom executable paths and
-  present-but-broken command shims remain outside this policy. Repair verifies
-  npm itself with `npm --version` from an explicit active-Node, APPDATA, or PATH
-  location before install, then verifies both the `.cmd` shim and CLI
-  `--version`. It is limited to one persisted attempt per CLI per hour. The
-  runner-status projection contains only active failures: a successful repair
-  or later healthy probe clears the entry, and the durable resolved journal row
-  prevents restart rehydration from restoring a stale alarm.
+- Local CLI repair handles three recognized global npm states: a truly absent
+  configured package receives a plain install; a present package with an absent
+  Windows `.cmd` command shim receives a forced relink so an unchanged package
+  version still regenerates bin shims; and a Claude package with its shim
+  present but a launcher below 4096 bytes, or a `--version` result containing
+  `native binary not installed`, replays `node install.cjs` in the package
+  directory. If `install.cjs` is missing, repair reinstalls the exact detected
+  package version. Custom executable paths remain outside this policy. Repair
+  verifies npm itself with `npm --version` from an explicit active-Node,
+  APPDATA, or PATH location before npm install, then verifies both the `.cmd`
+  shim and CLI `--version`. It is limited to one persisted attempt per CLI per
+  hour. The runner-status projection contains only active failures, including
+  the detected launcher-stub state. A successful repair or later healthy probe
+  clears the entry, and the durable resolved journal row prevents restart
+  rehydration from restoring a stale alarm.
 - Codex Spark quota windows are independent windows. Keep their labels and burn
   percentages separate from the standard 5-hour and weekly windows; never fold
   a Spark-only snapshot into the main-window admission signal.

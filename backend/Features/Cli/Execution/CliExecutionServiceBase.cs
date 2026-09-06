@@ -180,9 +180,14 @@ public partial class GenericCliExecutionService : ICliExecutionService
                 CreateNoWindow = true
             };
             proc.Start();
-            var rawVersion = proc.StandardOutput.ReadToEnd().Trim();
+            var standardOutput = proc.StandardOutput.ReadToEnd().Trim();
+            var standardError = proc.StandardError.ReadToEnd().Trim();
             proc.WaitForExit(5000);
             // Keep only the first non-empty line — some CLIs print update hints on line 2+
+            // On failure, retain the first stderr line as inspection evidence.
+            var rawVersion = !string.IsNullOrWhiteSpace(standardOutput)
+                ? standardOutput
+                : standardError;
             var version = rawVersion.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
             return (proc.ExitCode == 0, version, testPath);
         }

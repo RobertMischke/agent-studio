@@ -3,9 +3,11 @@ using System.Diagnostics;
 namespace AgentStudio.Cli;
 
 /// <summary>
-/// Bounded process boundary for installing or relinking one global npm package.
+/// Bounded process boundary for installing, relinking, or replaying the
+/// postinstall of one global npm package.
 /// Package selection and repair policy live in
-/// <see cref="LocalCliRepairService"/>; this class only executes npm.
+/// <see cref="LocalCliRepairService"/>; this class only executes the bounded
+/// npm and Node process operations selected by that policy.
 /// </summary>
 public class NpmGlobalInstaller
 {
@@ -69,6 +71,61 @@ public class NpmGlobalInstaller
         }
     }
 
+    /// <summary>
+    /// Replays a package's npm postinstall in place. Claude's launcher package
+    /// uses this script to replace its small placeholder executable with the
+    /// native optional-dependency binary. If the published package has no
+    /// script, reinstall the exact installed version instead.
+    /// </summary>
+    public virtual async Task<NpmGlobalInstallResult> RunPackagePostinstallAsync(
+        string packageDirectory,
+        string packageName,
+        string? installedVersion,
+        CancellationToken ct)
+    {
+        var postinstall = Path.Combine(packageDirectory, "install.cjs");
+        if (!File.Exists(postinstall))
+        {
+            if (string.IsNullOrWhiteSpace(installedVersion))
+            {
+                return new NpmGlobalInstallResult(
+                    NpmGlobalInstallOutcome.Failed,
+                    null,
+                    "",
+                    $"Package postinstall is missing at '{postinstall}' and the installed version is unknown.");
+            }
+
+            return await InstallAsync(
+                $"{packageName}@{installedVersion}",
+                NpmGlobalInstallMode.Install,
+                ct);
+        }
+
+        var nodeExecutable = await ResolveNodeExecutableAsync(ct);
+        if (nodeExecutable is null)
+        {
+            return new NpmGlobalInstallResult(
+                NpmGlobalInstallOutcome.NpmUnavailable,
+                null,
+                "",
+                "node unavailable: no candidate passed 'node --version'.");
+        }
+
+        var execution = await ExecuteAsync(
+            nodeExecutable,
+            packageDirectory,
+            [Path.GetFileName(postinstall)],
+            DefaultTimeout,
+            ct);
+        return new NpmGlobalInstallResult(
+            execution.ExitCode == 0
+                ? NpmGlobalInstallOutcome.Succeeded
+                : NpmGlobalInstallOutcome.Failed,
+            execution.ExitCode,
+            execution.StandardOutput,
+            execution.StandardError);
+    }
+
     internal static IReadOnlyList<string> BuildArguments(
         string packageName,
         NpmGlobalInstallMode mode)
@@ -112,6 +169,51 @@ public class NpmGlobalInstaller
         return new NpmExecutableResolution(
             null,
             $"npm unavailable: {checkedDetail}");
+    }
+
+    private static async Task<string?> ResolveNodeExecutableAsync(CancellationToken ct)
+    {
+        var candidates = new List<string>();
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(processPath)
+            && string.Equals(
+                Path.GetFileNameWithoutExtension(processPath),
+                "node",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            candidates.Add(processPath);
+        }
+
+        var isWindows = OperatingSystem.IsWindows();
+        candidates.AddRange(FindOnPath(
+            Environment.GetEnvironmentVariable("PATH"),
+            isWindows ? "node.exe" : "node",
+            Path.PathSeparator));
+        if (isWindows)
+        {
+            foreach (var root in new[]
+                     {
+                         Environment.GetEnvironmentVariable("ProgramFiles"),
+                         Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
+                     }.Where(root => !string.IsNullOrWhiteSpace(root)))
+            {
+                var candidate = Path.Combine(root!, "nodejs", "node.exe");
+                if (File.Exists(candidate)) candidates.Add(candidate);
+            }
+        }
+
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var result = await ExecuteAsync(
+                candidate,
+                Path.GetDirectoryName(candidate) ?? Environment.CurrentDirectory,
+                ["--version"],
+                PreflightTimeout,
+                ct);
+            if (result.ExitCode == 0 && !string.IsNullOrWhiteSpace(result.StandardOutput))
+                return candidate;
+        }
+        return null;
     }
 
     internal static IReadOnlyList<NpmExecutable> NpmExecutableCandidates(

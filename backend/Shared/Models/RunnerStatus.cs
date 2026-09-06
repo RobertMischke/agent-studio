@@ -167,7 +167,7 @@ public record RunnerStatus
     public IReadOnlyList<LocalCliRepairStatus> CliRepairs { get; init; } = [];
 }
 
-/// <summary>Active bounded npm-shim self-heal failure for one local CLI.</summary>
+/// <summary>Active bounded npm-package self-heal failure for one local CLI.</summary>
 public sealed record LocalCliRepairStatus
 {
     public string CliType { get; init; } = "";
@@ -176,6 +176,10 @@ public sealed record LocalCliRepairStatus
     public DateTimeOffset OccurredAt { get; init; }
     public string? VersionBefore { get; init; }
     public string? VersionAfter { get; init; }
+    /// <summary>Detected npm installation state that selected the repair.</summary>
+    public string? InstallState { get; init; }
+    /// <summary>Stable detection key persisted in the repair journal.</summary>
+    public string? Detection { get; init; }
     public string Detail { get; init; } = "";
 }
 

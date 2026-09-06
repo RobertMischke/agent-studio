@@ -10,6 +10,7 @@ public enum NpmCliInstallState
     TrulyUninstalled,
     PackagePresentWithShim,
     MissingShimWithPackagePresent,
+    LauncherStubWithPackageAndShim,
 }
 
 public sealed record NpmCliInstallInspection(
@@ -20,9 +21,20 @@ public sealed record NpmCliInstallInspection(
     string? PackageVersion,
     DateTimeOffset? PackageModifiedAt,
     string RequiredCommandShim,
-    IReadOnlyList<string> ExpectedShims);
+    IReadOnlyList<string> ExpectedShims,
+    string? LauncherPath,
+    long? LauncherSizeBytes,
+    string? VersionProbeOutput,
+    string? NativePackageDirectory);
+
+internal enum NpmCliRepairKind
+{
+    NpmInstall,
+    PackagePostinstall,
+}
 
 internal sealed record NpmCliRepairPlan(
+    NpmCliRepairKind Kind,
     NpmGlobalInstallMode InstallMode,
     string Detection,
     string PackageState,
@@ -36,6 +48,7 @@ internal sealed record NpmCliRepairPlan(
 public sealed class LocalCliRepairService
 {
     public static readonly TimeSpan AttemptWindow = TimeSpan.FromHours(1);
+    public const long LauncherStubThresholdBytes = 4096;
 
     private static readonly JsonSerializerOptions JournalJson = new()
     {
@@ -122,17 +135,26 @@ public sealed class LocalCliRepairService
         CancellationToken ct)
     {
         var before = probe();
-        if (before.Available)
+        if (!_isWindows())
+        {
+            if (before.Available) ReconcileHealthy(cliType, before);
+            return before;
+        }
+
+        var appData = _appData();
+        if (string.IsNullOrWhiteSpace(appData))
+        {
+            if (before.Available) ReconcileHealthy(cliType, before);
+            return before;
+        }
+        var npmBin = Path.Combine(appData, "npm");
+        var inspection = Inspect(cliType, before.Path, npmBin, before.Version);
+        if (before.Available
+            && inspection.State != NpmCliInstallState.LauncherStubWithPackageAndShim)
         {
             ReconcileHealthy(cliType, before);
             return before;
         }
-        if (!_isWindows()) return before;
-
-        var appData = _appData();
-        if (string.IsNullOrWhiteSpace(appData)) return before;
-        var npmBin = Path.Combine(appData, "npm");
-        var inspection = Inspect(cliType, before.Path, npmBin);
         var repairPlan = SelectRepairPlan(inspection.State);
         if (repairPlan is null)
         {
@@ -167,7 +189,12 @@ public sealed class LocalCliRepairService
                 $"Starting bounded {cliType} CLI repair: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction}.",
                 "",
                 "",
-                evidence));
+                evidence,
+                inspection.State.ToString(),
+                inspection.LauncherPath,
+                inspection.LauncherSizeBytes,
+                inspection.VersionProbeOutput,
+                inspection.NativePackageDirectory));
             _logger.LogInformation(
                 "Starting bounded local CLI repair cli={Cli} package={Package} packageVersion={Version} packageState={PackageState} shimStateBefore={ShimStateBefore} repairAction={RepairAction}",
                 cliType,
@@ -177,18 +204,25 @@ public sealed class LocalCliRepairService
                 shimStateBefore,
                 repairPlan.RepairAction);
 
-            var install = await _installer.InstallAsync(
-                inspection.PackageName,
-                repairPlan.InstallMode,
-                ct);
+            var install = repairPlan.Kind == NpmCliRepairKind.PackagePostinstall
+                ? await _installer.RunPackagePostinstallAsync(
+                    inspection.PackageDirectory,
+                    inspection.PackageName,
+                    inspection.PackageVersion,
+                    ct)
+                : await _installer.InstallAsync(
+                    inspection.PackageName,
+                    repairPlan.InstallMode,
+                    ct);
             var after = probe();
-            var afterInspection = Inspect(cliType, before.Path, npmBin);
+            var afterInspection = Inspect(cliType, before.Path, npmBin, after.Version);
             var packagePresentAfter = Directory.Exists(inspection.PackageDirectory);
             var commandShimRestored = File.Exists(inspection.RequiredCommandShim);
             var succeeded = install.Succeeded
                             && packagePresentAfter
                             && commandShimRestored
-                            && after.Available;
+                            && after.Available
+                            && afterInspection.State == NpmCliInstallState.PackagePresentWithShim;
             var occurredAt = _clock();
             var detail = succeeded
                 ? $"{cliType} CLI repaired: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} restored '{inspection.RequiredCommandShim}'; version {beforeVersion ?? "unknown"} -> {after.Version ?? "unknown"}."
@@ -217,7 +251,12 @@ public sealed class LocalCliRepairService
                 detail,
                 Truncate(LogRedactor.Scrub(install.StandardOutput), 4000),
                 Truncate(LogRedactor.Scrub(install.StandardError), 4000),
-                evidence);
+                evidence,
+                inspection.State.ToString(),
+                inspection.LauncherPath,
+                inspection.LauncherSizeBytes,
+                inspection.VersionProbeOutput,
+                inspection.NativePackageDirectory);
             AppendJournal(entry);
 
             if (succeeded)
@@ -249,7 +288,11 @@ public sealed class LocalCliRepairService
                     occurredAt,
                     install.ExitCode,
                     detail);
-                if (after.Available) ReconcileHealthy(cliType, after);
+                if (after.Available
+                    && afterInspection.State == NpmCliInstallState.PackagePresentWithShim)
+                {
+                    ReconcileHealthy(cliType, after);
+                }
             }
             return after;
         }
@@ -301,7 +344,8 @@ public sealed class LocalCliRepairService
     public static NpmCliInstallInspection Inspect(
         string cliType,
         string probedPath,
-        string npmBin)
+        string npmBin,
+        string? versionProbeOutput = null)
     {
         var definition = Definition(cliType);
         if (definition is null || !IsGlobalCommandPath(cliType, probedPath, npmBin))
@@ -314,10 +358,14 @@ public sealed class LocalCliRepairService
                 null,
                 null,
                 "",
-                []);
+                [],
+                null,
+                null,
+                versionProbeOutput,
+                null);
         }
 
-        var resolvedDefinition = definition.Value;
+        var resolvedDefinition = definition;
         var packageDirectory = Path.Combine(
             npmBin,
             "node_modules",
@@ -333,12 +381,27 @@ public sealed class LocalCliRepairService
         var requiredCommandShim = Path.Combine(npmBin, cliType + ".cmd");
         var packagePresent = Directory.Exists(packageDirectory);
         var shimPresent = File.Exists(requiredCommandShim);
+        var packageJson = Path.Combine(packageDirectory, "package.json");
+        var launcherPath = ResolveLauncherPath(
+            cliType,
+            packageDirectory,
+            packageJson,
+            resolvedDefinition.LauncherRelativePath);
+        var launcherSizeBytes = SafeFileSize(launcherPath);
+        var isClaude = string.Equals(cliType, CliTypes.Claude, StringComparison.OrdinalIgnoreCase);
+        var versionReportsMissingNativeBinary = isClaude
+                                                && versionProbeOutput?.Contains(
+                                                    "native binary not installed",
+                                                    StringComparison.OrdinalIgnoreCase) == true;
+        var launcherIsStub = isClaude
+                             && launcherSizeBytes is >= 0 and < LauncherStubThresholdBytes;
         var state = !packagePresent
             ? NpmCliInstallState.TrulyUninstalled
-            : shimPresent
-                ? NpmCliInstallState.PackagePresentWithShim
-                : NpmCliInstallState.MissingShimWithPackagePresent;
-        var packageJson = Path.Combine(packageDirectory, "package.json");
+            : !shimPresent
+                ? NpmCliInstallState.MissingShimWithPackagePresent
+                : launcherIsStub || versionReportsMissingNativeBinary
+                    ? NpmCliInstallState.LauncherStubWithPackageAndShim
+                    : NpmCliInstallState.PackagePresentWithShim;
         return new NpmCliInstallInspection(
             state,
             cliType,
@@ -347,7 +410,14 @@ public sealed class LocalCliRepairService
             ReadPackageVersion(packageJson),
             File.Exists(packageJson) ? SafeLastWrite(packageJson) : null,
             requiredCommandShim,
-            expectedShims);
+            expectedShims,
+            launcherPath,
+            launcherSizeBytes,
+            versionProbeOutput,
+            FindNestedNativePackage(
+                packageDirectory,
+                resolvedDefinition.Scope,
+                resolvedDefinition.NativePackagePrefix));
     }
 
     public static bool AttemptAllowed(
@@ -360,15 +430,23 @@ public sealed class LocalCliRepairService
         => state switch
         {
             NpmCliInstallState.TrulyUninstalled => new NpmCliRepairPlan(
+                NpmCliRepairKind.NpmInstall,
                 NpmGlobalInstallMode.Install,
                 "package-missing",
                 "absent",
                 "install"),
             NpmCliInstallState.MissingShimWithPackagePresent => new NpmCliRepairPlan(
+                NpmCliRepairKind.NpmInstall,
                 NpmGlobalInstallMode.ForceRelink,
                 "missing-shim-with-package-present",
                 "present",
                 "force-relink"),
+            NpmCliInstallState.LauncherStubWithPackageAndShim => new NpmCliRepairPlan(
+                NpmCliRepairKind.PackagePostinstall,
+                NpmGlobalInstallMode.Install,
+                "launcher-stub-with-package-and-shim",
+                "launcher-stub",
+                "package-postinstall"),
             _ => null,
         };
 
@@ -506,9 +584,9 @@ public sealed class LocalCliRepairService
         string shimStateBefore)
     {
         if (install.Outcome == NpmGlobalInstallOutcome.NpmUnavailable)
-            return $"{cliType} CLI repair failed: npm unavailable. {install.StandardError}";
+            return $"{cliType} CLI repair failed: repair runtime unavailable. {install.StandardError}";
         if (!install.Succeeded)
-            return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} attempted, but npm exited {install.ExitCode?.ToString() ?? "without an exit code"}.";
+            return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, repair action {repairPlan.RepairAction} attempted, but the process exited {install.ExitCode?.ToString() ?? "without an exit code"}.";
         if (!packagePresentAfter)
             return $"{cliType} CLI repair failed: package {repairPlan.PackageState}, command shim {shimStateBefore}, npm action {repairPlan.RepairAction} attempted, but the package is still absent.";
         if (!commandShimRestored)
@@ -524,6 +602,8 @@ public sealed class LocalCliRepairService
             OccurredAt = entry.Timestamp,
             VersionBefore = entry.VersionBefore,
             VersionAfter = entry.VersionAfter,
+            InstallState = entry.InstallState,
+            Detection = entry.Detection,
             Detail = entry.Detail,
         };
 
@@ -539,13 +619,91 @@ public sealed class LocalCliRepairService
             StringComparison.OrdinalIgnoreCase);
     }
 
-    private static (string Scope, string Package, string PackageName)? Definition(string cliType)
+    private static NpmCliDefinition? Definition(string cliType)
         => cliType.ToLowerInvariant() switch
         {
-            CliTypes.Claude => ("@anthropic-ai", "claude-code", "@anthropic-ai/claude-code"),
-            CliTypes.Codex => ("@openai", "codex", "@openai/codex"),
+            CliTypes.Claude => new NpmCliDefinition(
+                "@anthropic-ai",
+                "claude-code",
+                "@anthropic-ai/claude-code",
+                Path.Combine("bin", "claude.exe"),
+                "claude-code-"),
+            CliTypes.Codex => new NpmCliDefinition(
+                "@openai",
+                "codex",
+                "@openai/codex",
+                null,
+                "codex-"),
             _ => null,
         };
+
+    private static string? ResolveLauncherPath(
+        string cliType,
+        string packageDirectory,
+        string packageJson,
+        string? preferredRelativePath)
+    {
+        if (!string.IsNullOrWhiteSpace(preferredRelativePath))
+        {
+            var preferred = Path.Combine(packageDirectory, preferredRelativePath);
+            if (File.Exists(preferred)) return preferred;
+        }
+
+        var binTarget = ReadPackageBinTarget(packageJson, cliType);
+        return string.IsNullOrWhiteSpace(binTarget)
+            ? (!string.IsNullOrWhiteSpace(preferredRelativePath)
+                ? Path.Combine(packageDirectory, preferredRelativePath)
+                : null)
+            : Path.GetFullPath(Path.Combine(packageDirectory, binTarget));
+    }
+
+    private static string? ReadPackageBinTarget(string packageJson, string cliType)
+    {
+        if (!File.Exists(packageJson)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(packageJson));
+            if (!document.RootElement.TryGetProperty("bin", out var bin)) return null;
+            if (bin.ValueKind == JsonValueKind.String) return bin.GetString();
+            if (bin.ValueKind == JsonValueKind.Object
+                && bin.TryGetProperty(cliType, out var target)
+                && target.ValueKind == JsonValueKind.String)
+            {
+                return target.GetString();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Package metadata is best-effort evidence. The fixed Claude
+            // launcher path still covers the known npm layout.
+            SilentCatch.Note(ex, "LocalCliRepairService: package bin metadata unreadable");
+        }
+        return null;
+    }
+
+    private static long? SafeFileSize(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+        try { return new FileInfo(path).Length; }
+        catch { return null; }
+    }
+
+    private static string? FindNestedNativePackage(
+        string packageDirectory,
+        string nativePackageScope,
+        string nativePackagePrefix)
+    {
+        var scopeDirectory = Path.Combine(packageDirectory, "node_modules", nativePackageScope);
+        if (!Directory.Exists(scopeDirectory)) return null;
+        try
+        {
+            return Directory.EnumerateDirectories(scopeDirectory)
+                .FirstOrDefault(path => Path.GetFileName(path).StartsWith(
+                    nativePackagePrefix,
+                    StringComparison.OrdinalIgnoreCase));
+        }
+        catch { return null; }
+    }
 
     private static string? ReadPackageVersion(string path)
     {
@@ -571,6 +729,13 @@ public sealed class LocalCliRepairService
 
 }
 
+internal sealed record NpmCliDefinition(
+    string Scope,
+    string Package,
+    string PackageName,
+    string? LauncherRelativePath,
+    string NativePackagePrefix);
+
 public sealed record NpmLogEvidence(
     string FileName,
     DateTimeOffset ModifiedAt,
@@ -592,4 +757,9 @@ public sealed record LocalCliRepairJournalEntry(
     string Detail,
     string NpmStandardOutput,
     string NpmStandardError,
-    IReadOnlyList<NpmLogEvidence> RecentNpmActivity);
+    IReadOnlyList<NpmLogEvidence> RecentNpmActivity,
+    string? InstallState = null,
+    string? LauncherPath = null,
+    long? LauncherSizeBytes = null,
+    string? VersionProbeOutput = null,
+    string? NativePackageDirectory = null);

@@ -10,6 +10,17 @@ namespace AgentStudio.Cli;
 /// </summary>
 public sealed class CliEnvironment
 {
+    private static readonly IReadOnlyDictionary<string, string> GuardedProbeEnvironment =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TERM"] = "xterm-256color",
+            ["COLORTERM"] = "truecolor",
+            ["FORCE_COLOR"] = "0",
+            ["NO_COLOR"] = "1",
+            ["CLAUDE_CODE_DISABLE_AUTOUPDATER"] = "1",
+            ["DISABLE_AUTOUPDATER"] = "1",
+        };
+
     private readonly ILogger<CliEnvironment> _logger;
 
     public CliEnvironment(ILogger<CliEnvironment> logger)
@@ -25,4 +36,12 @@ public sealed class CliEnvironment
 
     /// <summary>No-op retained for the probe base class.</summary>
     public bool EnsureTerminalSetupAcknowledged(params string[] terminalIds) => false;
+
+    /// <summary>
+    /// Environment applied to every observability-only PTY spawn. Quota probes,
+    /// model discovery, and the diagnostic probe endpoint must never update a
+    /// globally installed CLI while inspecting it.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ProbeEnvironment()
+        => GuardedProbeEnvironment;
 }

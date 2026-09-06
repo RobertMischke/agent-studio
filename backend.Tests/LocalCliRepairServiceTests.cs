@@ -50,6 +50,58 @@ public sealed class LocalCliRepairServiceTests
         Assert.Equal(NpmCliInstallState.PackagePresentWithShim, inspection.State);
     }
 
+    [Fact]
+    public void Inspect_detects_claude_launcher_stub_and_records_native_package_evidence()
+    {
+        using var temp = new TempDirectory();
+        var npmBin = Path.Combine(temp.Path, "npm");
+        var packageDir = Path.Combine(
+            npmBin, "node_modules", "@anthropic-ai", "claude-code");
+        var launcher = Path.Combine(packageDir, "bin", "claude.exe");
+        var nativePackage = Path.Combine(
+            packageDir,
+            "node_modules",
+            "@anthropic-ai",
+            "claude-code-win32-x64");
+        Directory.CreateDirectory(Path.GetDirectoryName(launcher)!);
+        Directory.CreateDirectory(nativePackage);
+        File.WriteAllText(
+            Path.Combine(packageDir, "package.json"),
+            "{\"version\":\"2.1.263\",\"bin\":{\"claude\":\"bin/claude.exe\"}}");
+        File.WriteAllBytes(launcher, new byte[500]);
+        File.WriteAllText(Path.Combine(npmBin, "claude.cmd"), "command shim");
+
+        var inspection = LocalCliRepairService.Inspect("claude", "claude", npmBin);
+
+        Assert.Equal(NpmCliInstallState.LauncherStubWithPackageAndShim, inspection.State);
+        Assert.Equal(launcher, inspection.LauncherPath);
+        Assert.Equal(500, inspection.LauncherSizeBytes);
+        Assert.Equal(nativePackage, inspection.NativePackageDirectory);
+    }
+
+    [Fact]
+    public void Inspect_detects_claude_launcher_stub_from_failed_version_output()
+    {
+        using var temp = new TempDirectory();
+        var npmBin = Path.Combine(temp.Path, "npm");
+        var packageDir = Path.Combine(
+            npmBin, "node_modules", "@anthropic-ai", "claude-code");
+        var launcher = Path.Combine(packageDir, "bin", "claude.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(launcher)!);
+        File.WriteAllText(Path.Combine(packageDir, "package.json"), "{\"version\":\"2.1.263\"}");
+        File.WriteAllBytes(launcher, new byte[LocalCliRepairService.LauncherStubThresholdBytes]);
+        File.WriteAllText(Path.Combine(npmBin, "claude.cmd"), "command shim");
+
+        var inspection = LocalCliRepairService.Inspect(
+            "claude",
+            "claude",
+            npmBin,
+            "Error: claude native binary not installed.");
+
+        Assert.Equal(NpmCliInstallState.LauncherStubWithPackageAndShim, inspection.State);
+        Assert.Contains("native binary not installed", inspection.VersionProbeOutput, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(NpmGlobalInstallMode.Install, false)]
     [InlineData(NpmGlobalInstallMode.ForceRelink, true)]
@@ -126,6 +178,7 @@ public sealed class LocalCliRepairServiceTests
     [Theory]
     [InlineData(NpmCliInstallState.TrulyUninstalled, NpmGlobalInstallMode.Install)]
     [InlineData(NpmCliInstallState.MissingShimWithPackagePresent, NpmGlobalInstallMode.ForceRelink)]
+    [InlineData(NpmCliInstallState.LauncherStubWithPackageAndShim, NpmGlobalInstallMode.Install)]
     public void Repair_plan_selects_remedy_for_package_and_shim_state(
         NpmCliInstallState state,
         NpmGlobalInstallMode expectedMode)
@@ -134,6 +187,17 @@ public sealed class LocalCliRepairServiceTests
 
         Assert.NotNull(plan);
         Assert.Equal(expectedMode, plan.InstallMode);
+    }
+
+    [Fact]
+    public void Repair_plan_replays_package_postinstall_for_launcher_stub()
+    {
+        var plan = LocalCliRepairService.SelectRepairPlan(
+            NpmCliInstallState.LauncherStubWithPackageAndShim);
+
+        Assert.NotNull(plan);
+        Assert.Equal(NpmCliRepairKind.PackagePostinstall, plan.Kind);
+        Assert.Equal("launcher-stub-with-package-and-shim", plan.Detection);
     }
 
     [Theory]
@@ -258,6 +322,122 @@ public sealed class LocalCliRepairServiceTests
         Assert.True(healthy.Available);
         Assert.Equal(1, installer.Calls);
         Assert.Equal(3, versionProbeCalls);
+    }
+
+    [Fact]
+    public async Task Probe_repairs_claude_launcher_stub_with_package_postinstall()
+    {
+        using var temp = new TempDirectory();
+        var appData = Path.Combine(temp.Path, "appdata");
+        var npmBin = Path.Combine(appData, "npm");
+        var packageDir = Path.Combine(
+            npmBin, "node_modules", "@anthropic-ai", "claude-code");
+        var launcher = Path.Combine(packageDir, "bin", "claude.exe");
+        var nativePackage = Path.Combine(
+            packageDir,
+            "node_modules",
+            "@anthropic-ai",
+            "claude-code-win32-x64");
+        var nativeBinary = Path.Combine(nativePackage, "claude.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(launcher)!);
+        Directory.CreateDirectory(nativePackage);
+        File.WriteAllText(Path.Combine(packageDir, "package.json"), "{\"version\":\"2.1.263\"}");
+        File.WriteAllText(Path.Combine(packageDir, "install.cjs"), "postinstall");
+        File.WriteAllBytes(launcher, new byte[500]);
+        File.WriteAllBytes(nativeBinary, new byte[8192]);
+        File.WriteAllText(Path.Combine(npmBin, "claude.cmd"), "command shim");
+        var installer = new FakeInstaller(
+            (_, _) => { },
+            onPostinstall: (_, _, _) => File.Copy(nativeBinary, launcher, overwrite: true));
+        var journal = Path.Combine(temp.Path, "cli-self-heal.jsonl");
+        var service = new LocalCliRepairService(
+            installer,
+            NullLogger<LocalCliRepairService>.Instance,
+            () => new DateTimeOffset(2026, 9, 6, 16, 32, 0, TimeSpan.Zero),
+            () => true,
+            () => appData,
+            () => null,
+            journal);
+
+        (bool Available, string? Version, string Path) Probe()
+            => new FileInfo(launcher).Length >= LocalCliRepairService.LauncherStubThresholdBytes
+                ? (true, "2.1.263 (Claude Code)", "claude")
+                : (false, "Error: claude native binary not installed.", "claude");
+
+        var result = await service.ProbeAndRepairAsync(
+            "claude", "2.1.261", Probe, CancellationToken.None);
+
+        Assert.True(result.Available);
+        Assert.Equal(1, installer.PostinstallCalls);
+        Assert.Equal(0, installer.Calls);
+        Assert.Empty(service.Current());
+        var journalText = File.ReadAllText(journal);
+        Assert.Contains("launcher-stub-with-package-and-shim", journalText, StringComparison.Ordinal);
+        Assert.Contains("\"launcherSizeBytes\":500", journalText, StringComparison.Ordinal);
+        Assert.Contains("claude-code-win32-x64", journalText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Missing_package_postinstall_falls_back_to_exact_installed_version()
+    {
+        using var temp = new TempDirectory();
+        var installer = new FallbackRecordingInstaller();
+
+        var result = await installer.RunPackagePostinstallAsync(
+            temp.Path,
+            "@anthropic-ai/claude-code",
+            "2.1.263",
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("@anthropic-ai/claude-code@2.1.263", installer.PackageName);
+        Assert.Equal(NpmGlobalInstallMode.Install, installer.Mode);
+    }
+
+    [Fact]
+    public async Task Failed_launcher_stub_repair_is_projected_until_next_healthy_probe()
+    {
+        using var temp = new TempDirectory();
+        var appData = Path.Combine(temp.Path, "appdata");
+        var npmBin = Path.Combine(appData, "npm");
+        var packageDir = Path.Combine(
+            npmBin, "node_modules", "@anthropic-ai", "claude-code");
+        var launcher = Path.Combine(packageDir, "bin", "claude.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(launcher)!);
+        File.WriteAllText(Path.Combine(packageDir, "package.json"), "{\"version\":\"2.1.263\"}");
+        File.WriteAllText(Path.Combine(packageDir, "install.cjs"), "postinstall");
+        File.WriteAllBytes(launcher, new byte[500]);
+        File.WriteAllText(Path.Combine(npmBin, "claude.cmd"), "command shim");
+        var now = new DateTimeOffset(2026, 9, 6, 16, 32, 0, TimeSpan.Zero);
+        var journal = Path.Combine(temp.Path, "cli-self-heal.jsonl");
+        var service = new LocalCliRepairService(
+            new FakeInstaller((_, _) => { }, NpmGlobalInstallOutcome.Failed),
+            NullLogger<LocalCliRepairService>.Instance,
+            () => now,
+            () => true,
+            () => appData,
+            () => null,
+            journal);
+
+        (bool Available, string? Version, string Path) Probe()
+            => new FileInfo(launcher).Length >= LocalCliRepairService.LauncherStubThresholdBytes
+                ? (true, "2.1.263 (Claude Code)", "claude")
+                : (false, "Error: claude native binary not installed.", "claude");
+
+        await service.ProbeAndRepairAsync("claude", "2.1.261", Probe, CancellationToken.None);
+
+        var failure = Assert.Single(service.Current());
+        Assert.Equal(nameof(NpmCliInstallState.LauncherStubWithPackageAndShim), failure.InstallState);
+        Assert.Equal("launcher-stub-with-package-and-shim", failure.Detection);
+
+        File.WriteAllBytes(launcher, new byte[8192]);
+        now = now.AddMinutes(5);
+        var healthy = await service.ProbeAndRepairAsync(
+            "claude", "2.1.263", Probe, CancellationToken.None);
+
+        Assert.True(healthy.Available);
+        Assert.Empty(service.Current());
+        Assert.Contains("\"outcome\":\"resolved\"", File.ReadAllText(journal), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -423,9 +603,11 @@ public sealed class LocalCliRepairServiceTests
 
     private sealed class FakeInstaller(
         Action<string, NpmGlobalInstallMode> onInstall,
-        NpmGlobalInstallOutcome outcome = NpmGlobalInstallOutcome.Succeeded) : NpmGlobalInstaller
+        NpmGlobalInstallOutcome outcome = NpmGlobalInstallOutcome.Succeeded,
+        Action<string, string, string?>? onPostinstall = null) : NpmGlobalInstaller
     {
         public int Calls { get; private set; }
+        public int PostinstallCalls { get; private set; }
         public NpmGlobalInstallMode? LastMode { get; private set; }
 
         public override Task<NpmGlobalInstallResult> InstallAsync(
@@ -441,6 +623,41 @@ public sealed class LocalCliRepairServiceTests
                 outcome == NpmGlobalInstallOutcome.Succeeded ? 0 : 1,
                 outcome == NpmGlobalInstallOutcome.Succeeded ? "installed" : "",
                 outcome == NpmGlobalInstallOutcome.Succeeded ? "" : "install failed"));
+        }
+
+        public override Task<NpmGlobalInstallResult> RunPackagePostinstallAsync(
+            string packageDirectory,
+            string packageName,
+            string? installedVersion,
+            CancellationToken ct)
+        {
+            PostinstallCalls++;
+            onPostinstall?.Invoke(packageDirectory, packageName, installedVersion);
+            return Task.FromResult(new NpmGlobalInstallResult(
+                outcome,
+                outcome == NpmGlobalInstallOutcome.Succeeded ? 0 : 1,
+                outcome == NpmGlobalInstallOutcome.Succeeded ? "postinstall complete" : "",
+                outcome == NpmGlobalInstallOutcome.Succeeded ? "" : "postinstall failed"));
+        }
+    }
+
+    private sealed class FallbackRecordingInstaller : NpmGlobalInstaller
+    {
+        public string? PackageName { get; private set; }
+        public NpmGlobalInstallMode? Mode { get; private set; }
+
+        public override Task<NpmGlobalInstallResult> InstallAsync(
+            string packageName,
+            NpmGlobalInstallMode mode,
+            CancellationToken ct)
+        {
+            PackageName = packageName;
+            Mode = mode;
+            return Task.FromResult(new NpmGlobalInstallResult(
+                NpmGlobalInstallOutcome.Succeeded,
+                0,
+                "installed",
+                ""));
         }
     }
 

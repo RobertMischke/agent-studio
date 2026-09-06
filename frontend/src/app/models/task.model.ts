@@ -1690,7 +1690,7 @@ export interface SetRunnerModeResponse {
 
 export interface RunnerStatus {
   projects: Record<string, ProjectRunnerStatus>;
-  /** Active bounded local npm-shim repair failures; healthy CLIs are omitted. */
+  /** Active bounded local npm-package repair failures; healthy CLIs are omitted. */
   cliRepairs?: LocalCliRepairStatus[];
 }
 
@@ -1700,6 +1700,8 @@ export interface LocalCliRepairStatus {
   occurredAt: string;
   versionBefore?: string | null;
   versionAfter?: string | null;
+  installState?: string | null;
+  detection?: string | null;
   detail: string;
 }
 
