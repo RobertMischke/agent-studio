@@ -46,6 +46,8 @@ interface TaskFixture {
       result: string;
       observedAt: string;
       summary: string;
+      reason: string;
+      reportRef: string;
     }>;
   };
 }
@@ -391,6 +393,8 @@ test('archived-card evidence incident renders honest before and SHA-linked after
               result: 'passed',
               observedAt: '2026-07-29T20:41:22Z',
               summary: `Review build-tests Pass at ${sha}`,
+              reason: 'All recorded build-test commands passed.',
+              reportRef: `remote-review-grade-${reviewId}.md`,
             }],
           }
         : {
@@ -464,6 +468,10 @@ test('build gate not-applicable is neutral while a true skip stays red', async (
       result: state,
       observedAt: '2026-08-08T10:00:00Z',
       summary,
+      reason: state === 'not-proven'
+        ? 'Build/test proof is missing because command execution was interrupted.'
+        : 'No build/test commands are defined for this project.',
+      reportRef: 'post-steps/build-test-gate-1.log',
     }],
   });
   const grouped = (): typeof GROUPED => ({

@@ -118,6 +118,10 @@ describe('ResultViewComponent', () => {
           result: state,
           observedAt: null,
           summary,
+          reason: state === 'not-proven'
+            ? 'Build/test proof is missing because command execution was interrupted.'
+            : 'No build/test commands are defined for this project.',
+          reportRef: 'post-steps/build-test-gate-1.log',
         }],
       },
     }), verdict());

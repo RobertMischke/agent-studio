@@ -6,15 +6,40 @@
        [attr.data-testid]="testId()"
        [appTooltip]="tooltipText()">
     <span class="test-evidence__dot" aria-hidden="true"></span>
-    <span class="test-evidence__copy">
-      <strong>{{ evidence.summary }}</strong>
-      @if (evidence.runId) {
-        <small>{{ evidence.runId }} · {{ evidence.runState }}{{ evidence.runResult ? ' · ' + evidence.runResult : '' }}</small>
-      } @else if (evidence.sources?.length) {
-        <small>{{ sourceDetail() }}</small>
-      } @else {
-        <small>No SHA-linked project run, build gate, or review grade is recorded.</small>
-      }
-    </span>
+    @if (variant() === 'panel' && evidence.sources?.length) {
+      <ul class="test-evidence__sources" aria-label="Test and review evidence">
+        @for (source of evidence.sources; track sourceIdentity(source)) {
+          <li class="test-evidence__source"
+              [attr.data-source-result]="source.result"
+              [attr.data-testid]="'test-evidence-source-' + source.kind"
+              [attr.aria-label]="sourceAriaLabel(source)"
+              [appTooltip]="sourceReason(source)">
+            <span class="test-evidence__source-dot" aria-hidden="true"></span>
+            <span class="test-evidence__copy">
+              <strong>{{ source.summary }}</strong>
+              <small>{{ sourceReason(source) }}</small>
+            </span>
+            @if (reportHref(source); as href) {
+              <a class="test-evidence__report"
+                 [href]="href"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 [attr.aria-label]="'Open report ' + source.reportRef">Report</a>
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <span class="test-evidence__copy">
+        <strong>{{ evidence.summary }}</strong>
+        @if (evidence.runId) {
+          <small>{{ evidence.runId }} · {{ evidence.runState }}{{ evidence.runResult ? ' · ' + evidence.runResult : '' }}</small>
+        } @else if (evidence.sources?.length) {
+          <small>{{ sourceDetail() }}</small>
+        } @else {
+          <small>No SHA-linked project run, build gate, or review grade is recorded.</small>
+        }
+      </span>
+    }
   </div>
 }

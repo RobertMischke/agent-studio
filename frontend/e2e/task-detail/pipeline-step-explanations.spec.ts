@@ -32,7 +32,44 @@ function makeDetail(state: string, gateStatus: 'passed' | 'notApplicable' | 'ski
       ? 'No build/test defined'
       : gateStatus === 'skipped'
         ? 'Build/test gate skipped at d1649ce9'
-        : 'Build/test gate passed at d1649ce9';
+        : 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)';
+  const sources = gateStatus === 'passed'
+    ? [
+        {
+          kind: 'review-build-tests',
+          id: 'review_ad5cca8e3178425fb9ba9cabe329d50e',
+          commit: '491ddd64',
+          result: 'passed',
+          observedAt: '2026-08-31T20:41:22Z',
+          summary: evidenceSummary,
+          reason: 'verify-1 and verify-2 passed.',
+          reportRef: 'remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e.md',
+        },
+        {
+          kind: 'review-aspects',
+          id: 'review_ad5cca8e3178425fb9ba9cabe329d50e:documentation-impact',
+          commit: '491ddd64',
+          result: 'blocked',
+          observedAt: '2026-08-31T20:41:22Z',
+          summary: 'Review blocked by documentation-impact',
+          reason: 'documentation-impact blocked: Public API and state-file contract changed without corresponding load-bearing doc updates.',
+          reportRef: 'remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e.md',
+        },
+      ]
+    : [
+        {
+          kind: 'build-test-gate',
+          id: 'gate-d1649ce9',
+          commit: 'd1649ce9',
+          result: evidenceState,
+          observedAt: '2026-06-02T08:00:02Z',
+          summary: evidenceSummary,
+          reason: evidenceState === 'not-proven'
+            ? 'Build/test proof is missing because command execution was interrupted.'
+            : 'No build/test commands are defined for this project.',
+          reportRef: 'post-steps/build-test-gate-1.log',
+        },
+      ];
   return {
     info: {
       id: JOB_ID,
@@ -64,16 +101,7 @@ function makeDetail(state: string, gateStatus: 'passed' | 'notApplicable' | 'ski
         evidenceState,
         awaitingEvidence: false,
         summary: evidenceSummary,
-        sources: [
-          {
-            kind: 'build-test-gate',
-            id: 'gate-d1649ce9',
-            commit: 'd1649ce9',
-            result: evidenceState,
-            observedAt: '2026-06-02T08:00:02Z',
-            summary: evidenceSummary,
-          },
-        ],
+        sources,
       },
     },
     promptMarkdown: 'Test prompt.',
@@ -469,6 +497,50 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
           clip: { x, y, width: right - x, height: bottom - y },
         });
         await testInfo.attach(`pipeline-subset-coverage-tooltip--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    }
+  });
+
+  test('Evidence keeps passing build-tests separate from the blocking review aspect', async ({
+    page,
+  }, testInfo) => {
+    await installRoutes(page, '5-human-review');
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+    await dismissErrorDialog(page);
+    const evidenceTab = page.getByTestId('prompt-tab-evidence');
+    await expect(evidenceTab).toBeVisible();
+    await dismissErrorDialog(page);
+    await evidenceTab.click({ force: true });
+
+    const evidence = page.getByTestId('evidence-tab-test-evidence');
+    const buildTests = page.getByTestId('test-evidence-source-review-build-tests');
+    const aspect = page.getByTestId('test-evidence-source-review-aspects');
+    await expect(evidence).toBeVisible();
+    await expect(buildTests).toHaveAttribute('data-source-result', 'passed');
+    await expect(buildTests).toContainText('Review build-tests Pass at 491ddd64 (verify-1, verify-2)');
+    await expect(buildTests).toContainText('verify-1 and verify-2 passed.');
+    await expect(aspect).toHaveAttribute('data-source-result', 'blocked');
+    await expect(aspect).toContainText('Review blocked by documentation-impact');
+    await expect(aspect).toHaveAttribute('aria-label', /Public API and state-file contract changed/);
+    await expect(aspect.getByRole('link', { name: /Open report/ })).toHaveAttribute(
+      'href',
+      /remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e\.md/,
+    );
+
+    if (RESULTS_DIR) {
+      for (const theme of ['dark', 'light'] as const) {
+        await setTheme(page, theme);
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2714--independent-review-evidence--${theme}--mocked.png`,
+        );
+        await evidence.screenshot({ path: screenshotPath });
+        await testInfo.attach(`independent-review-evidence--${theme}`, {
           path: screenshotPath,
           contentType: 'image/png',
         });

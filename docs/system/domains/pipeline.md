@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-27
+Version: 2026-09-06
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -630,6 +630,19 @@ tools, build/test commands, and semantic aspects. W18 may later provide a
 first-class claimable GateAttempt for integration and release gates so their
 queueing, retries, cleanup, and terminal infrastructure state are independently
 visible without consuming review identity.
+
+Task evidence preserves those facts independently. A `review-build-tests`
+source is derived only from the Remote Review report's `build-tests` verdict
+rows: all rows passing proves the build/test commands, any failed row fails the
+proof, and no row produces `not-proven` with the missing command named in the
+reason. The report's overall outcome and a blocking semantic aspect never
+override a green build/test result. Each blocking aspect is projected as a
+separate `review-aspects` source with result `blocked`, the aspect name and
+summary in its reason, and warn presentation in the Evidence tab. Every
+task-scoped evidence source carries a one-sentence `reason` and a `reportRef` to
+the originating review report or gate receipt; the Evidence tab renders both
+and links the reference. Failed build proof uses the bad tone, blocked aspects
+use the warn tone, and missing proof remains neutral.
 
 Every remotely executed command records `executionLocation=remote`, Host,
 Executor, ReviewAttempt, lease/fence-derived authority, start/finish time, exact
