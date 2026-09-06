@@ -4,12 +4,18 @@
   "title": "Admin Surface Design Guideline",
   "summary": "Binding admin-surface standard: flat full-bleed composition, compact disclosure-first headers, one grid for stream entries, non-redundant sober copy, project identity, operator-grade density, bounded prose width, theme tokens, and locally hosted fonts. Includes a fully specified Activity reference, a screenshot-backed violation audit, an incremental adoption contract, an explicit prohibition on nested outcome-summary boxes, the details-panel addendum, the append-only Navigation citizenship chapter with three light/dark Tree variants, a neutral waiting-decision counter recommendation, state rules, a follow-up slice boundary, visual Dos and Don'ts pairs, and an append-only Applied surfaces register.",
   "entrypoint": "index.html",
-  "status": "living-standard",
-  "phase": "accepted",
+  "status": "documented",
+  "phase": "informational",
   "updatedAt": "2026-08-16T00:00:00Z",
   "pages": [
-    { "title": "Visual dos and don'ts", "path": "pages/dos-and-donts.html" },
-    { "title": "Applied surfaces", "path": "pages/applied-surfaces.html" }
+    {
+      "title": "Visual dos and don'ts",
+      "path": "pages/dos-and-donts.html"
+    },
+    {
+      "title": "Applied surfaces",
+      "path": "pages/applied-surfaces.html"
+    }
   ],
   "sourceTaskKeys": [
     "AGT-2583"

@@ -4,8 +4,8 @@
   "title": "Live improvement log",
   "summary": "Operator-ordered rolling log (2026-08-18): the orchestrator records improvement observations from live supervision over the coming hours. Every entry is reconciled against in-flight cards and existing dossiers before it may propose new work - dedup is the core discipline. Entries carry one of three verdicts: covered-by (existing key), operator-action (no ticket needed, a hand must move), or new-candidate (becomes a card only after a second sighting or operator nod).",
   "entrypoint": "index.html",
-  "status": "accepted",
-  "phase": "in-progress",
+  "status": "decided",
+  "phase": "testing",
   "updatedAt": "2026-08-18T09:00:00Z",
   "sourceTaskKeys": [],
   "relatedTaskKeys": [

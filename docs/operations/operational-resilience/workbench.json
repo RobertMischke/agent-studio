@@ -4,8 +4,8 @@
   "title": "Operative Resilienz",
   "summary": "Synthese-Dossier zur operativen Resilienz einer selbstfahrenden Agenten-Fleet: elf Ausfallklassen aus dem Live-Betrieb, jeweils mit Symptom, Ursache, Härtung und zuständiger Karte. Verbindende These: Fleet-Ausfälle sind fast immer still - das Symptom heißt fast immer 'System appears stalled'. Enthält ein Regelkreis-Diagramm (deliver -> gate -> review -> integrate -> accept) mit Markierung, wo jede Klasse zuschlägt, eine Symptom-Ursache-Fix-Tabelle und Querverweise auf die Quell-Dossiers sowie den öffentlichen Concept-Doc.",
   "entrypoint": "index.html",
-  "status": "accepted",
-  "phase": "documented",
+  "status": "decided",
+  "phase": "informational",
   "updatedAt": "2026-08-27T00:00:00Z",
   "sourceTaskKeys": [],
   "relatedTaskKeys": [
