@@ -10,5 +10,14 @@
   "editedBy": "Orchestrator (Claude) im Auftrag von Robert, 06.09.2026",
   "statusReason": "Entscheidungen getroffen (Freigabe Robert 06.09.: autonom auswerten und umsetzen); Umsetzungskarten R1-R4 in Ready; loest AGT-W11 (log-retention) und den Entwurf workspace-repo-nachhaltigkeit ab.",
   "sourceTaskKeys": [],
-  "relatedTaskKeys": ["AGT-2743", "AGT-2744", "AGT-2745", "AGT-2746", "AGT-2728", "AGT-2732", "AGT-2739"]
+  "relatedTaskKeys": [
+    "AGT-2743",
+    "AGT-2744",
+    "AGT-2745",
+    "AGT-2746",
+    "AGT-2728",
+    "AGT-2732",
+    "AGT-2739"
+  ],
+  "key": "ASW-W46"
 }
