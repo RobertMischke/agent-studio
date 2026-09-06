@@ -2221,6 +2221,28 @@
             one-slice review and a passing-build repeated-block escalation to <span class="lane">5e-escalated</span>.
           </td>
         </tr>
+        <tr id="case-agt-2692">
+          <td>2026-08-31</td>
+          <td><code>AGT-2692</code><br><span class="small">Codex "at capacity" crash recorded as an external completion into human review</span></td>
+          <td>
+            The remote run received <code>{"type":"error","message":"Selected model is at capacity."}</code> and
+            <code>turn.failed</code> three minutes after start, exited 1, and was classified <code>CliCrash</code> with
+            <code>recovery=TerminateHonestly</code>. The honest-termination path then posted an external completion
+            "without a terminal sentinel" whose verified result SHA was the develop base (no commits, no diff). The card
+            landed in <code>5-human-review</code> with a parked operator-decision blocker and "no code change".
+          </td>
+          <td>
+            <code>BuildVerifiedOutOfBandRequest</code> only checks that the secured work matches the delivery proof; it does
+            not require the result to differ from the base and does not consult the typed <code>CliCrash</code> outcome.
+            "At capacity" is missing from the provider-access rate-limit signals, so the capability latched as
+            <code>ProviderUnauthorized</code> (same family as AGT-2694).
+          </td>
+          <td>
+            <b>Card AGT-2713</b>: a run without a delivery is a failed attempt with its crash reason, never a completion;
+            the server rejects result-equals-base completions; "at capacity" becomes a bounded rate limit; the Codex
+            <code>error</code> frame is typed. Operator requeued the card on 2026-09-06 after the runner link was restored.
+          </td>
+        </tr>
         <tr id="case-cac-18-review-preparation-plan-loop">
           <td>2026-09-01</td>
           <td><code>CAC-18</code><br><span class="small">untracked review preparation plan loop</span></td>
