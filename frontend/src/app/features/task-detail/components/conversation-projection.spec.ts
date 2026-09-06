@@ -19,7 +19,10 @@ import {
   isInternalEventLine,
   isNonRenderableRawLine,
   isRenderableActivityKind,
+  isTruncatedJsonLine,
+  repairTruncatedCodexFrame,
   sanitizeProjectionLines,
+  TRUNCATED_PAYLOAD_NOTE,
 } from './conversation-projection';
 import { CliOutputLine } from '../../../models/task.model';
 
@@ -286,5 +289,106 @@ describe('renderable-kind whitelist', () => {
   it('rejects an unknown kind', () => {
     expect(isRenderableActivityKind('stream-json')).toBe(false);
     expect(isRenderableActivityKind('')).toBe(false);
+  });
+});
+
+// A Codex `item.completed` command frame as it appears on one stdout line. The
+// command carries nested escaped quotes, the output a `\u00fc` escape, a
+// newline escape, and an escaped backslash, so a cut can land inside each.
+const CODEX_COMMAND_FRAME =
+  '{"type":"item.completed","item":{"id":"item_13","type":"command_execution",'
+  + '"command":"/bin/bash -lc \\"rg -n \\\\\\"CAR migration|Freigabe\\\\\\" --glob \'!**/bin/**\'\\"",'
+  + '"aggregated_output":"docs/a.md:1: Schl\\u00fcssel line\\ndocs/b.md:2: second line with a backslash \\\\ here",'
+  + '"exit_code":0,"status":"completed"}}';
+// Marker the backend CliOutputLogParser appends (number formatted by the host locale).
+const BACKEND_CUT_MARKER = '\u2026[truncated: line exceeded 65.536 chars]';
+// Marker the remote runner LogShipper appends.
+const RUNNER_CUT_MARKER = ' [runner: event payload truncated]';
+
+function cutFrame(at: number, marker = BACKEND_CUT_MARKER): string {
+  return CODEX_COMMAND_FRAME.slice(0, at) + marker;
+}
+
+function parseRepaired(text: string): { type: string; item: Record<string, unknown> } {
+  const repaired = repairTruncatedCodexFrame(text);
+  expect(repaired).not.toBeNull();
+  return JSON.parse(repaired as string) as { type: string; item: Record<string, unknown> };
+}
+
+describe('repairTruncatedCodexFrame - frames cut at the 64 KiB log line cap', () => {
+  it('closes a frame cut inside aggregated_output and keeps id, command and type', () => {
+    const frame = parseRepaired(cutFrame(CODEX_COMMAND_FRAME.indexOf('second line')));
+    expect(frame.type).toBe('item.completed');
+    expect(frame.item['id']).toBe('item_13');
+    expect(frame.item['type']).toBe('command_execution');
+    expect(String(frame.item['command'])).toContain('rg -n \\"CAR migration|Freigabe\\"');
+    expect(String(frame.item['aggregated_output'])).toContain('docs/a.md:1: Schlüssel line');
+    expect(String(frame.item['aggregated_output'])).toContain(TRUNCATED_PAYLOAD_NOTE);
+    expect(frame.item['exit_code']).toBeUndefined();
+  });
+
+  it('accepts the runner marker as well', () => {
+    const frame = parseRepaired(cutFrame(CODEX_COMMAND_FRAME.indexOf('second line'), RUNNER_CUT_MARKER));
+    expect(frame.item['id']).toBe('item_13');
+  });
+
+  it('drops an escape sequence the cut left unfinished', () => {
+    const insideUnicode = CODEX_COMMAND_FRAME.indexOf('\\u00fc') + 3;
+    expect(String(parseRepaired(cutFrame(insideUnicode)).item['aggregated_output'])).toContain('Schl');
+    const afterBackslash = CODEX_COMMAND_FRAME.indexOf('\\\\ here') + 1;
+    expect(String(parseRepaired(cutFrame(afterBackslash)).item['aggregated_output'])).toContain('backslash');
+  });
+
+  it('puts the note on the output when the cut sits between tokens', () => {
+    const afterComma = CODEX_COMMAND_FRAME.indexOf('"exit_code"');
+    const frame = parseRepaired(cutFrame(afterComma));
+    expect(String(frame.item['aggregated_output'])).toContain('second line with a backslash \\ here');
+    expect(String(frame.item['aggregated_output'])).toContain(TRUNCATED_PAYLOAD_NOTE);
+    expect(frame.item['exit_code']).toBeUndefined();
+  });
+
+  it('yields a parseable frame with the original type for every cut position', () => {
+    const typeEnd = CODEX_COMMAND_FRAME.indexOf(',');
+    const idEnd = CODEX_COMMAND_FRAME.indexOf('"type":"command_execution"');
+    for (let at = typeEnd; at < CODEX_COMMAND_FRAME.length; at++) {
+      const repaired = repairTruncatedCodexFrame(cutFrame(at));
+      expect(repaired, `cut at ${at}`).not.toBeNull();
+      const frame = JSON.parse(repaired as string) as { type: string; item?: Record<string, unknown> };
+      expect(frame.type, `cut at ${at}`).toBe('item.completed');
+      if (at > idEnd) expect(frame.item?.['id'], `cut at ${at}`).toBe('item_13');
+    }
+  });
+
+  it('leaves intact frames, prose and non-Codex frames alone', () => {
+    expect(repairTruncatedCodexFrame(CODEX_COMMAND_FRAME)).toBeNull();
+    expect(repairTruncatedCodexFrame('plain prose' + RUNNER_CUT_MARKER)).toBeNull();
+    expect(repairTruncatedCodexFrame('{"type":"assistant","message":{"role":"assistant"' + RUNNER_CUT_MARKER)).toBeNull();
+    expect(isTruncatedJsonLine('{"type":"assistant","message":{' + RUNNER_CUT_MARKER)).toBe(true);
+    expect(isTruncatedJsonLine('plain prose' + RUNNER_CUT_MARKER)).toBe(false);
+    expect(isTruncatedJsonLine(CODEX_COMMAND_FRAME)).toBe(false);
+  });
+});
+
+describe('sanitizeProjectionLines - truncated frames', () => {
+  it('hands a rebuilt Codex frame to the projection instead of raw prose', () => {
+    const [out] = sanitizeProjectionLines([line(cutFrame(CODEX_COMMAND_FRAME.indexOf('second line')))]);
+    expect(out.text).not.toBe(INTERNAL_EVENT_MARKER);
+    expect(out.text.startsWith('{"type":"item.completed"')).toBe(true);
+    const frame = JSON.parse(out.text) as { item: Record<string, unknown> };
+    expect(frame.item['id']).toBe('item_13');
+    expect(String(frame.item['aggregated_output'])).toContain(TRUNCATED_PAYLOAD_NOTE);
+  });
+
+  it('collapses a cut Anthropic frame to the internal-event marker', () => {
+    const raw = '{"type":"assistant","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"hel'
+      + RUNNER_CUT_MARKER;
+    const [out] = sanitizeProjectionLines([line(raw)]);
+    expect(out.text).toBe(INTERNAL_EVENT_MARKER);
+    expect(out.internalDetail).toContain('"type":"assistant"');
+  });
+
+  it('leaves an intact Codex frame untouched (same array reference)', () => {
+    const input = [line(CODEX_COMMAND_FRAME)];
+    expect(sanitizeProjectionLines(input)).toBe(input);
   });
 });

@@ -33,6 +33,15 @@
  * (`{"type":"item.completed","item":{...}}`) into real tool / message groups.
  * Those are NOT redacted here - the guard only recognises Anthropic
  * `stream-json` / Messages-API transport frames.
+ *
+ * Truncated frames: the log pipeline caps a physical line at 64 KiB (remote
+ * runner `LogShipper`, backend `CliOutputLogParser`) and appends a marker. A
+ * Codex `item.completed` frame with a large `aggregated_output` loses its
+ * closing quotes and braces that way, the library cannot parse it, and the raw
+ * JSON used to land in the chat as agent prose (AGT-2373, 2026-09-06). The
+ * guard rebuilds such a frame into valid JSON with a visible note so it still
+ * projects as a tool call; a cut frame it cannot rebuild collapses to the
+ * `[internal event]` marker like any other unparseable transport frame.
  */
 import type { CliOutputLine } from '../../../models/task.model';
 import { stripAnsi } from '../../../utils/ansi-text';
@@ -144,6 +153,153 @@ export function isRenderableActivityKind(kind: string): boolean {
 }
 
 /**
+ * Markers the log pipeline appends when it cut a physical line: the remote
+ * runner's `LogShipper` (64 KiB shipping cap) and the backend
+ * `CliOutputLogParser` (64 KiB read cap, number formatted per host locale).
+ */
+const TRUNCATION_MARKER_PATTERNS: readonly RegExp[] = [
+  /\s*\[runner: event payload truncated\]\s*$/,
+  /\s*\u2026\[truncated: line exceeded [^\]]*\]\s*$/,
+];
+
+/** Codex JSONL frames start with the event type; only those are rebuilt. */
+const CODEX_FRAME_START = /^\{\s*"type"\s*:\s*"(?:item|turn|thread|session)\./;
+
+/** Note appended where the payload was cut so the reader sees why it ends abruptly. */
+export const TRUNCATED_PAYLOAD_NOTE =
+  '\u2026 [payload cut at the 64 KiB log line cap; the full output is only in the run log]';
+
+/** Upper bound on retries when the cut sits between JSON tokens. */
+const MAX_REPAIR_ATTEMPTS = 8;
+
+/** True when the line carries a pipeline truncation marker and starts like JSON. */
+export function isTruncatedJsonLine(text: string | undefined | null): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (trimmed[0] !== '{' && trimmed[0] !== '[') return false;
+  return TRUNCATION_MARKER_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+/**
+ * Rebuild a Codex JSONL frame that the log pipeline cut at its line cap into
+ * valid JSON. Returns the repaired frame text, or null when the line is not a
+ * cut Codex frame or cannot be closed into parseable JSON.
+ *
+ * The cut usually lands inside a long string (`aggregated_output`); the string
+ * is closed with {@link TRUNCATED_PAYLOAD_NOTE} and every open object / array
+ * is closed. When the cut sits between tokens (after a comma or colon, inside
+ * a bare literal), the text is trimmed back to the last complete member and
+ * the note goes into the item's output text instead. Structure, ids and the
+ * command text survive; only the tail of the payload is lost, which the note
+ * says explicitly.
+ */
+export function repairTruncatedCodexFrame(text: string | undefined | null): string | null {
+  if (!text) return null;
+  const trimmed = text.trim();
+  const marker = TRUNCATION_MARKER_PATTERNS.find((pattern) => pattern.test(trimmed));
+  if (!marker || !CODEX_FRAME_START.test(trimmed)) return null;
+
+  let body = trimmed.replace(marker, '');
+  for (let attempt = 0; attempt < MAX_REPAIR_ATTEMPTS; attempt++) {
+    const scan = scanJson(body);
+    const closed = closeJson(body, scan);
+    try {
+      const frame = JSON.parse(closed) as unknown;
+      if (!isPlainObject(frame)) return null;
+      return JSON.stringify(annotateTruncatedFrame(frame, scan.inString));
+    } catch {
+      if (scan.lastComma < 0) return null;
+      body = body.slice(0, scan.lastComma);
+    }
+  }
+  return null;
+}
+
+interface JsonScan {
+  /** The text ends inside a string literal. */
+  inString: boolean;
+  /** Start index of an escape sequence the cut left unfinished, or -1. */
+  pendingEscapeStart: number;
+  /** Open containers in nesting order. */
+  stack: ('{' | '[')[];
+  /** Index of the last `,` outside a string: the last safe point to trim to. */
+  lastComma: number;
+}
+
+/** Single pass over a JSON prefix: string state, open containers, last comma. */
+function scanJson(body: string): JsonScan {
+  let inString = false;
+  let escaping = false;
+  let unicodeDigitsLeft = 0;
+  let pendingEscapeStart = -1;
+  let lastComma = -1;
+  const stack: ('{' | '[')[] = [];
+
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (inString) {
+      if (unicodeDigitsLeft > 0) {
+        unicodeDigitsLeft--;
+        if (unicodeDigitsLeft === 0) pendingEscapeStart = -1;
+      } else if (escaping) {
+        escaping = false;
+        if (c === 'u') unicodeDigitsLeft = 4;
+        else pendingEscapeStart = -1;
+      } else if (c === '\\') {
+        escaping = true;
+        pendingEscapeStart = i;
+      } else if (c === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}' || c === ']') stack.pop();
+    else if (c === ',') lastComma = i;
+  }
+
+  return {
+    inString,
+    pendingEscapeStart: escaping || unicodeDigitsLeft > 0 ? pendingEscapeStart : -1,
+    stack,
+    lastComma,
+  };
+}
+
+/** Close the open string (with the note) and every open container. */
+function closeJson(body: string, scan: JsonScan): string {
+  let head = body;
+  if (scan.inString) {
+    if (scan.pendingEscapeStart >= 0) head = head.slice(0, scan.pendingEscapeStart);
+    // JSON.stringify yields a quoted string; drop its outer quotes to append.
+    head += JSON.stringify(`\n${TRUNCATED_PAYLOAD_NOTE}`).slice(1, -1) + '"';
+  }
+  const closers = [...scan.stack].reverse().map((open) => (open === '{' ? '}' : ']')).join('');
+  return head + closers;
+}
+
+/**
+ * When the cut sat inside a string the note is already part of that string.
+ * Otherwise put it on the item's output text so the tool card still shows it.
+ */
+function annotateTruncatedFrame(
+  frame: Record<string, unknown>,
+  cutInsideString: boolean,
+): Record<string, unknown> {
+  if (cutInsideString) return frame;
+  const item = frame['item'];
+  if (!isPlainObject(item)) return frame;
+  let field: 'aggregated_output' | 'text' | null = null;
+  if (typeof item['aggregated_output'] === 'string') field = 'aggregated_output';
+  else if (typeof item['text'] === 'string') field = 'text';
+  if (field === null) return frame;
+  const existing = item[field] as string;
+  const annotated = existing ? `${existing}\n${TRUNCATED_PAYLOAD_NOTE}` : TRUNCATED_PAYLOAD_NOTE;
+  return { ...frame, item: { ...item, [field]: annotated } };
+}
+
+/**
  * True when the line text is a raw Anthropic `stream-json` transport frame that
  * must not be rendered as chat content. Returns false for ordinary prose, for
  * JSON snippets that are not transport frames, and for Codex JSONL frames the
@@ -245,7 +401,12 @@ export function sanitizeProjectionLines(
   let runDetails: string[] | null = null;
 
   for (const line of lines) {
-    const cleanText = stripAnsi(line.text);
+    const rawText = stripAnsi(line.text);
+    // A frame the pipeline cut at its line cap is no longer valid JSON. Rebuild
+    // it so the library projects a tool call instead of raw agent prose.
+    const repaired = repairTruncatedCodexFrame(rawText);
+    const cleanText = repaired ?? rawText;
+    if (repaired !== null) anyRedacted = true;
     // Codex todo_list snapshots have a dedicated living checklist fed from
     // the typed PlanUpdated path. Keep the original line in the untouched
     // Trace input, but do not hand it to CAC where every item.updated frame
@@ -272,7 +433,8 @@ export function sanitizeProjectionLines(
 
     const cleanLine = normalizeProjectionLine(line, cleanText, inCodexTextModeTranscript);
     if (cleanLine !== line) anyRedacted = true;
-    if (isNonRenderableRawLine(cleanText)) {
+    // A cut frame that could not be rebuilt is still transport, never prose.
+    if (isNonRenderableRawLine(cleanText) || (repaired === null && isTruncatedJsonLine(rawText))) {
       anyRedacted = true;
       const detail = cleanText;
       if (runDetails) {
