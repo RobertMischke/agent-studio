@@ -368,6 +368,12 @@ auslöst. Klasse A verlässt den heißen Store nie.</figcaption>
 <p class="stx stx-part"><b>Stand 06.09. 22:30:</b> Ignore-Regel für <code>.metadata/attempt-authority*</code> gesetzt,
 gedriftete Bus-Logs und Task-Zustände committet, Einzel-Push abgebrochen (über 2 GB), Repack der losen Objekte läuft,
 Block-Push zu 250 Commits läuft (erster Block in 303 s). Die übrigen Punkte sind Teil von R1 (§10).</p>
+<p class="stx stx-part"><b>R1 status 07.09. 2026:</b> The standalone engine, legacy file-tree adapter, staged excerpts,
+manifest restore, full-backup commands, commit guards, runtime rotation, and Task Server CLI are implemented and verified.
+The delivery runner cannot access <code>C:\Projects\agent-taskboard-workspace</code>; the similarly named Linux path available
+to the run contains zero tasks, 81,036 bytes, and no Git repository, so it was rejected as the live store. No live plan or
+apply was performed and before/after production numbers remain pending execution on the operator host. The run evidence
+records this distinction instead of substituting fixture measurements.</p>
 <ol>
   <li><b>Log nur am Run-Ende committen.</b> <code>WorkspaceEvidenceBatcher</code> und die Run-Grenzen schließen Klasse C
       während eines laufenden Runs aus; erst der Abschluss des Runs committet eine Version. Erwartete Wirkung: rund 90 %
