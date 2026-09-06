@@ -15,6 +15,7 @@ if (args is ["--help"] or ["-h"])
 
         Configuration is read from engine.env through the process environment:
           SERVER_URL
+          ALLOW_INSECURE_HTTP       1 only on a trusted private container network
           CLIENT_ID
           CLIENT_CREDENTIAL
           REVIEW_CONCURRENCY

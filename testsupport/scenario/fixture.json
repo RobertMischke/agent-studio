@@ -1,0 +1,10 @@
+{
+  "workspace": { "id": "scenario-workspace", "name": "Deployment regression" },
+  "project": { "id": "scenario-project", "name": "Deployment scenario", "taskKeyPrefix": "DSR" },
+  "dossier": { "id": "deployment-dossier", "title": "Deployment decision", "gate": "operator-approval", "decision": "approved" },
+  "epic": { "id": "deployment-epic", "title": "Reduced deployment proof", "tasks": ["coding", "decision"] },
+  "tasks": [
+    { "id": "scenario-coding", "key": "DSR-1", "title": "Repair deterministic fixture", "state": "2-ready" },
+    { "id": "scenario-decision", "key": "DSR-2", "title": "Approve deployment dossier", "state": "0-backlog" }
+  ]
+}

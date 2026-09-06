@@ -452,6 +452,11 @@ evidence.
 The release-blocking harness is intentionally separate from browser E2E. Build
 the deployables once, then run the topology and compatibility gate:
 
+All deployment cards and releases also use the shared
+[deployment regression scenario](../testing/deployment-scenario.md). Run
+`scripts/scenario.sh --target inproc --level smoke` for the card gate and
+`scripts/scenario.sh --target compose --level full` for the release gate.
+
 ```bash
 dotnet build agent-taskboard.sln
 dotnet test runner.Tests/AgentRunner.Tests.csproj \

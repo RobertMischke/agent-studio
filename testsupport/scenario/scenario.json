@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "deployment-regression-v1",
+  "clockUtc": "2026-09-06T10:00:00Z",
+  "smokeStepCount": 6,
+  "steps": [
+    { "id": "bootstrap-principals", "title": "Bootstrap principals", "assertions": [{ "type": "httpStatus", "expected": "200" }] },
+    { "id": "register-runner", "title": "Register coding and review runners", "assertions": [{ "type": "jsonEquals", "path": "status", "expected": "active" }] },
+    { "id": "create-task", "title": "Create scenario project, dossier, epic, and tasks", "assertions": [{ "type": "jsonEquals", "path": "task.state", "expected": "2-ready" }] },
+    { "id": "claim", "title": "Claim the coding task", "assertions": [{ "type": "jsonEquals", "path": "task.state", "expected": "3-progress" }] },
+    { "id": "run-fake-cli", "title": "Run deterministic fake coding CLI", "assertions": [{ "type": "gitCommit", "expected": "fix: make fixture test pass" }, { "type": "fileExists", "expected": "fake-cli.log" }] },
+    { "id": "auto-review", "title": "Run deterministic fake review CLI", "assertions": [{ "type": "jsonEquals", "path": "review.outcome", "expected": "Pass" }] },
+    { "id": "integrate", "title": "Integrate reviewed result", "assertions": [{ "type": "jsonEquals", "path": "task.state", "expected": "5-human-review" }] },
+    { "id": "complete", "title": "Complete the coding task", "assertions": [{ "type": "jsonEquals", "path": "task.state", "expected": "6-completed" }] },
+    { "id": "orchestrator-chat", "title": "Append orchestrator chat turn with context receipt", "assertions": [{ "type": "jsonEquals", "path": "turn.receipt.sources[0].status", "expected": "included" }] },
+    { "id": "dossier-decision", "title": "Record the dossier decision", "assertions": [{ "type": "jsonEquals", "path": "decision", "expected": "approved" }] },
+    { "id": "backup-restore", "title": "Back up and restore the scenario store", "assertions": [{ "type": "httpStatus", "expected": "200" }] },
+    { "id": "inventory-hash", "title": "Compare logical inventory hashes", "assertions": [{ "type": "sha256Equals", "expected": "before" }] }
+  ]
+}

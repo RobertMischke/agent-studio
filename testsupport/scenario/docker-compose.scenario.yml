@@ -1,0 +1,24 @@
+services:
+  # Keep the production runner services out of this hermetic profile. Their
+  # enrollment file remains a required operator input in docker-compose.yml.
+  agent-host-coding:
+    profiles: !override [operator-runner]
+    env_file: !override
+      - path: ./testsupport/scenario/runner.env
+        required: true
+
+  agent-host-review:
+    profiles: !override [operator-runner]
+    env_file: !override
+      - path: ./testsupport/scenario/runner.env
+        required: true
+
+  deployment-scenario:
+    build:
+      context: .
+      dockerfile: testsupport/scenario/Dockerfile
+    profiles: [runner]
+    depends_on:
+      - studio-bff
+    volumes:
+      - ${SCENARIO_RESULTS_DIR:?SCENARIO_RESULTS_DIR is required}:/scenario-results

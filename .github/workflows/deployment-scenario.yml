@@ -1,0 +1,42 @@
+name: Deployment scenario gate
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inproc-smoke:
+    name: In-process smoke (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run two consecutive smoke scenarios
+        shell: bash
+        run: |
+          results_root="$RUNNER_TEMP"
+          if command -v cygpath >/dev/null 2>&1; then results_root="$(cygpath -u "$RUNNER_TEMP")"; fi
+          scripts/scenario.sh --target inproc --level smoke --output "$results_root/deployment-scenario/run-1"
+          scripts/scenario.sh --target inproc --level smoke --output "$results_root/deployment-scenario/run-2"
+
+      - name: Upload deployment scenario reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-scenario-${{ matrix.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/deployment-scenario/
+          if-no-files-found: error

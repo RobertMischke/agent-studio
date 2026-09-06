@@ -16,4 +16,9 @@
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="scenario\**\*.cs" />
+    <None Remove="scenario\**\*" />
+  </ItemGroup>
+
 </Project>

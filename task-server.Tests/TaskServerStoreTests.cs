@@ -374,6 +374,71 @@ public sealed class TaskServerStoreTests
     }
 
     [Fact]
+    public async Task Typed_successful_completion_preserves_the_fenced_result_for_review()
+    {
+        using var temp = new TempDirectory();
+        var store = Store(temp.Path);
+        await store.InitializeAsync();
+        var (_, project, task) = await SeedReadyTaskAsync(store);
+        await store.RegisterRunnerAsync("runner-a", Runner("instance-a"), "test", default);
+        var claim = await store.ClaimAsync(new ClaimRequest("runner-a", "instance-a"), "test", default);
+        var lease = claim.Lease!;
+        var initialHandoff = Handoff(claim.Run!.RunId, lease, sequence: 1);
+        var envelope = initialHandoff.Envelope with
+        {
+            RepositoryUrl = "https://example.invalid/deployment-scenario.git",
+        };
+        var digest = ResultEnvelopeDigest.Compute(envelope);
+        var handoffRequest = initialHandoff with
+        {
+            Envelope = envelope,
+            EnvelopeDigest = digest,
+            IdempotencyKey = $"handoff:{claim.Run.RunId}:{digest}",
+        };
+        var handoff = await store.AcknowledgeResultHandoffAsync(
+            claim.Run.RunId,
+            handoffRequest,
+            "runner-a",
+            default);
+
+        await store.CompleteRunAsync(
+            claim.Run.RunId,
+            new CompleteRunRequest(
+                "runner-a",
+                "instance-a",
+                lease.LeaseId,
+                lease.Fence,
+                ExecutionOutcomeKind.SuccessfulCompletion.ToString(),
+                ResultEnvelopeDigest: handoff.EnvelopeDigest,
+                IdempotencyKey: $"completion:{claim.Run.RunId}",
+                Sequence: 2),
+            "runner-a",
+            default);
+
+        var subject = await store.CreateReviewSubjectAsync(
+            new CreateReviewSubjectRequest(
+                task.TaskId,
+                claim.Run.RunId,
+                handoffRequest.Envelope.RepositoryId,
+                handoffRequest.Envelope.RepositoryUrl,
+                handoffRequest.Envelope.ResultSha,
+                handoffRequest.Envelope.ImmutableRemoteRef,
+                null,
+                null,
+                "coding-host",
+                "policy-v1",
+                new ReviewPlanDto(
+                    [new ReviewCommandDto("verify", "deployment", "verify", [])],
+                    ["deployment"]),
+                $"subject:{task.TaskId}"),
+            "test",
+            default);
+
+        Assert.Equal(handoffRequest.Envelope.ResultSha, subject.ExpectedResultSha);
+        Assert.Equal("4-auto-review", (await store.GetTaskAsync(project.ProjectId, task.TaskKey, default))!.State);
+    }
+
+    [Fact]
     public async Task Backup_and_restore_release_database_file_handles_before_cleanup()
     {
         await TempDirectory.RunAsync(async temp =>

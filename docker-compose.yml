@@ -106,6 +106,11 @@ services:
     restart: unless-stopped
     depends_on:
       - task-server
+    environment:
+      SERVER_URL: http://task-server:5071
+      CLIENT_ID: compose-orchestrator-engine
+      CLIENT_CREDENTIAL: compose-private-network
+      ALLOW_INSECURE_HTTP: "1"
 
   studio-bff:
     build:
@@ -115,6 +120,8 @@ services:
     restart: unless-stopped
     depends_on:
       - task-server
+    environment:
+      TaskServer__BaseUrl: http://task-server:5071
     ports:
       - "127.0.0.1:${STUDIO_BFF_PORT:-5072}:5072"
 

@@ -57,6 +57,23 @@ public sealed class EngineContractTests
     }
 
     [Fact]
+    public void Private_compose_network_requires_an_explicit_http_opt_in()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["SERVER_URL"] = "http://task-server:5071",
+            ["CLIENT_ID"] = "compose-engine",
+            ["CLIENT_CREDENTIAL"] = "compose-private-network",
+            ["ALLOW_INSECURE_HTTP"] = "1",
+        };
+
+        var options = EngineOptions.Parse(key => values.GetValueOrDefault(key));
+
+        Assert.True(options.AllowInsecureHttp);
+        Assert.Equal("http://task-server:5071", options.ServerUrl);
+    }
+
+    [Fact]
     public void Version_surface_contains_release_and_git_sha()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
