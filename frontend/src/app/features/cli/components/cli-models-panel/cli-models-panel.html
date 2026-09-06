@@ -1,4 +1,31 @@
 <div class="cli-models" data-testid="cli-models-panel">
+  @if (migrationCatalog(); as migration) {
+    <section class="cli-models__migrations" data-testid="model-migration-catalog">
+      <div class="cli-models__migration-head">
+        <span><strong>Model migrations</strong> · catalog {{ migration.catalogVersion }}</span>
+        <span>Safe updates apply only to non-explicit routes.</span>
+      </div>
+      @for (workspace of migration.workspaces; track workspace.workspaceId) {
+        <label class="cli-models__migration-row">
+          <input type="checkbox"
+                 [attr.data-testid]="'model-migration-auto-' + workspace.workspaceId"
+                 [checked]="workspace.autoApplyEnabled"
+                 [disabled]="savingMigration() === workspace.workspaceId"
+                 (change)="setAutoApply(workspace.workspaceId, $any($event.target).checked)" />
+          <span>{{ workspace.workspaceName }}: automatic safe migrations</span>
+        </label>
+      }
+      @for (pin of migration.configPins; track pin.key) {
+        <div class="cli-models__migration-row" [attr.data-testid]="'config-model-update-' + pin.key">
+          <span>{{ pin.key }}: update available, {{ pin.proposal.from }} to {{ pin.proposal.to }}</span>
+          <button type="button"
+                  [disabled]="!!savingMigration()"
+                  [cacTooltip]="migrationTooltip(pin.proposal)"
+                  (click)="applyConfigPin(pin.key, pin.proposal.from, pin.proposal.to)">Apply</button>
+        </div>
+      }
+    </section>
+  }
   @if (policy(); as routingPolicy) {
     <section class="cli-models__policy" data-testid="model-routing-policy">
       <div class="cli-models__policy-copy">

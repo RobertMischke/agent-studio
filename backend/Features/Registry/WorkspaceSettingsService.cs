@@ -131,6 +131,19 @@ public sealed class WorkspaceSettingsService
             clamped, workspaceId);
     }
 
+    public void SetModelMigrationAutoApply(string workspaceId, bool enabled)
+    {
+        if (string.IsNullOrWhiteSpace(workspaceId)) return;
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(workspaceId, out var settings) ? settings : new WorkspaceSettings();
+            _cache[workspaceId] = current with { ModelMigrationAutoApply = enabled };
+            Persist();
+        }
+        _logger.LogInformation("workspace-settings model migration auto-apply set to {Enabled} for workspace {Workspace}", enabled, workspaceId);
+    }
+
     private void EnsureLoaded()
     {
         lock (_lock)

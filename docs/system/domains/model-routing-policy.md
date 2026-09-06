@@ -1,6 +1,6 @@
 # Model Routing Policy
 
-Version: 2026-07-24
+Version: 2026-09-06
 
 Status: Canonical policy, initial hypothesis based on the 2026-07-23 historical benchmark
 
@@ -26,7 +26,7 @@ should explain when a pin is below the policy floor.
 | `gpt-5.6-terra` / `medium` | Standard features, content, and reversible UI or service changes inside one subsystem. This is the default sweet spot when requirements and test seams are clear. | P0 work, fencing, distributed authority, data-loss paths, or changes that require broad architectural reconstruction. | The historical report contained eight Terra/medium records, but none had a known grade and none formed a trustworthy terminal cohort. Keep Terra as the working default, but promote on substantive reissue until controlled data validates it. |
 | `gpt-5.6-sol` / `medium` | Demanding implementation, investigation, or analysis with several interacting concepts, a broad context search, or two to three subsystems. | Correctness-critical control-plane work that meets a hard floor. | Sol/medium had seven standard chore/feature runs with zero reissues. Five had known grades and all five were A or B. This is the strongest favorable historical signal, although the sample is still small and observational. |
 | `gpt-5.6-sol` / `xhigh` | Correctness-critical work: P0, fencing, leases, distributed authority, security boundaries, destructive migrations, data-loss prevention, or subtle concurrent state machines. | Routine work merely because quota is available. More thinking is not a substitute for tighter scope or deterministic tests. | The xhigh cohort was heavily selected for difficult and incident-driven work: 78 runs, 32 reissued, with only 22 known grades. Its high reissue rate is a warning about cohort and pipeline churn, not proof that xhigh causes poor outcomes. This tier is selected by the correctness floor while controlled benchmarks remain open. |
-| `gpt-5.4-mini` / `high` | Bounded orchestrator and supporting-pipeline decisions over compact, structured evidence, with a deterministic output contract. Examples: aspect verdicts, the final route decision, and post-abort classification. | Core code implementation, open-ended architecture, ambiguous product decisions, or a context set too large to fit in the bounded decision prompt. | The historical task benchmark had only two Mini/medium task records, both grade B and neither reissued. That does not validate Mini for core tasks. The `high` pipeline route instead follows the existing bounded-support contract in `PipelineStepModelDefaults`; use a stronger tier when the decision itself is correctness-critical or unbounded. |
+| `gpt-mini` family / `high` | Bounded orchestrator and supporting-pipeline decisions over compact, structured evidence, with a deterministic output contract. Examples: aspect verdicts, the final route decision, and post-abort classification. | Core code implementation, open-ended architecture, ambiguous product decisions, or a context set too large to fit in the bounded decision prompt. | The historical task benchmark had only two Mini/medium task records, both grade B and neither reissued. That does not validate Mini for core tasks. The `high` pipeline route instead follows the existing bounded-support contract in `PipelineStepModelDefaults`; its concrete model is the newest available mini-family member. Use a stronger tier when the decision itself is correctness-critical or unbounded. |
 
 `high` and `ultra` are supported reasoning levels but are not default core-task
 routes in this policy. Add a default tier only after controlled comparisons
@@ -170,6 +170,46 @@ silently used to rewrite the initial estimate.
 For every one of these cards, bounded supporting aspect and orchestrator calls
 may still use Mini/high. The table selects the core implementation route.
 
+## Model families and migrations
+
+Runtime defaults are stable family references, not release-specific model ids.
+`ModelFamilyResolver` recognizes `claude-haiku`, `claude-sonnet`,
+`claude-opus`, `gpt-mini`, and `gpt-flagship`. It selects the newest available,
+non-deprecated member from the live CLI catalogue at call time. A catalogue
+older than two hours is stale and the resolver falls back to the ordered model
+metadata registry. Explicit configuration values remain concrete model pins
+and continue to take precedence.
+
+This means latest-in-family is not the same as selecting a more expensive
+family. In the Claude Code catalogue observed on 2026-09-06, Opus 5 supersedes
+Opus 4.8 and Sonnet 5 supersedes Sonnet 4.6. Haiku 4.5 remains the current
+Haiku, because there is no Haiku 5. Moving a bounded economy call from Haiku to
+Sonnet is a Token Economy policy decision, not a family-resolution rule.
+
+Token Economy owns the versioned migration catalogue at
+`src/TokenEconomy/catalog/model-migrations.json` in the registered Token Economy
+project. Studio caches it and reloads it when the file timestamp changes. A
+deployment may set `TokenEconomy:ModelMigrationCatalogPath` explicitly. If the
+registered catalogue is unavailable or malformed, Studio uses its bundled,
+dated compatibility catalogue and identifies that fallback version in the UI
+and audit data.
+
+Each migration rule carries its source and target model, family, stable rule
+name, `safeAuto` decision, cost-class comparison, and reasoning ladders.
+Workspace CLI Management displays the active catalogue version and configured
+pin proposals. Task cards display proposals for explicit card models, and the
+project pipeline editor displays proposals for concrete per-step overrides.
+Each surface exposes an Apply action and the cost and reasoning-ladder change.
+
+At run admission, a non-explicit card model may migrate automatically only when
+the active rule is `safeAuto`, both ids resolve to the same family, and the
+workspace switch is enabled. Explicit card models, configuration pins, and
+project pipeline-step overrides are never rewritten automatically. Supporting
+calls that have no explicit pin resolve their family on every call and
+therefore need no persisted migration. Every automatic card migration emits a
+closed `model_migrated` timeline event with `from`, `to`, `rule`, and
+`catalogVersion`, plus a model-migration item in the orchestrator feed.
+
 ## Quota and provider handling
 
 1. Establish the correctness floor and score before consulting quota.
@@ -202,10 +242,10 @@ economy state, correctness floor, and reason.
    defaults only after enough controlled runs meet declared correctness,
    reissue, duration, and token thresholds. Until then the UI labels them
    provisional.
-5. **Automation follows evidence.** Align `ModelQualificationService` and the
-   Token Economy advisor with this score, hard floors, quota rule, and
-   reissue behavior. Emit the complete worksheet in
-   `model-qualification.jsonl`.
+5. **Automation follows evidence.** `ModelQualificationService` applies the
+   score, hard floors, quota rule, and safe Token Economy migrations. Keep the
+   complete worksheet in `model-qualification.jsonl` and the migration audit
+   on the task timeline.
 6. **Quarterly calibration.** Recompute the benchmark, inspect cohort drift,
    review false promotions and unsafe downgrades, and version this page when a
    threshold or default route changes.

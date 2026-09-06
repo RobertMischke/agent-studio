@@ -75,6 +75,7 @@ function contracts() {
 }
 
 async function stub(page: Page) {
+  await page.route('**/api/auth/status', json({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }));
   await page.route('**/api/tasks', json([]));
   await page.route('**/api/tasks/grouped*', json({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] }));
   await page.route('**/api/watch-paths', json([]));
@@ -113,6 +114,25 @@ async function stub(page: Page) {
     else if (p.endsWith('/quota')) body = quotaReport;
     else if (p.endsWith('/usage')) body = usageReport();
     else if (p.endsWith('/contracts')) body = contracts();
+    else if (p.endsWith('/model-migrations')) body = {
+      catalogVersion: 'te-2026-09-06',
+      migrations: [{
+        from: 'claude-haiku-4-5', to: 'claude-sonnet-5', family: 'claude-haiku',
+        rule: 'te-economy-haiku-to-sonnet-5', safeAuto: false,
+        catalogVersion: 'te-2026-09-06', fromCostClass: 'economy', toCostClass: 'standard',
+        fromReasoningLadder: ['low'], toReasoningLadder: ['low', 'medium', 'high'],
+      }],
+      configPins: [{
+        key: 'ClaudeCli:SummaryModel', model: 'claude-haiku-4-5',
+        proposal: {
+          from: 'claude-haiku-4-5', to: 'claude-sonnet-5', family: 'claude-haiku',
+          rule: 'te-economy-haiku-to-sonnet-5', safeAuto: false,
+          catalogVersion: 'te-2026-09-06', fromCostClass: 'economy', toCostClass: 'standard',
+          fromReasoningLadder: ['low'], toReasoningLadder: ['low', 'medium', 'high'],
+        },
+      }],
+      workspaces: [{ workspaceId: 'local', workspaceName: 'Local', autoApplyEnabled: true }],
+    };
     else if (p.endsWith('/models')) {
       const m = /\/api\/cli\/([^/]+)\/models/.exec(p);
       const vendor = m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : 'CLI';
@@ -160,6 +180,17 @@ test.describe('CLI Management restructure (AGT-2101)', () => {
     const overlay = page.getByTestId('cli-admin-overlay');
     await expect(overlay).toBeVisible();
     await expect(overlay.getByRole('heading', { name: 'CLI Management' })).toBeVisible();
+    await expect(overlay.getByTestId('model-migration-catalog')).toContainText('te-2026-09-06');
+    await expect(overlay.getByTestId('model-migration-auto-local')).toBeChecked();
+    await expect(overlay.getByTestId('config-model-update-ClaudeCli:SummaryModel'))
+      .toContainText('claude-haiku-4-5 to claude-sonnet-5');
+    const [migrationRequest] = await Promise.all([
+      page.waitForRequest(request => request.url().endsWith('/api/cli/model-migrations/config-pin/apply')),
+      overlay.getByTestId('config-model-update-ClaudeCli:SummaryModel').getByRole('button', { name: 'Apply' }).click(),
+    ]);
+    expect(migrationRequest.postDataJSON()).toEqual({
+      key: 'ClaudeCli:SummaryModel', from: 'claude-haiku-4-5', to: 'claude-sonnet-5',
+    });
 
     // Leads with the catalog rows (what CLIs / models / routes).
     await expect(overlay.getByTestId('cli-admin-models')).toBeVisible();

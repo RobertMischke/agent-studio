@@ -37,6 +37,23 @@ public class ClaudeModelDiscoveryTests
     }
 
     [Fact]
+    public void ParsePickerSnapshot_CapturesSeptemberCatalogIncludingOpus5AndFable51()
+    {
+        var models = ClaudeModelDiscovery.ParsePickerSnapshot("""
+        Select Model
+        > Opus 5 (default)
+          Fable 5.1
+          Sonnet 5
+          Haiku 4.5
+        """);
+
+        Assert.Contains(models, model => model.Id == ModelIds.ClaudeOpus5);
+        Assert.Contains(models, model => model.Id == ModelIds.ClaudeFable51);
+        Assert.Contains(models, model => model.Id == ModelIds.ClaudeSonnet5);
+        Assert.Contains(models, model => model.Id == ModelIds.ClaudeHaiku45);
+    }
+
+    [Fact]
     public void Reconcile_MarksRegistryModelsMissingFromCliUnavailable()
     {
         var discovered = new[]

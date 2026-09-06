@@ -19,6 +19,22 @@ namespace AgentStudio.Configuration;
 /// </summary>
 public sealed class OrchestratorConfigService
 {
+    private static readonly HashSet<string> ModelPinKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ClaudeCli:SummaryModel",
+        "TitleGeneration:Model",
+        "PromptEnhancement:Model",
+        "ProposalManagement:Model",
+        "WikiSearch:Model",
+        "Supervisor:SoftReasoningModel",
+        "ReviewDecisionOrchestrator:Model",
+        "ReviewDecisionOrchestrator:AspectModel",
+        "CodeReviewStep:DefaultModel",
+        "TaskSpawnerStep:DefaultModel",
+        "CodexCli:DefaultModel",
+        "CodexCli:Model",
+        "GlobalOrchestrator:Model",
+    };
     private readonly IConfiguration _configuration;
     private readonly IHostEnvironment _env;
     private readonly ILogger<OrchestratorConfigService> _logger;
@@ -111,6 +127,33 @@ public sealed class OrchestratorConfigService
 
         return GetSnapshot();
     }
+
+    public void ApplyModelPinMigration(string key, string from, string model)
+    {
+        if (!ModelPinKeys.Contains(key)) throw new ArgumentException($"Unknown model config key '{key}'.", nameof(key));
+        if (!string.Equals(
+                ModelMetadataRegistry.NormalizeId(_configuration[key]),
+                ModelMetadataRegistry.NormalizeId(from),
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Configuration pin '{key}' no longer matches '{from}'. Refresh the migration catalog.");
+        if (string.IsNullOrWhiteSpace(model)) throw new ArgumentException("model is required", nameof(model));
+        lock (FileLock)
+        {
+            JsonObject root;
+            if (File.Exists(OverrideFilePath))
+                root = JsonNode.Parse(File.ReadAllText(OverrideFilePath)) as JsonObject ?? new JsonObject();
+            else
+                root = new JsonObject();
+            SetNodeAtPath(root, key, JsonValue.Create(model.Trim()));
+            var temp = OverrideFilePath + ".tmp";
+            File.WriteAllText(temp, root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(temp, OverrideFilePath, overwrite: true);
+            if (_configuration is IConfigurationRoot configurationRoot) configurationRoot.Reload();
+        }
+        _logger.LogInformation("Applied model pin migration for {Key}: {Model}", key, model);
+    }
+
+    public static IReadOnlyCollection<string> SupportedModelPinKeys => ModelPinKeys;
 
     private OrchestratorConfigOption BuildOption(OrchestratorConfigDefinition def)
     {

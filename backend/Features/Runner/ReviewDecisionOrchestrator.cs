@@ -24,7 +24,7 @@ namespace AgentStudio.Runner;
 /// question (reissuing the task back to 3-progress with the orchestrator's
 /// reply) or escalate to the user with a clear reason. A configurable
 /// review-decision CLI call (<c>ReviewDecisionOrchestrator:Cli</c> /
-/// <c>ReviewDecisionOrchestrator:Model</c>, Codex with <c>gpt-5.4-mini</c>
+/// <c>ReviewDecisionOrchestrator:Model</c>, Codex with the latest mini-family model
 /// by default) handles unresolved questions and is expected to respond with
 /// a single <c>[[ORCHESTRATOR_DECISION]]</c> sentinel. DONE reviews use
 /// independently routed aspect reviewers followed by deterministic gates and
@@ -436,7 +436,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", DefaultCallsPerHour);
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", CliTypes.Codex);
-        var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
+        var model = _configuration["ReviewDecisionOrchestrator:Model"] ?? ModelFamilyResolver.Resolve(ModelFamilies.GptMini);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
         var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
         var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
@@ -680,7 +680,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return PostProcessingCardResult.Blocked("review-decision-orchestrator-disabled");
 
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", CliTypes.Codex);
-        var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", ModelIds.Gpt54Mini);
+        var model = _configuration["ReviewDecisionOrchestrator:Model"] ?? ModelFamilyResolver.Resolve(ModelFamilies.GptMini);
         var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
         var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
         var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", DefaultCallsPerHour);

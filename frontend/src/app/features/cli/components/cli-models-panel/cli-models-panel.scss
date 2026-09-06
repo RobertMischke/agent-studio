@@ -2,6 +2,30 @@
 
 .cli-models { display: block; }
 
+.cli-models__migrations {
+  display: grid;
+  gap: var(--studio-spacing-2);
+  margin-bottom: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-hover);
+  padding: var(--studio-spacing-3);
+  font-size: 11px;
+}
+
+.cli-models__migration-head,
+.cli-models__migration-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--studio-spacing-3);
+}
+
+.cli-models__migration-head { color: var(--studio-fg-muted); }
+.cli-models__migration-head strong { color: var(--studio-fg-strong); }
+.cli-models__migration-row { color: var(--studio-fg); }
+.cli-models__migration-row button { font: inherit; }
+
 .cli-models__policy {
   display: flex;
   align-items: center;

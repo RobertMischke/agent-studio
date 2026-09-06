@@ -170,6 +170,17 @@ public sealed class WorkspaceSettingsServiceTests : IDisposable
         Assert.Equal(0, svc.Get("ws-frontend").AutonomyLevel);
     }
 
+    [Fact]
+    public void ModelMigrationAutoApply_PersistsWorkspaceKillSwitch()
+    {
+        var svc = Build();
+
+        Assert.Null(svc.Get("ws-default").ModelMigrationAutoApply);
+        svc.SetModelMigrationAutoApply("ws-default", enabled: false);
+
+        Assert.False(Build().Get("ws-default").ModelMigrationAutoApply);
+    }
+
     private WorkspaceSettingsService Build()
     {
         var config = new ConfigurationBuilder()

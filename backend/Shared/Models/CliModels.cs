@@ -107,6 +107,8 @@ public static class ContinueModes
 /// <summary>Canonical model id constants. Call sites should reference these instead of repeated literals.</summary>
 public static class ModelIds
 {
+    public const string ClaudeOpus5 = "claude-opus-5";
+    public const string ClaudeFable51 = "claude-fable-5-1";
     public const string ClaudeOpus48 = "claude-opus-4-8";
     public const string ClaudeOpus47 = "claude-opus-4-7";
     public const string ClaudeOpus46 = "claude-opus-4-6";
@@ -168,7 +170,10 @@ public static class ModelMetadataRegistry
 {
     private static readonly ModelMetadata[] Entries =
     [
-        Claude(ModelIds.ClaudeOpus48, "Claude Opus 4.8", isDefault: true, context: 200_000, aliases: ["claude-opus-4.8"]),
+        Claude(ModelIds.ClaudeOpus5, "Claude Opus 5", isDefault: true, context: 1_000_000),
+        // Fable 5.1 is parsed from live discovery, but is intentionally not a
+        // registry fallback until Token Economy has authoritative pricing.
+        Claude(ModelIds.ClaudeOpus48, "Claude Opus 4.8", context: 200_000, aliases: ["claude-opus-4.8"]),
         Claude(ModelIds.ClaudeOpus47, "Claude Opus 4.7", context: 200_000, aliases: ["claude-opus-4.7"]),
         Claude(ModelIds.ClaudeOpus46, "Claude Opus 4.6", context: 200_000, aliases: ["claude-opus-4.6"]),
         Claude(ModelIds.ClaudeOpus45, "Claude Opus 4.5", context: 200_000, aliases: ["claude-opus-4.5"]),
@@ -182,6 +187,8 @@ public static class ModelMetadataRegistry
         // left null until authoritative numbers are confirmed (same posture as
         // the GPT-4.1 / GPT-4o entries) so no invented cost is asserted.
         new(ModelIds.Gpt55, "GPT-5.5", "openai", IsDefault: true, Deprecated: false, Available: true,
+            ContextWindow: 400_000),
+        new(ModelIds.Gpt54Mini, "GPT-5.4 Mini", "openai", IsDefault: false, Deprecated: false, Available: true,
             ContextWindow: 400_000),
         // gpt-5-codex is retained (API-key accounts still accept it) but is no
         // longer the default: a ChatGPT-account spawn rejects it outright.

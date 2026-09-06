@@ -435,6 +435,7 @@ builder.Services.AddSingleton<AgentStudio.TaskAccess.ITaskAccessHost>(sp =>
 builder.Services.AddSingleton<CliEnvironment>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
 builder.Services.AddSingleton<ClaudeModelDiscovery>();
+builder.Services.AddSingleton<ModelMigrationCatalogService>();
 // The per-CLI execution engines: one concrete GenericCliExecutionService per
 // CLI, parameterized by a CliBehavior from BuiltInCliBehaviors. Keyed by CLI
 // type so the router + the Claude-specific consumers (orchestrator runner,

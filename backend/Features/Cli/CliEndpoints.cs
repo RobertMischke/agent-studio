@@ -17,6 +17,51 @@ public static class CliEndpoints
 
         cliGroup.MapGet("/types", () => Results.Ok(CliTypes.All));
 
+        cliGroup.MapGet("/model-migrations", (
+            ModelMigrationCatalogService migrations,
+            IConfiguration configuration,
+            AgentStudio.Registry.WorkspaceRegistry workspaces,
+            AgentStudio.Registry.WorkspaceSettingsService workspaceSettings) =>
+        {
+            var catalog = migrations.GetCatalog();
+            var pins = AgentStudio.Configuration.OrchestratorConfigService.SupportedModelPinKeys
+                .Select(key => new { key, model = configuration[key], proposal = migrations.Propose(configuration[key]) })
+                .Where(item => item.proposal is not null)
+                .ToList();
+            var workspaceRows = workspaces.List().Select(workspace => new
+            {
+                workspaceId = workspace.Id,
+                workspaceName = workspace.DisplayName,
+                autoApplyEnabled = workspaceSettings.Get(workspace.Id).ModelMigrationAutoApply ?? true,
+            });
+            var proposals = catalog.Migrations.Select(rule => migrations.Propose(rule.From)).Where(proposal => proposal is not null);
+            return Results.Ok(new { catalogVersion = catalog.Version, migrations = proposals, configPins = pins, workspaces = workspaceRows });
+        });
+
+        cliGroup.MapPost("/model-migrations/config-pin/apply", (
+            ApplyConfigurationModelMigrationRequest request,
+            ModelMigrationCatalogService migrations,
+            AgentStudio.Configuration.OrchestratorConfigService configuration) =>
+        {
+            var proposal = migrations.Propose(request.From);
+            if (proposal is null
+                || !string.Equals(proposal.To, request.To, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = "The requested migration is not in the active Token Economy catalog." });
+            try
+            {
+                configuration.ApplyModelPinMigration(request.Key, request.From, proposal.To);
+                return Results.Ok(proposal);
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+        });
+
         // Per-CLI completion contract: how each backend signals turn
         // completion (native frame -> typed CliRunEvent). Static, derived
         // from the live adapter mappings; the Admin/CLI page renders it so
@@ -315,6 +360,8 @@ public static class CliEndpoints
         }).WithPublicDemoExecutionDenied(ExecutionAdmissionPath.Preview);
     }
 }
+
+public sealed record ApplyConfigurationModelMigrationRequest(string Key, string From, string To);
 
 public sealed record SetCliQuotaWaitPolicyRequest
 {

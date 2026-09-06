@@ -11,7 +11,7 @@ namespace AgentStudio.Cli;
 public sealed class ClaudeModelDiscovery
 {
     private static readonly Regex ModelLineRegex = new(
-        @"^\s*(?:[\u276F>\?\*\u2713\u2714\u2705]\s*)?(?<label>(?:Claude\s+)?(?:Opus|Sonnet|Haiku)\s+[A-Za-z0-9 .\-_]+?)(?:\s+\((?:default|selected)\))?\s*$",
+        @"^\s*(?:[\u276F>\?\*\u2713\u2714\u2705]\s*)?(?<label>(?:Claude\s+)?(?:Opus|Fable|Sonnet|Haiku)\s+[A-Za-z0-9 .\-_]+?)(?:\s+\((?:default|selected)\))?\s*$",
         RegexOptions.Compiled | RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
     private static readonly Regex TrustPromptRegex = new(
@@ -50,13 +50,13 @@ public sealed class ClaudeModelDiscovery
     {
         if (!forceRefresh)
         {
-            if (_memCache != null && DateTime.UtcNow - _memCacheAt < Ttl) return _memCache;
+            if (_memCache != null && DateTime.UtcNow - _memCacheAt < Ttl) return Publish(_memCache);
             var fromDisk = TryLoadDisk();
             if (fromDisk != null && DateTime.UtcNow - fromDisk.FetchedAt < Ttl)
             {
                 _memCache = fromDisk;
                 _memCacheAt = fromDisk.FetchedAt;
-                return fromDisk;
+                return Publish(fromDisk);
             }
         }
 
@@ -64,7 +64,7 @@ public sealed class ClaudeModelDiscovery
         try
         {
             if (!forceRefresh && _memCache != null && DateTime.UtcNow - _memCacheAt < Ttl)
-                return _memCache;
+                return Publish(_memCache);
 
             try
             {
@@ -72,23 +72,29 @@ public sealed class ClaudeModelDiscovery
                 _memCache = fresh;
                 _memCacheAt = fresh.FetchedAt;
                 TrySaveDisk(fresh);
-                return fresh;
+                return Publish(fresh);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Claude PTY model discovery failed; falling back to registry catalog");
-                if (_memCache != null) return WithSource(_memCache, "pty-failed-mem-cache");
+                if (_memCache != null) return Publish(WithSource(_memCache, "pty-failed-mem-cache"));
                 var fromDisk = TryLoadDisk();
                 if (fromDisk != null)
                 {
                     _memCache = fromDisk;
                     _memCacheAt = fromDisk.FetchedAt;
-                    return WithSource(fromDisk, "pty-failed-disk-cache");
+                    return Publish(WithSource(fromDisk, "pty-failed-disk-cache"));
                 }
-                return FallbackCatalog("pty-failed-registry-fallback");
+                return Publish(FallbackCatalog("pty-failed-registry-fallback"));
             }
         }
         finally { _gate.Release(); }
+    }
+
+    private static CliModelCatalog Publish(CliModelCatalog catalogue)
+    {
+        ModelFamilyResolver.Publish(CliTypes.Claude, catalogue);
+        return catalogue;
     }
 
     private async Task<CliModelCatalog> DiscoverViaPtyAsync(string cliPath, CancellationToken ct)
@@ -213,6 +219,7 @@ public sealed class ClaudeModelDiscovery
         var normalized = Regex.Replace(label.Trim(), @"\s+", " ");
         if (!normalized.StartsWith("Claude ", StringComparison.OrdinalIgnoreCase)
             && (normalized.StartsWith("Opus ", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith("Fable ", StringComparison.OrdinalIgnoreCase)
                 || normalized.StartsWith("Sonnet ", StringComparison.OrdinalIgnoreCase)
                 || normalized.StartsWith("Haiku ", StringComparison.OrdinalIgnoreCase)))
         {

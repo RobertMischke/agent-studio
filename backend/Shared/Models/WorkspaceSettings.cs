@@ -55,6 +55,12 @@ public record WorkspaceSettings
     /// platform default (balanced, level 2).
     /// </summary>
     public int? AutonomyLevel { get; init; }
+
+    /// <summary>
+    /// Enables safe Token Economy model migrations at run admission. Null keeps
+    /// the platform default (enabled); false is the workspace kill switch.
+    /// </summary>
+    public bool? ModelMigrationAutoApply { get; init; }
 }
 
 /// <summary>

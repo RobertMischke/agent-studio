@@ -1639,6 +1639,24 @@ export class TaskService {
     );
   }
 
+  getModelMigrations() {
+    return this.http.get<import('../features/cli').ModelMigrationCatalogView>(
+      `${this.baseUrl}/cli/model-migrations`,
+    );
+  }
+
+  applyConfigurationModelMigration(key: string, from: string, to: string) {
+    return this.http.post<import('../features/cli').ModelMigrationProposal>(
+      `${this.baseUrl}/cli/model-migrations/config-pin/apply`, { key, from, to },
+    );
+  }
+
+  setWorkspaceModelMigrationAutoApply(workspaceId: string, enabled: boolean) {
+    return this.http.put<{ enabled: boolean }>(
+      `${this.baseUrl}/workspaces/${encodeURIComponent(workspaceId)}/model-migrations/auto-apply`, { enabled },
+    );
+  }
+
   setJobThinkingLevel(jobId: string, thinkingLevel: string | null, watchPath?: string) {
     return this.http.put(
       `${this.baseUrl}/tasks/${encodeURIComponent(jobId)}/thinking-level`,

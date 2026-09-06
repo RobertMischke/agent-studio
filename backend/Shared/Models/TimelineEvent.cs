@@ -75,6 +75,8 @@ public sealed record TimelineEvent
 /// </summary>
 public static class TimelineEventKinds
 {
+    /// <summary>A safe Token Economy model migration changed a non-explicit run route.</summary>
+    public const string ModelMigrated = "model_migrated";
     /// <summary>Task prompt was created on disk.</summary>
     public const string PromptCreated = "prompt_created";
     /// <summary>One CLI invocation started (start / continue / recovery).</summary>

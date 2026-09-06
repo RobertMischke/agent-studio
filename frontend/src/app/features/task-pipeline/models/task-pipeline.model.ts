@@ -280,6 +280,7 @@ export interface PipelineCatalogueStep {
   model?: string | null;
   resolvedModel?: string | null;
   modelSource?: string | null;
+  modelUpdate?: ModelMigrationProposal | null;
   resolvedThinkingLevel?: string | null;
   thinkingLevelSource?: string | null;
   usesModel: boolean;
@@ -304,6 +305,19 @@ export interface PipelineCatalogueStep {
   supportsCondition: boolean;
   supportsMaxIterations?: boolean;
   defaultMaxIterations?: number | null;
+}
+
+export interface ModelMigrationProposal {
+  from: string;
+  to: string;
+  family: string;
+  rule: string;
+  safeAuto: boolean;
+  catalogVersion: string;
+  fromCostClass: string;
+  toCostClass: string;
+  fromReasoningLadder: string[];
+  toReasoningLadder: string[];
 }
 
 /**

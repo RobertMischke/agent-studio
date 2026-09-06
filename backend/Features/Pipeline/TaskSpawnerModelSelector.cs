@@ -5,7 +5,7 @@ namespace AgentStudio.Pipeline;
 /// (AGT-2028) uses to judge relevance and generate the follow-up task prompt.
 /// The spawn evaluation is quality-first by design: it defaults to the catalogue's
 /// best available Codex model at its top advertised effort, mirroring the ASS-1657
-/// code-review-grade asymmetry (the bounded aspect verdicts use gpt-5.4-mini while an
+/// code-review-grade asymmetry (bounded aspect verdicts use the GPT mini family while an
 /// operator-facing judgment gets the strong model).
 ///
 /// <para>
@@ -40,7 +40,7 @@ public static class TaskSpawnerModelSelector
     /// static gpt-5.5 id if live discovery has not published a newer flagship.
     /// </summary>
     public static string DefaultModel =>
-        ModelMetadataRegistry.DefaultForCli(DefaultCli) ?? ModelIds.Gpt55;
+        ModelFamilyResolver.Resolve(ModelFamilies.GptFlagship);
 
     /// <summary>
     /// Resolve the effective (model, cli, thinkingLevel) for the spawn pass,

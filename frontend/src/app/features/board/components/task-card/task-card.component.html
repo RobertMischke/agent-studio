@@ -234,8 +234,8 @@
         [tooltip]="effectiveModelChip().tooltip"
         [source]="effectiveModelChip().source"
         [isDefault]="effectiveModelChip().isDefault"
-        testId="task-card-effective-model"
-        levelTestId="task-card-thinking-level" />
+        testId="task-card-effective-model" levelTestId="task-card-thinking-level" />
+      <app-model-migration-update [model]="job().model" [modelExplicit]="job().modelExplicit" [taskId]="job().id" [watchPath]="job().watchPath" [disabled]="mutationsBlocked()" testId="task-card-model-update" />
       <app-execution-location-badge [execution]="displayedExecutionLocation()" />
       @if (integrationStatus(); as integ) {
         <app-integration-status-badge

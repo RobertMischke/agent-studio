@@ -74,6 +74,17 @@ The frontend's model dropdown reads `/api/cli/{cliType}/models`. No CLI-specific
 
 **Selected model.** Studio first qualifies the chosen model against its live catalog. Claude and Codex then pass the qualified model and thinking level to CAR, which applies its common normalization and descriptor flags. The legacy Antigravity adapter maps the model to its `agentapi` vocabulary.
 
+**Latest family defaults and migrations.** Unpinned runtime and supporting-call
+defaults use the stable model families documented in the
+[Model Routing Policy](../domains/model-routing-policy.md#model-families-and-migrations).
+Workspace CLI Management shows the active Token Economy migration catalogue
+version, automatic-migration switches per workspace, and configuration pins
+with an available update. The same migration proposal appears on explicit task
+cards and concrete project pipeline-step overrides. Apply actions show the cost
+class and reasoning-ladder change before replacing a pin. Automatic migration
+is limited to same-family `safeAuto` rules for non-explicit card models; it is
+audited in the task timeline and orchestrator feed.
+
 ### 2.4 Quota probe
 
 **Contract.** A `QuotaProbeBase` subclass returns a `QuotaSnapshot` with:

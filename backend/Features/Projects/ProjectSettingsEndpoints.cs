@@ -158,7 +158,8 @@ public static class ProjectSettingsEndpoints
             string? projectName,
             string? pipelineType,
             ProjectSettingsService settings,
-            TaskScannerService scanner) =>
+            TaskScannerService scanner,
+            ModelMigrationCatalogService migrations) =>
         {
             if (!string.IsNullOrWhiteSpace(pipelineType) && !PipelineTypes.IsValid(pipelineType))
                 return Results.BadRequest(new { error = $"Unknown pipeline type '{pipelineType}'" });
@@ -237,6 +238,9 @@ public static class ProjectSettingsEndpoints
                     modelSource = resolved?.Source,
                     resolvedThinkingLevel = thinking?.ThinkingLevel,
                     thinkingLevelSource = thinking?.Source,
+                    modelUpdate = string.IsNullOrWhiteSpace(configured?.Model)
+                        ? null
+                        : migrations.Propose(configured.Model),
                     // The core agent run cannot be disabled or model-overridden
                     // here (it uses the task's own CLI + model). Only steps that
                     // the runtime actually resolves through PipelineStepConfigResolver

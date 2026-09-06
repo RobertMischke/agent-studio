@@ -4618,6 +4618,22 @@ public class ProjectRunner
             }
 
             await _modelQualification.RecordDecisionAsync(info.FolderPath, decision, ct);
+            if (decision.AppliedMigration is { } migration)
+            {
+                _timeline?.Append(info.FolderPath, ModelMigrationAudit.TimelineEvent(migration));
+                _chatLog.Append(
+                    info,
+                    OrchestratorMessageKind.Decision,
+                    $"Model migration applied: {migration.From} -> {migration.To} ({migration.Rule}, catalog {migration.CatalogVersion}).");
+                _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Decision,
+                    Topic = OrchestratorLogTopics.ModelMigration,
+                    JobId = info.Id,
+                    Summary = $"Model migrated from {migration.From} to {migration.To}.",
+                    Reasoning = $"{migration.Rule}; Token Economy catalog {migration.CatalogVersion}",
+                });
+            }
             _logger.LogInformation(
                 "model-qualification jobId={JobId} taskType={TaskType} policy={PolicyVersion} tier={PolicyTier} economyMode={EconomyMode} complexity={Complexity} surface={Surface} recommendedModel={RecommendedModel} recommendedThinking={RecommendedThinking} selectedModel={SelectedModel} selectedThinking={SelectedThinking} source={SelectionSource} expectedSavingsPercent={Savings}",
                 info.Id, decision.TaskType,

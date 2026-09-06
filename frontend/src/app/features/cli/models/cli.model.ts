@@ -29,6 +29,31 @@ export interface CliModelCatalog {
   fetchedAt?: string;
 }
 
+export interface ModelMigrationProposal {
+  from: string;
+  to: string;
+  family: string;
+  rule: string;
+  safeAuto: boolean;
+  catalogVersion: string;
+  fromCostClass: string;
+  toCostClass: string;
+  fromReasoningLadder: string[];
+  toReasoningLadder: string[];
+}
+
+export function modelMigrationDiffTooltip(update: ModelMigrationProposal): string {
+  return `Cost: ${update.fromCostClass} to ${update.toCostClass}. `
+    + `Reasoning ladder: ${update.fromReasoningLadder.join(', ')} to ${update.toReasoningLadder.join(', ')}`;
+}
+
+export interface ModelMigrationCatalogView {
+  catalogVersion: string;
+  migrations: ModelMigrationProposal[];
+  configPins: { key: string; model: string; proposal: ModelMigrationProposal }[];
+  workspaces: { workspaceId: string; workspaceName: string; autoApplyEnabled: boolean }[];
+}
+
 /**
  * Mirror of the backend `CliCompletionContract` record (see
  * backend/Features/Cli/Execution/CliCompletionContracts.cs). Describes how one

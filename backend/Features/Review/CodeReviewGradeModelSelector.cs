@@ -17,7 +17,7 @@ public static class CodeReviewGradeModelSelector
     /// promote this to a newer flagship; gpt-5.5 is the safe static fallback.
     /// </summary>
     public static string DefaultModel =>
-        ModelMetadataRegistry.DefaultForCli(CliTypes.Codex) ?? ModelIds.Gpt55;
+        ModelFamilyResolver.Resolve(ModelFamilies.GptFlagship);
 
     /// <summary>Default CLI for the grade pass.</summary>
     public const string DefaultCli = CliTypes.Codex;

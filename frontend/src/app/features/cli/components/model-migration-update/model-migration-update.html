@@ -1,0 +1,7 @@
+@if (update(); as migration) {
+  <button type="button"
+          [attr.data-testid]="testId()"
+          [disabled]="disabled()"
+          [cacTooltip]="tooltip()"
+          (click)="select($event)">Update available: {{ migration.from }} to {{ migration.to }}</button>
+}

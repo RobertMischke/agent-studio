@@ -1,0 +1,18 @@
+:host {
+  display: inline-flex;
+}
+
+button {
+  border: 1px solid var(--studio-accent-warn);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--studio-accent-warn) 12%, transparent);
+  color: var(--studio-fg);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  font-size: var(--studio-card-meta-size);
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

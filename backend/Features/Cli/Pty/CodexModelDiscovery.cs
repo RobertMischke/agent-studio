@@ -257,6 +257,7 @@ public sealed class CodexModelDiscovery
     /// </summary>
     private CliModelCatalog Publish(CliModelCatalog cat)
     {
+        ModelFamilyResolver.Publish(CliTypes.Codex, cat);
         var detected = PickDetectedDefault(cat);
         ModelMetadataRegistry.SetDetectedCodexDefault(detected);
         _logger.LogDebug("Codex detected default published: {Detected} (source={Source})",

@@ -93,6 +93,7 @@ public sealed record ModelQualificationDecision
     public int EstimatedSavingsPercent { get; init; }
     public string Reason { get; init; } = string.Empty;
     public string CatalogueSource { get; init; } = string.Empty;
+    public ModelMigrationProposal? AppliedMigration { get; init; }
 }
 
 public sealed record ModelQualificationOutcome
@@ -120,17 +121,26 @@ public sealed class ModelQualificationService
     private readonly IModelRoutingModeProvider _routingMode;
     private readonly IJsonlAppender _jsonl;
     private readonly ILogger<ModelQualificationService> _logger;
+    private readonly ModelMigrationCatalogService? _migrations;
+    private readonly AgentStudio.Registry.ProjectRegistry? _projects;
+    private readonly AgentStudio.Registry.WorkspaceSettingsService? _workspaceSettings;
 
     public ModelQualificationService(
         ModelRoutingPolicyRegistry policy,
         IModelRoutingModeProvider routingMode,
         IJsonlAppender jsonl,
-        ILogger<ModelQualificationService> logger)
+        ILogger<ModelQualificationService> logger,
+        ModelMigrationCatalogService? migrations = null,
+        AgentStudio.Registry.ProjectRegistry? projects = null,
+        AgentStudio.Registry.WorkspaceSettingsService? workspaceSettings = null)
     {
         _policy = policy;
         _routingMode = routingMode;
         _jsonl = jsonl;
         _logger = logger;
+        _migrations = migrations;
+        _projects = projects;
+        _workspaceSettings = workspaceSettings;
     }
 
     public ModelQualificationDecision Qualify(
@@ -162,9 +172,11 @@ public sealed class ModelQualificationService
 
         var modelExplicit = task.ModelExplicit;
         var thinkingExplicit = task.ThinkingLevelExplicit;
+        var autoApplyEnabled = AutoApplyEnabled(task.ProjectName);
+        var appliedMigration = _migrations?.SafeAutomaticMigration(task.Model, modelExplicit, autoApplyEnabled);
         var selectedModel = modelExplicit && !string.IsNullOrWhiteSpace(task.Model)
             ? task.Model!
-            : recommendation.Model;
+            : appliedMigration?.To ?? recommendation.Model;
         var selectedThinking = thinkingExplicit
             ? task.ThinkingLevel
             : string.Equals(selectedModel, recommendation.Model, StringComparison.OrdinalIgnoreCase)
@@ -172,10 +184,14 @@ public sealed class ModelQualificationService
                 : ModelMetadataRegistry.ResolveThinkingLevel(task.CliType, selectedModel, recommendation.ThinkingLevel);
         var source = modelExplicit || thinkingExplicit
             ? "task-override"
-            : recommendation.EconomyDowngraded ? "policy-economy" : "policy";
+            : appliedMigration is not null
+                ? "policy-migration"
+                : recommendation.EconomyDowngraded ? "policy-economy" : "policy";
         var reason = $"{recommendation.Reason}; " +
                      (source == "task-override"
                          ? $"card override wins, selected {selectedModel} at {selectedThinking ?? "model default"}"
+                         : appliedMigration is not null
+                             ? $"Token Economy migration {appliedMigration.From} to {appliedMigration.To} ({appliedMigration.Rule}, catalog {appliedMigration.CatalogVersion})"
                          : $"selected policy recommendation; expected saving about {recommendation.EstimatedSavingsPercent}% vs top rung");
 
         return new ModelQualificationDecision
@@ -202,7 +218,15 @@ public sealed class ModelQualificationService
             EstimatedSavingsPercent = source == "task-override" ? 0 : recommendation.EstimatedSavingsPercent,
             Reason = reason,
             CatalogueSource = catalogue.Source ?? "unknown",
+            AppliedMigration = appliedMigration,
         };
+    }
+
+    private bool AutoApplyEnabled(string projectName)
+    {
+        var project = _projects?.FindByIdOrDisplayName(projectName);
+        if (project is null || _workspaceSettings is null) return true;
+        return _workspaceSettings.Get(project.WorkspaceId).ModelMigrationAutoApply ?? true;
     }
 
     public async Task RecordDecisionAsync(string jobFolder, ModelQualificationDecision decision, CancellationToken ct)

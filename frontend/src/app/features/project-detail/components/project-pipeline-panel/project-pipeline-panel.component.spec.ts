@@ -67,6 +67,12 @@ describe('ProjectPipelinePanelComponent (render)', () => {
         usesModel: true, usesPrompt: true, supportsMode: true, cliType: 'claude',
         framework: 'Angular', promptTemplate: 'aspect-code-quality',
         canDisable: true, defaultEnabled: true, supportsCondition: true,
+        modelUpdate: {
+          from: 'claude-sonnet-4-5', to: 'claude-sonnet-5', family: 'claude-sonnet',
+          rule: 'latest-in-family', safeAuto: true, catalogVersion: 'te-1',
+          fromCostClass: 'standard', toCostClass: 'standard',
+          fromReasoningLadder: ['low', 'medium'], toReasoningLadder: ['low', 'medium', 'high'],
+        },
       },
       {
         id: 'post-build-test-gate', displayName: 'Build/test gate', kind: 'tool', phase: 'tool',
@@ -175,6 +181,8 @@ describe('ProjectPipelinePanelComponent (render)', () => {
     expect(aspectToggle?.closest('summary')).toBeTruthy();
     expect(host.querySelector('[data-testid="pipeline-step-framework-aspect-code-quality"]')?.textContent)
       .toContain('Angular');
+    expect(host.querySelector('[data-testid="pipeline-step-model-update-aspect-code-quality"]')?.textContent)
+      .toContain('claude-sonnet-4-5 to claude-sonnet-5');
 
     // Prompt binding cell: registry template reference + legacy inline override + Clear.
     const promptCell = host.querySelector('[data-testid="pipeline-step-prompt-aspect-requirement-fit"]');

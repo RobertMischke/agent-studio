@@ -30,11 +30,11 @@ import { PipelineHealthBlockComponent } from '../pipeline-health-block/pipeline-
 import { PipelineStepExecutionComponent } from './pipeline-step-execution/pipeline-step-execution.component';
 import { PipelineTypePickerComponent } from './pipeline-type-picker/pipeline-type-picker.component';
 import { PipelineStepRowStateComponent } from './pipeline-step-row-state/pipeline-step-row-state.component';
-/** Per-type project pipeline editor for ordering, activation, agents, prompts, gates, and usage. */
+import { ModelMigrationUpdateComponent } from '../../../cli'; /** Per-type project pipeline editor for ordering, activation, agents, prompts, gates, and usage. */
 @Component({
   selector: 'app-project-pipeline-panel', standalone: true,
   imports: [FormsModule, CliModelSelectorComponent, TooltipDirective, PipelineHealthBlockComponent, PipelineStepExecutionComponent,
-    PipelineTypePickerComponent, PipelineStepRowStateComponent],
+    PipelineTypePickerComponent, PipelineStepRowStateComponent, ModelMigrationUpdateComponent],
   hostDirectives: [{ directive: PipelineStepFocusDirective, inputs: ['focusStepId'] }],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-pipeline-panel.component.html',
@@ -96,8 +96,7 @@ export class ProjectPipelinePanelComponent {
         id: step.id, displayName: step.displayName, kind: step.kind,
         appliesTo: step.appliesTo ?? 'any', applicable: step.applicable ?? true,
         effectiveExecution: step.effectiveExecution ?? { executionKind: 'internal', source: 'runtime', commands: [] }, runMode: step.runMode ?? '', dependsOn: step.dependsOn ?? [],
-        idempotent: step.idempotent ?? false,
-        stub: step.stub ?? false,
+        idempotent: step.idempotent ?? false, stub: step.stub ?? false,
         deferred: step.deferred ?? false,
         usesModel: step.usesModel,
         supportsEconomyModel: step.supportsEconomyModel ?? false,
@@ -116,6 +115,7 @@ export class ProjectPipelinePanelComponent {
         effectiveModel: ov?.model ?? step.resolvedModel ?? step.model ?? '',
         effectiveModelSource: ov?.model ? 'step' : (step.modelSource ?? ''),
         effectiveThinkingLevel: ov?.thinkingLevel ?? step.resolvedThinkingLevel ?? '',
+        modelUpdate: step.modelUpdate ?? null,
         prompt: ov?.prompt ?? '',
         promptTemplate: step.promptTemplate ?? '',
         mode: ov?.mode ?? '',

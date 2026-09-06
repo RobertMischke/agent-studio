@@ -1,9 +1,12 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CLI_TYPES, type CliType } from '../../../../models/task.model';
-import type { CliModelInfo } from '../../models/cli.model';
+import { modelMigrationDiffTooltip, type CliModelInfo, type ModelMigrationProposal } from '../../models/cli.model';
 import { CliCatalogStore } from '../../services/cli-catalog.store';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService, type CliModelRouteProfile, type ModelRoutingPolicyView } from '../../../quota';
+import { TaskService } from '../../../../services/task.service';
+import { ModelMigrationStore } from '../../services/model-migration.store';
+import { TooltipDirective } from 'coding-agent-chat/shared';
 
 interface CliModelGroup {
   cliType: CliType;
@@ -27,7 +30,7 @@ interface CliModelGroup {
 @Component({
   selector: 'app-cli-models-panel',
   standalone: true,
-  imports: [],
+  imports: [TooltipDirective],
   templateUrl: './cli-models-panel.html',
   styleUrl: './cli-models-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,10 +38,14 @@ interface CliModelGroup {
 export class CliModelsPanelComponent implements OnInit {
   private readonly catalog = inject(CliCatalogStore);
   private readonly routesApi = inject(QuotaApiService);
+  private readonly tasks = inject(TaskService);
+  private readonly migrationStore = inject(ModelMigrationStore);
   readonly routes = signal<Record<string, CliModelRouteProfile>>({});
   readonly savingCli = signal<string | null>(null);
   readonly policy = signal<ModelRoutingPolicyView | null>(null);
   readonly savingEconomyMode = signal(false);
+  readonly savingMigration = signal<string | null>(null);
+  readonly migrationCatalog = this.migrationStore.catalog;
   readonly cliTypes = CLI_TYPES;
 
   /** CLIs whose per-row details (route editor + full model list) are expanded.
@@ -61,12 +68,35 @@ export class CliModelsPanelComponent implements OnInit {
 
   ngOnInit(): void {
     this.catalog.hydrateAll();
+    this.migrationStore.ensureLoaded();
     this.routesApi.getModelRoutes().subscribe({
       next: (response) => this.routes.set(response.profiles ?? {}),
     });
     this.routesApi.getModelRoutingPolicy().subscribe({
       next: (policy) => this.policy.set(policy),
     });
+  }
+
+  applyConfigPin(key: string, from: string, to: string): void {
+    if (this.savingMigration()) return;
+    this.savingMigration.set(key);
+    this.tasks.applyConfigurationModelMigration(key, from, to).subscribe({
+      next: () => { this.savingMigration.set(null); this.migrationStore.reload(); },
+      error: () => this.savingMigration.set(null),
+    });
+  }
+
+  setAutoApply(workspaceId: string, enabled: boolean): void {
+    if (this.savingMigration()) return;
+    this.savingMigration.set(workspaceId);
+    this.tasks.setWorkspaceModelMigrationAutoApply(workspaceId, enabled).subscribe({
+      next: () => { this.savingMigration.set(null); this.migrationStore.reload(); },
+      error: () => this.savingMigration.set(null),
+    });
+  }
+
+  migrationTooltip(update: ModelMigrationProposal): string {
+    return modelMigrationDiffTooltip(update);
   }
 
   refresh(cliType: CliType): void {
