@@ -9,24 +9,30 @@ coverage.
 
 ## Global Search
 
-The title-bar search opens a Ctrl+K command palette. V1 covers tasks (key,
-title, prompt, and status text), commit messages and SHA prefixes, and file names
+The title-bar search opens a Ctrl+K command palette. It covers tasks (key,
+title, prompt, and status text), Dossiers (document reference key, id, title,
+summary, status, and phase), commit messages and SHA prefixes, and file names
 or paths on each project's working branch. Task matches are ranked immediately
 from the in-memory board snapshot, with an exact task key first and a warm
 response target below 300 ms.
 
 Repository-backed results use
-`GET /api/search?q=<query>&domains=tasks,commits,files&limit=<count>`. The
-`domains` value is a comma-separated subset of `tasks`, `commits`, and `files`;
-`limit` is optional and bounded by the backend. The JSON response contains the
-normalized `query`, an array for each requested domain, per-domain `errors`,
-and `durationMs`. Git commit and file lookup reuse the HEAD-keyed cache rather
-than maintaining a search index.
+`GET /api/search?q=<query>&domains=tasks,commits,files,dossiers&limit=<count>`.
+The `domains` value is a comma-separated subset of `tasks`, `commits`, `files`,
+and `dossiers`, and an omitted `domains` selects all four; `limit` is optional
+and bounded by the backend. The JSON response contains the normalized `query`,
+an array for each requested domain, per-domain `errors`, and `durationMs`. Git
+commit and file lookup reuse the HEAD-keyed cache rather than maintaining a
+search index; Dossiers are read from the cached workbench catalogue of every
+non-archived project, history included, so a settled Dossier stays reachable by
+its key.
 
 Results are grouped by domain and carry project identity. Commit results open
-the diff surface, documentation files open the Wiki, and other files open the
-project Git view. Queries shorter than two characters return empty result
-groups, and a failed domain reports an error without hiding successful domains.
+the diff surface, documentation files open the Wiki, other files open the
+project Git view, and a Dossier opens the read-only Dossier viewer through
+`workbenchId` plus project rather than through a repository path. Queries
+shorter than two characters return empty result groups, and a failed domain
+reports an error without hiding successful domains.
 
 ## Entry Points
 

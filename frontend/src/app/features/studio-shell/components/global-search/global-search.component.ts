@@ -5,6 +5,15 @@ import { BoardFiltersService } from '../../../board';
 import { StudioTabStateService } from '../../services/studio-tab-state.service';
 import { GlobalSearchItem, GlobalSearchService } from './global-search.service';
 
+interface RemoteResults {
+  commits: GlobalSearchItem[];
+  files: GlobalSearchItem[];
+  dossiers: GlobalSearchItem[];
+  errors: Record<string, string>;
+}
+
+const EMPTY_REMOTE: RemoteResults = { commits: [], files: [], dossiers: [], errors: {} };
+
 @Component({
   selector: 'app-global-search',
   standalone: true,
@@ -20,7 +29,7 @@ export class GlobalSearchComponent {
   readonly tasks = input<readonly TaskInfo[]>([]);
   readonly open = model(false);
   readonly query = signal('');
-  readonly remote = signal<{ commits: GlobalSearchItem[]; files: GlobalSearchItem[]; errors: Record<string, string> }>({ commits: [], files: [], errors: {} });
+  readonly remote = signal<RemoteResults>(EMPTY_REMOTE);
   readonly loading = signal(false);
   readonly activeIndex = signal(0);
   readonly inputRef = viewChild<ElementRef<HTMLInputElement>>('searchInput');
@@ -45,6 +54,7 @@ export class GlobalSearchComponent {
 
   readonly groups = computed(() => [
     { domain: 'tasks', label: 'Tasks', items: this.taskResults() },
+    { domain: 'dossiers', label: 'Dossiers', items: this.remote().dossiers },
     { domain: 'commits', label: 'Commits', items: this.remote().commits },
     { domain: 'files', label: 'Files', items: this.remote().files },
   ] as const);
@@ -58,7 +68,7 @@ export class GlobalSearchComponent {
   close(): void {
     this.open.set(false);
     this.query.set('');
-    this.remote.set({ commits: [], files: [], errors: {} });
+    this.remote.set(EMPTY_REMOTE);
   }
 
   onQuery(value: string): void {
@@ -67,7 +77,7 @@ export class GlobalSearchComponent {
     if (this.timer) clearTimeout(this.timer);
     const q = value.trim();
     if (q.length < 2) {
-      this.remote.set({ commits: [], files: [], errors: {} });
+      this.remote.set(EMPTY_REMOTE);
       this.loading.set(false);
       return;
     }
@@ -76,12 +86,17 @@ export class GlobalSearchComponent {
     this.timer = setTimeout(() => this.api.search(q).subscribe({
       next: result => {
         if (version !== this.requestVersion) return;
-        this.remote.set({ commits: result.commits, files: result.files, errors: result.errors });
+        this.remote.set({
+          commits: result.commits ?? [],
+          files: result.files ?? [],
+          dossiers: result.dossiers ?? [],
+          errors: result.errors,
+        });
         this.loading.set(false);
       },
       error: () => {
         if (version !== this.requestVersion) return;
-        this.remote.set({ commits: [], files: [], errors: { search: 'Git results are temporarily unavailable.' } });
+        this.remote.set({ ...EMPTY_REMOTE, errors: { search: 'Repository results are temporarily unavailable.' } });
         this.loading.set(false);
       },
     }), 120);
@@ -93,6 +108,14 @@ export class GlobalSearchComponent {
       if (task) {
         this.tabs.open({ kind: 'task', taskKey: task.taskKey });
       }
+    } else if (item.domain === 'dossiers' && item.dossierId) {
+      this.tabs.open({
+        kind: 'workbench',
+        projectName: item.projectName,
+        workbenchId: item.dossierId,
+        title: item.title,
+        key: item.dossierKey,
+      });
     } else if (item.domain === 'commits' && item.sha) {
       this.boardFilters.setSoleProject(item.projectName);
       this.tabs.open({ kind: 'diff', commitSha: item.sha });
@@ -129,6 +152,12 @@ export class GlobalSearchComponent {
   }
 
   resultIndex(item: GlobalSearchItem): number { return this.flatResults().indexOf(item); }
+
+  /** Stable row identity: two Dossiers of one project can share a subtitle. */
+  resultKey(item: GlobalSearchItem): string {
+    const identity = item.taskKey ?? item.dossierId ?? item.sha ?? item.path ?? item.subtitle;
+    return `${item.domain}:${item.projectName}:${identity}`;
+  }
 
   private projectColor(name: string): string {
     let hash = 0;

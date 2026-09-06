@@ -285,6 +285,13 @@ When the descriptor or entrypoint has uncommitted working-tree changes, the
 viewer says so explicitly and withholds the HEAD revision instead of attaching
 that SHA to bytes HEAD does not contain.
 
+Dossiers are also a domain of the global Ctrl+K search. A document reference
+key such as `AGT-W15` is an exact, first-ranked hit, and title, summary,
+status, and phase words match as well. History is searched, so a decided or
+archived Dossier stays reachable by its key. Selecting a result opens the same
+Dossier viewer as the overview, addressed by project and Dossier id, never by a
+repository path.
+
 Because the files remain below `docs/`, they also stay visible in the physical
 Wiki tree and Git/Pulse history. The ordinary Wiki view renders the entrypoint
 as an interactive but isolated artifact. The Dossiers row is a narrow
