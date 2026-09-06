@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
 import { TaskInfo, TaskState } from '../../../../models/task.model';
+import { lanePresentation, laneShortName, laneTone } from '../../../../models/lane-presentation.model';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
@@ -165,13 +166,13 @@ export class DetailHeaderComponent {
    * lane is omitted too (prep runs in-place on 1-preparation now).
    */
   readonly laneOptions: readonly { state: string; label: string }[] = [
-    { state: TaskState.Preparation,   label: 'Preparation' },
-    { state: TaskState.Ready,         label: 'Ready' },
-    { state: TaskState.HumanReview,   label: 'Review' },
-    { state: TaskState.Escalated,     label: 'Escalated' },
-    { state: TaskState.Completed,     label: 'Delivered' },
-    { state: TaskState.Archive,       label: 'Archive' },
-  ];
+    TaskState.Preparation,
+    TaskState.Ready,
+    TaskState.HumanReview,
+    TaskState.Escalated,
+    TaskState.Completed,
+    TaskState.Archive,
+  ].map((state) => ({ state, label: laneShortName(state) }));
 
   isStandardLane(state: string): boolean {
     return this.laneOptions.some(o => o.state === state);
@@ -184,6 +185,8 @@ export class DetailHeaderComponent {
 
   /** Lane the dropdown shows as selected (pager lane, fallback to job state). */
   readonly selectedLane = computed(() => this.pagerLaneState() || this.info().state);
+  readonly selectedLaneTone = computed(() => laneTone(this.selectedLane()));
+  readonly selectedLaneToneToken = computed(() => lanePresentation(this.selectedLane())?.toneToken ?? null);
 
   onStateSelect(event: Event) {
     const target = event.target as HTMLSelectElement;

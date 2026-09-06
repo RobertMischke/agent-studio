@@ -6,7 +6,8 @@ import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { UndoController } from '../../../services/undo.service';
 import { TaskDetailPrefetchService } from './task-detail-prefetch.service';
 import { TaskSelectionService } from './task-selection.service';
-import { LanePagerService, LANE_LABELS } from './lane-pager.service';
+import { LanePagerService } from './lane-pager.service';
+import { laneName } from '../../../models/lane-presentation.model';
 import {
   laneLabelFor,
   needsPlanningAcceptWarning,
@@ -460,7 +461,7 @@ export class TriageController {
     const sel = this.jobSelection.selected();
     const newState = sel?.info.state;
     const newStateLabel = newState
-      ? (LANE_LABELS[newState] ?? newState)
+      ? laneName(newState)
       : 'another lane';
 
     // Update triageLaneState to the job's new state so the shell's

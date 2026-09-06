@@ -3,6 +3,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TaskState, type CliType, type PromoteToCodingResponse, type TaskInfo } from '../../../../../models/task.model';
+import { lanePresentation, laneTone } from '../../../../../models/lane-presentation.model';
 import { CreateTaskFormService, type PendingAttachment } from '../../../../board';
 import type { CliModelInfo } from '../../../../cli';
 import type { RunRecord } from '../../../../run-timeline';
@@ -512,6 +513,8 @@ export class OverviewPaneComponent {
   readonly stepStatusLabel = stepStatusLabel;
   readonly visibleStepVerdict = distinctStepVerdict;
   readonly laneLabel = laneLabel;
+  readonly lanePresentation = lanePresentation;
+  readonly laneTone = laneTone;
   readonly formatTokens = formatTokens;
   readonly formatDuration = formatDuration;
 

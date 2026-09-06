@@ -66,7 +66,7 @@
 }
 
 .wf__lane-label {
-  color: var(--studio-fg);
+  color: var(--studio-lane-tone, var(--studio-fg));
   font-size: 0.85rem;
   font-weight: 600;
 }

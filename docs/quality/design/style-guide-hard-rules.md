@@ -124,6 +124,19 @@ and do not contain `Tab` or `Escape`. The detailed embedding contract and its
 CAC-22 precedent are recorded in the
 [Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html#panel-keyboard-containment).
 
+### R9 - One lane identity on every surface
+
+Every surface that names or colours a workflow lane reads the shared
+`LanePresentation` entry for that `TaskState`. The board column, task-header
+chip, Result header, verdict signal, badge, workflow row, and help trigger use
+one display name and one `--studio-lane-*` semantic tone token. Do not hard-code
+lane names, glyphs, colours, sentence copy, or help topics in components.
+
+Protocol and grouping keys such as `humanReview` may remain in wire and state
+adapters, but they are never user-facing wording. Both themes define the same
+token vocabulary. `lint:structure` rejects new lane-name literals outside the
+canonical presentation module.
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../../AGENTS.md) and
@@ -138,3 +151,6 @@ CAC-22 precedent are recorded in the
 - **Admin reference:** the fully specified light/dark Activity surface,
   violation audit, and adoption contract live in the
   [Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html).
+- **Lane identity:** `frontend/src/app/models/lane-presentation.model.ts` owns
+  names, copy, tone tokens, glyphs, and help topics; `lint:structure` prevents a
+  second source.

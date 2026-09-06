@@ -8,6 +8,7 @@ export interface DecisionBadgeVm {
   tone: AspectVerdictTone;
   severity: TooltipSeverity;
   tooltip: StructuredTooltip;
+  toneToken?: ProtocolVerdict['toneToken'];
 }
 
 export function outcomeDecisionBadge(outcome: ProtocolVerdict | null): DecisionBadgeVm | null {
@@ -19,9 +20,10 @@ export function outcomeDecisionBadge(outcome: ProtocolVerdict | null): DecisionB
   const severity: TooltipSeverity = tone === 'danger' ? 'error' : tone === 'warn' ? 'warn' : tone === 'ok' ? 'success' : 'info';
   return {
     verdict: status,
-    label: outcome.label === 'Human review lane' ? 'Human review' : outcome.label,
+    label: outcome.label,
     tone,
     severity,
     tooltip: { title: `Run outcome: ${outcome.label}`, body: outcome.detail },
+    toneToken: outcome.toneToken,
   };
 }

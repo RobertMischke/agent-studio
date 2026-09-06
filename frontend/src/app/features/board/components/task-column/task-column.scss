@@ -71,7 +71,7 @@
       font-size: var(--studio-lane-header-primary-size);
       line-height: 1;
       font-weight: 600;
-      color: var(--studio-fg, #e2e8f0);
+      color: var(--studio-lane-tone, var(--studio-fg, #e2e8f0));
       flex: 1 1 auto;
       min-width: 0;
       overflow: hidden;
@@ -370,7 +370,7 @@
       padding-block: var(--studio-rail-padding-block);
       padding-inline: var(--studio-rail-padding-inline);
       cursor: pointer;
-      color: var(--studio-fg-dim);
+      color: var(--studio-lane-tone, var(--studio-fg-dim));
       transition: outline 0.15s, background-color 0.15s;
       /* Same containment rationale as .column: a rail's running-pulse
          animation must not invalidate sibling lanes. */

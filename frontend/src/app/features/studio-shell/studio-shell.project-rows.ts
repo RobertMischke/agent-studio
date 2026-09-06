@@ -1,5 +1,6 @@
 import { excludeEpics } from '../board';
-import type { GroupedJobs, TaskInfo } from '../../models/task.model';
+import { TaskState, type GroupedJobs, type TaskInfo } from '../../models/task.model';
+import { LANE_PRESENTATIONS } from '../../models/lane-presentation.model';
 import { projectIdentity } from '../../services/project-identity.util';
 import type { StructuredTooltip } from 'coding-agent-chat/shared';
 
@@ -18,16 +19,16 @@ export interface ExplorerLaneCounts {
  */
 export const BOARD_LANE_COUNT_TOOLTIPS: Record<keyof ExplorerLaneCounts, StructuredTooltip> = {
   ready: {
-    title: 'Ready',
-    body: 'Refined tasks queued for a coding agent. The orchestrator runs the top card next when a slot frees up.',
+    title: LANE_PRESENTATIONS[TaskState.Ready].name,
+    body: LANE_PRESENTATIONS[TaskState.Ready].sentence,
   },
   progress: {
-    title: 'In Progress',
-    body: 'Tasks the orchestrator is actively running now, or resuming between attempts. One per project at a time.',
+    title: LANE_PRESENTATIONS[TaskState.Progress].name,
+    body: LANE_PRESENTATIONS[TaskState.Progress].sentence,
   },
   humanReview: {
-    title: 'Human Review',
-    body: 'Finished runs waiting for your review, including escalations that need a decision. Accept the work or send it back for another pass.',
+    title: LANE_PRESENTATIONS[TaskState.HumanReview].name,
+    body: LANE_PRESENTATIONS[TaskState.HumanReview].sentence,
   },
 };
 
@@ -56,7 +57,9 @@ export function laneCountsFor(project: { laneCounts?: ExplorerLaneCounts }): Exp
 
 export function boardLaneCountsLabel(project: { laneCounts?: ExplorerLaneCounts }): string {
   const counts = laneCountsFor(project);
-  return `${counts.ready} ready, ${counts.progress} in progress, ${counts.humanReview} human review`;
+  return `${counts.ready} ${LANE_PRESENTATIONS[TaskState.Ready].name}, `
+    + `${counts.progress} ${LANE_PRESENTATIONS[TaskState.Progress].name}, `
+    + `${counts.humanReview} ${LANE_PRESENTATIONS[TaskState.HumanReview].name}`;
 }
 
 export function buildProjectSidebarRows(

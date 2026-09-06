@@ -4,6 +4,7 @@ import {
   WorkbenchDocument,
   WorkbenchTaskDraft,
 } from '../../../../models/project-docs.model';
+import { laneShortName } from '../../../../models/lane-presentation.model';
 
 export function selectedDecisionText(
   points: readonly WorkbenchDecisionPoint[],
@@ -54,7 +55,7 @@ export function bounded(value: string, length: number): string {
 }
 
 export function laneLabel(lane: string | null): string {
-  return lane === '1-preparation' ? 'Preparation' : lane ?? 'Unknown lane';
+  return lane ? laneShortName(lane) : 'Unknown lane';
 }
 
 export function actionErrorMessage(error: unknown): string {

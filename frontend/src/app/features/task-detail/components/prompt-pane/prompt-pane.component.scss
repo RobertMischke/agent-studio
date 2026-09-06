@@ -71,7 +71,7 @@
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--studio-bg-hover);
-  color: var(--lane-backlog);
+  color: var(--studio-lane-tone, var(--lane-backlog));
 
   &.state--0-backlog            { color: var(--lane-backlog); }
   &.state--1-preparation        { color: var(--lane-prep); }

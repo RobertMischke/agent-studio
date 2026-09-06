@@ -1,6 +1,6 @@
     @if (collapsed()) {
       <button type="button"
-              class="column-rail"
+              class="column-rail" [attr.data-lane-tone]="lanePresentation()?.toneToken" [style.--studio-lane-tone]="lanePresentation() ? 'var(' + lanePresentation()!.toneToken + ')' : null"
               [class.column-rail--dragover]="isDragOver"
               [attr.data-testid]="'lane-rail-' + state()"
               [attr.data-state]="state()"
@@ -37,7 +37,7 @@
           <span class="column-rail__expand" aria-hidden="true">›</span>
       </button>
     } @else {
-    <div class="column"
+    <div class="column" [attr.data-lane-tone]="lanePresentation()?.toneToken" [style.--studio-lane-tone]="lanePresentation() ? 'var(' + lanePresentation()!.toneToken + ')' : null"
          [class.column--dragover]="isDragOver"
          [class.column--archive]="isArchive()"
          [attr.data-testid]="'lane-' + state()"

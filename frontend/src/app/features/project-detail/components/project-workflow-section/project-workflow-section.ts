@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TaskService } from '../../../../services/task.service';
-import { TaskState } from '../../../../models/task.model';
+import { lanePresentation } from '../../../../models/lane-presentation.model';
 import type { PipelineCatalogueStep, PipelineStepSetting } from '../../../../features/task-pipeline';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import {
@@ -18,6 +18,7 @@ interface WorkflowLaneRow {
   label: string;
   icon: string;
   role: string;
+  toneToken: string;
 }
 
 /** A read-only transition card: what the platform does today at one hop. */
@@ -70,7 +71,8 @@ export class ProjectWorkflowSectionComponent implements OnInit {
     state: lane.state,
     label: lane.label,
     icon: lane.icon,
-    role: LANE_ROLES[lane.state] ?? '',
+    role: lanePresentation(lane.state)?.sentence ?? '',
+    toneToken: lanePresentation(lane.state)?.toneToken ?? '--studio-fg-muted',
   }));
 
   // ---- Board sort per lane (the only writeable controls; shown in the lane list) ----
@@ -197,19 +199,6 @@ export class ProjectWorkflowSectionComponent implements OnInit {
     });
   }
 }
-
-/** Role copy per lane, keyed by canonical lane state. Board order via SORTABLE_LANES. */
-const LANE_ROLES: Record<string, string> = {
-  [TaskState.Backlog]: 'Captured but not yet scheduled.',
-  [TaskState.Preparation]: 'Intake and preparation before the task is workable.',
-  [TaskState.Ready]: 'Queued and ready for pickup.',
-  [TaskState.Progress]: 'A run is executing the task (runner-owned).',
-  [TaskState.AutoReview]: 'Post Processing — automated review gates run here (orchestrator-owned).',
-  [TaskState.HumanReview]: 'Awaiting human review.',
-  [TaskState.Escalated]: 'Escalated for operator attention.',
-  [TaskState.Completed]: 'Delivered and accepted.',
-  [TaskState.Archive]: 'Archived; out of the active workflow.',
-};
 
 const AUTO_PUSH_LABELS: Record<AutoPushStrategy, string> = {
   'never': 'Never',

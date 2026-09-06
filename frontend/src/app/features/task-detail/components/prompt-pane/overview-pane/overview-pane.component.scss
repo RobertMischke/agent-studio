@@ -385,7 +385,7 @@
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--studio-bg-hover);
-  color: var(--lane-backlog);
+  color: var(--studio-lane-tone, var(--lane-backlog));
 
   &.state--0-backlog              { color: var(--lane-backlog); }
   &.state--1-preparation          { color: var(--lane-prep); }
@@ -901,6 +901,12 @@
       color: var(--severity-high);
       border-color: color-mix(in srgb, var(--severity-high) 58%, var(--studio-border));
       background: color-mix(in srgb, var(--severity-high) 18%, transparent);
+    }
+
+    &[data-lane-tone] {
+      color: var(--studio-lane-tone);
+      border-color: color-mix(in srgb, var(--studio-lane-tone) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--studio-lane-tone) 16%, transparent);
     }
 
     &:focus-visible {

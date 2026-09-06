@@ -137,7 +137,7 @@ describe('EpicOverviewScreenComponent', () => {
 
     expect(testid(host, 'epic-overview-subs')).toBeTruthy();
     expect(testids(host, 'epic-overview-open-sub')).toHaveLength(2);
-    expect(testids(host, 'epic-overview-open-sub')[0].textContent).toContain('ready');
+    expect(testids(host, 'epic-overview-open-sub')[0].textContent).toContain('Ready');
     expect(testids(host, 'epic-overview-sub-project')).toHaveLength(2);
     expect(testids(host, 'epic-overview-sub-verdict')[0].textContent).toContain('escalate');
 

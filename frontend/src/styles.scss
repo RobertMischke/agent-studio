@@ -128,7 +128,7 @@ html[data-studio-theme='light'] {
     background: #f8f8f8;
     color: #1a1a1a;
   }
-  .column__title,
+  .column__title { color: var(--studio-lane-tone, #1a1a1a); }
   .column__header { color: #1a1a1a; }
   .task-card {
     background: var(--studio-card-bg);

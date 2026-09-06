@@ -202,6 +202,7 @@
 
   &__item[data-status='failed'] &__dot { background: var(--severity-high); }
   &__item[data-status='succeeded'] &__dot { background: var(--studio-accent-success); }
+  &__item[style*='--studio-signal-tone'] &__dot { background: var(--studio-signal-tone); }
 
   &__source {
     color: var(--studio-fg-muted);

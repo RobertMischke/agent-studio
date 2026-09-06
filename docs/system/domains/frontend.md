@@ -1,11 +1,30 @@
 # Frontend Domain Map
 
-Version: 2026-08-12
+Version: 2026-09-06
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
 kanban, project pages, frontend polling, model selectors, menus, or Playwright
 coverage.
+
+## Lane presentation
+
+`frontend/src/app/models/lane-presentation.model.ts` is the single source for
+every workflow lane's display name, short chip name, sentence copy, semantic
+tone token, glyph, and help topic. Board columns, task headers, Result outcome
+labels and dots, verdict signals, workflow rows, badges, and info buttons must
+resolve those values from `LanePresentation`; transport keys such as
+`humanReview` are not presentation sources.
+
+Lane pigments are the theme-aware `--studio-lane-*` tokens in
+`frontend/src/styles/_tokens-semantic.scss`. A surface binds the resolved token
+as `--studio-lane-tone`, so the same lane has the same colour in light and dark
+themes. `npm run lint:structure` reads the canonical names from the presentation
+map and rejects hard-coded lane-name literals in production source, apart from
+narrowly identified non-lane homonyms such as deployment readiness. The map's
+unit spec locks completeness for every `TaskState`, and
+`e2e/task-detail/lane-presentation-parity.spec.ts` locks the Human review name
+and computed tone across the board column, task-header chip, and Result header.
 
 ## Global Search
 

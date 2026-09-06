@@ -10,7 +10,9 @@
   <h3>Lanes &amp; board sort</h3>
   <div class="wf__lanes" data-testid="project-detail-lane-sort">
     @for (lane of lanes; track lane.state) {
-      <div class="wf__lane-row" [attr.data-testid]="'workflow-lane-' + lane.state">
+      <div class="wf__lane-row" [attr.data-testid]="'workflow-lane-' + lane.state"
+           [attr.data-lane-tone]="lane.toneToken"
+           [style.--studio-lane-tone]="'var(' + lane.toneToken + ')'">
         <span class="wf__lane-icon" aria-hidden="true">{{ lane.icon }}</span>
         <div class="wf__lane-main">
           <span class="wf__lane-label">{{ lane.label }}</span>

@@ -1827,6 +1827,20 @@
   }
 }
 
+.studio .studio-tab-action--lane-select {
+  color: var(--studio-lane-tone, var(--studio-fg-dim));
+  border: 1px solid color-mix(
+    in srgb,
+    var(--studio-lane-tone, var(--studio-border)) 55%,
+    var(--studio-border)
+  );
+  background: color-mix(
+    in srgb,
+    var(--studio-lane-tone, var(--studio-fg-muted)) 12%,
+    transparent
+  );
+}
+
 // Flex row so the board controls get even spacing; the projected wrapper is
 // block-level, so without this the buttons only had whitespace between them.
 .studio-board-actions {

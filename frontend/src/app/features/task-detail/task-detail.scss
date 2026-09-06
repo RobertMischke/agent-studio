@@ -357,6 +357,11 @@
       opacity: 0.55;
       cursor: progress;
     }
+    .detail__state--select {
+      color: var(--studio-lane-tone, currentColor);
+      border-color: color-mix(in srgb, var(--studio-lane-tone, var(--studio-border)) 55%, var(--studio-border));
+      background: color-mix(in srgb, var(--studio-lane-tone, var(--studio-fg-muted)) 15%, transparent);
+    }
     .detail__state--select option {
       color: var(--studio-fg);
       background: var(--studio-bg-elevated);

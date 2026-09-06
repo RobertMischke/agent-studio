@@ -20,6 +20,7 @@ import {
   ProjectRunnerStatus,
   TaskState,
 } from '../../../../models/task.model';
+import { lanePresentation } from '../../../../models/lane-presentation.model';
 import { TaskService } from '../../../../services/task.service';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { DecisionBacklogHintComponent } from '../decision-backlog-hint/decision-backlog-hint.component';
@@ -28,12 +29,10 @@ import { cliTypeIcon } from '../../../../services/format.util';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { groupReviewJobs } from '../review-grouping.util';
 import { InfoButtonComponent } from '../../../../components/info-button/info-button.component';
-import { laneDocTopic } from '../../../../components/info-button/lane-doc-topic';
 import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lane-sort.util';
 import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { PostProcessingSummaryComponent } from '../post-processing-summary/post-processing-summary.component';
 import { BoardDragStateService } from '../../state/board-drag-state.service';
-
 /** ASS-1727: Archive pagination and typed-filter debounce. */
 const ARCHIVE_PAGE_SIZE = 50;
 const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
@@ -86,6 +85,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
    * change detection is OnPush-friendly.
    */
   readonly nowMs = input<number>(0);
+  readonly lanePresentation = computed(() => lanePresentation(this.state()));
 
   readonly stalledCount = computed(() => this.state() === TaskState.Progress
     ? this.jobs().filter((job) => deriveStalledTaskState(job, this.nowMs() || Date.now()) !== null).length
@@ -373,11 +373,11 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
    * Every lane carries an info trigger: each one maps to a committed
    * concept doc under <c>docs/app/help/lane-guides/lane-*.md</c>, served by
    * <c>GET /api/concept-docs/{topic}</c> and shown in the lane-info
-   * modal. Virtual sub-lanes (e.g. <c>2-ready-intake</c>, <c>4-review</c>)
+   * modal. Virtual sub-lanes (<c>2-ready-intake</c>, <c>4-review</c>)
    * collapse to their parent's doc. Returns <c>null</c> only for a state
    * with no doc, in which case the trigger is hidden.
    */
-  readonly infoTopic = computed<string | null>(() => laneDocTopic(this.state()));
+  readonly infoTopic = computed<string | null>(() => this.lanePresentation()?.docTopic ?? null);
 
   /**
    * The ADR-0025 swim-lanes are now real columns; the in-column
