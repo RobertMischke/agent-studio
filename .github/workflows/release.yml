@@ -94,6 +94,19 @@ jobs:
             --filter "FullyQualifiedName~TaskServer.Tests.TopologyTests|FullyQualifiedName~TaskServer.Tests.ProtocolTests" \
             --logger "console;verbosity=normal"
 
+      - name: Test full deployment scenario in Compose
+        env:
+          JOB_RESULTS_DIR: ${{ runner.temp }}/deployment-scenario-results
+        run: scripts/scenario.sh --target compose --level full
+
+      - name: Attach deployment scenario report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-scenario-compose-full
+          path: ${{ runner.temp }}/deployment-scenario-results/deployment-scenario
+          if-no-files-found: error
+
       - name: Lint and type-check frontend
         working-directory: frontend
         run: |

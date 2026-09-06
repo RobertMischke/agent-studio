@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-orchestrator.dev/schemas/deployment-scenario.schema.json",
+  "title": "Deployment regression scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "clock", "fixture", "steps"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "clock": { "type": "string", "format": "date-time" },
+    "fixture": { "type": "object" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "levels", "assertions"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "levels": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["smoke", "full"] }
+          },
+          "assertions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "http-status", "json-equals", "json-prefix", "count",
+                    "positive", "not-empty", "exit-code", "sha256",
+                    "file-exists", "git-commit", "git-ancestor"
+                  ]
+                },
+                "path": { "type": "string" },
+                "expected": {},
+                "expectedPath": { "type": "string" },
+                "expectedByTarget": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

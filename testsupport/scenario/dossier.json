@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "deployment-regression-dossier",
+  "title": "Deployment regression fixture decision",
+  "status": "decision-pending",
+  "decisionGate": {
+    "question": "May the deterministic deployment fixture be integrated?",
+    "options": ["approved", "rejected"],
+    "selected": null
+  },
+  "epic": {
+    "id": "deployment-regression-epic",
+    "taskKeys": ["DSR-1", "DSR-2"]
+  }
+}

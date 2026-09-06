@@ -30,4 +30,14 @@ jobs:
           docker compose version
 
       - name: Build, start, and verify onboarding stack
+        env:
+          JOB_RESULTS_DIR: ${{ runner.temp }}/deployment-scenario-results
         run: scripts/compose-smoke-test.sh
+
+      - name: Attach deployment scenario report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-scenario-compose-smoke
+          path: ${{ runner.temp }}/deployment-scenario-results
+          if-no-files-found: error

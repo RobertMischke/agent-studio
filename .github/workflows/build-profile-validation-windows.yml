@@ -7,6 +7,10 @@ on:
     paths:
       - 'backend/**'
       - 'backend.Tests/**'
+      - 'task-server/**'
+      - 'testsupport/scenario/**'
+      - 'scripts/scenario.py'
+      - 'scripts/scenario.sh'
       - '.github/workflows/build-profile-validation-windows.yml'
   workflow_dispatch:
 
@@ -22,8 +26,26 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Validate host-native shell and retained pickup state
         run: >-
           dotnet test backend.Tests/OrchestratorApi.Tests.csproj
           --filter "FullyQualifiedName=AgentStudio.Tests.BuildProfileValidationServiceTests.DotnetProfile_UsesHostShell_ValidatesGreenAndAllowsPickup|FullyQualifiedName=AgentStudio.Tests.ProjectSettingsServiceTests.ChangingOnlyTestFilter_PreservesPipelineReadyValidation"
           --logger "console;verbosity=normal"
+
+      - name: Run deployment card smoke gate
+        shell: bash
+        env:
+          JOB_RESULTS_DIR: ${{ runner.temp }}/deployment-scenario-results
+        run: scripts/scenario.sh --target inproc --level smoke
+
+      - name: Attach deployment card scenario report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-scenario-build-profile-windows
+          path: ${{ runner.temp }}/deployment-scenario-results
+          if-no-files-found: error

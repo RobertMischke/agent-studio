@@ -54,6 +54,20 @@ To add execution capacity after the Studio is running, follow the
 contributors use the separate
 [contributor setup](./docs/operations/setup/contributor-setup.md).
 
+## Testing
+
+Every deployment change uses the same reduced regression run:
+
+```bash
+scripts/scenario.sh --target inproc --level smoke
+```
+
+The command is supported on Windows and Linux, emits JUnit XML plus a Markdown
+step report, and exits nonzero on the first failed typed assertion. Release CI
+also runs the full scenario through Docker Compose. See the
+[deployment scenario guide](./docs/operations/testing/deployment-scenario.md)
+for target credentials, report paths, and the extension contract.
+
 ## More
 
 Agent Studio is part of the agent-orc ecosystem. It uses

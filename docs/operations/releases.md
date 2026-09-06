@@ -179,7 +179,8 @@ For release CI, green means green:
 - shell steps use failing exit codes and pipelines that propagate failure;
 - the production dependency audit blocks known critical runtime advisories;
 - .NET solution tests, release-topology tests, frontend lint/type-check/unit
-  tests, and the production frontend build all block publication;
+  tests, the full Compose deployment scenario, and the production frontend
+  build all block publication;
 - the `Category!=MachineBound` filter is explicit because tests that inspect a
   particular live checkout are not hermetic release evidence;
 - the GitHub Release step runs last and refuses an absent or mismatched tag.

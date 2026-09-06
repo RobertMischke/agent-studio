@@ -467,3 +467,15 @@ The test owns only its exact child PIDs and temporary directories. It never
 sweeps by process name. Its parent-PID assertions require Task Server, Studio
 BFF, and Runner to be siblings owned by the harness, so stopping Studio cannot
 implicitly stop either service.
+
+Deployment cards must also run the shared reduced regression scenario. It uses
+the same built Task Server and deterministic fake-CLI topology conventions, but
+adds the ordered claim, result, review, reporting, and restore contract used by
+Compose and remote deployments:
+
+```bash
+scripts/scenario.sh --target inproc --level smoke
+```
+
+See [Deployment regression scenario](../testing/deployment-scenario.md) for the
+full step inventory and target-specific configuration.

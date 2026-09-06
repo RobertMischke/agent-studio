@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "id": "deployment-regression-v1",
+  "clock": "2026-09-06T10:00:00Z",
+  "fixture": {
+    "workspaceId": "ws_deployment_scenario",
+    "projectId": "project_deployment_scenario",
+    "projectName": "Deployment regression scenario",
+    "taskKeyPrefix": "DSR",
+    "repository": "fixture-repository",
+    "dossier": "dossier.json",
+    "epicTasks": [
+      { "taskId": "task_dsr_epic_1", "taskKey": "DSR-1", "title": "Scenario fixture: first epic task" },
+      { "taskId": "task_dsr_epic_2", "taskKey": "DSR-2", "title": "Scenario fixture: second epic task" }
+    ],
+    "runTask": { "taskId": "task_dsr_run", "taskKey": "DSR-3", "title": "Execute deployment regression fixture" }
+  },
+  "steps": [
+    {
+      "id": "bootstrap-principals",
+      "title": "Bootstrap principals and project",
+      "levels": ["smoke", "full"],
+      "assertions": [
+        { "type": "http-status", "path": "httpStatus", "expected": 201 },
+        { "type": "json-prefix", "path": "project.projectId", "expected": "project_deployment_scenario" }
+      ]
+    },
+    {
+      "id": "register-runner",
+      "title": "Register coding and review runners",
+      "levels": ["smoke", "full"],
+      "assertions": [
+        { "type": "json-equals", "path": "coding.status", "expected": "active" },
+        { "type": "json-equals", "path": "review.status", "expected": "active" }
+      ]
+    },
+    {
+      "id": "create-task",
+      "title": "Seed dossier, epic, and runnable task",
+      "levels": ["smoke", "full"],
+      "assertions": [
+        { "type": "count", "path": "tasks", "expected": 3 },
+        { "type": "json-equals", "path": "runTask.state", "expected": "2-ready" }
+      ]
+    },
+    {
+      "id": "claim",
+      "title": "Claim the runnable task",
+      "levels": ["smoke", "full"],
+      "assertions": [
+        { "type": "json-equals", "path": "status", "expected": "claimed" },
+        { "type": "positive", "path": "lease.fence" }
+      ]
+    },
+    {
+      "id": "run-fake-cli",
+      "title": "Run fixed coding CLI output and hand off a commit",
+      "levels": ["smoke", "full"],
+      "assertions": [
+        { "type": "exit-code", "path": "exitCode", "expected": 0 },
+        { "type": "git-commit", "path": "resultSha" },
+        { "type": "file-exists", "path": "fakeCliLog" },
+        { "type": "json-equals", "path": "taskState", "expected": "4-auto-review" }
+      ]
+    },
+    {
+      "id": "auto-review",
+      "title": "Run fixed review CLI and persist a passing review",
+      "levels": ["smoke", "full"],
+      "assertions": [
+        { "type": "json-equals", "path": "report.outcome", "expected": "Pass" },
+        { "type": "json-equals", "path": "cleanup.status", "expected": "cleaned" },
+        { "type": "file-exists", "path": "fakeReviewLog" }
+      ]
+    },
+    {
+      "id": "integrate",
+      "title": "Settle review orchestration and integrate the exact commit",
+      "levels": ["full"],
+      "assertions": [
+        { "type": "json-equals", "path": "taskState", "expected": "5-human-review" },
+        { "type": "git-ancestor", "path": "resultSha" }
+      ]
+    },
+    {
+      "id": "complete",
+      "title": "Complete the reviewed task",
+      "levels": ["full"],
+      "assertions": [
+        { "type": "json-equals", "path": "state", "expected": "6-completed" }
+      ]
+    },
+    {
+      "id": "orchestrator-chat",
+      "title": "Append an orchestrator turn with a context receipt",
+      "levels": ["full"],
+      "assertions": [
+        { "type": "count", "path": "turns", "expected": 2 },
+        { "type": "not-empty", "path": "turns.1.receipt.receiptId" }
+      ]
+    },
+    {
+      "id": "dossier-decision",
+      "title": "Record the seeded dossier decision",
+      "levels": ["full"],
+      "assertions": [
+        { "type": "json-equals", "path": "decision", "expected": "approved" },
+        { "type": "positive", "path": "taskVersion" },
+        { "type": "file-exists", "path": "dossierDecision" }
+      ]
+    },
+    {
+      "id": "backup",
+      "title": "Create a Task Server backup",
+      "levels": ["full"],
+      "assertions": [
+        { "type": "sha256", "path": "sha256" },
+        { "type": "not-empty", "path": "backupId" }
+      ]
+    },
+    {
+      "id": "restore",
+      "title": "Restore or verify the backup on the isolated target",
+      "levels": ["full"],
+      "assertions": [
+        { "type": "json-equals", "path": "verified", "expected": true },
+        { "type": "json-equals", "path": "restored", "expectedByTarget": { "remote": false, "default": true } }
+      ]
+    },
+    {
+      "id": "inventory-hash",
+      "title": "Compare the logical inventory before and after restore",
+      "levels": ["full"],
+      "assertions": [
+        { "type": "json-equals", "path": "before", "expectedPath": "after" },
+        { "type": "sha256", "path": "after" }
+      ]
+    }
+  ]
+}

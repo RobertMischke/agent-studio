@@ -1,0 +1,30 @@
+services:
+  agent-host-coding:
+    profiles: !override ["operator-runner"]
+    env_file: !reset []
+
+  agent-host-review:
+    profiles: !override ["operator-runner"]
+    env_file: !reset []
+
+  task-server:
+    environment:
+      AUTH: bearer
+      AUTH_TOKEN: ${SCENARIO_TASK_SERVER_TOKEN}
+      TASK_SERVER_PROFILE: scenario
+
+  scenario-fake-cli:
+    build:
+      context: ../..
+      dockerfile: task-server/Dockerfile
+    profiles: ["runner"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '%s\n' 'fake-cli-image=ready' > /tmp/scenario-fake-cli.ready;
+        exec sleep infinity
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/scenario-fake-cli.ready"]
+      interval: 1s
+      timeout: 1s
+      retries: 10
