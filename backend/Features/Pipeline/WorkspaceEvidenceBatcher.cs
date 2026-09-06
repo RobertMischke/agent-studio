@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using AgentStudio.Retention;
 
 namespace AgentStudio.Pipeline;
 
@@ -44,15 +45,13 @@ public sealed class WorkspaceEvidenceBatcher
     // does not match `/chat-attachments/`; the nested .orchestrator glob covers
     // those PNGs.)
     private static readonly string[] DefaultExcludeGlobs =
-    {
+    [
         "*.tmp",
         "*.cache",
         "*/.orchestrator/*",
-        "*/attachments/*",
-        "*/results/*",
         "*/.runtime/*",
-        "*/logs/cli-output.log.1",
-    };
+        .. new ArtifactClassifier().IntermediateCommitExcludeGlobs,
+    ];
 
     private readonly WorkspaceArtifactCommitService _commit;
     private readonly WorkspaceArtifactPushQueue? _push;

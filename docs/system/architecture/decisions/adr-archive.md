@@ -1519,3 +1519,49 @@ switch ship together.
 **Amendment (2026-08-11).** Immediate integration into a repository with both `develop` and `main` has one fixed lineage: merge and gate the delivery on `develop`, then run the release gate on that exact develop merge commit and fast-forward `main`. A raw delivery fence is never a release source in this topology. The path fails before merging when existing history does not make `main` an ancestor of `develop`; it does not create a convergence merge or rewrite history. Deferred publication applies the same order to origin and stops before `main` when the `develop` push fails. A successful prerequisite push is not a terminal receipt, so restart recovery repeats the full ordered publication after a crash window. Main-only repositories retain their existing single-target behavior.
 
 **Amendment (2026-08-11, integration before acceptance).** The canonical Remote order is delivery, settled Review/build gate, integration, Human Review, then acceptance. This applies to every Remote coding project and executor; no project-name flag limits it to AGT, and `RemoteExecutionEnabled` controls dispatch rather than post-delivery integration. A failed delivery gate or immediate integration attempt is persisted visibly before Human Review and is not retried by acceptance. Acceptance validates current-attempt lineage and Git ancestry, then moves an already integrated card without changing Git or the merge-step receipt. An unintegrated card remains in Human Review with `IntegrationFailed`; explicit operator override is the only coding exception. `AcceptedIntegrationWorker` and `AcceptedIntegrationBackstopHostedService` remain only to recover a durable `integrating` transaction written by an older backend process. Local coding retains its existing order of local integration before Auto Review, while report-only, concept, Epic, and other no-code/no-branch modes do not integrate. Remote Review infrastructure retries remain in Auto Review. A configured `pull-request` strategy and any gate, conflict, lineage, or publication failure are explicit non-normal states with visible evidence, never acceptance-time integration. The dual-line `develop` then exact-SHA release-to-`main` rule above remains mandatory.
+
+---
+
+## ADR-0068 - Retention policy is store-neutral and cold payloads are manifest-addressed (2026-09-06)
+
+**Decision.** One `AgentStudio.Retention` engine owns artifact classification,
+policy validation, staged planning, content-aware excerpts, and execution
+contracts. Storage-specific adapters provide task and file inventory, cold
+movement, stubs, and restore. The legacy adapter reads the workspace file tree;
+the Task Server adapter will use the same engine against SQLite. Class A stays
+hot, class B moves only with the task, class C thins from full to excerpt to
+stub, and class D never enters cold storage. Every cold transition writes a
+SHA-256 manifest and deflated payload outside the repository before removing
+hot content. A pointer in the hot task chains every manifest needed for full
+restore.
+
+**Context.** The legacy workspace holds authority, evidence, heavy working
+data, and runtime state in one repository-shaped tree. Heavy logs and results
+made that repository expensive to commit and operate, while the Phase B Task
+Server cutover changes the live store from files to SQLite. Embedding retention
+in either host would duplicate policy and make migration behavior diverge.
+
+**Non-goals.** The engine does not reference backend or Task Server types. Cold
+storage is not placed inside the workspace repository. Runtime files are not
+archived. R1 does not add the SQLite adapter, management API, Admin UI, or
+object-storage target. Stage-3 cold deletion remains disabled by default.
+
+**Reasoning style.** Classify every artifact exactly once, plan with pure age,
+lane, size, and budget decisions, then execute bounded file and Git effects
+behind the existing repository gate. Preserve later search value through fixed
+Markdown excerpt headings. Make backup completion explicit by writing a
+verified inventory first and `complete.json` last.
+
+**Implementation pointers.** Engine and file-tree adapter:
+[`retention/`](../../../../retention/). CLI host:
+[`task-server/RetentionCommand.cs`](../../../../task-server/RetentionCommand.cs).
+Legacy commit guards:
+[`backend/Features/Pipeline/WorkspaceArtifactCommitService.cs`](../../../../backend/Features/Pipeline/WorkspaceArtifactCommitService.cs).
+Policy, layout, and staged thinning dossier:
+[`docs/operations/retention-und-archiv/index.html`](../../../operations/retention-und-archiv/index.html).
+Operator commands:
+[`docs/operations/setup/task-server.md`](../../../operations/setup/task-server.md#retention-cli).
+
+**Status.** Accepted for R1. The live Windows workspace sweep remains an
+operator-host action when that path is mounted; fixture plan, apply, archive,
+restore, full backup, verification, and full restore are covered in tests.

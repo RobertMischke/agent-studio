@@ -167,6 +167,25 @@ public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
     }
 
     [Fact]
+    public void RunBoundaryCommit_RefusesClassCFileAboveFiftyMiB()
+    {
+        var job = JobFolder("ASS-LARGE");
+        var logs = Path.Combine(job, "logs");
+        Directory.CreateDirectory(logs);
+        var path = Path.Combine(logs, "cli-output.log");
+        using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+            stream.SetLength(50L * 1024 * 1024 + 1);
+
+        var result = _service.TryCommitRunBoundary(
+            _root, "ASS-LARGE", null, job, ReviewDecisionKind.AcceptAsDone);
+
+        Assert.False(result.Success);
+        Assert.False(result.DidCommit);
+        Assert.Contains("artifact-oversize-refused", result.Error);
+        Assert.DoesNotContain(Relative(path), RunGitCapture(_root, "diff", "--cached", "--name-only"));
+    }
+
+    [Fact]
     public void RunBoundaryCommit_EnqueuesEveryCommitForImmediatePush()
     {
         var queue = new WorkspaceArtifactPushQueue();

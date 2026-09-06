@@ -1,9 +1,9 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using AgentStudio.Retention;
 
 namespace AgentStudio.Pipeline;
 
@@ -23,18 +23,6 @@ public sealed class WorkspaceArtifactCommitService
     private readonly WorkspaceArtifactPushQueue? _pushQueue;
     private readonly int _indexLockRetryAttempts;
     private readonly int _indexLockRetryBackoffMs;
-
-    // Per-repo serialization gate. The punctual job-folder commits and the
-    // debounced Transition-Committer's evidence batches both mutate the same
-    // workspace repo's index; without a shared lock two `git commit` calls can
-    // collide on `.git/index.lock`. Keyed by resolved git root so distinct
-    // repos never contend. Static so the single DI singleton and any test
-    // instance pointed at the same repo share the gate.
-    private static readonly ConcurrentDictionary<string, object> RepoGates =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    private static object RepoGate(string gitRoot) =>
-        RepoGates.GetOrAdd(gitRoot, _ => new object());
 
     public WorkspaceArtifactCommitService(
         IConfiguration configuration,
@@ -142,6 +130,15 @@ public sealed class WorkspaceArtifactCommitService
             var pathspecs = BuildPathspecs(gitRoot, beforeMoveFolderPath, afterMoveFolderPath);
             if (pathspecs.Count == 0)
                 return WorkspaceArtifactCommitResult.Skipped("job-folder-outside-workspace");
+            var refused = FindOversizeHeavyFiles(gitRoot, pathspecs);
+            if (refused.Count > 0)
+            {
+                _logger.LogWarning(
+                    "workspace-artifact-commit refused oversized class-C files jobId={JobId} files={Files}",
+                    jobId, string.Join(",", refused));
+                return WorkspaceArtifactCommitResult.Failed(
+                    "artifact-oversize-refused", string.Join(", ", refused));
+            }
 
             string? shortSha;
             ArtifactCommitPlan plan;
@@ -149,7 +146,7 @@ public sealed class WorkspaceArtifactCommitService
             // any concurrent job-folder commit) on this repo, with an
             // index.lock retry so a lost race with an external git process is
             // recovered rather than surfaced as a failure.
-            lock (RepoGate(gitRoot))
+            lock (RepositoryMutationGate.For(gitRoot))
             {
                 var addArgs = new List<string> { "add", "-A", "--" };
                 addArgs.AddRange(pathspecs);
@@ -414,6 +411,15 @@ public sealed class WorkspaceArtifactCommitService
                 .ToList();
             if (pathspecs.Count == 0)
                 return WorkspaceArtifactCommitResult.Skipped("no-data-paths");
+            var refused = FindOversizeHeavyFiles(gitRoot, pathspecs);
+            if (refused.Count > 0)
+            {
+                _logger.LogWarning(
+                    "workspace-evidence-commit refused oversized class-C files root={Root} files={Files}",
+                    gitRoot, string.Join(",", refused));
+                return WorkspaceArtifactCommitResult.Failed(
+                    "artifact-oversize-refused", string.Join(", ", refused));
+            }
 
             // Excludes are enforced in two places, and BOTH are required:
             //   1. `git reset` unstages them from the index (below). This alone
@@ -435,7 +441,7 @@ public sealed class WorkspaceArtifactCommitService
             var excludeCommitSpecs = BuildExcludePathspecs(excludeGlobs);
 
             string? shortSha;
-            lock (RepoGate(gitRoot))
+            lock (RepositoryMutationGate.For(gitRoot))
             {
                 // Stage the data paths (git add already honours the workspace
                 // repo's .gitignore), then unstage the exclude globs from the
@@ -597,6 +603,28 @@ public sealed class WorkspaceArtifactCommitService
             return;
         }
         result.Add(rel.Replace('\\', '/'));
+    }
+
+    private static IReadOnlyList<string> FindOversizeHeavyFiles(
+        string gitRoot,
+        IReadOnlyList<string> pathspecs)
+    {
+        var classifier = new ArtifactClassifier();
+        var refused = new List<string>();
+        foreach (var pathspec in pathspecs)
+        {
+            var root = Path.Combine(gitRoot, pathspec);
+            if (!Directory.Exists(root))
+                continue;
+            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(gitRoot, path).Replace('\\', '/');
+                var bytes = new FileInfo(path).Length;
+                if (classifier.IsCommitRefused(relative, bytes))
+                    refused.Add($"{relative} ({bytes} bytes)");
+            }
+        }
+        return refused;
     }
 
     private static string NormalizeVerdict(ReviewDecisionKind verdict) => verdict switch

@@ -365,9 +365,12 @@ auslöst. Klasse A verlässt den heißen Store nie.</figcaption>
 
 <!-- ============================================================ -->
 <h2 id="sofort"><span class="no">§7</span>Sofortmaßnahmen im heutigen Repository</h2>
-<p class="stx stx-part"><b>Stand 06.09. 22:30:</b> Ignore-Regel für <code>.metadata/attempt-authority*</code> gesetzt,
-gedriftete Bus-Logs und Task-Zustände committet, Einzel-Push abgebrochen (über 2 GB), Repack der losen Objekte läuft,
-Block-Push zu 250 Commits läuft (erster Block in 303 s). Die übrigen Punkte sind Teil von R1 (§10).</p>
+<p class="stx stx-part"><b>Stand 06.09. 2026, 23:32 Uhr, R1:</b> Engine, Altersstufen, inhaltsbezogene Auszüge,
+Dateibaum-Adapter, Manifest/Restore, CLI, Commit-Grenze und Vollsicherung sind implementiert und durch Fixture-Roundtrips
+geprüft. Der freigegebene Lauf gegen <code>C:\Projects\agent-taskboard-workspace</code> konnte im isolierten Linux-Runner
+nicht ausgeführt werden, weil das Windows-Laufwerk dort nicht eingehängt ist; der gleichnamige Runner-Pfad enthält
+keine Tasks und kein Git-Repository. Daher gibt es noch keine belastbaren Vorher-/Nachher-Zahlen. Der CLI-Laufreport
+wird beim ersten Lauf an <code>.metadata/retention-reports/</code> und in die Kartenergebnisse geschrieben.</p>
 <ol>
   <li><b>Log nur am Run-Ende committen.</b> <code>WorkspaceEvidenceBatcher</code> und die Run-Grenzen schließen Klasse C
       während eines laufenden Runs aus; erst der Abschluss des Runs committet eine Version. Erwartete Wirkung: rund 90 %

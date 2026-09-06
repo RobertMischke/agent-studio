@@ -184,7 +184,7 @@ public sealed class WorkspaceEvidenceBatcherTests : IDisposable
     }
 
     [Fact]
-    public void FlushDue_ExcludesTrackedCliOutputRotation_NotJustUntracked()
+    public void FlushDue_ExcludesAllTrackedHeavyCliOutputUntilRunBoundary()
     {
         var time = new FakeTimeProvider(new DateTime(2026, 8, 2, 12, 0, 0, DateTimeKind.Utc));
         var batcher = BuildBatcher(time, debounce: 5, maxDelay: 60);
@@ -206,14 +206,13 @@ public sealed class WorkspaceEvidenceBatcherTests : IDisposable
 
         Assert.True(Assert.Single(batcher.FlushDue()).Result.DidCommit);
         var committed = CommittedFiles();
-        Assert.Contains("projects/demo/3-progress/ASS-10/logs/cli-output.log", committed);
+        Assert.DoesNotContain("projects/demo/3-progress/ASS-10/logs/cli-output.log", committed);
         Assert.DoesNotContain(
             "projects/demo/3-progress/ASS-10/logs/cli-output.log.1",
             committed);
-        Assert.Contains(
-            "cli-output.log.1",
-            RunGitCapture(_root, "status", "--porcelain=v1"),
-            StringComparison.Ordinal);
+        var status = RunGitCapture(_root, "status", "--porcelain=v1");
+        Assert.Contains("cli-output.log", status, StringComparison.Ordinal);
+        Assert.Contains("cli-output.log.1", status, StringComparison.Ordinal);
     }
 
     // ---- Foreign-repo guard ------------------------------------------------

@@ -332,6 +332,64 @@ After draining, `POST /api/v1/management/prepare-shutdown` verifies that no
 reason, and enters `Maintenance`. A safe response is permission for the service
 manager to stop the process; the API does not try to stop its own host process.
 
+## Retention CLI
+
+The Task Server binary also hosts the legacy file-tree retention adapter. The
+engine is store-neutral; this command selects the file-tree adapter with
+`--workspace` until the Task Server store adapter takes ownership in R2.
+
+Preview the default policy without moving data:
+
+```bash
+dotnet task-server.dll retention plan \
+  --workspace /srv/agent-taskboard-workspace \
+  --policy default --json
+```
+
+`plan` writes the same JSON it prints beneath
+`.metadata/retention-reports/`. The report contains action and byte totals per
+rule and project, the largest affected tasks, and before/after task, hot, cold,
+and Git working-tree byte counts. Limit either command with `--project NAME`
+or `--task KEY`. A policy file uses the versioned `RetentionPolicy` JSON
+contract; `default` selects the built-in 30-day excerpt and 180-day task-stub
+stages.
+
+Apply a reviewed plan or restore one task:
+
+```bash
+dotnet task-server.dll retention apply \
+  --workspace /srv/agent-taskboard-workspace --policy default --json
+dotnet task-server.dll retention restore \
+  --workspace /srv/agent-taskboard-workspace --project Demo --task DEM-42 --json
+```
+
+Apply holds the shared workspace repository gate. It writes one evidence
+commit per changed project, appends `.metadata/retention-audit.jsonl`, removes
+expired runtime files, and keeps `logs/bus/` plus
+`.metadata/attempt-authority*` out of Git. The local archive defaults to the
+`agent-taskboard-archive` sibling of the workspace. Set `ARCHIVE_PATH` to use a
+different directory outside the workspace repository.
+
+Create, verify, and restore a portable full backup set:
+
+```bash
+dotnet task-server.dll retention backup-full \
+  --workspace /srv/agent-taskboard-workspace \
+  --out /srv/backups/full/20260906T230000Z --json
+dotnet task-server.dll retention verify-full \
+  --out /srv/backups/full/20260906T230000Z --json
+dotnet task-server.dll retention restore-full \
+  --out /srv/backups/full/20260906T230000Z \
+  --workspace /srv/restore/agent-taskboard-workspace --json
+```
+
+A full set contains `workspace.bundle`, untracked evidence and working-tree
+overlays, every cold manifest and payload referenced by the hot tree, and the
+versioned `export/tasks.jsonl` analysis projection. `inventory.json` records
+each file's size and SHA-256 plus a hash over the set. `complete.json` is
+written last. Full restore requires an empty destination and reconstructs the
+cold archive as its sibling.
+
 ## Backup and restore rehearsal
 
 `POST /api/v1/management/backups` creates a consistent SQLite backup, runs an
