@@ -1,0 +1,42 @@
+name: Deployment scenario
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inproc-smoke:
+    name: In-process smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run two consecutive green smoke scenarios
+        shell: bash
+        run: |
+          for run in 1 2; do
+            SCENARIO_RESULTS_DIR="$GITHUB_WORKSPACE/results/scenario-$run" \
+              scripts/scenario.sh --target inproc --level smoke
+          done
+
+      - name: Upload scenario reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-scenario-${{ matrix.os }}
+          path: results/scenario-*/
+          if-no-files-found: error

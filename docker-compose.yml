@@ -114,9 +114,30 @@ services:
     profiles: ["distributed"]
     restart: unless-stopped
     depends_on:
-      - task-server
+      task-server:
+        condition: service_started
     ports:
       - "127.0.0.1:${STUDIO_BFF_PORT:-5072}:5072"
+
+  scenario-runner:
+    build:
+      context: .
+      dockerfile: testsupport/scenario/Dockerfile
+    profiles: ["scenario"]
+    depends_on:
+      studio-bff:
+        condition: service_started
+      frontend:
+        condition: service_healthy
+    environment:
+      SCENARIO_TARGET: compose
+      SCENARIO_BASE_URL: http://studio-bff:5072
+      SCENARIO_UI_URL: http://frontend
+      SCENARIO_RESULTS_DIR: /results
+    volumes:
+      - type: bind
+        source: ${SCENARIO_RESULTS_DIR:-./results/deployment-scenario}
+        target: /results
 
 volumes:
   workspace:

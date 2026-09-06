@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "name": "deployment-regression",
+  "clock": "2026-09-06T12:00:00Z",
+  "fixture": {
+    "workspaceId": "ws_deployment_scenario",
+    "projectId": "prj_deployment_scenario",
+    "projectName": "Deployment scenario",
+    "taskKeyPrefix": "DSC",
+    "epic": "EPIC-DEPLOYMENT-1",
+    "dossier": "deployment-proof",
+    "decisionGate": "release-ready"
+  },
+  "levels": {
+    "smoke": 6,
+    "full": 14
+  },
+  "steps": [
+    {
+      "id": "bootstrap-principals",
+      "title": "Bootstrap principals and prove the protocol boundary",
+      "assertions": [{ "kind": "equals", "actual": "protocol", "expected": "supported" }]
+    },
+    {
+      "id": "register-runner",
+      "title": "Register the deterministic fake runner",
+      "assertions": [{ "kind": "equals", "actual": "runnerStatus", "expected": "active" }]
+    },
+    {
+      "id": "create-task",
+      "title": "Register the project, dossier, epic, and two tasks",
+      "assertions": [{ "kind": "equals", "actual": "taskCount", "expected": "2" }]
+    },
+    {
+      "id": "claim",
+      "title": "Claim the ready task with a fenced lease",
+      "assertions": [{ "kind": "equals", "actual": "claimStatus", "expected": "claimed" }]
+    },
+    {
+      "id": "fake-cli-run",
+      "title": "Run the fixed fake CLI and capture its commit and log",
+      "assertions": [
+        { "kind": "equals", "actual": "knownFailure", "expected": "observed" },
+        { "kind": "equals", "actual": "knownPass", "expected": "observed" }
+      ]
+    },
+    {
+      "id": "handoff-run",
+      "title": "Upload evidence, hand off the immutable result, and finish the run",
+      "assertions": [{ "kind": "equals", "actual": "taskState", "expected": "4-auto-review" }]
+    },
+    {
+      "id": "auto-review",
+      "title": "Run the fixed fake review CLI and settle review orchestration",
+      "assertions": [{ "kind": "equals", "actual": "reviewOutcome", "expected": "Pass" }]
+    },
+    {
+      "id": "integrate",
+      "title": "Verify the fake CLI commit is integrated",
+      "assertions": [{ "kind": "equals", "actual": "commitIntegrated", "expected": "true" }]
+    },
+    {
+      "id": "complete",
+      "title": "Complete the scenario task",
+      "assertions": [{ "kind": "equals", "actual": "taskState", "expected": "6-completed" }]
+    },
+    {
+      "id": "orchestrator-chat",
+      "title": "Persist an orchestrator turn with its context receipt",
+      "assertions": [{ "kind": "equals", "actual": "turnCount", "expected": "2" }]
+    },
+    {
+      "id": "dossier-decision",
+      "title": "Record the seeded dossier decision",
+      "assertions": [{ "kind": "equals", "actual": "decision", "expected": "accepted" }]
+    },
+    {
+      "id": "backup",
+      "title": "Create and verify a Task Server backup",
+      "assertions": [{ "kind": "equals", "actual": "backupShaLength", "expected": "64" }]
+    },
+    {
+      "id": "restore",
+      "title": "Restore through empty staging or verify it remotely",
+      "assertions": [{ "kind": "equals", "actual": "verified", "expected": "true" }]
+    },
+    {
+      "id": "inventory-hash",
+      "title": "Compare the canonical inventory before and after restore",
+      "assertions": [{ "kind": "equals", "actual": "inventoryEqual", "expected": "true" }]
+    }
+  ]
+}

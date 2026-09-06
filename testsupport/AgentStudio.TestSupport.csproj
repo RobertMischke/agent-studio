@@ -16,4 +16,10 @@
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The deployment scenario is a sibling executable nested for fixture
+         ownership, not source for this shared helper assembly. -->
+    <Compile Remove="scenario/**/*.cs" />
+  </ItemGroup>
+
 </Project>

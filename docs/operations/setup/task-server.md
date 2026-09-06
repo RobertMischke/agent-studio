@@ -449,6 +449,11 @@ evidence.
 
 ## Release topology rehearsal
 
+Every deployment and release also runs the shared
+[deployment regression scenario](../testing/deployment-scenario.md). Use its
+Markdown report as the status artifact; the topology command below remains the
+lower-level outage, replay, authentication, and binary-contract companion gate.
+
 The release-blocking harness is intentionally separate from browser E2E. Build
 the deployables once, then run the topology and compatibility gate:
 
