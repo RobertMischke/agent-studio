@@ -247,6 +247,22 @@ public class TaskReferencesTests : IDisposable
     }
 
     [Fact]
+    public void Index_Dependents_IdentifiesReleaseGatedEdges()
+    {
+        var source = Task("a", "ATP-1") with
+        {
+            References = new TaskReferences
+            {
+                DependsOn = [new TaskDependencyReference("ATP-9", releaseGate: true)],
+            },
+        };
+        var index = TaskReferenceIndex.Build([source, Task("z", "ATP-9")]);
+
+        var link = Assert.Single(index.Dependents("ATP-9", TaskReferenceKinds.DependsOn));
+        Assert.True(link.ReleaseGate);
+    }
+
+    [Fact]
     public void Index_Dependents_ResolvesWorkbenchReferences()
     {
         var index = TaskReferenceIndex.Build(new[]

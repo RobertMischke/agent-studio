@@ -27,7 +27,7 @@ import { kvValueOf, withKvSegment } from '../../../services/url-hash.util';
  */
 
 export interface ActiveFilterPill {
-  kind: 'search' | 'owner' | 'project' | 'type' | 'tag' | 'dependsOn' | 'integration';
+  kind: 'search' | 'owner' | 'project' | 'type' | 'tag' | 'dependsOn' | 'integration' | 'release';
   kindLabel: string;
   /** Identifier used by the remove handler. */
   value: string;
@@ -75,6 +75,7 @@ export class BoardFiltersService {
   readonly activeTypeFilter = signal<Set<string>>(new Set());
   readonly activeTagFilter = signal<Set<string>>(new Set());
   readonly stalledIntegrationOnly = signal(false);
+  readonly waitingForReleaseOnly = signal(false);
   private readonly stalledIntegrationTaskRefs = signal<ReadonlySet<string>>(new Set());
 
   /** Single-select view of the type filter. Null = no type filter. */
@@ -93,7 +94,8 @@ export class BoardFiltersService {
     || this.activeTagFilter().size > 0
     || !!this.activeClientFilter()
     || !!this.activeDependsOnFilter()
-    || this.stalledIntegrationOnly());
+    || this.stalledIntegrationOnly()
+    || this.waitingForReleaseOnly());
 
   readonly hasActiveFiltersOrSearch = computed(() =>
     this.searchQuery().trim().length > 0
@@ -101,7 +103,8 @@ export class BoardFiltersService {
     || this.activeDependsOnFilter() !== null
     || this.activeType() !== null
     || this.activeTagFilter().size > 0
-    || this.stalledIntegrationOnly());
+    || this.stalledIntegrationOnly()
+    || this.waitingForReleaseOnly());
 
   readonly activeFilterCount = computed(() => {
     let n = 0;
@@ -111,6 +114,7 @@ export class BoardFiltersService {
     if (this.activeType()) n += 1;
     n += this.activeTagFilter().size;
     if (this.stalledIntegrationOnly()) n += 1;
+    if (this.waitingForReleaseOnly()) n += 1;
     return n;
   });
 
@@ -136,10 +140,21 @@ export class BoardFiltersService {
     const types = this.activeTypeFilter();
     const tagIds = this.activeTagFilter();
     const stalledIntegrationOnly = this.stalledIntegrationOnly();
+    const waitingForReleaseOnly = this.waitingForReleaseOnly();
     const stalledIntegrationTaskRefs = this.stalledIntegrationTaskRefs();
+    const pendingReleaseTargets = new Set<string>();
+    for (const task of groupedTasks(grouped)) {
+      for (const item of task.waitsOn?.items ?? []) {
+        if (!item.waitingForRelease) continue;
+        if (item.targetJobId) {
+          pendingReleaseTargets.add(releaseTaskRef(item.targetWatchPath, item.targetJobId));
+        }
+        pendingReleaseTargets.add(`key:${item.key.trim().toUpperCase()}`);
+      }
+    }
     const query = this.searchQuery().trim().toLowerCase();
     const noFilters = active.size === 0 && !ownerId && !dependsOnKey && types.size === 0
-      && tagIds.size === 0 && !stalledIntegrationOnly && !query;
+      && tagIds.size === 0 && !stalledIntegrationOnly && !waitingForReleaseOnly && !query;
     if (noFilters) return grouped;
     const matchesQuery = (j: TaskInfo) => {
       if (!query) return true;
@@ -168,6 +183,12 @@ export class BoardFiltersService {
       }
       if (stalledIntegrationOnly
           && !stalledIntegrationTaskRefs.has(integrationAlertTaskRef(j.projectName, j.id))) return false;
+      if (waitingForReleaseOnly) {
+        const waitsForRelease = j.waitsOn?.items.some(item => item.waitingForRelease) === true;
+        const isPendingTarget = pendingReleaseTargets.has(releaseTaskRef(j.watchPath, j.id))
+          || (!!j.key && pendingReleaseTargets.has(`key:${j.key.trim().toUpperCase()}`));
+        if (!waitsForRelease && !isPendingTarget) return false;
+      }
       if (!matchesQuery(j)) return false;
       return true;
     });
@@ -283,6 +304,12 @@ export class BoardFiltersService {
         label: 'integration:stalled', swatch: null,
       });
     }
+    if (this.waitingForReleaseOnly()) {
+      pills.push({
+        kind: 'release', kindLabel: 'Release gate', value: 'waiting',
+        label: 'Waiting for release', swatch: null,
+      });
+    }
     return pills;
   });
 
@@ -310,6 +337,9 @@ export class BoardFiltersService {
         this.stalledIntegrationOnly.set(false);
         this.writeFilterHash();
         break;
+      case 'release':
+        this.setWaitingForReleaseOnly(false);
+        break;
     }
   }
 
@@ -333,6 +363,11 @@ export class BoardFiltersService {
   /** Show only tasks that depend on `key` (F33 stable key), or clear with null. */
   setDependsOnFilter(key: string | null): void {
     this.activeDependsOnFilter.set(key ? key.trim() : null);
+    this.writeFilterHash();
+  }
+
+  setWaitingForReleaseOnly(active: boolean): void {
+    this.waitingForReleaseOnly.set(active);
     this.writeFilterHash();
   }
 
@@ -454,6 +489,7 @@ export class BoardFiltersService {
     this.activeClientFilter.set(null);
     this.activeDependsOnFilter.set(null);
     this.stalledIntegrationOnly.set(false);
+    this.waitingForReleaseOnly.set(false);
     this.activeProjects.set(new Set());
     this.explicitProjectFilter.set(false);
     localStorage.setItem('activeProjects', '[]');
@@ -522,6 +558,7 @@ export class BoardFiltersService {
     this.activeTypeFilter.set(new Set());
     this.activeTagFilter.set(new Set());
     this.stalledIntegrationOnly.set(false);
+    this.waitingForReleaseOnly.set(false);
 
     const rawFilters = kvValueOf(hash, 'filters');
     if (rawFilters != null) {
@@ -533,6 +570,7 @@ export class BoardFiltersService {
       const types = new Set<string>();
       const tags = new Set<string>();
       let stalledIntegrationOnly = false;
+      let waitingForReleaseOnly = false;
       for (const p of parts) {
         const idx = p.indexOf(':');
         if (idx <= 0) continue;
@@ -545,6 +583,7 @@ export class BoardFiltersService {
         else if (k === 'type') types.add(v);
         else if (k === 'tags') v.split(',').filter(Boolean).forEach(x => tags.add(x));
         else if (k === 'integration' && v === 'stalled') stalledIntegrationOnly = true;
+        else if (k === 'release' && v === 'waiting') waitingForReleaseOnly = true;
       }
       this.activeClientFilter.set(owner);
       this.activeDependsOnFilter.set(dependsOn);
@@ -555,6 +594,7 @@ export class BoardFiltersService {
       this.activeTypeFilter.set(oneType);
       this.activeTagFilter.set(tags);
       this.stalledIntegrationOnly.set(stalledIntegrationOnly);
+      this.waitingForReleaseOnly.set(waitingForReleaseOnly);
       return;
     }
     const rawLegacy = kvValueOf(hash, 'filter');
@@ -587,6 +627,7 @@ export class BoardFiltersService {
     const tags = [...this.activeTagFilter()];
     if (tags.length > 0) segments.push(`tags:${tags.join(',')}`);
     if (this.stalledIntegrationOnly()) segments.push('integration:stalled');
+    if (this.waitingForReleaseOnly()) segments.push('release:waiting');
     // Segment-aware upsert: the route segment of an open overlay (workspace
     // settings, project shell, epics) and legacy segments survive; only the
     // filters= segment is owned here. See url-hash.util.ts for the contract.
@@ -652,6 +693,19 @@ function safeParseStringArray(raw: string | null): string[] {
 
 function integrationAlertTaskRef(projectName: string, taskId: string): string {
   return `${projectName}\u0000${taskId}`.toLowerCase();
+}
+
+function releaseTaskRef(watchPath: string | null | undefined, taskId: string): string {
+  return `${watchPath ?? ''}\u0000${taskId}`.toLowerCase();
+}
+
+function groupedTasks(grouped: GroupedJobs): TaskInfo[] {
+  const result = new Map<string, TaskInfo>();
+  for (const lane of Object.values(grouped)) {
+    if (!Array.isArray(lane)) continue;
+    for (const task of lane) result.set(task.taskKey || releaseTaskRef(task.watchPath, task.id), task);
+  }
+  return [...result.values()];
 }
 
 function typeFilterLabel(value: string): string {

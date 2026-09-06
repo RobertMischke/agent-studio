@@ -71,6 +71,20 @@ function json(route: Route, body: unknown): Promise<void> {
 }
 
 async function openBoard(page: Page): Promise<void> {
+  let released = false;
+  const currentTasks = () => TASKS.map(item => item.id !== RELEASE_WAIT.id ? item : {
+    ...item,
+    waitsOn: {
+      ...item.waitsOn,
+      blocked: !released,
+      items: (item.waitsOn.items as Record<string, unknown>[]).map(wait => ({
+        ...wait,
+        fulfilled: released,
+        targetReleased: released,
+        waitingForRelease: !released,
+      })),
+    },
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.addInitScript(() => {
     localStorage.setItem('atp.flag.vsCodeLayout', '1');
@@ -85,9 +99,13 @@ async function openBoard(page: Page): Promise<void> {
     profile: 'local', bootstrapRequired: false, authenticated: true, user: null,
   }));
   await page.route('**/api/tasks/archive**', (route) => json(route, { items: [], total: 0 }));
-  await page.route(/\/api\/tasks(\?|$)/, (route) => json(route, TASKS));
+  await page.route('**/api/tasks/lib-1/release**', async (route) => {
+    released = (route.request().postDataJSON() as { released: boolean }).released;
+    await json(route, { released });
+  });
+  await page.route(/\/api\/tasks(\?|$)/, (route) => json(route, currentTasks()));
   await page.route('**/api/tasks/grouped**', (route) => json(route, {
-    backlog: [], preparation: [], orchestratorPrep: [], ready: TASKS,
+    backlog: [], preparation: [], orchestratorPrep: [], ready: currentTasks(),
     progress: [], failedPickup: [], codeNotComplete: [], autoReview: [],
     review: [], humanReview: [], escalated: [], completed: [], archive: [],
   }));
@@ -128,6 +146,27 @@ test.describe('dependsOn release gate board status', () => {
     await expect(completionChip).toContainText('waits for completion: LIB-2');
     await releaseChip.hover();
     await expect(page.getByTestId('cac-tooltip')).toContainText('completed, release pending');
+  });
+
+  test('releases a terminal target inline and removes the dependent release wait', async ({ page }) => {
+    await openBoard(page);
+    const dependent = page.getByTestId('task-card').filter({ hasText: RELEASE_WAIT.title });
+    const releaseRequest = page.waitForRequest(request =>
+      request.url().includes('/api/tasks/lib-1/release') && request.method() === 'PUT');
+
+    await dependent.getByTestId('release-task-lib-1').click();
+
+    expect((await releaseRequest).postDataJSON()).toEqual({ released: true });
+    await expect(dependent).not.toContainText('waits for release: LIB-1');
+    await expect(dependent.getByTestId('task-card-waiting-on')).toContainText('LIB-1');
+
+    if (RESULTS_DIR) {
+      mkdirSync(RESULTS_DIR, { recursive: true });
+      await page.screenshot({
+        path: `${RESULTS_DIR}/depends-on-release-gate-after-release--mocked.png`,
+        fullPage: false,
+      });
+    }
   });
 
   for (const theme of ['light', 'dark'] as const) {

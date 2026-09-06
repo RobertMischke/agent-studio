@@ -177,6 +177,8 @@ export interface TaskReferenceLink {
   sourceState: string;
   sourceWatchPath: string;
   kind: TaskReferenceKind | string;
+  /** True when this incoming dependsOn edge requires explicit release. */
+  releaseGate: boolean;
 }
 
 /**

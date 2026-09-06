@@ -1590,6 +1590,14 @@ export interface DependencyChip {
   /** Direct nav target resolved by the backend (works across lanes/projects, incl. archive). */
   targetJobId: string | null;
   targetWatchPath: string | null;
+  releaseTarget: DependencyReleaseTarget | null;
+}
+
+export interface DependencyReleaseTarget {
+  jobId: string;
+  key: string;
+  watchPath: string | null;
+  released: boolean;
 }
 
 export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChip | null {
@@ -1607,6 +1615,7 @@ export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChi
       targetKey: primary?.key ?? null,
       targetJobId: primary?.targetJobId ?? null,
       targetWatchPath: primary?.targetWatchPath ?? null,
+      releaseTarget: null,
     };
   }
 
@@ -1623,6 +1632,7 @@ export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChi
       targetKey: primary.key,
       targetJobId: primary.targetJobId ?? null,
       targetWatchPath: primary.targetWatchPath ?? null,
+      releaseTarget: dependencyReleaseTarget(primary),
     };
   }
 
@@ -1636,6 +1646,20 @@ export function buildDependencyChip(waitsOn: TaskInfo['waitsOn']): DependencyChi
     targetKey: primary.key,
     targetJobId: primary.targetJobId ?? null,
     targetWatchPath: primary.targetWatchPath ?? null,
+    releaseTarget: dependencyReleaseTarget(primary),
+  };
+}
+
+function dependencyReleaseTarget(
+  item: NonNullable<TaskInfo['waitsOn']>['items'][number],
+): DependencyReleaseTarget | null {
+  const terminal = item.targetState === TaskState.Completed || item.targetState === TaskState.Archive;
+  if (!item.releaseGate || !terminal || !item.targetJobId) return null;
+  return {
+    jobId: item.targetJobId,
+    key: item.key,
+    watchPath: item.targetWatchPath ?? null,
+    released: item.targetReleased === true,
   };
 }
 

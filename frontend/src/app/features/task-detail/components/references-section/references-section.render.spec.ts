@@ -86,6 +86,7 @@ const BLOCKING_LINK: TaskReferenceLink = {
   sourceState: TaskState.Ready,
   sourceWatchPath: '/ws/web',
   kind: 'dependsOn',
+  releaseGate: true,
 };
 
 function makeFakeTaskService(dependents: TaskReferenceLink[]) {
@@ -93,6 +94,8 @@ function makeFakeTaskService(dependents: TaskReferenceLink[]) {
     jobs: signal<TaskInfo[]>([CAR_3, WEB_UPDATE]),
     getTaskDependents: vi.fn().mockReturnValue(of(dependents)),
     setTaskReferences: vi.fn().mockReturnValue(of({ references: {}, warnings: [] })),
+    setTaskReleased: vi.fn().mockImplementation((_id: string, released: boolean) => of({ released })),
+    refresh: vi.fn(),
   } as unknown as TaskService;
 }
 
@@ -109,7 +112,10 @@ async function mount(info: TaskInfo, dependents: TaskReferenceLink[] = [BLOCKING
       provideRouter([]),
       { provide: TaskService, useValue: tasks },
       { provide: TaskSelectionService, useValue: { openDetail } },
-      { provide: NotificationService, useValue: { info: vi.fn(), warning: vi.fn(), error: vi.fn() } },
+      {
+        provide: NotificationService,
+        useValue: { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() },
+      },
       {
         provide: ProjectDocsService,
         useValue: {
@@ -216,6 +222,56 @@ describe('ReferencesSectionComponent (render — both dependency directions)', (
     const { fixture } = await mount(info, []);
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('[data-testid="references-section"]')).toBeNull();
+  });
+
+  it('shows a reversible release control on a terminal target and lists gated dependents', async () => {
+    const info = makeTask({ state: TaskState.Completed, released: false });
+    const { fixture, tasks } = await mount(info);
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(host.querySelector('[data-testid="task-release-state"]')?.textContent).toContain('Held');
+    expect(host.querySelector('[data-testid="release-gated-dependents"]')?.textContent)
+      .toContain('WEB-UPDATE');
+    const action = host.querySelector('[data-testid="release-task-agt-audit"]') as HTMLButtonElement;
+    expect(action.textContent).toContain('Release for dependents');
+
+    action.click();
+    fixture.detectChanges();
+
+    expect(tasks.setTaskReleased).toHaveBeenCalledWith('agt-audit', true, '/ws/agt');
+    expect(host.querySelector('[data-testid="task-release-state"]')?.textContent).toContain('Released');
+  });
+
+  it('does not show the target release control before the task is terminal', async () => {
+    const { fixture } = await mount(makeTask({ state: TaskState.HumanReview }));
+    expect(fixture.nativeElement.querySelector('[data-testid="references-row-release-gate"]')).toBeNull();
+  });
+
+  it('offers release inline on a dependent reference when its gated target is terminal', async () => {
+    const info = makeTask({
+      references: {
+        dependsOn: [{ key: 'CAR-3', releaseGate: true }],
+        relatedTo: [], blockedBy: [], supersedes: [],
+      },
+      waitsOn: {
+        blocked: true,
+        cycleDetected: false,
+        items: [{
+          key: 'CAR-3', resolved: true, fulfilled: false, releaseGate: true,
+          targetReleased: false, waitingForRelease: true, targetJobId: 'car-3',
+          targetTitle: 'Pricing lib', targetState: TaskState.Archive, targetWatchPath: '/ws/car',
+        }],
+      },
+    });
+    const { fixture, tasks } = await mount(info, []);
+    const action = fixture.nativeElement.querySelector(
+      '[data-testid="release-task-car-3"]',
+    ) as HTMLButtonElement;
+
+    expect(action).not.toBeNull();
+    action.click();
+
+    expect(tasks.setTaskReleased).toHaveBeenCalledWith('car-3', true, '/ws/car');
   });
 
   it('renders a linked document key and opens its viewer tab', async () => {

@@ -148,6 +148,9 @@ public sealed class TaskReferenceIndex
             foreach (var (kind, target) in refs.Enumerate())
             {
                 if (string.IsNullOrWhiteSpace(target)) continue;
+                var releaseGate = kind == TaskReferenceKinds.DependsOn
+                    && refs.DependsOn.Any(edge =>
+                        KeyComparer.Equals(edge.Key.Trim(), target.Trim()) && edge.ReleaseGate);
                 if (!incoming.TryGetValue(target, out var list))
                     incoming[target] = list = new List<TaskReferenceLink>();
                 list.Add(new TaskReferenceLink(
@@ -156,7 +159,8 @@ public sealed class TaskReferenceIndex
                     SourceTitle: t.Title,
                     SourceState: t.State,
                     SourceWatchPath: t.WatchPath,
-                    Kind: kind));
+                    Kind: kind,
+                    ReleaseGate: releaseGate));
 
                 if (kind == TaskReferenceKinds.DependsOn && sourceKey.Length > 0)
                 {
@@ -177,7 +181,8 @@ public sealed class TaskReferenceIndex
                     SourceTitle: t.Title,
                     SourceState: t.State,
                     SourceWatchPath: t.WatchPath,
-                    Kind: TaskReferenceKinds.Workbenches));
+                    Kind: TaskReferenceKinds.Workbenches,
+                    ReleaseGate: false));
             }
         }
 
@@ -197,4 +202,5 @@ public record TaskReferenceLink(
     string SourceTitle,
     string SourceState,
     string SourceWatchPath,
-    string Kind);
+    string Kind,
+    bool ReleaseGate);

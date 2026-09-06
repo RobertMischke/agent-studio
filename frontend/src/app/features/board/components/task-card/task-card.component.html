@@ -119,6 +119,13 @@
               (click)="navigateToDependency(dep, $event)">
         <span class="task-card__waiting-glyph" aria-hidden="true">{{ dep.glyph }}</span> {{ dep.label }}
       </button>
+      @if (dep.releaseTarget; as target) {
+        <app-release-task-button
+          [targetId]="target.jobId"
+          [targetKey]="target.key"
+          [watchPath]="target.watchPath ?? undefined"
+          [released]="target.released" />
+      }
     }
     @if (providerAuthWait(); as authWait) {
       <span class="task-card__provider-auth-wait"

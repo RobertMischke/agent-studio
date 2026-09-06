@@ -74,6 +74,18 @@
     </section>
   }
 
+  <section class="sheet__section" data-testid="release-status-filter">
+    <h3 class="sheet__section-title">Status</h3>
+    <label class="sheet__checkbox" data-testid="kanban-filter-waiting-for-release">
+      <input
+        type="checkbox"
+        [checked]="boardFilters.waitingForReleaseOnly()"
+        (change)="onSetWaitingForRelease($any($event.target).checked)" />
+      <span class="sheet__swatch sheet__swatch--blank" aria-hidden="true">⏳</span>
+      <span class="sheet__checkbox-label">Waiting for release</span>
+    </label>
+  </section>
+
   <section class="sheet__section">
     <h3 class="sheet__section-title">
       Tags

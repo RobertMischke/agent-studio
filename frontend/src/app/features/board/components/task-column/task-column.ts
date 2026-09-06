@@ -10,6 +10,8 @@ import {
   input,
   output,
   signal,
+  effect,
+  untracked,
 } from '@angular/core';
 import type { Subscription } from 'rxjs';
 import {
@@ -33,6 +35,7 @@ import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lan
 import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { PostProcessingSummaryComponent } from '../post-processing-summary/post-processing-summary.component';
 import { BoardDragStateService } from '../../state/board-drag-state.service';
+import { BoardFiltersService } from '../../state/board-filters.service';
 
 /** ASS-1727: Archive pagination and typed-filter debounce. */
 const ARCHIVE_PAGE_SIZE = 50;
@@ -56,6 +59,7 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
 export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   private readonly taskService = inject(TaskService);
   private readonly boardDrag = inject(BoardDragStateService);
+  private readonly boardFilters = inject(BoardFiltersService);
 
   readonly title = input.required<string>();
   readonly icon = input<string>('');
@@ -409,28 +413,23 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
     return this.state() === TaskState.Completed || this.state() === '5-completed';
   }
 
-  // ── ASS-1727: Archive lane lazy-load ──────────────────────────────────
-  // The board's `grouped.archive` is intentionally empty (the cache-backed
-  // board scan excludes the terminal lane), so this lane hydrates from the
-  // paged `GET /api/tasks/archive` endpoint instead of its `jobs()` input.
-  // Newest-first, paged via "load more", narrowed by a simple text filter.
+  // Archive is absent from `grouped`; hydrate it from the paged endpoint.
   readonly archiveItems = signal<ArchivedTaskInfo[]>([]);
   readonly archiveTotal = signal<number>(0);
   readonly archiveLoading = signal<boolean>(false);
   readonly archiveError = signal<string | null>(null);
   readonly archiveSearch = signal<string>('');
-  /** True once the first fetch has resolved, so the empty state doesn't flash before data lands. */
   readonly archiveLoaded = signal<boolean>(false);
   private archiveSearchTimer: ReturnType<typeof setTimeout> | null = null;
   private archiveSub: Subscription | null = null;
   private archiveInitialized = false;
+  private readonly releaseFilterRefresh = effect(() => {
+    this.boardFilters.waitingForReleaseOnly();
+    if (this.archiveInitialized) untracked(() => this.loadArchive(true));
+  });
 
-  /** Unloaded archived rows behind the current page (drives "load more"). */
   readonly archiveRemaining = computed(() => Math.max(0, this.archiveTotal() - this.archiveItems().length));
-  /** Show the empty state only once a fetch has resolved with a genuine zero count. */
   readonly archiveIsEmpty = computed(() => this.archiveLoaded() && this.archiveTotal() === 0);
-
-  /** Header/rail count: archived total for the archive lane, live job count otherwise. */
   readonly headerCount = computed(() => (this.isArchive() ? this.archiveTotal() : this.jobs().length));
 
   ngOnInit(): void {
@@ -470,6 +469,7 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
         offset,
         limit: ARCHIVE_PAGE_SIZE,
         search: this.archiveSearch(),
+        waitingForRelease: this.boardFilters.waitingForReleaseOnly(),
       })
       .subscribe({
         next: (res) => {

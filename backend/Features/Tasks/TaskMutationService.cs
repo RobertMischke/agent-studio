@@ -946,15 +946,29 @@ public class TaskMutationService
     /// dependsOn edges. Terminal lane movement intentionally does not call this
     /// method: approval must come from an operator or a dedicated release step.
     /// </summary>
-    public bool SetJobReleased(string jobId, bool released, string? watchPath = null)
+    public bool SetJobReleased(
+        string jobId,
+        bool released,
+        string? watchPath = null,
+        string? actor = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
+        if (info.Released == released) return true;
         TaskJsonFile.UpdateField(info.FolderPath, "released", released, _logger);
+        _timeline?.Append(
+            info.FolderPath,
+            TimelineEventKinds.TaskReleased,
+            string.IsNullOrWhiteSpace(actor) ? TimelineActors.Human(string.Empty) : actor,
+            released ? "Task released for gated dependents" : "Task release withdrawn",
+            details: new()
+            {
+                ["released"] = released ? "true" : "false",
+            });
         _logger.LogInformation(
             "task-release-set job={JobId} released={Released}",
             jobId, released);
-        return Updated();
+        return Updated(info);
     }
 
     private static List<TaskCommitInfo>? ReadPersistedCommitChain(string folderPath)

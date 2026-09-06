@@ -87,6 +87,9 @@ describe('buildDependencyChip', () => {
     expect(chip!.tone).toBe('open');
     expect(chip!.label).toBe('waits for release: DEP-1');
     expect(chip!.tooltip).toContain('completed, release pending');
+    expect(chip!.releaseTarget).toEqual({
+      jobId: 'dep-1', key: 'DEP-1', watchPath: '/ws/lib', released: false,
+    });
   });
 
   it('renders a cycle chip (config error) regardless of item states', () => {

@@ -17,6 +17,7 @@ import { TypeFilterOption } from '../filters-dropdown/filters-dropdown.component
 
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
+import { BoardFiltersService } from '../../state/board-filters.service';
 /**
  * VS Code-style right-edge sidesheet that hosts the board's search box and
  * faceted filters in one place. The board reflows live as the user types
@@ -42,6 +43,7 @@ import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.c
   }
 })
 export class KanbanFilterSidesheetComponent {
+  readonly boardFilters = inject(BoardFiltersService);
   readonly open = input<boolean>(false);
   /** When true, render the filter sections directly without the
    *  `<app-sidesheet>` chrome (no slide-in animation, no header/close
@@ -132,6 +134,10 @@ export class KanbanFilterSidesheetComponent {
 
   onSetOwner(id: string | null): void {
     this.setOwner.emit(id);
+  }
+
+  onSetWaitingForRelease(active: boolean): void {
+    this.boardFilters.setWaitingForReleaseOnly(active);
   }
 
   onClearAll(): void {

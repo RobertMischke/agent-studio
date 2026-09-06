@@ -15,6 +15,7 @@ export interface TimelineSourceDisclosure {
 
 const KIND_LABELS: Readonly<Record<string, string>> = {
   [TIMELINE_KIND.promptCreated]: 'Prompt created',
+  [TIMELINE_KIND.taskReleased]: 'Release approval changed',
   [TIMELINE_KIND.agentRunStarted]: 'Run started',
   [TIMELINE_KIND.quotaFallbackActivated]: 'Quota fallback activated',
   [TIMELINE_KIND.quotaAdmissionDecision]: 'Quota admission decision',

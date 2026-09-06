@@ -1,0 +1,32 @@
+:host {
+  display: inline-flex;
+}
+
+.release-action {
+  min-height: var(--studio-card-pill-height);
+  padding: 0 var(--studio-spacing-2);
+  border: 1px solid var(--notify-warning-border);
+  border-radius: 999px;
+  background: var(--notify-warning-tint);
+  color: var(--notify-warning-icon-fg);
+  font: inherit;
+  font-size: var(--studio-card-meta-size);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.release-action--released {
+  border-color: color-mix(in srgb, var(--studio-accent-success) 35%, var(--studio-border));
+  background: color-mix(in srgb, var(--studio-accent-success) 14%, var(--studio-bg-elevated));
+  color: var(--studio-accent-success-strong);
+}
+
+.release-action:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.release-action:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 1px;
+}

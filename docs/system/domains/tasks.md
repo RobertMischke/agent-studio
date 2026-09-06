@@ -597,7 +597,14 @@ cannot erase an operator decision.
   explicit target-card release after terminal completion. Operators and
   dedicated release steps set that independent flag through
   `PUT /api/tasks/{id}/release`; ordinary string edges keep their existing
-  terminal-state-only semantics.
+  terminal-state-only semantics. The target task's References section shows
+  the current flag, the gated dependents affected by it, and a reversible
+  **Release for dependents** action once the target is terminal. A dependent
+  task offers the same action beside a terminal gated target. The board's
+  **Waiting for release** filter returns both blocked dependents and the
+  terminal targets whose release is pending. Each changed approval appends an
+  actor-attributed `task_released` timeline event; repeating the current value
+  is an idempotent write and does not duplicate the event.
 - Rendered task references resolve through `POST /api/tasks/reference-status`.
   Send `{ "keys": ["AGT-2050", "CAR-2"] }`; keys are trimmed, uppercased,
   deduplicated, and capped at 200. The response is `{ "items": [...] }`, where

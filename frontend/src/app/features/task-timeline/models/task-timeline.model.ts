@@ -30,6 +30,7 @@ export interface TaskTimelineEvent {
  */
 export const TIMELINE_KIND = {
   promptCreated: 'prompt_created',
+  taskReleased: 'task_released',
   agentRunStarted: 'agent_run_started',
   quotaFallbackActivated: 'quota_fallback_activated',
   quotaAdmissionDecision: 'quota_admission_decision',

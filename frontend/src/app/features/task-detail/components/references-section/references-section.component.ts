@@ -15,7 +15,6 @@ import {
   TaskReferenceLink,
   TaskReferences,
   TASK_REFERENCE_KINDS,
-  TaskState,
   taskDependencyKey,
   taskDependencyRequiresRelease,
 } from '../../../../models/task.model';
@@ -26,6 +25,14 @@ import { TaskSelectionService } from '../../state/task-selection.service';
 import { StudioTabStateService } from '../../../studio-shell/services/studio-tab-state.service';
 import { ProjectDocsService } from '../../../../services/project-docs.service';
 import type { WorkbenchListItem } from '../../../../models/project-docs.model';
+import { ReleaseTaskButtonComponent } from '../../../../components/release-task-button/release-task-button.component';
+import {
+  dependencyReleaseTarget,
+  isTerminalTaskState,
+  releaseIdentity,
+  selfReleaseTarget,
+  type ReleaseTarget,
+} from './release-target.util';
 
 /**
  * F34 detail-view reference editor. Renders the typed cross-reference rows
@@ -42,7 +49,7 @@ import type { WorkbenchListItem } from '../../../../models/project-docs.model';
   selector: 'app-references-section',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, TooltipDirective],
+  imports: [FormsModule, TooltipDirective, ReleaseTaskButtonComponent],
   templateUrl: './references-section.component.html',
   styleUrl: './references-section.component.scss',
 })
@@ -94,12 +101,19 @@ export class ReferencesSectionComponent {
    * this task or it has no stable key.
    */
   readonly blocking = signal<TaskReferenceLink[]>([]);
+  readonly gatedBlocking = computed(() => this.blocking()
+    .filter(link => link.releaseGate && !isTerminalTaskState(link.sourceState)));
+  private readonly releaseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
 
   /** The section renders when there is either an outgoing ref or an incoming dependent. */
   readonly hasAnyReferences = computed(() =>
-    this.totalCount() > 0 || this.blocking().length > 0 || (this.info().relatedWikiPages?.length ?? 0) > 0);
+    this.totalCount() > 0 || this.blocking().length > 0
+    || (this.info().relatedWikiPages?.length ?? 0) > 0 || isTerminalTaskState(this.info().state));
 
   readonly wikiPages = computed(() => this.info().relatedWikiPages ?? []);
+
+  readonly selfReleaseTarget = computed(() =>
+    selfReleaseTarget(this.info(), this.releaseOverrides()));
 
   private lastSeededKey: string | null = null;
   private readonly seed = effect(() => {
@@ -254,7 +268,21 @@ export class ReferencesSectionComponent {
     if (kind !== 'dependsOn') return false;
     const target = this.keyIndex().get(key.trim().toUpperCase());
     if (!target) return false;
-    return !isTerminalState(target.state) || (this.releaseGateFor(key) && target.released !== true);
+    return !isTerminalTaskState(target.state) || (this.releaseGateFor(key) && target.released !== true);
+  }
+
+  releaseTargetFor(kind: TaskReferenceKind, key: string): ReleaseTarget | null {
+    return dependencyReleaseTarget(
+      this.info(), this.localRefs(), this.keyIndex(), this.releaseOverrides(), kind, key);
+  }
+
+  onReleaseChanged(target: ReleaseTarget, released: boolean): void {
+    this.releaseOverrides.update(current => {
+      const next = new Map(current);
+      next.set(releaseIdentity(target), released);
+      return next;
+    });
+    this.changed.emit();
   }
 
   navigate(key: string): void {
@@ -389,10 +417,6 @@ function cloneRefs(r: TaskReferences): TaskReferences {
     supersedes: [...r.supersedes],
     workbenches: [...(r.workbenches ?? [])],
   };
-}
-
-function isTerminalState(state: string): boolean {
-  return state === TaskState.Completed || state === TaskState.Archive;
 }
 
 function truncate(text: string, max: number): string {

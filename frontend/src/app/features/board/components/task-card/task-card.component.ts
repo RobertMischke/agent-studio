@@ -68,6 +68,7 @@ import { PostProcessingActivityComponent } from '../post-processing-activity/pos
 import { TestEvidenceStatusComponent } from '../../../test-evidence';
 import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
 import { ProviderAuthStatusService, providerAuthWaitReason } from '../../../remote-hosts';
+import { ReleaseTaskButtonComponent } from '../../../../components/release-task-button/release-task-button.component';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -78,7 +79,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, TaskTokenUsagePopoverComponent, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TestEvidenceStatusComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, TaskTokenUsagePopoverComponent, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TestEvidenceStatusComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent, ReleaseTaskButtonComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-card.component.html',
   styleUrl: './task-card.component.scss',
@@ -460,20 +461,14 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   readonly cardCtxMenuItems = computed(() => buildCardCtxMenuItems(
     this.job(), this.isEpic(), this.epicsForMenu(), this.subTaskEpicId(), this.mutationsBlocked()));
 
-  /** AGT-2029: open the dependency this card is waiting on (see resolveDependencyTarget). */
   navigateToDependency(chip: DependencyChip, event: MouseEvent): void {
     event.preventDefault();
     event.stopPropagation();
     const target = resolveDependencyTarget(chip, this.jobs.jobs());
-    if (target) {
-      this.selection.openDetail(target);
-      return;
-    }
-    this.notifications.info(
-      chip.targetKey
-        ? `${chip.targetKey} is not loaded in the current workspace view.`
-        : 'That dependency could not be opened.',
-    );
+    if (target) return this.selection.openDetail(target);
+    this.notifications.info(chip.targetKey
+      ? `${chip.targetKey} is not loaded in the current workspace view.`
+      : 'That dependency could not be opened.');
   }
 
   openCardContextMenu(event: MouseEvent): void {

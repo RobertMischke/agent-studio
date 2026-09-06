@@ -1,0 +1,17 @@
+<button
+  type="button"
+  class="release-action"
+  [class.release-action--released]="released()"
+  [disabled]="busy()"
+  [attr.aria-pressed]="released()"
+  [attr.aria-label]="(released() ? 'Withdraw release for ' : 'Release ') + targetKey() + ' for dependents'"
+  [attr.data-testid]="'release-task-' + targetId()"
+  (click)="setReleased($event)">
+  @if (busy()) {
+    Saving…
+  } @else if (released()) {
+    {{ expanded() ? 'Withdraw release' : 'Withdraw' }}
+  } @else {
+    {{ expanded() ? 'Release for dependents' : 'Release' }}
+  }
+</button>

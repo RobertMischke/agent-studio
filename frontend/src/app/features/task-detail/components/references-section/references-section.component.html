@@ -12,6 +12,41 @@
     </div>
 
     <div class="refs__body">
+      @if (selfReleaseTarget(); as target) {
+        <div class="refs__row" data-testid="references-row-release-gate">
+          <span class="refs__label">Release gate</span>
+          <div class="refs__release">
+            <div class="refs__release-summary">
+              <span
+                class="refs__release-state"
+                [class.refs__release-state--released]="target.released"
+                data-testid="task-release-state">
+                {{ target.released ? 'Released' : 'Held' }}
+              </span>
+              <app-release-task-button
+                [targetId]="target.jobId"
+                [targetKey]="target.key"
+                [watchPath]="target.watchPath"
+                [released]="target.released"
+                [expanded]="true"
+                (releaseChanged)="onReleaseChanged(target, $event)" />
+            </div>
+            @if (gatedBlocking().length > 0) {
+              <span class="refs__release-impact" data-testid="release-gated-dependents">
+                Unblocks
+                @for (link of gatedBlocking(); track link.sourceJobId) {
+                  <button type="button" class="refs__impact-link" (click)="navigateToBlocking(link)">
+                    {{ link.sourceKey ?? link.sourceJobId }}
+                  </button>
+                }
+              </span>
+            } @else {
+              <span class="refs__release-impact">No release-gated dependents found.</span>
+            }
+          </div>
+        </div>
+      }
+
       @for (kind of kinds; track kind) {
         @if (refsFor(kind).length > 0 || adding()) {
           <div class="refs__row" [attr.data-testid]="'references-row-' + kind">
@@ -30,6 +65,14 @@
                     (click)="navigate(key)">
                     {{ chipLabel(key) }}
                   </button>
+                  @if (releaseTargetFor(kind, key); as target) {
+                    <app-release-task-button
+                      [targetId]="target.jobId"
+                      [targetKey]="target.key"
+                      [watchPath]="target.watchPath"
+                      [released]="target.released"
+                      (releaseChanged)="onReleaseChanged(target, $event)" />
+                  }
                   @if (adding()) {
                     <button
                       type="button"

@@ -710,13 +710,14 @@ export class TaskService {
    * "load more" and an accurate empty state. No full disk walk per call —
    * the backend serves this from the same cached scan that feeds the board.
    */
-  getArchivedTasks(opts: { project?: string; watchPath?: string; offset?: number; limit?: number; search?: string } = {}) {
+  getArchivedTasks(opts: { project?: string; watchPath?: string; offset?: number; limit?: number; search?: string; waitingForRelease?: boolean } = {}) {
     let params = this.withWatchPath(opts.watchPath).params ?? new HttpParams();
     if (opts.project?.trim()) params = params.set('project', opts.project.trim());
     if (typeof opts.offset === 'number') params = params.set('offset', String(opts.offset));
     if (typeof opts.limit === 'number') params = params.set('limit', String(opts.limit));
     const term = opts.search?.trim();
     if (term) params = params.set('search', term);
+    if (opts.waitingForRelease) params = params.set('waitingForRelease', 'true');
     return this.http.get<ArchivedTasksResponse>(`${this.baseUrl}/tasks/archive`, { params });
   }
 

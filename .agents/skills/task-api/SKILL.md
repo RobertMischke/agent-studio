@@ -213,6 +213,28 @@ atomic reorder on disk.
 
 Reference: [`scripts/move-to-top.js`](scripts/move-to-top.js).
 
+## Process: releasing a terminal task for gated dependents
+
+`PUT /api/tasks/{jobId}/release?watchPath=...` with body
+`{"released":true}`. This is the explicit approval required only by
+`references.dependsOn` edges that carry `releaseGate: true`; completing or
+archiving the target never sets it implicitly. Send `{"released":false}` to
+withdraw the approval and block those dependents again.
+
+```js
+const body = JSON.stringify({ released: true });
+const path = `/api/tasks/${encodeURIComponent(jobId)}/release` +
+             `?watchPath=${encodeURIComponent(watchPath)}`;
+// PUT, using the same Content-Type, Content-Length, and X-Client-Id headers
+// as the create example above.
+```
+
+A successful response is `200 {"released":true}`. A changed flag writes one
+actor-attributed `task_released` timeline event. Repeating the current value is
+idempotent and does not append a duplicate event. Prefer the task detail or
+dependent-card UI for a one-off operator decision because it also lists the
+affected release-gated dependents.
+
 ## Process: bulk triage
 
 Triage rolls separate classification from mutation. Pattern:

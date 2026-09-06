@@ -186,6 +186,30 @@ describe('BoardFiltersService project selection', () => {
     expect(svc.activeFilterPills().map(pill => pill.label)).toContain('integration:stalled');
   });
 
+  it('filters to release waiters and their terminal targets', () => {
+    const target = makeJob('lib-1', 'Library', '6-completed');
+    target.key = 'LIB-1';
+    const dependent = makeJob('app-1', 'Application', '2-ready');
+    dependent.waitsOn = {
+      blocked: true,
+      cycleDetected: false,
+      items: [{
+        key: 'LIB-1', resolved: true, fulfilled: false, releaseGate: true,
+        targetReleased: false, waitingForRelease: true, targetJobId: 'lib-1',
+        targetState: '6-completed', targetWatchPath: target.watchPath,
+      }],
+    };
+    jobs.grouped.set(makeGrouped([target, dependent, makeJob('other', 'Application', '2-ready')]));
+
+    svc.setWaitingForReleaseOnly(true);
+
+    const grouped = svc.filteredGrouped();
+    expect(grouped.ready.map(job => job.id)).toEqual(['app-1']);
+    expect(grouped.completed.map(job => job.id)).toEqual(['lib-1']);
+    expect(svc.activeFilterPills().map(pill => pill.label)).toContain('Waiting for release');
+    expect(decodeURIComponent(window.location.hash)).toContain('release:waiting');
+  });
+
   it('includes search and project expressions in the visible filter pills', () => {
     svc.setSearchQuery('release gate');
     svc.selectProject('Lotta Dashboard', false);

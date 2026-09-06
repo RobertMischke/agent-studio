@@ -77,6 +77,8 @@ public static class TimelineEventKinds
 {
     /// <summary>Task prompt was created on disk.</summary>
     public const string PromptCreated = "prompt_created";
+    /// <summary>An operator changed the explicit release approval for gated dependents.</summary>
+    public const string TaskReleased = "task_released";
     /// <summary>One CLI invocation started (start / continue / recovery).</summary>
     public const string AgentRunStarted = "agent_run_started";
     /// <summary>A run switched to its configured fallback because primary quota was exhausted.</summary>

@@ -68,6 +68,7 @@ Query params (all optional):
 | `offset` | `0` | paging start; negative is clamped to `0` |
 | `limit` | `50` | page size, clamped to `1..200` |
 | `search` | none | case-insensitive substring over title / key / id |
+| `waitingForRelease` | `false` | return only archived targets holding gated dependents |
 | `includeFixtures` | `false` | include fixture jobs (mirrors the board endpoints) |
 
 Ordering is newest-archived first (`enteredLaneAt` desc, `lastActivity` as
@@ -182,6 +183,19 @@ and refresh time, and Git process count/time.
 
 Promote a job to the head of `2-ready`. No body. Returns
 `{ position: 0 }` on success, `404` if not found in a promotable lane.
+
+### `PUT /api/tasks/{jobId}/release?watchPath=...`
+
+Set or withdraw the explicit approval consumed by `dependsOn` edges with
+`releaseGate: true`:
+
+```json
+{ "released": true }
+```
+
+Use `false` to withdraw release. A changed value appends one `task_released`
+timeline event attributed from `X-Client-Id`; repeating the current value is
+an idempotent no-op. Terminal lane state alone never grants this approval.
 
 ### `POST /api/tasks/reorder`
 

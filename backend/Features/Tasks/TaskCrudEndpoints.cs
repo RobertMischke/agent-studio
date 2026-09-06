@@ -209,7 +209,7 @@ public static class TaskCrudEndpoints
         // archived card renders. Query: watchPath (optional project filter),
         // offset/limit (paging), search (case-insensitive title/key/id), and
         // includeFixtures (default false, mirroring the board endpoints).
-        group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? includeFixtures, HttpContext context,
+        group.MapGet("/archive", (string? project, string? watchPath, int? offset, int? limit, string? search, bool? waitingForRelease, bool? includeFixtures, HttpContext context,
             TaskScannerService scanner, AgentStudio.Registry.ProjectRegistry projects, ILoggerFactory loggerFactory) =>
         {
             var projectRequested = !string.IsNullOrWhiteSpace(project);
@@ -228,6 +228,17 @@ public static class TaskCrudEndpoints
                 archived = archived.Where(j => WatchPathComparison.PathsEqual(j.WatchPath, watchPath));
             if (includeFixtures != true)
                 archived = archived.Where(j => !j.Fixture);
+            if (waitingForRelease == true)
+            {
+                var references = scanner.GetReferenceIndex();
+                var pendingTargets = scanner.ScanAllJobs()
+                    .SelectMany(job => references.EvaluateWaitsOn(job).Items)
+                    .Where(item => item.WaitingForRelease && item.TargetJobId != null)
+                    .Select(item => $"{item.TargetWatchPath}\0{item.TargetJobId}")
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                archived = archived.Where(job =>
+                    pendingTargets.Contains($"{job.WatchPath}\0{job.Id}"));
+            }
 
             var term = search?.Trim();
             var hasSearch = !string.IsNullOrWhiteSpace(term);
@@ -265,8 +276,8 @@ public static class TaskCrudEndpoints
                     term, total, all.Count, !string.IsNullOrWhiteSpace(watchPath));
             }
             logger.LogInformation(
-                "GET /api/tasks/archive returned {Returned}/{Total} archived tasks (offset={Offset}, limit={Limit}, search={HasSearch}) in {ElapsedMs}ms",
-                items.Count, total, off, lim, hasSearch, sw.ElapsedMilliseconds);
+                "GET /api/tasks/archive returned {Returned}/{Total} archived tasks (offset={Offset}, limit={Limit}, search={HasSearch}, waitingForRelease={WaitingForRelease}) in {ElapsedMs}ms",
+                items.Count, total, off, lim, hasSearch, waitingForRelease == true, sw.ElapsedMilliseconds);
 
             return Results.Ok(new ArchivedTasksResponse
             {
@@ -932,10 +943,14 @@ public static class TaskCrudEndpoints
         // Explicit content release for references.dependsOn edges with
         // releaseGate=true. Completion never sets this implicitly: the endpoint
         // is the operator/release-step seam that records the additional approval.
-        group.MapPut("/{jobId}/release", (string jobId, string? project, string? watchPath, SetJobReleasedRequest req, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
+        group.MapPut("/{jobId}/release", (string jobId, string? project, string? watchPath, SetJobReleasedRequest req, HttpContext ctx, TaskMutationService mutations, AgentStudio.Registry.ProjectRegistry projects) =>
         {
             watchPath = ResolveWatchPath(projects, project, watchPath);
-            var success = mutations.SetJobReleased(jobId, req?.Released == true, watchPath);
+            var success = mutations.SetJobReleased(
+                jobId,
+                req?.Released == true,
+                watchPath,
+                OperatorActor(ctx));
             return success ? Results.Ok(new { released = req?.Released == true }) : Results.NotFound();
         });
 
