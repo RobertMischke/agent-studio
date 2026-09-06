@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
 import { setTheme } from '../helpers/theme';
+import { test as devBackendTest } from '../fixtures/dev-backend';
 
 /**
  * Job-Details pipeline: every step name carries a "what happens here"
@@ -72,6 +73,12 @@ function makeDetail(state: string, gateStatus: 'passed' | 'notApplicable' | 'ski
             result: evidenceState,
             observedAt: '2026-06-02T08:00:02Z',
             summary: evidenceSummary,
+            reason: gateStatus === 'notApplicable'
+              ? 'No verify commands were defined.'
+              : gateStatus === 'skipped'
+                ? 'The build command was interrupted.'
+                : 'All selected commands passed.',
+            reportRef: 'post-steps/build-test-gate-d1649ce9.log',
           },
         ],
       },
@@ -187,6 +194,7 @@ async function installRoutes(
   page: Page,
   state: string,
   gateStatus: () => 'passed' | 'notApplicable' | 'skipped' = () => 'passed',
+  detailFactory: (() => ReturnType<typeof makeDetail>) | null = null,
 ) {
   const idEsc = JOB_ID.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -241,6 +249,13 @@ async function installRoutes(
   );
   await page.route('**/api/projects**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+  );
+  await page.route('**/api/projects/*/workbenches**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items: [] }),
+    }),
   );
   await page.route('**/api/git/summary**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
@@ -324,7 +339,7 @@ async function installRoutes(
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(makeDetail(state, gateStatus())),
+      body: JSON.stringify(detailFactory?.() ?? makeDetail(state, gateStatus())),
     }),
   );
 }
@@ -561,4 +576,97 @@ test.describe('Pipeline: per-step explanation tooltips', () => {
       }
     }
   });
+
 });
+
+devBackendTest('Evidence tab separates passing review builds from a blocked aspect and links their report', async ({
+    page,
+    devBackend,
+  }, testInfo) => {
+    expect(devBackend.port).toBe(5030);
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem(
+          'taskboard.panesVisible',
+          JSON.stringify({ prompt: true, protocol: false, git: false }),
+        );
+      } catch {
+        /* private mode */
+      }
+    });
+    const reportRef = 'remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e.md';
+    const detailFactory = () => {
+      const detail = makeDetail('5-human-review');
+      detail.info.testEvidence = {
+        ...detail.info.testEvidence,
+        evidenceState: 'proven',
+        summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+        sources: [
+          {
+            kind: 'review-build-tests',
+            id: 'review_ad5cca8e3178425fb9ba9cabe329d50e',
+            commit: '491ddd64',
+            result: 'passed',
+            observedAt: '2026-08-31T20:41:22Z',
+            summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+            reason: 'verify-1 and verify-2 passed.',
+            reportRef,
+          },
+          {
+            kind: 'review-aspects',
+            id: 'review_ad5cca8e3178425fb9ba9cabe329d50e:documentation-impact',
+            commit: '491ddd64',
+            result: 'blocked',
+            observedAt: '2026-08-31T20:41:22Z',
+            summary: 'Review blocked by documentation-impact',
+            reason: 'documentation-impact blocked: Public API and state-file contract changed without corresponding load-bearing doc updates.',
+            reportRef,
+          },
+        ],
+      };
+      return detail;
+    };
+    await installRoutes(page, '5-human-review', () => 'passed', detailFactory);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(
+      `/?job=${encodeURIComponent(JOB_ID)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+    );
+    await dismissErrorDialog(page);
+    const evidenceTab = page.getByTestId('prompt-tab-evidence');
+    await expect(evidenceTab).toBeVisible({ timeout: 10_000 });
+    // The fixture intentionally leaves unrelated polling endpoints sparse.
+    // Drive the real tab handler directly if one of those background reads
+    // opens the global error overlay between the visibility check and click.
+    await evidenceTab.evaluate((element: HTMLButtonElement) => element.click());
+
+    const build = page.getByTestId('test-evidence-source-review-build-tests');
+    const aspects = page.getByTestId('test-evidence-source-review-aspects');
+    await expect(build).toHaveAttribute('data-tone', 'good');
+    await expect(build).toContainText('Review build-tests Pass at 491ddd64 (verify-1, verify-2)');
+    await expect(build).toContainText('verify-1 and verify-2 passed.');
+    await expect(aspects).toHaveAttribute('data-tone', 'warn');
+    await expect(aspects).toContainText('Review blocked by documentation-impact');
+    await expect(aspects).toContainText('Public API and state-file contract changed');
+    const report = page.getByTestId('test-evidence-report-review-aspects');
+    await expect(report).toHaveAttribute(
+      'href',
+      new RegExp(`/api/tasks/${JOB_ID}/files/${reportRef}\\?.*scope=workspace`),
+    );
+    await expect(report).toHaveAttribute('aria-label', /documentation-impact blocked/);
+
+    if (RESULTS_DIR) {
+      await dismissErrorDialog(page);
+      for (const theme of ['light', 'dark'] as const) {
+        await setTheme(page, theme);
+        const screenshotPath = path.join(
+          RESULTS_DIR,
+          `agt-2714--review-evidence-reasons--${theme}--mocked.png`,
+        );
+        await page.getByTestId('evidence-tab-test-evidence').screenshot({ path: screenshotPath });
+        await testInfo.attach(`review-evidence-reasons--${theme}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    }
+  });

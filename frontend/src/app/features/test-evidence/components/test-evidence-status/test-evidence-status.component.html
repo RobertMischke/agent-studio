@@ -11,10 +11,42 @@
       @if (evidence.runId) {
         <small>{{ evidence.runId }} · {{ evidence.runState }}{{ evidence.runResult ? ' · ' + evidence.runResult : '' }}</small>
       } @else if (evidence.sources?.length) {
-        <small>{{ sourceDetail() }}</small>
+        @if (variant() === 'card') {
+          <small>{{ sourceDetail() }}</small>
+        }
       } @else {
         <small>No SHA-linked project run, build gate, or review grade is recorded.</small>
       }
     </span>
+    @if (variant() === 'panel' && evidence.sources?.length) {
+      <ul class="test-evidence__sources" aria-label="Evidence sources">
+        @for (source of evidence.sources; track source.kind + ':' + source.id) {
+          <li class="test-evidence__source"
+              [attr.data-tone]="sourceTone(source)"
+              [attr.data-result]="source.result"
+              [attr.data-testid]="'test-evidence-source-' + source.kind"
+              [attr.aria-label]="source.summary + '. ' + source.reason"
+              [appTooltip]="source.reason">
+            <span class="test-evidence__source-dot" aria-hidden="true"></span>
+            <span class="test-evidence__source-copy">
+              <span class="test-evidence__source-head">
+                <strong>{{ source.summary }}</strong>
+                <span class="test-evidence__source-result">{{ sourceResultLabel(source) }}</span>
+              </span>
+              <span class="test-evidence__source-reason">{{ source.reason }}</span>
+            </span>
+            @if (reportHref(source); as href) {
+              <a class="test-evidence__report"
+                 [href]="href"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 [attr.data-testid]="'test-evidence-report-' + source.kind"
+                 [attr.aria-label]="'Open report for ' + source.summary + '. ' + source.reason"
+                 [appTooltip]="source.reason">Open report</a>
+            }
+          </li>
+        }
+      </ul>
+    }
   </div>
 }

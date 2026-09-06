@@ -391,6 +391,8 @@ test('archived-card evidence incident renders honest before and SHA-linked after
               result: 'passed',
               observedAt: '2026-07-29T20:41:22Z',
               summary: `Review build-tests Pass at ${sha}`,
+              reason: 'verify-1 and verify-2 passed.',
+              reportRef: `remote-review-grade-${reviewId}.md`,
             }],
           }
         : {
@@ -439,7 +441,7 @@ test('archived-card evidence incident renders honest before and SHA-linked after
   await test.info().attach('evidence-linked-after', { path: after, contentType: 'image/png' });
 });
 
-test('build gate not-applicable is neutral while a true skip stays red', async ({ page }) => {
+test('build gate not-applicable and missing proof remain neutral', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   let corrected = false;
   const gateEvidence = (
@@ -464,6 +466,8 @@ test('build gate not-applicable is neutral while a true skip stays red', async (
       result: state,
       observedAt: '2026-08-08T10:00:00Z',
       summary,
+      reason: state === 'not-applicable' ? 'No verify commands were defined.' : 'The build command was interrupted.',
+      reportRef: `post-steps/build-test-gate-${state}.log`,
     }],
   });
   const grouped = (): typeof GROUPED => ({
@@ -511,8 +515,8 @@ test('build gate not-applicable is neutral while a true skip stays red', async (
       background: getComputedStyle(element).backgroundColor,
     })),
   ]);
-  expect(neutral.color).not.toBe(skipped.color);
-  expect(neutral.background).not.toBe(skipped.background);
+  expect(neutral.color).toBe(skipped.color);
+  expect(neutral.background).toBe(skipped.background);
   await reviewLane.screenshot({
     path: path.join(resultsDir, 'agt-2518--build-test-gate-skip-classes--after--mocked.png'),
   });

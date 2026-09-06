@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
-import { TaskState, type TaskInfo, type TaskTestRunEvidence } from '../../../../models/task.model';
+import { TaskState, type TaskInfo, type TaskTestEvidenceSource, type TaskTestRunEvidence } from '../../../../models/task.model';
 
-type TestEvidenceContext = Pick<TaskInfo, 'state' | 'commit' | 'commits' | 'integration' | 'testEvidence'>;
+type TestEvidenceContext = Pick<TaskInfo, 'id' | 'watchPath' | 'state' | 'commit' | 'commits' | 'integration' | 'testEvidence'>;
 export type TestEvidenceStatusVariant = 'card' | 'panel';
 
 const MISSING_EVIDENCE_RELEVANT_STATES = new Set<string>([
@@ -53,7 +53,7 @@ export class TestEvidenceStatusComponent {
     const details = evidence.runId
       ? [`Project test run ${evidence.runId} at ${evidence.runCommit || 'unknown commit'}`]
       : [];
-    details.push(...(evidence.sources ?? []).map(source => source.summary));
+    details.push(...(evidence.sources ?? []).map(source => `${source.summary}: ${source.reason}`));
     return details.length > 0 ? details.join(' · ') : evidence.summary;
   }
 
@@ -66,8 +66,37 @@ export class TestEvidenceStatusComponent {
 
   private sourceLabel(kind: string): string {
     if (kind === 'review-build-tests') return 'Remote review';
+    if (kind === 'review-aspects') return 'Review aspects';
     if (kind === 'pre-develop-build-gate') return 'Pre-develop gate';
     if (kind === 'pre-main-test-gate') return 'Pre-main gate';
     return 'Build/test gate';
+  }
+
+  sourceTone(source: TaskTestEvidenceSource): 'good' | 'warn' | 'bad' | 'neutral' {
+    if (source.result === 'passed') return 'good';
+    if (source.result === 'blocked') return 'warn';
+    if (source.result === 'failed') return 'bad';
+    return 'neutral';
+  }
+
+  sourceResultLabel(source: TaskTestEvidenceSource): string {
+    if (source.result === 'not-proven') return 'Not proven';
+    if (source.result === 'not-applicable') return 'Not applicable';
+    return source.result.charAt(0).toUpperCase() + source.result.slice(1);
+  }
+
+  reportHref(source: TaskTestEvidenceSource): string | null {
+    const jobId = this.task().id?.trim();
+    const reportRef = source.reportRef?.trim().replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!jobId || !reportRef || reportRef.startsWith('/') || reportRef.split('/').some(part => !part || part === '..')) {
+      return null;
+    }
+
+    const path = reportRef.split('/').map(encodeURIComponent).join('/');
+    const watchPath = this.task().watchPath?.trim();
+    const query = [watchPath ? `watchPath=${encodeURIComponent(watchPath)}` : '', 'scope=workspace']
+      .filter(Boolean)
+      .join('&');
+    return `/api/tasks/${encodeURIComponent(jobId)}/files/${path}?${query}`;
   }
 }

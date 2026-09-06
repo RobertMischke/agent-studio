@@ -18,6 +18,8 @@ const missingEvidence: TaskTestRunEvidence = {
 
 function task(state: string, overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
+    id: 'AGT-2689',
+    watchPath: 'C:/fixtures/agent-studio',
     state,
     commit: null,
     commits: [],
@@ -136,6 +138,8 @@ describe('TestEvidenceStatusComponent', () => {
         result: sourceResult,
         observedAt: '2026-08-08T10:00:00Z',
         summary,
+        reason: state === 'not-applicable' ? 'No verify commands were defined.' : 'The build command was interrupted.',
+        reportRef: 'post-steps/build-test-gate-42.log',
       }],
     } satisfies TaskTestRunEvidence;
     fixture.componentRef.setInput('task', task(TaskState.HumanReview, { testEvidence: evidence }));
@@ -166,6 +170,8 @@ describe('TestEvidenceStatusComponent', () => {
           result: 'passed',
           observedAt: '2026-07-29T20:41:22Z',
           summary: 'Review build-tests Pass at d1649ce9',
+          reason: 'verify-1 and verify-2 passed.',
+          reportRef: 'remote-review-grade-review-42.md',
         },
         {
           kind: 'build-test-gate',
@@ -174,6 +180,8 @@ describe('TestEvidenceStatusComponent', () => {
           result: 'passed',
           observedAt: '2026-07-29T20:40:00Z',
           summary: 'Build/test gate green at d1649ce9',
+          reason: 'All selected commands passed.',
+          reportRef: 'post-steps/build-test-gate-42.log',
         },
       ],
     } satisfies TaskTestRunEvidence;
@@ -184,5 +192,75 @@ describe('TestEvidenceStatusComponent', () => {
     expect(element.textContent).toContain('Review build-tests Pass at d1649ce9');
     expect(element.textContent).toContain('Build/test gate green at d1649ce9');
     expect(element.textContent).not.toContain('Evidence pending');
+  });
+
+  it('renders passing build proof and a blocking review aspect as independent reasoned rows', async () => {
+    await TestBed.configureTestingModule({ imports: [TestEvidenceStatusComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TestEvidenceStatusComponent);
+    const reportRef = 'remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e.md';
+    const evidence = {
+      ...missingEvidence,
+      matchQuality: 'perfect',
+      direction: 'exact',
+      distance: 0,
+      diffContained: true,
+      evidenceState: 'proven',
+      summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+      sources: [
+        {
+          kind: 'review-build-tests',
+          id: 'review_ad5cca8e3178425fb9ba9cabe329d50e',
+          commit: '491ddd64',
+          result: 'passed',
+          observedAt: '2026-08-31T20:41:22Z',
+          summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+          reason: 'verify-1 and verify-2 passed.',
+          reportRef,
+        },
+        {
+          kind: 'review-aspects',
+          id: 'review_ad5cca8e3178425fb9ba9cabe329d50e:documentation-impact',
+          commit: '491ddd64',
+          result: 'blocked',
+          observedAt: '2026-08-31T20:41:22Z',
+          summary: 'Review blocked by documentation-impact',
+          reason: 'documentation-impact blocked: Public API and state-file contract changed without corresponding load-bearing doc updates.',
+          reportRef,
+        },
+      ],
+    } satisfies TaskTestRunEvidence;
+    fixture.componentRef.setInput('task', task(TaskState.HumanReview, { testEvidence: evidence }));
+    fixture.componentRef.setInput('variant', 'panel');
+    fixture.detectChanges();
+
+    const build = fixture.nativeElement.querySelector('[data-testid="test-evidence-source-review-build-tests"]') as HTMLElement;
+    const aspects = fixture.nativeElement.querySelector('[data-testid="test-evidence-source-review-aspects"]') as HTMLElement;
+    const aspectLink = fixture.nativeElement.querySelector('[data-testid="test-evidence-report-review-aspects"]') as HTMLAnchorElement;
+    expect(build.dataset['tone']).toBe('good');
+    expect(build.textContent).toContain('verify-1 and verify-2 passed.');
+    expect(aspects.dataset['tone']).toBe('warn');
+    expect(aspects.textContent).toContain('Review blocked by documentation-impact');
+    expect(aspects.getAttribute('aria-label')).toContain('Public API and state-file contract changed');
+    expect(aspectLink.href).toContain('/api/tasks/AGT-2689/files/remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e.md');
+    expect(aspectLink.getAttribute('aria-label')).toContain('documentation-impact blocked');
+    expect(fixture.nativeElement.textContent).not.toContain('No SHA-linked project run');
+  });
+
+  it.each([
+    ['failed', 'bad'],
+    ['not-proven', 'neutral'],
+  ] as const)('maps %s evidence to the %s source-row tone', async (result, tone) => {
+    await TestBed.configureTestingModule({ imports: [TestEvidenceStatusComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TestEvidenceStatusComponent);
+    expect(fixture.componentInstance.sourceTone({
+      kind: 'review-build-tests',
+      id: 'review-42',
+      commit: '491ddd64',
+      result,
+      observedAt: null,
+      summary: 'Build evidence',
+      reason: 'The evidence explains its state.',
+      reportRef: 'remote-review-grade-review-42.md',
+    })).toBe(tone);
   });
 });

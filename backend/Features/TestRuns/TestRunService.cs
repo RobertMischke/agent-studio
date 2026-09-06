@@ -350,12 +350,13 @@ public sealed class TestRunService
         }
         return matches
             .OrderByDescending(match => match.Source.ObservedAt ?? DateTime.MinValue)
+            .ThenBy(match => match.Source.Kind == "review-build-tests" ? 0 : 1)
             .ToList();
     }
 
     private static TaskTestRunEvidence FromTaskScoped(IReadOnlyList<ScopedEvidenceMatch> matches)
     {
-        var selected = matches[0];
+        var selected = matches.First(match => match.Source.Kind != "review-aspects");
         var evidenceState = selected.Source.Result switch
         {
             "passed" => "proven",

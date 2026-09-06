@@ -118,6 +118,8 @@ describe('ResultViewComponent', () => {
           result: state,
           observedAt: null,
           summary,
+          reason: state === 'not-applicable' ? 'No verify commands were defined.' : 'The build command was interrupted.',
+          reportRef: 'post-steps/build-test-gate-42.log',
         }],
       },
     }), verdict());

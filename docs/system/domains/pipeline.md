@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-27
+Version: 2026-09-06
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -657,6 +657,14 @@ Result-SHA, policy hash, report hash, verdicts, and gate facts. Only a fenced
 Engine settlement can request reissue, escalation, or Human Review handoff, and
 only the Task Server can apply the version-fenced lane mutation plus lifecycle
 evidence. Studio and its BFF are read and command surfaces, not loop owners.
+Task-scoped evidence preserves the report's independent facts: `review-build-tests`
+is derived only from the report's build-tests rows, while each blocking semantic
+aspect is projected separately as `review-aspects`. An overall product failure
+never changes passing build rows into missing proof. Every projected source
+carries a one-sentence `reason` and a task-relative `reportRef`; `not-proven` is
+reserved for reports with no build-tests row, whose reason names the missing
+verification command evidence. The Evidence tab renders those sources as
+separate rows and links each row back to its report.
 Requirement-fit receives the card's normalized `acceptanceScope` as a separate,
 authoritative prompt section. For `bounded-slice`, it judges only the named
 slice and criteria; a linked Dossier, parent objective, or open recommendation
