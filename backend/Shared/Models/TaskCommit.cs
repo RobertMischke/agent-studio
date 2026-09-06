@@ -22,6 +22,12 @@ public record TaskCommitInfo
     public string ShortSha { get; init; } = "";
     public string Message { get; init; } = "";
     /// <summary>
+    /// Repository that owns this commit. Prefer the registered repository id
+    /// or its credential-free URL. Legacy entries may contain the remote name
+    /// recovered from the informational <c>[repo]</c> subject prefix.
+    /// </summary>
+    public string? Repository { get; init; }
+    /// <summary>
     /// Delivery branch that carried this attributed commit. Remote attribution
     /// persists the exact runner/result ref here so acceptance can resolve the
     /// reviewed source from card data without reconstructing it from the task

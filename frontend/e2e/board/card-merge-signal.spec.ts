@@ -27,9 +27,22 @@ interface MergeSignal {
 }
 
 interface IntegrationStatus {
-  status: 'integrated' | 'pending' | 'no-branch';
+  status: 'integrated' | 'partial' | 'pending' | 'no-branch';
   sha: string | null;
   integrationBranch: string;
+  detail: string;
+  repositories?: RepositoryIntegrationStatus[];
+}
+
+interface RepositoryIntegrationStatus {
+  repository: string;
+  commits: string[];
+  integrationBranch: string;
+  releaseBranch: string;
+  integrationCommitCount: number;
+  releaseCommitCount: number;
+  onIntegrationBranch: boolean;
+  onReleaseBranch: boolean;
   detail: string;
 }
 
@@ -174,6 +187,51 @@ const NO_COMMIT = makeTask(
   },
 );
 
+const REPOSITORY_COUNTS = [
+  ['agent-studio', 5, 'develop', 'main'],
+  ['runner', 4, 'main', 'main'],
+  ['token-economy', 4, 'main', 'main'],
+  ['chat', 3, 'main', 'main'],
+  ['ai-patterns.dev', 2, 'main', 'main'],
+  ['quality-studio', 1, 'main', 'main'],
+  ['.github', 1, 'main', 'main'],
+] as const;
+const MULTI_REPOSITORY = {
+  ...makeTask(
+    'agt-2307',
+    '5-human-review',
+    'AGT-2307 multi-repository delivery',
+    mergeSignal(true, true),
+    false,
+    true,
+    {
+      status: 'integrated',
+      sha: 'c0ffee1',
+      integrationBranch: 'multiple',
+      detail: 'All 20 attributed commits are integrated in their repositories.',
+      repositories: REPOSITORY_COUNTS.map(([repository, count, integrationBranch, releaseBranch]) => ({
+        repository: `https://github.com/example/${repository}.git`,
+        commits: Array.from({ length: count }, (_, index) => `${repository}-${index}`),
+        integrationBranch,
+        releaseBranch,
+        integrationCommitCount: count,
+        releaseCommitCount: count,
+        onIntegrationBranch: true,
+        onReleaseBranch: true,
+        detail: `${repository}: ${count}/${count} commits integrated.`,
+      })),
+    },
+  ),
+  commits: Array.from({ length: 20 }, (_, index) => ({
+    sha: `sha-${index}`,
+    shortSha: `sha-${index}`,
+    message: 'externalization delivery',
+    filesChanged: 1,
+    files: [`file-${index}`],
+    at: '2026-08-04T10:15:00Z',
+  })),
+};
+
 const GROUPED_PAYLOAD = {
   backlog: [],
   preparation: [],
@@ -183,7 +241,7 @@ const GROUPED_PAYLOAD = {
   failedPickup: [],
   review: [],
   autoReview: [],
-  humanReview: [IN_DEVELOP, ONLY_MAIN, STALE_ATTEMPT, SALVAGED, NO_COMMIT],
+  humanReview: [IN_DEVELOP, MULTI_REPOSITORY, ONLY_MAIN, STALE_ATTEMPT, SALVAGED, NO_COMMIT],
   completed: [RELEASED],
   archive: [],
 };
@@ -357,6 +415,30 @@ test.describe('AGT-2046 board card merge signal', () => {
     // A self-explanatory icon chip took its place, next to the branch name.
     await expect(card.locator('.task-card__change-ref-icon')).toHaveCount(1);
   });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`AGT-2307 shows all seven repository delivery lines (${theme})`, async ({ page }, testInfo) => {
+      await gotoBoard(page);
+      await setTheme(page, theme);
+      const card = cardByTitle(page, MULTI_REPOSITORY.title);
+      const lines = card.getByTestId('integration-repository-line');
+
+      await expect(lines).toHaveCount(7);
+      await expect(lines.nth(0)).toContainText('agent-studio 5/5 develop and main');
+      await expect(lines.nth(1)).toContainText('runner 4/4 main');
+      await expect(lines.nth(6)).toContainText('.github 1/1 main');
+
+      const buf = await card.screenshot();
+      await testInfo.attach(`agt-2307-repositories-${theme}--mocked.png`, {
+        body: buf,
+        contentType: 'image/png',
+      });
+      const resultsDir = process.env.JOB_RESULTS_DIR;
+      if (resultsDir) {
+        await card.screenshot({ path: `${resultsDir}/agt-2307-repositories-${theme}--mocked.png` });
+      }
+    });
+  }
 
   for (const theme of ['light', 'dark'] as const) {
     test(`captures the board merge signals (${theme})`, async ({ page }, testInfo) => {

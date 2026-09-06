@@ -131,6 +131,9 @@ public record TaskMergeSignal
 
     /// <summary>Short SHA of the task anchor that reached main. Null when not in main.</summary>
     public string? ReleaseSha { get; init; }
+
+    /// <summary>Repository-level membership behind the aggregate booleans.</summary>
+    public List<TaskRepositoryIntegrationStatus> Repositories { get; init; } = [];
 }
 
 /// <summary>
@@ -275,6 +278,26 @@ public record TaskIntegrationStatus
     /// <see cref="IntegrationStatuses.ConflictSkipped"/>.
     /// </summary>
     public TaskIntegrationFailure? Failure { get; init; }
+
+    /// <summary>
+    /// Repository-scoped delivery evidence. The card-level status is integrated
+    /// only when every entry is on its integration branch.
+    /// </summary>
+    public List<TaskRepositoryIntegrationStatus> Repositories { get; init; } = [];
+}
+
+/// <summary>Branch membership for one repository in a task delivery.</summary>
+public sealed record TaskRepositoryIntegrationStatus
+{
+    public string Repository { get; init; } = "";
+    public List<string> Commits { get; init; } = [];
+    public string IntegrationBranch { get; init; } = "main";
+    public string ReleaseBranch { get; init; } = "main";
+    public int IntegrationCommitCount { get; init; }
+    public int ReleaseCommitCount { get; init; }
+    public bool OnIntegrationBranch { get; init; }
+    public bool OnReleaseBranch { get; init; }
+    public string Detail { get; init; } = "";
 }
 
 /// <summary>

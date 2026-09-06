@@ -180,6 +180,13 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   path. Startup performs an idempotent, Git-read-only repair of missing commit
   metadata on non-archived cards and writes only the affected `task.json` files
   through `TaskMutationService`.
+- Each commit attribution records structured `repository` and `branch`
+  coordinates at attribution time. `repository` is the registered project
+  repository id or URL when available, otherwise the observed remote URL. A
+  leading `[repo]` commit-message prefix remains display text and is never the
+  runtime source of repository identity. Startup migrates legacy records once
+  by parsing that prefix only when `repository` is absent; it does not rewrite
+  the message.
 - Remote commit attribution is evaluated independently for every fenced run
   attempt. Each attempt's verified delivery range passes through the
   foreign-task guard before persistence. Card-level `commits[]` is the
@@ -216,15 +223,26 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   through `TaskMutationService`. The same pass materializes missing remote
   token receipts from that attempt's CLI-log window. Ambiguous cards remain
   unchanged and are listed in the durable migration report.
-- Accepted-card `integration.status` is a read-time projection of attributed
-  commit membership in the configured target branch, cached against that
-  branch's current HEAD. Lane state, provenance merge records, pipeline success,
-  and curated merge subjects do not force `integrated`; an out-of-band merge is
-  detected on the next read.
+- Accepted-card `integration.repositories[]` is a read-time projection grouped
+  by the structured commit repository. Registered project repositories are
+  resolved first; otherwise the recorded remote is resolved from the primary
+  checkout. Each entry carries its commit SHAs, integration and release branch
+  membership, counts, and a repository-scoped detail. The card-level
+  `integration.status` is `integrated` only when every repository entry is on
+  its integration branch. A `partial` detail names only the repository and SHAs
+  that are missing from that repository, never SHAs looked up in a different
+  graph. Results are cached against each target branch's current HEAD. Lane
+  state, provenance merge records, pipeline success, and curated merge subjects
+  do not force `integrated`; an out-of-band merge is detected on the next read.
 - Human acceptance is transactional. A coding card remains in
   `5-human-review` with phase `integrating` until the delivery reaches `Merged`,
-  `MergedAfterRebase`, or `AlreadyMerged`. `NoTaskBranch`, conflict, gate failure,
-  and error return it
+  `MergedAfterRebase`, `AlreadyMerged`, or `AlreadyOnIntegrationBranch`. When no
+  task branch exists and every attributed commit for the integration repository
+  is already an ancestor of the integration branch,
+  `AlreadyOnIntegrationBranch` records the evidence SHAs and completes without
+  manufacturing a merge. The ordinary integration-branch durability push still
+  runs and is a no-op when the remote already has the tip. `NoTaskBranch`,
+  conflict, gate failure, and error return it
   to ordinary Human Review with an Integration failed badge and timeline
   evidence. Before the already-integrated decision, acceptance fetches the
   configured origin integration ref and evaluates refreshed local plus remote
@@ -232,6 +250,10 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   queue and gate, while local/remote divergence becomes a failed integration
   record instead of being overwritten. The `integrationpending` tag is an
   internal recovery marker, not a second UI status.
+- `mergeSignal.repositories[]` uses the same repository entries as integration
+  status. When a task branch is absent, its aggregate `inIntegration` and
+  `inRelease` booleans derive from attributed commit ancestry across all
+  repository entries instead of branch-name presence.
 - A current integration failure is projected as typed card state from the
   durable merge step. `integration.failure` carries a stable code, concise
   label, operator-facing reason, and whether focused rebase recovery applies.

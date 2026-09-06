@@ -242,6 +242,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             "merged" => nameof(MergeIntoIntegrationOutcome.Merged),
             "merged-after-rebase" => nameof(MergeIntoIntegrationOutcome.MergedAfterRebase),
             "already-merged" or "already-integrated" => nameof(MergeIntoIntegrationOutcome.AlreadyMerged),
+            "already-on-integration-branch" => nameof(MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch),
             "no-branch" => nameof(MergeIntoIntegrationOutcome.NoTaskBranch),
             "conflict" => nameof(MergeIntoIntegrationOutcome.Conflict),
             "gate-failed" => nameof(MergeIntoIntegrationOutcome.GateFailed),

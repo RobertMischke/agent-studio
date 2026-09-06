@@ -2265,6 +2265,26 @@
             process stderr into the failure detail and the durable grade's explicit Detail line, including the full path.
           </td>
         </tr>
+        <tr id="case-agt-2718">
+          <td>2026-09-06</td>
+          <td><code>AGT-2718</code><br><span class="small">multi-repository direct delivery reported partial and branchless</span></td>
+          <td>
+            AGT-2307 delivered 20 commits to seven repositories, but the card reported only 5/20 integrated. Human
+            acceptance later failed with <code>NoTaskBranch</code> although every delivery was already on its target branch,
+            leaving the card in Human Review.
+          </td>
+          <td>
+            Commit attribution stored repository identity only in a message prefix. Integration resolved every SHA in the
+            agent-studio graph, while merge status and acceptance assumed a task branch must exist.
+          </td>
+          <td>
+            <span class="pill ok">fixed in dev</span> attribution now persists repository and branch coordinates;
+            integration and merge status evaluate each repository graph independently. A branchless delivery whose
+            attributed commits are all ancestors of the integration branch reaches
+            <code>AlreadyOnIntegrationBranch</code> with evidence SHAs, so acceptance reaches Completed without a synthetic
+            merge. A genuinely missing repository remains Partial and names only its own missing SHAs.
+          </td>
+        </tr>
       </tbody>
     </table>
 

@@ -159,6 +159,10 @@ public static class TaskGitEndpoints
                 Sha = sha,
                 ShortSha = sha[..8],
                 Message = commitMeta.Body.Trim(),
+                Repository = git.ReadOriginUrlAt(
+                    git.ResolveRepoRootForWatchPath(watchPath ?? info.WatchPath) ?? string.Empty),
+                Branch = git.ReadCurrentBranchAt(
+                    git.ResolveRepoRootForWatchPath(watchPath ?? info.WatchPath) ?? string.Empty),
                 FilesChanged = files.Count,
                 Files = files.Select(file => file.Path).ToList(),
                 At = commitMeta.AuthorDateUtc,

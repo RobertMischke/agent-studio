@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 
+using AgentStudio.Pipeline;
 using AgentStudio.Shared;
 using AgentStudio.Tasks;
 
@@ -275,6 +276,33 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_NoTaskBranch_DerivesRepositorySignalsFromAttributedCommits()
+    {
+        var repo = SeedDevelopMainRepo(out _, out _);
+        RunGit(repo, "checkout -q develop");
+        File.WriteAllText(Path.Combine(repo, "direct.txt"), "direct");
+        Commit(repo, "feat: direct delivery");
+        var sha = RunGit(repo, "rev-parse develop").Out.Trim();
+
+        var svc = BuildService(repo, out var project, repositoryAware: true);
+        var job = Job(
+            "direct",
+            project: project,
+            repo: repo,
+            commits: [Commit(sha) with { Repository = repo, Branch = "develop" }]);
+
+        var signal = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.True(signal.InIntegration);
+        Assert.False(signal.InRelease);
+        Assert.Equal("develop", signal.Branch);
+        var repository = Assert.Single(signal.Repositories);
+        Assert.True(repository.OnIntegrationBranch);
+        Assert.False(repository.OnReleaseBranch);
+        Assert.Equal(sha, Assert.Single(repository.Commits));
+    }
+
+    [Fact]
     public void BuildLookup_SkipsCardsWithoutAnchor()
     {
         var repo = SeedDevelopMainRepo(out _, out _);
@@ -351,7 +379,8 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         out string projectName,
         TimeProvider? timeProvider = null,
         ILogger<BoardMergeStatusService>? logger = null,
-        bool configureIntegrationBranch = true)
+        bool configureIntegrationBranch = true,
+        bool repositoryAware = false)
     {
         projectName = "Fixture";
         var dict = new Dictionary<string, string?>
@@ -368,11 +397,19 @@ public sealed class BoardMergeStatusServiceTests : IDisposable
         var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
         if (configureIntegrationBranch)
             settings.SetIntegrationBranch(projectName, "develop");
+        var integrationStatus = repositoryAware
+            ? new TaskIntegrationStatusService(
+                git,
+                settings,
+                new PipelineExecutionLog(NullLogger<PipelineExecutionLog>.Instance),
+                NullLogger<TaskIntegrationStatusService>.Instance)
+            : null;
         return new BoardMergeStatusService(
             git,
             settings,
             logger ?? NullLogger<BoardMergeStatusService>.Instance,
-            timeProvider ?? TimeProvider.System);
+            timeProvider ?? TimeProvider.System,
+            integrationStatus);
     }
 
     private static List<(int Spawns, long GitMs, long WallMs, string Breakdown)> Rollups(

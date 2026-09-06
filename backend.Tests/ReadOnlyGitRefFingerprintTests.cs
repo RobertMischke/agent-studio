@@ -112,6 +112,24 @@ public sealed class ReadOnlyGitRefFingerprintTests : IDisposable
     }
 
     [Fact]
+    public void Capture_TracksExplicitNamedRemoteRef()
+    {
+        Git("update-ref", "refs/remotes/runner/main", "main");
+        var before = ReadOnlyGitRefFingerprint.Capture(
+            _root, ["refs/remotes/runner/main"]);
+
+        Git("checkout", "-q", "develop");
+        File.WriteAllText(Path.Combine(_root, "runner.txt"), "change");
+        Git("add", "-A");
+        Git("commit", "-q", "-m", "runner change");
+        Git("update-ref", "refs/remotes/runner/main", "develop");
+
+        var after = ReadOnlyGitRefFingerprint.Capture(
+            _root, ["refs/remotes/runner/main"]);
+        Assert.NotEqual(before, after);
+    }
+
+    [Fact]
     public void Capture_NestedLooseTagChangeUsesDirectoryMetadata()
     {
         Git("tag", "v1/one");

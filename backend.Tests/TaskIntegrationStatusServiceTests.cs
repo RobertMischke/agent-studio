@@ -293,6 +293,94 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildLookup_MultiRepositoryDelivery_EvaluatesEachRepositoryGraph()
+    {
+        var agentStudio = SeedDevelopMainRepo();
+        RunGit(agentStudio, "checkout -q develop");
+        File.WriteAllText(Path.Combine(agentStudio, "studio.txt"), "studio delivery");
+        Commit(agentStudio, "feat: studio delivery");
+        var studioSha = RunGit(agentStudio, "rev-parse develop").Out.Trim();
+
+        var runner = SeedDevelopMainRepo();
+        RunGit(runner, "checkout -q main");
+        File.WriteAllText(Path.Combine(runner, "runner.txt"), "runner delivery");
+        Commit(runner, "feat: runner delivery");
+        var runnerSha = RunGit(runner, "rev-parse main").Out.Trim();
+
+        var svc = BuildService(agentStudio, out var project, out var log);
+        var job = Job("multi-repo", "AGT-2307", project, agentStudio, log, commits:
+        [
+            Commit(studioSha) with { Repository = agentStudio, Branch = "develop" },
+            Commit(runnerSha) with { Repository = runner, Branch = "main" },
+        ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        Assert.Equal(2, status.Repositories.Count);
+        Assert.All(status.Repositories, entry => Assert.True(entry.OnIntegrationBranch));
+        Assert.Contains(status.Repositories, entry => entry.Repository == runner && entry.IntegrationBranch == "main");
+    }
+
+    [Fact]
+    public void BuildLookup_MultiRepositoryPartial_NamesOnlyTheMissingRepositoryAndCommit()
+    {
+        var agentStudio = SeedDevelopMainRepo();
+        RunGit(agentStudio, "checkout -q develop");
+        File.WriteAllText(Path.Combine(agentStudio, "studio.txt"), "studio delivery");
+        Commit(agentStudio, "feat: studio delivery");
+        var studioSha = RunGit(agentStudio, "rev-parse develop").Out.Trim();
+
+        var runner = SeedDevelopMainRepo();
+        RunGit(runner, "checkout -q -b task/direct main");
+        File.WriteAllText(Path.Combine(runner, "runner.txt"), "runner delivery");
+        Commit(runner, "feat: runner delivery");
+        var missingRunnerSha = RunGit(runner, "rev-parse HEAD").Out.Trim();
+
+        var svc = BuildService(agentStudio, out var project, out var log);
+        var job = Job("multi-partial", "AGT-2307", project, agentStudio, log, commits:
+        [
+            Commit(studioSha) with { Repository = agentStudio, Branch = "develop" },
+            Commit(missingRunnerSha) with { Repository = runner, Branch = "task/direct" },
+        ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Partial, status.Status);
+        Assert.Contains(runner, status.Detail);
+        Assert.Contains(missingRunnerSha[..7], status.Detail);
+        Assert.DoesNotContain(studioSha[..7], status.Detail);
+        Assert.Equal("main", status.Repositories.Single(entry => entry.Repository == runner).IntegrationBranch);
+    }
+
+    [Fact]
+    public void BuildLookup_UnregisteredRepository_UsesMatchingNamedRemote()
+    {
+        var agentStudio = SeedDevelopMainRepo();
+        var runner = SeedDevelopMainRepo();
+        RunGit(runner, "checkout -q main");
+        File.WriteAllText(Path.Combine(runner, "remote.txt"), "remote delivery");
+        Commit(runner, "feat: remote delivery");
+        var runnerSha = RunGit(runner, "rev-parse main").Out.Trim();
+        RunGit(agentStudio, $"remote add runner {runner}");
+        RunGit(agentStudio, "fetch -q runner");
+
+        var svc = BuildService(agentStudio, out var project, out var log);
+        var job = Job("named-remote", "AGT-2307", project, agentStudio, log, commits:
+        [
+            Commit(runnerSha) with { Repository = "runner", Branch = "main" },
+        ]);
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Integrated, status.Status);
+        var entry = Assert.Single(status.Repositories);
+        Assert.Equal("runner", entry.Repository);
+        Assert.Equal("main", entry.IntegrationBranch);
+        Assert.True(entry.OnIntegrationBranch);
+    }
+
+    [Fact]
     public void BuildLookup_SupersededConflictRoundMissingButReplacementLanded_IsIntegrated()
     {
         var repo = SeedDevelopMainRepo();

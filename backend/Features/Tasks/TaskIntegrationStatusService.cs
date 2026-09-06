@@ -1,11 +1,13 @@
 using System.Collections.Concurrent;
+using AgentStudio.Registry;
 
 namespace AgentStudio.Tasks;
 
 /// <summary>
-/// AGT-2202 - computes the honest, git-derived integration verdict for delivered
-/// cards (4-auto-review / 5-human-review / 5e-escalated / 6-completed / 7-archive): is the task's
-/// work actually folded into the integration branch (develop)? The result is attached to
+/// AGT-2202 and AGT-2718: computes the honest, Git-derived integration verdict
+/// for delivered cards (4-auto-review / 5-human-review / 5e-escalated /
+/// 6-completed / 7-archive). Each attributed repository is evaluated against
+/// its own integration and release branches. The result is attached to
 /// <see cref="TaskInfo.Integration"/> so the board renders a single, unambiguous
 /// "integrated / not integrated / conflict / no branch" badge on every delivered
 /// card, and so acceptance can refuse a delivery that has not passed the
@@ -23,11 +25,11 @@ namespace AgentStudio.Tasks;
 /// into the five
 /// <see cref="IntegrationStatuses"/> states:
 /// <list type="number">
-/// <item>ALL attributed commits are ancestors of develop → <c>integrated</c> (even
+/// <item>ALL attributed commits are ancestors of their repository target branches → <c>integrated</c> (even
 ///   when the branch tip still carries further, un-integrated WIP commits the
 ///   widget never showed);</item>
 /// <item>SOME attributed commits are ancestors → <c>partial</c>, with the missing
-///   short-SHAs in the detail;</item>
+///   repository and short SHAs in the detail;</item>
 /// <item>NONE are ancestors → <c>pending</c> (or <c>conflict-skipped</c> when a
 ///   typed accepted-integration failure was recorded);</item>
 /// <item>no attributed commit and no evidenced delivery ref →
@@ -56,6 +58,7 @@ public sealed class TaskIntegrationStatusService
     private readonly ProjectSettingsService _settings;
     private readonly PipelineExecutionLog _pipelineLog;
     private readonly ILogger<TaskIntegrationStatusService> _logger;
+    private readonly ProjectRegistry? _registry;
 
     /// <summary>The delivered lanes this verdict applies to. Cards outside get no entry.</summary>
     internal static readonly HashSet<string> DeliveredLanes = new(StringComparer.Ordinal)
@@ -78,8 +81,9 @@ public sealed class TaskIntegrationStatusService
         GitService git,
         ProjectSettingsService settings,
         PipelineExecutionLog pipelineLog,
-        ILogger<TaskIntegrationStatusService> logger)
-        : this(git, settings, pipelineLog, logger, TimeProvider.System)
+        ILogger<TaskIntegrationStatusService> logger,
+        ProjectRegistry? registry = null)
+        : this(git, settings, pipelineLog, logger, TimeProvider.System, registry)
     {
     }
 
@@ -88,12 +92,14 @@ public sealed class TaskIntegrationStatusService
         ProjectSettingsService settings,
         PipelineExecutionLog pipelineLog,
         ILogger<TaskIntegrationStatusService> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ProjectRegistry? registry = null)
     {
         _git = git;
         _settings = settings;
         _pipelineLog = pipelineLog;
         _logger = logger;
+        _registry = registry;
         _cache = new GenerationSingleFlightCache<RepoIntegration>(timeProvider);
     }
 
@@ -110,55 +116,10 @@ public sealed class TaskIntegrationStatusService
 
         using var _t = GitProcessTelemetry.BeginRequest("board/integration-status", _logger);
 
-        var byRepo = new Dictionary<RepoBranchKey, List<TaskInfo>>();
-        var noRepo = new List<TaskInfo>();
         foreach (var job in jobs)
         {
             if (!DeliveredLanes.Contains(job.State)) continue;
-            var root = _git.ResolveRepoRootForWatchPath(job.WatchPath);
-            if (string.IsNullOrWhiteSpace(root))
-            {
-                noRepo.Add(job);
-                continue;
-            }
-            var key = new RepoBranchKey(root!, ConfiguredIntegrationBranch(job));
-            if (!byRepo.TryGetValue(key, out var list))
-            {
-                list = new List<TaskInfo>();
-                byRepo[key] = list;
-            }
-            list.Add(job);
-        }
-
-        // Cards with no resolvable repo can still be honestly classified: a card
-        // with no anchor commit and no branch is no-branch, anything else pending.
-        foreach (var job in noRepo)
-            result[job.TaskKey] = ClassifyNotIntegrated(
-                job,
-                ConfiguredIntegrationBranch(job));
-
-        var reaches = new ConcurrentDictionary<RepoBranchKey, RepoIntegration>();
-        Parallel.ForEach(
-            byRepo,
-            new ParallelOptions { MaxDegreeOfParallelism = ReadOnlyGitConcurrencyLimiter.MaxConcurrency },
-            pair =>
-            {
-                var cacheKey = $"{pair.Key.Root}\0{pair.Key.Branch}";
-                var refFingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(pair.Key.Root, [pair.Key.Branch]);
-                reaches[pair.Key] = _cache.GetOrCreateVersioned(
-                    cacheKey,
-                    refFingerprint.Value,
-                    value => value.Succeeded
-                        ? refFingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
-                        : FailureCacheTtl,
-                    () => ComputeRepoIntegration(pair.Key.Root, pair.Key.Branch));
-            });
-
-        foreach (var (repoBranch, repoJobs) in byRepo)
-        {
-            var reach = reaches[repoBranch];
-            foreach (var job in repoJobs)
-                result[job.TaskKey] = ClassifyWithRepo(job, reach);
+            result[job.TaskKey] = ClassifyRepositories(job);
         }
 
         return result;
@@ -262,8 +223,8 @@ public sealed class TaskIntegrationStatusService
     }
 
     /// <summary>
-    /// The verdict for one card given its repo's cached integration facts. A
-    /// verdict is derived entirely from the target-branch ancestry of the card's attributed
+    /// The verdict for one card given its repositories' cached integration facts.
+    /// A verdict is derived entirely from target-branch ancestry of the card's attributed
     /// <c>commits[]</c> (the same list the commit widget shows): all landed →
     /// integrated, some → partial, none → pending/conflict, and no attributed
     /// commit plus no delivery ref → no-branch. The branch tip is deliberately
@@ -271,59 +232,109 @@ public sealed class TaskIntegrationStatusService
     /// whose use was the AGT-2171 badge/widget self-contradiction. It remains
     /// valid evidence that a local delivery ref exists.
     /// </summary>
-    private TaskIntegrationStatus ClassifyWithRepo(TaskInfo job, RepoIntegration reach)
+    private TaskIntegrationStatus ClassifyRepositories(TaskInfo job)
     {
-        var branchName = reach.IntegrationBranch;
+        var entries = BuildRepositoryEntries(job);
         var deliveryRef = DeliveryRefFor(job);
+        var primaryBranch = entries.FirstOrDefault()?.IntegrationBranch
+                            ?? ConfiguredIntegrationBranch(job);
 
-        // Anchor = integrable entries in the attributed commits[] list. Zero-file
-        // runner lifecycle markers are metadata, not delivery expectations.
-        // A current review subject is only a fallback when attribution is empty;
-        // it must never hide a genuine missing, non-superseded commit.
-        var attributed = AttributedCommits(job, reach.DevelopAncestors);
-        var reviewedResultSha = ReviewSubjectStore.Read(job.FolderPath)?.ResultSha;
-        if (attributed.Count == 0
-            && !string.IsNullOrWhiteSpace(reviewedResultSha)
-            && AncestorSetContains(reach.DevelopAncestors, reviewedResultSha))
+        // A current review subject remains a fallback only for old single-repo
+        // cards whose attribution is empty.
+        if (entries.Count == 0)
         {
-            return Integrated(
-                Short(reviewedResultSha),
-                branchName,
-                deliveryRef,
-                "reviewed-result-ancestor");
+            var target = ResolveRepositoryTarget(job, null, null);
+            var reach = GetRepoIntegration(target);
+            var reviewedResultSha = ReviewSubjectStore.Read(job.FolderPath)?.ResultSha;
+            if (!string.IsNullOrWhiteSpace(reviewedResultSha)
+                && AncestorSetContains(reach.IntegrationAncestors, reviewedResultSha))
+            {
+                return Integrated(
+                    Short(reviewedResultSha),
+                    reach.IntegrationBranch,
+                    deliveryRef,
+                    "reviewed-result-ancestor",
+                    []);
+            }
+            return ClassifyNotIntegrated(job, reach.IntegrationBranch, deliveryRef, []);
         }
 
-        if (attributed.Count == 0)
-            return ClassifyNotIntegrated(job, branchName, deliveryRef);
+        if (entries.All(entry => entry.OnIntegrationBranch))
+        {
+            var expected = entries.SelectMany(entry => entry.Commits)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var newest = EffectiveCommits(job).Last(commit => expected.Contains(commit.Sha)).Sha;
+            return Integrated(
+                Short(newest),
+                primaryBranch,
+                deliveryRef,
+                "anchor-ancestor",
+                entries);
+        }
 
-        var missing = new List<string>();
-        foreach (var sha in attributed)
-            if (!AncestorSetContains(reach.DevelopAncestors, sha)) missing.Add(sha);
+        var anyIntegrated = entries.Any(entry => entry.IntegrationCommitCount > 0);
+        if (!anyIntegrated)
+            return ClassifyNotIntegrated(job, primaryBranch, deliveryRef, entries);
 
-        // NONE of the attributed commits landed → conflict-skipped / pending
-        // (no-branch is impossible here: there IS attributed work).
-        if (missing.Count == attributed.Count)
-            return ClassifyNotIntegrated(job, branchName, deliveryRef);
-
-        var newest = attributed[^1];
-
-        // ALL attributed commits landed. Attempt history and recorded merge
-        // provenance are deliberately irrelevant to this result.
-        if (missing.Count == 0)
-            return Integrated(Short(newest), branchName, deliveryRef, "anchor-ancestor");
-
-        // SOME landed, some did not → partial, naming the missing short-SHAs so the
-        // tooltip says exactly which attributed commits are not in develop yet.
-        var integratedCount = attributed.Count - missing.Count;
-        var missingShort = string.Join(", ", missing.Select(Short));
+        var missingDetails = entries
+            .Where(entry => !entry.OnIntegrationBranch)
+            .Select(entry => entry.Detail);
         return new TaskIntegrationStatus
         {
             Status = IntegrationStatuses.Partial,
             DeliveryRef = deliveryRef,
-            IntegrationBranch = branchName,
-            Detail = $"{integratedCount}/{attributed.Count} attributed commits integrated; "
-                     + $"missing: {missingShort}",
+            IntegrationBranch = primaryBranch,
+            Detail = string.Join("; ", missingDetails),
+            Repositories = entries,
         };
+    }
+
+    /// <summary>Repository membership used by both integration and merge projections.</summary>
+    internal List<TaskRepositoryIntegrationStatus> BuildRepositoryEntries(TaskInfo job)
+    {
+        var commits = EffectiveCommits(job);
+        var groups = commits
+            .GroupBy(commit => string.IsNullOrWhiteSpace(commit.Repository)
+                ? "\0primary"
+                : commit.Repository!.Trim(), StringComparer.OrdinalIgnoreCase);
+        var entries = new List<TaskRepositoryIntegrationStatus>();
+        foreach (var group in groups)
+        {
+            var groupCandidates = group.ToList();
+            var repository = group.Key == "\0primary" ? null : group.Key;
+            var target = ResolveRepositoryTarget(job, repository, groupCandidates[^1].Branch);
+            var reach = GetRepoIntegration(target);
+            var groupCommits = groupCandidates
+                .Where(commit => !IsZeroFileLifecycleMarker(commit)
+                                 || AncestorSetContains(reach.IntegrationAncestors, commit.Sha))
+                .ToList();
+            if (groupCommits.Count == 0) continue;
+            var shas = groupCommits.Select(commit => commit.Sha).ToList();
+            var integrationCount = shas.Count(sha =>
+                AncestorSetContains(reach.IntegrationAncestors, sha));
+            var releaseCount = shas.Count(sha =>
+                AncestorSetContains(reach.ReleaseAncestors, sha));
+            var missing = shas
+                .Where(sha => !AncestorSetContains(reach.IntegrationAncestors, sha))
+                .Select(Short)
+                .ToList();
+            var detail = missing.Count == 0
+                ? $"{target.Repository}: {integrationCount}/{shas.Count} attributed commits on {reach.IntegrationBranch}."
+                : $"{target.Repository}: {integrationCount}/{shas.Count} attributed commits on {reach.IntegrationBranch}; missing: {string.Join(", ", missing)}";
+            entries.Add(new TaskRepositoryIntegrationStatus
+            {
+                Repository = target.Repository,
+                Commits = shas,
+                IntegrationBranch = reach.IntegrationBranch,
+                ReleaseBranch = reach.ReleaseBranch,
+                IntegrationCommitCount = integrationCount,
+                ReleaseCommitCount = releaseCount,
+                OnIntegrationBranch = integrationCount == shas.Count,
+                OnReleaseBranch = releaseCount == shas.Count,
+                Detail = detail,
+            });
+        }
+        return entries;
     }
 
     /// <summary>
@@ -336,7 +347,8 @@ public sealed class TaskIntegrationStatusService
     private TaskIntegrationStatus ClassifyNotIntegrated(
         TaskInfo job,
         string branchName,
-        string? deliveryRef = null)
+        string? deliveryRef = null,
+        List<TaskRepositoryIntegrationStatus>? repositories = null)
     {
         deliveryRef ??= DeliveryRefFor(job);
         var anchor = AnchorFor(job);
@@ -358,6 +370,7 @@ public sealed class TaskIntegrationStatusService
                     Reason = visibleReason,
                     RebaseRecoveryAvailable = failure.RebaseRecoveryAvailable,
                 },
+                Repositories = repositories ?? [],
             };
         }
 
@@ -368,6 +381,7 @@ public sealed class TaskIntegrationStatusService
                 DeliveryRef = null,
                 IntegrationBranch = branchName,
                 Detail = "No delivery ref or attributed commit to integrate.",
+                Repositories = repositories ?? [],
             };
 
         return new TaskIntegrationStatus
@@ -378,6 +392,7 @@ public sealed class TaskIntegrationStatusService
             Detail = deliveryRef is null
                 ? $"Accepted work is not yet in {branchName}."
                 : $"Delivery ref '{deliveryRef}' is not yet integrated into {branchName}.",
+            Repositories = repositories ?? [],
         };
     }
 
@@ -385,13 +400,15 @@ public sealed class TaskIntegrationStatusService
         string sha,
         string branchName,
         string? deliveryRef,
-        string detail) => new()
+        string detail,
+        List<TaskRepositoryIntegrationStatus>? repositories = null) => new()
     {
         Status = IntegrationStatuses.Integrated,
         Sha = sha,
         DeliveryRef = deliveryRef,
         IntegrationBranch = branchName,
         Detail = detail,
+        Repositories = repositories ?? [],
     };
 
     /// <summary>
@@ -592,6 +609,17 @@ public sealed class TaskIntegrationStatusService
         return result;
     }
 
+    private static List<TaskCommitInfo> EffectiveCommits(TaskInfo job)
+    {
+        var source = job.Commits.Count > 0
+            ? job.Commits
+            : job.Commit is null ? [] : [job.Commit];
+        return source
+            .Where(commit => !string.IsNullOrWhiteSpace(commit.Sha)
+                             && !TaskCommitSupersession.IsSuperseded(commit))
+            .ToList();
+    }
+
     /// <summary>
     /// Membership check for persisted task SHAs. Older task records can contain
     /// the seven-character display SHA rather than the full object id returned by
@@ -627,23 +655,136 @@ public sealed class TaskIntegrationStatusService
     /// The target-branch ancestor SHA set for one repository, cached per target
     /// HEAD fingerprint and computed under the read-only concurrency limiter.
     /// </summary>
-    private RepoIntegration ComputeRepoIntegration(string root, string configuredBranch)
+    private RepoIntegration GetRepoIntegration(RepositoryTarget target)
+    {
+        if (string.IsNullOrWhiteSpace(target.Root))
+            return new RepoIntegration(
+                target.ConfiguredBranch.Length == 0 ? "main" : target.ConfiguredBranch,
+                "main", [], [], false);
+
+        string[] refs = target.RemoteName is null
+            ? [target.ConfiguredBranch, "main"]
+            : [$"refs/remotes/{target.RemoteName}/{target.ConfiguredBranch}", $"refs/remotes/{target.RemoteName}/main"];
+        var cacheKey = $"{target.Root}\0{target.RemoteName}\0{target.ConfiguredBranch}";
+        var fingerprint = ReadOnlyGitRefFingerprint.CaptureDetailed(target.Root, refs);
+        return _cache.GetOrCreateVersioned(
+            cacheKey,
+            fingerprint.Value,
+            value => value.Succeeded
+                ? fingerprint.RequiresShortFallback ? ShortFallbackTtl : CacheTtl
+                : FailureCacheTtl,
+            () => ComputeRepoIntegration(target));
+    }
+
+    private RepoIntegration ComputeRepoIntegration(RepositoryTarget target)
     {
         Interlocked.Increment(ref _computationCount);
         return ReadOnlyGitConcurrencyLimiter.Run(() =>
         {
-            var integrationRef = _git.ResolveIntegrationReadRef(root, configuredBranch);
-            var integrationBranch = integrationRef.StartsWith("origin/", StringComparison.Ordinal)
-                ? integrationRef["origin/".Length..]
+            var root = target.Root!;
+            var integrationRef = target.RemoteName is null
+                ? _git.ResolveIntegrationReadRef(root, target.ConfiguredBranch)
+                : $"{target.RemoteName}/{target.ConfiguredBranch}";
+            var integrationBranch = integrationRef.Contains('/')
+                ? integrationRef[(integrationRef.LastIndexOf('/') + 1)..]
                 : integrationRef;
-
-            var succeeded = _git.TryGetAncestorShaSet(
-                root,
-                [integrationBranch, "origin/" + integrationBranch],
-                out var ancestors);
-
-            return new RepoIntegration(integrationBranch, ancestors, succeeded);
+            var integrationRefs = target.RemoteName is null
+                ? new[] { integrationBranch, "origin/" + integrationBranch }
+                : new[] { $"{target.RemoteName}/{integrationBranch}" };
+            var releaseRefs = target.RemoteName is null
+                ? new[] { "main", "origin/main" }
+                : new[] { $"{target.RemoteName}/main" };
+            var integrationSucceeded = _git.TryGetAncestorShaSet(
+                root, integrationRefs, out var integrationAncestors);
+            var releaseSucceeded = _git.TryGetAncestorShaSet(
+                root, releaseRefs, out var releaseAncestors);
+            return new RepoIntegration(
+                integrationBranch,
+                "main",
+                integrationAncestors,
+                releaseAncestors,
+                integrationSucceeded && releaseSucceeded);
         });
+    }
+
+    private RepositoryTarget ResolveRepositoryTarget(
+        TaskInfo task,
+        string? repository,
+        string? branchHint)
+    {
+        var primaryRoot = _git.ResolveRepoRootForWatchPath(task.WatchPath);
+        var primaryRepository = primaryRoot is null ? null : _git.ReadOriginUrlAt(primaryRoot);
+        if (string.IsNullOrWhiteSpace(repository)
+            || RepositoryMatches(repository, primaryRepository, primaryRoot, task.ProjectName))
+        {
+            return new RepositoryTarget(
+                primaryRoot,
+                repository ?? primaryRepository ?? task.ProjectName,
+                ConfiguredIntegrationBranch(task),
+                null);
+        }
+
+        var registered = _registry?.List().FirstOrDefault(project =>
+            RepositoryMatches(repository, RegisteredRepository(project), project.RepositoryPath, project.DisplayName)
+            || string.Equals(project.Id, repository, StringComparison.OrdinalIgnoreCase));
+        if (registered is not null)
+        {
+            var root = registered.RepositoryPath ?? registered.RootPath;
+            var configured = _settings.Get(registered.DisplayName).IntegrationBranch;
+            return new RepositoryTarget(
+                root,
+                RegisteredRepository(registered) ?? registered.Id,
+                string.IsNullOrWhiteSpace(configured) ? FallbackIntegrationBranch(branchHint) : configured,
+                null);
+        }
+
+        if (Directory.Exists(repository) && _git.IsGitRepo(repository))
+            return new RepositoryTarget(repository, repository, FallbackIntegrationBranch(branchHint), null);
+
+        var remote = primaryRoot is null ? null : _git.ResolveRemoteNameAt(primaryRoot, repository);
+        return new RepositoryTarget(
+            remote is null ? null : primaryRoot,
+            repository,
+            FallbackIntegrationBranch(branchHint),
+            remote);
+    }
+
+    private static string FallbackIntegrationBranch(string? attributedBranch)
+    {
+        var branch = TaskIntegrationBranch.Name(attributedBranch, fallback: "");
+        return branch is "main" or "master" or "develop" ? branch : "main";
+    }
+
+    private static string? RegisteredRepository(ProjectRecord project)
+        => project.Urls.FirstOrDefault(url =>
+            string.Equals(url.Id, "repo", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(url.Label, "repo", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(url.Label, "repository", StringComparison.OrdinalIgnoreCase))?.Url;
+
+    private static bool RepositoryMatches(
+        string? candidate,
+        string? registered,
+        string? path,
+        string? name)
+    {
+        if (string.IsNullOrWhiteSpace(candidate)) return false;
+        if (string.Equals(NormalizeRepository(candidate), NormalizeRepository(registered), StringComparison.OrdinalIgnoreCase))
+            return true;
+        var candidateName = RepositoryName(candidate);
+        return string.Equals(candidateName, RepositoryName(registered), StringComparison.OrdinalIgnoreCase)
+               || string.Equals(candidateName, RepositoryName(path), StringComparison.OrdinalIgnoreCase)
+               || string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeRepository(string? value)
+        => (value ?? string.Empty).Trim().TrimEnd('/', '\\');
+
+    private static string RepositoryName(string? value)
+    {
+        var normalized = NormalizeRepository(value);
+        var separator = Math.Max(normalized.LastIndexOf('/'), Math.Max(normalized.LastIndexOf('\\'), normalized.LastIndexOf(':')));
+        var name = separator >= 0 ? normalized[(separator + 1)..] : normalized;
+        return name.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
     }
 
     private string ConfiguredIntegrationBranch(TaskInfo task)
@@ -658,10 +799,16 @@ public sealed class TaskIntegrationStatusService
 
     private sealed record RepoIntegration(
         string IntegrationBranch,
-        HashSet<string> DevelopAncestors,
+        string ReleaseBranch,
+        HashSet<string> IntegrationAncestors,
+        HashSet<string> ReleaseAncestors,
         bool Succeeded);
 
-    private sealed record RepoBranchKey(string Root, string Branch);
+    private sealed record RepositoryTarget(
+        string? Root,
+        string Repository,
+        string ConfiguredBranch,
+        string? RemoteName);
 }
 
 internal enum AcceptedIntegrationRecoveryAction

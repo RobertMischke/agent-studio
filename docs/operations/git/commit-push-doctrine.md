@@ -29,7 +29,7 @@ The commit and push flow today lives in `TaskTransitionService.MoveAsync` ([back
    - Falls back to `chore: snapshot for review (<N> files changed)` if the LLM hiccups.
    - The platform stages only the inspected manifest paths, verifies staged blob IDs against the manifest, and commits with the same explicit path list. A concurrent file cannot ride along.
    - The commit body records task ID, runner ID, and gate decision provenance.
-5. The folder is moved to `4-auto-review` and the resulting SHA, message, file list, and timestamp are stamped onto `JobInfo.Commit` / `JobInfo.Commits` via `_mutations.SetJobCommitOnFolder`. The detail pane and run-timeline endpoints read this stamp.
+5. The folder is moved to `4-auto-review` and the resulting SHA, message, file list, timestamp, repository, and branch are stamped onto `JobInfo.Commit` / `JobInfo.Commits` via `_mutations.SetJobCommitOnFolder`. The detail pane, run timeline, and repository-scoped integration projection read this stamp. The repository is a registered id or URL when available; commit-message `[repo]` prefixes are informational only.
 6. Per-project `AutoCommit` is a boolean setting ([backend/Services/ProjectSettingsService.cs](../../../backend/Services/ProjectSettingsService.cs), `PUT /api/projects/{name}/auto-commit`) so a user who would rather stage commits manually can keep the rest of the lifecycle automatic.
 7. Per-project `AutoPushStrategy` controls when stamped commits are pushed:
    - `never`: the operator pushes manually.
@@ -50,6 +50,8 @@ The commit-message template is editable in [prompts/runtime/commit-message.md](.
 Coding tasks use an isolated, task-owned worktree on `task/<id>` even in the primary sequential slot. The platform commits there, pushes the task branch with retry, then serializes integration into the configured work branch. A failed task-branch push is visible as the Warn `task-branch-unpushed` outcome issue; branch cleanup runs only after integration.
 
 Interactive operator edits may still exist directly on `develop`. Read-only tasks, legacy repositories, and unknown recovery paths may also lack a task worktree. Those paths never receive an implicit add-all commit: the platform must capture and supply the exact reviewed pathspecs, including for an operator-confirmed crash-recovery item, or leave the changes dirty for attribution. A file that appears after the pending recovery manifest was shown remains dirty and cannot join that snapshot.
+
+A historical or explicitly platform-attributed delivery may already be present on its configured integration branch without a surviving `task/<id>` branch. Acceptance treats that state as `AlreadyOnIntegrationBranch` only when every attributed commit for that repository is proven by Git ancestry. The durable step records the evidence SHAs and does not manufacture a merge. The ordinary integration-branch durability push still runs and is a no-op when the remote already has the tip. Missing or ambiguous evidence still returns `NoTaskBranch`; this exception recognizes completed delivery and does not weaken branch ownership for new coding runs.
 
 The boundary is the same in both modes: worker CLIs do not create branches, switch branches, merge, commit, or push. The platform owns those operations. PR-shaped review remains a future integration strategy; the current implemented path is direct merge plus visible conflict or unpushed-branch outcomes.
 

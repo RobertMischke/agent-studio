@@ -227,6 +227,47 @@ describe('buildDelivery', () => {
     );
     expect(d.filesChanged).toBe(3);
   });
+
+  it('renders repository-scoped delivery membership and a missing reason', () => {
+    const d = buildDelivery(info({
+      integration: {
+        status: 'partial',
+        deliveryRef: null,
+        sha: null,
+        integrationBranch: 'multiple',
+        detail: 'runner is missing one commit',
+        repositories: [
+          {
+            repository: 'https://example.test/agent-studio.git',
+            commits: ['a', 'b'],
+            integrationBranch: 'develop',
+            releaseBranch: 'main',
+            integrationCommitCount: 2,
+            releaseCommitCount: 2,
+            onIntegrationBranch: true,
+            onReleaseBranch: true,
+            detail: 'agent-studio: 2/2 commits integrated into develop and main.',
+          },
+          {
+            repository: 'https://example.test/runner.git',
+            commits: ['c', 'd'],
+            integrationBranch: 'main',
+            releaseBranch: 'main',
+            integrationCommitCount: 1,
+            releaseCommitCount: 1,
+            onIntegrationBranch: false,
+            onReleaseBranch: false,
+            detail: 'runner: 1/2 commits integrated into main; missing: deadbee.',
+          },
+        ],
+      },
+    } as Partial<TaskInfo>));
+
+    expect(d.repositories.map((repository) => repository.text)).toEqual([
+      'agent-studio 2/2 develop and main',
+      'runner 1/2 main · missing: deadbee.',
+    ]);
+  });
 });
 
 describe('deriveRecommendation', () => {

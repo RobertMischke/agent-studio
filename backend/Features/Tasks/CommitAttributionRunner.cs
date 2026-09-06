@@ -64,6 +64,10 @@ public static class CommitAttributionRunner
         var input = new AttributionInput
         {
             TaskId = info.Id,
+            Repository = git.ReadOriginUrlAt(
+                git.ResolveRepoRootForWatchPath(watchPath ?? info.WatchPath) ?? string.Empty),
+            TaskBranch = git.ReadCurrentBranchAt(
+                git.ResolveRepoRootForWatchPath(watchPath ?? info.WatchPath) ?? string.Empty),
             Candidates = candidates,
             // The platform-stamped auto-commit(s) are the task's accepted work
             // by construction - pin them to full confidence.

@@ -1099,6 +1099,18 @@ catch (Exception ex)
     crashRecorder.Record("CommitMetadataBackfill", ex);
 }
 
+// One-time repository/branch migration for commit attribution records. The
+// legacy [repo] message prefix is parsed only while the structured coordinate
+// is absent; the prefix remains informational text.
+try
+{
+    app.Services.GetRequiredService<TaskMutationService>().BackfillCommitDeliveryCoordinates();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("CommitDeliveryCoordinateBackfill", ex);
+}
+
 // One-time, conservative repair of historical rebase/steer generations. The
 // persisted report is also the completion marker. Ambiguous file-breadth cases
 // remain untouched and visible in that report.

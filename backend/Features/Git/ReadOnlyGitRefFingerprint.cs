@@ -108,6 +108,11 @@ internal static class ReadOnlyGitRefFingerprint
     {
         if (string.IsNullOrWhiteSpace(branchName)) return;
         var branch = branchName.Trim().Replace('\\', '/');
+        if (branch.StartsWith("refs/remotes/", StringComparison.Ordinal))
+        {
+            AddSafeRelativePath(commonDir, branch, paths);
+            return;
+        }
         if (branch.StartsWith("refs/heads/", StringComparison.Ordinal))
             branch = branch["refs/heads/".Length..];
         else if (branch.StartsWith("origin/", StringComparison.Ordinal))

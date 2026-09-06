@@ -21,6 +21,10 @@ namespace AgentStudio.Tasks;
 /// </summary>
 public class TaskMutationService
 {
+    private static readonly System.Text.RegularExpressions.Regex RepositoryPrefix = new(
+        @"^\[(?<repository>[^\]\r\n]+)\]\s*",
+        System.Text.RegularExpressions.RegexOptions.Compiled
+        | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
     private readonly TaskScannerService _scanner;
     private readonly ClientIdentityStore _clients;
     private readonly ProjectRegistry _projectRegistry;
@@ -305,6 +309,7 @@ public class TaskMutationService
                 if (!producerBySha.TryGetValue(commit.Sha, out var producer)) return commit;
                 return commit with
                 {
+                    Repository = commit.Repository ?? producer.Repository,
                     Branch = commit.Branch ?? producer.Branch,
                     RunAttemptId = commit.RunAttemptId ?? producer.RunAttemptId,
                     RunnerId = commit.RunnerId ?? producer.RunnerId,
@@ -1061,6 +1066,105 @@ public class TaskMutationService
             repairedTasks,
             repairedCommits,
             unresolvedTasks);
+    }
+
+    /// <summary>
+    /// One-time, idempotent migration of legacy commit attribution into the
+    /// repository-aware contract. A leading <c>[repo]</c> subject prefix is
+    /// parsed only while the structured field is absent and remains unchanged
+    /// as informational text.
+    /// </summary>
+    public CommitDeliveryCoordinateBackfillResult BackfillCommitDeliveryCoordinates()
+    {
+        var repairedTasks = 0;
+        var repairedCommits = 0;
+        foreach (var task in _scanner.ScanAllJobsWithArchive())
+        {
+            var persisted = ReadPersistedCommitChain(task.FolderPath);
+            if (persisted is null || persisted.Count == 0) continue;
+            var changed = 0;
+            var enriched = persisted.Select(commit =>
+            {
+                if (!string.IsNullOrWhiteSpace(commit.Repository)
+                    && !string.IsNullOrWhiteSpace(commit.Branch)) return commit;
+
+                var repositoryHint = LegacyRepositoryFromMessage(commit.Message);
+                var registered = ResolveRegisteredRepository(repositoryHint, task.ProjectName);
+                var root = registered?.RepositoryPath
+                           ?? registered?.RootPath
+                           ?? _git?.ResolveRepoRootForWatchPath(task.WatchPath);
+                var repository = commit.Repository
+                    ?? RegisteredRepositoryValue(registered)
+                    ?? repositoryHint
+                    ?? (root is null ? null : _git?.ReadOriginUrlAt(root));
+                var branch = commit.Branch
+                    ?? (!string.IsNullOrWhiteSpace(task.IntegrationBranch)
+                        ? TaskIntegrationBranch.Name(task.IntegrationBranch)
+                        : root is null ? null : _git?.ReadCurrentBranchAt(root));
+                if (string.IsNullOrWhiteSpace(branch) && root is not null && _git is not null)
+                    branch = _git.ResolveIntegrationBranch(root, string.Empty);
+
+                if (string.Equals(repository, commit.Repository, StringComparison.Ordinal)
+                    && string.Equals(branch, commit.Branch, StringComparison.Ordinal)) return commit;
+                changed++;
+                return commit with { Repository = repository, Branch = branch };
+            }).ToList();
+
+            if (changed == 0 || !WriteCommitState(task.FolderPath, enriched)) continue;
+            repairedTasks++;
+            repairedCommits += changed;
+        }
+
+        if (repairedTasks > 0)
+            _logger.LogInformation(
+                "commit-delivery-coordinate-backfill repairedTasks={Tasks} repairedCommits={Commits}",
+                repairedTasks,
+                repairedCommits);
+        return new CommitDeliveryCoordinateBackfillResult(repairedTasks, repairedCommits);
+    }
+
+    internal static string? LegacyRepositoryFromMessage(string? message)
+    {
+        var prefix = RepositoryPrefix.Match(message ?? string.Empty);
+        return prefix.Success ? prefix.Groups["repository"].Value.Trim() : null;
+    }
+
+    private ProjectRecord? ResolveRegisteredRepository(string? hint, string projectName)
+    {
+        var projects = _projectRegistry.List();
+        if (string.IsNullOrWhiteSpace(hint))
+            return projects.FirstOrDefault(project =>
+                string.Equals(project.Id, projectName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(project.DisplayName, projectName, StringComparison.OrdinalIgnoreCase));
+
+        var normalized = NormalizeRepository(hint);
+        return projects.FirstOrDefault(project =>
+            string.Equals(project.Id, hint, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(project.DisplayName, hint, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(RepositoryName(project.RepositoryPath), normalized, StringComparison.OrdinalIgnoreCase)
+            || project.Urls.Any(url =>
+                IsRepositoryUrl(url)
+                && (string.Equals(NormalizeRepository(url.Url), normalized, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(RepositoryName(url.Url), normalized, StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private static string? RegisteredRepositoryValue(ProjectRecord? project)
+        => project?.Urls.FirstOrDefault(IsRepositoryUrl)?.Url ?? project?.Id;
+
+    private static bool IsRepositoryUrl(ProjectUrlRecord url)
+        => string.Equals(url.Id, "repo", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(url.Label, "repo", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(url.Label, "repository", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeRepository(string? value)
+        => (value ?? string.Empty).Trim().TrimEnd('/', '\\');
+
+    private static string RepositoryName(string? value)
+    {
+        var normalized = NormalizeRepository(value);
+        var separator = Math.Max(normalized.LastIndexOf('/'), Math.Max(normalized.LastIndexOf('\\'), normalized.LastIndexOf(':')));
+        var name = separator >= 0 ? normalized[(separator + 1)..] : normalized;
+        return name.EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
     }
 
     /// <summary>
@@ -2074,3 +2178,7 @@ public sealed record CommitMetadataBackfillResult(
     int RepairedTasks,
     int RepairedCommits,
     int UnresolvedTasks);
+
+public sealed record CommitDeliveryCoordinateBackfillResult(
+    int RepairedTasks,
+    int RepairedCommits);

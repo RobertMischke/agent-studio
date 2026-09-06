@@ -43,6 +43,30 @@ public class CommitAttributionServiceTests
     }
 
     [Fact]
+    public void Attribution_PersistsRepositoryAndBranchForEachRepositoryPass()
+    {
+        var agentStudio = CommitAttributionService.Attribute(new AttributionInput
+        {
+            TaskId = TaskId,
+            Repository = "https://github.com/agent-orc/agent-studio.git",
+            TaskBranch = "develop",
+            Candidates = [Candidate("a111", "feat: agent studio delivery")],
+        });
+        var runner = CommitAttributionService.Attribute(new AttributionInput
+        {
+            TaskId = TaskId,
+            Repository = "https://github.com/agent-orc/runner.git",
+            TaskBranch = "main",
+            Candidates = [Candidate("b222", "feat: runner delivery")],
+        });
+
+        Assert.Equal("https://github.com/agent-orc/agent-studio.git", Assert.Single(agentStudio.Attributed).Repository);
+        Assert.Equal("develop", agentStudio.Attributed[0].Branch);
+        Assert.Equal("https://github.com/agent-orc/runner.git", Assert.Single(runner.Attributed).Repository);
+        Assert.Equal("main", runner.Attributed[0].Branch);
+    }
+
+    [Fact]
     public void OwnCrashRecovery_IsAttributed_NotExcluded()
     {
         var result = CommitAttributionService.Attribute(new AttributionInput

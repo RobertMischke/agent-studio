@@ -340,6 +340,8 @@ export interface TaskCommitInfo {
   sha: string;
   shortSha: string;
   message: string;
+  /** Registered repository id or credential-free URL that owns the commit. */
+  repository?: string | null;
   filesChanged: number;
   files: string[];
   at: string;
@@ -457,13 +459,14 @@ export interface TaskProvenanceRecord {
  * `TaskMergeSignal` and ships on every board card via `TaskInfo.mergeSignal`,
  * so the card renders a two-segment `[develop|main]` indicator without the
  * per-task graph query the detail header pays. Uses the same
- * worktree -> develop -> main semantics as {@link LandedState}: `inIntegration`
- * == the task's anchor is an ancestor of develop, `inRelease` == an ancestor of
- * main. Computed batched + cached per repository on the backend (never per
- * card). Null on cards with no committed/merged anchor yet.
+ * repository -> integration -> release semantics as {@link LandedState}:
+ * `inIntegration` means every repository entry is on its integration branch,
+ * while `inRelease` means every entry is on its release branch. Computed
+ * batched and cached per repository on the backend. Null on cards with no
+ * committed or merged anchor yet.
  */
 export interface TaskMergeSignal {
-  /** The task's worktree branch name, for the card's branch chip + tooltip. */
+  /** Delivery branch when one exists; direct deliveries may use the target branch. */
   branch: string;
   /** True when the work is folded into the integration branch (develop). */
   inIntegration: boolean;
@@ -477,6 +480,20 @@ export interface TaskMergeSignal {
   integrationSha: string | null;
   /** Short SHA of the anchor that reached main; null when not in main. */
   releaseSha: string | null;
+  /** Repository-level evidence behind the aggregate booleans. */
+  repositories?: TaskRepositoryIntegrationStatus[];
+}
+
+export interface TaskRepositoryIntegrationStatus {
+  repository: string;
+  commits: string[];
+  integrationBranch: string;
+  releaseBranch: string;
+  integrationCommitCount: number;
+  releaseCommitCount: number;
+  onIntegrationBranch: boolean;
+  onReleaseBranch: boolean;
+  detail: string;
 }
 
 /** One of the discrete integration verdicts (AGT-2202; `partial` added AGT-2171 fix). */
@@ -511,6 +528,8 @@ export interface TaskIntegrationStatus {
   detail: string | null;
   /** Typed current failure from the durable accepted-integration pipeline step. */
   failure?: TaskIntegrationFailure | null;
+  /** One line per repository in this delivery. */
+  repositories?: TaskRepositoryIntegrationStatus[];
 }
 
 export interface TaskIntegrationFailure {

@@ -112,6 +112,17 @@
     strong { color: var(--studio-fg-strong); }
   }
 
+  &__delivery-repositories {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--studio-spacing-1);
+  }
+
+  &__delivery-repository + &__delivery-repository::before {
+    margin-right: var(--studio-spacing-1);
+    content: '·';
+  }
+
   &__seg {
     display: inline-flex;
     align-items: center;

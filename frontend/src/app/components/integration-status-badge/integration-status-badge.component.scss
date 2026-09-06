@@ -18,9 +18,7 @@
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
 }
 
 .integration-badge__glyph { flex: 0 0 auto; }
@@ -29,6 +27,25 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.integration-badge__repositories {
+  display: inline-flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.integration-badge__repository {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.integration-badge__repository + .integration-badge__repository::before {
+  margin: 0 var(--studio-spacing-1);
+  color: var(--studio-fg-dim);
+  content: '·';
 }
 
 /* Green — the work is provably in develop. */

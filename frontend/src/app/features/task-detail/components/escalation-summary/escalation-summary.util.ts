@@ -94,6 +94,8 @@ export interface EscalationDelivery {
   commitCount: number;
   /** Distinct changed files across those commits (0 when unknown). */
   filesChanged: number;
+  /** Repository-scoped delivery membership lines. */
+  repositories: { key: string; text: string; detail: string }[];
 }
 
 /** The single structured line that remains visible when details are closed. */
@@ -524,7 +526,31 @@ export function buildDelivery(info: TaskInfo): EscalationDelivery {
     for (const f of c.files ?? []) distinctFiles.add(f);
   }
   const filesChanged = distinctFiles.size > 0 ? distinctFiles.size : filesChangedSum;
-  return { merge, commitCount: commits.length, filesChanged };
+  const memberships = info.integration?.repositories ?? info.mergeSignal?.repositories ?? [];
+  const repositories = memberships.map((entry) => {
+    const total = entry.commits.length;
+    const name = repositoryName(entry.repository);
+    const targets = entry.onIntegrationBranch
+      ? entry.onReleaseBranch && entry.releaseBranch !== entry.integrationBranch
+        ? `${entry.integrationBranch} and ${entry.releaseBranch}`
+        : entry.integrationBranch
+      : entry.integrationBranch;
+    const reason = entry.onIntegrationBranch
+      ? ''
+      : ` · ${entry.detail.replace(/^.*?;\s*/, '')}`;
+    return {
+      key: entry.repository,
+      text: `${name} ${entry.integrationCommitCount}/${total} ${targets}${reason}`,
+      detail: entry.detail,
+    };
+  });
+  return { merge, commitCount: commits.length, filesChanged, repositories };
+}
+
+function repositoryName(value: string): string {
+  const normalized = (value || 'repository').trim().replace(/[\\/]+$/, '');
+  const segment = normalized.split(/[\\/:]/).filter(Boolean).at(-1) ?? normalized;
+  return segment.replace(/\.git$/i, '') || 'repository';
 }
 
 /**

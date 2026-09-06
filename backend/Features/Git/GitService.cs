@@ -84,6 +84,11 @@ public enum MergeIntoIntegrationOutcome
     MergedAfterRebase,
     /// <summary>The task branch was already contained in the integration branch; no-op.</summary>
     AlreadyMerged,
+    /// <summary>
+    /// No delivery branch exists, but every attributed commit for this
+    /// repository is already an ancestor of the integration branch.
+    /// </summary>
+    AlreadyOnIntegrationBranch,
     /// <summary>No <c>task/&lt;id&gt;</c> branch exists (e.g. a sequential run); nothing to merge.</summary>
     NoTaskBranch,
     /// <summary>The configured pull-request strategy deliberately left the delivery ref for external review.</summary>
@@ -116,7 +121,8 @@ public static class MergeIntoIntegrationOutcomePolicy
 
     public static bool IsSuccessfulIntegration(this MergeIntoIntegrationOutcome outcome)
         => outcome.IsFreshMerge()
-            || outcome == MergeIntoIntegrationOutcome.AlreadyMerged;
+            || outcome is MergeIntoIntegrationOutcome.AlreadyMerged
+                or MergeIntoIntegrationOutcome.AlreadyOnIntegrationBranch;
 }
 
 /// <summary>
@@ -5169,6 +5175,42 @@ public class GitService
         if (code != 0) return null;
         var branch = output.Trim();
         return string.IsNullOrWhiteSpace(branch) || !IsLikelyBranchName(branch) ? null : branch;
+    }
+
+    /// <summary>Reads the credential-free configured origin URL for a repository.</summary>
+    public string? ReadOriginUrlAt(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return null;
+        var (output, _, code) = RunGitArgs(root, "config", "--get", "remote.origin.url");
+        if (code != 0) return null;
+        var value = output.Trim();
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.UserInfo))
+            return value;
+        return new UriBuilder(uri) { UserName = string.Empty, Password = string.Empty }.Uri.ToString();
+    }
+
+    /// <summary>
+    /// Resolves a persisted repository id as either a configured remote name or
+    /// a remote URL in the supplied repository. No fetch is performed.
+    /// </summary>
+    public string? ResolveRemoteNameAt(string root, string repository)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)
+            || string.IsNullOrWhiteSpace(repository)) return null;
+        var (output, _, code) = RunGitArgs(root, "remote");
+        if (code != 0) return null;
+        foreach (var remote in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (string.Equals(remote, repository, StringComparison.OrdinalIgnoreCase)) return remote;
+            var (url, _, urlCode) = RunGitArgs(root, "remote", "get-url", remote);
+            if (urlCode == 0
+                && string.Equals(
+                    url.Trim().TrimEnd('/', '\\'),
+                    repository.Trim().TrimEnd('/', '\\'),
+                    StringComparison.OrdinalIgnoreCase)) return remote;
+        }
+        return null;
     }
 
     /// <summary>

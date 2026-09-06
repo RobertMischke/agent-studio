@@ -3,9 +3,9 @@ using System.Collections.Concurrent;
 namespace AgentStudio.Tasks;
 
 /// <summary>
-/// Builds the board's always-on merge signal (AGT-2046): for every card, is the
-/// task's work folded into the integration branch (develop) and/or the release
-/// branch (main)? The result is attached to <see cref="TaskInfo.MergeSignal"/> so
+/// Builds the board's always-on merge signal (AGT-2046 and AGT-2718): for every
+/// card, is the task's work folded into every repository's integration branch
+/// and/or release branch? The result is attached to <see cref="TaskInfo.MergeSignal"/> so
 /// the kanban card renders a two-segment <c>[develop|main]</c> indicator.
 ///
 /// <para>
@@ -33,6 +33,7 @@ public sealed class BoardMergeStatusService
     private readonly GitService _git;
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<BoardMergeStatusService> _logger;
+    private readonly TaskIntegrationStatusService? _integrationStatus;
 
     public const string ReleaseBranch = "main";
 
@@ -54,8 +55,9 @@ public sealed class BoardMergeStatusService
     public BoardMergeStatusService(
         GitService git,
         ProjectSettingsService settings,
-        ILogger<BoardMergeStatusService> logger)
-        : this(git, settings, logger, TimeProvider.System)
+        ILogger<BoardMergeStatusService> logger,
+        TaskIntegrationStatusService? integrationStatus = null)
+        : this(git, settings, logger, TimeProvider.System, integrationStatus)
     {
     }
 
@@ -63,11 +65,13 @@ public sealed class BoardMergeStatusService
         GitService git,
         ProjectSettingsService settings,
         ILogger<BoardMergeStatusService> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        TaskIntegrationStatusService? integrationStatus = null)
     {
         _git = git;
         _settings = settings;
         _logger = logger;
+        _integrationStatus = integrationStatus;
         _cache = new GenerationSingleFlightCache<RepoReachability>(timeProvider);
     }
 
@@ -84,6 +88,34 @@ public sealed class BoardMergeStatusService
         if (jobs.Count == 0) return result;
 
         using var _t = GitProcessTelemetry.BeginRequest("board/merge-status", _logger);
+
+        if (_integrationStatus is not null)
+        {
+            foreach (var job in jobs)
+            {
+                var entries = _integrationStatus.BuildRepositoryEntries(job);
+                if (entries.Count == 0) continue;
+                var commits = TaskIntegrationStatusService.AttributedCommits(job);
+                if (commits.Count == 0) continue;
+                var anchor = commits[^1];
+                var inIntegration = entries.All(entry => entry.OnIntegrationBranch);
+                var inRelease = entries.All(entry => entry.OnReleaseBranch);
+                result[job.TaskKey] = new TaskMergeSignal
+                {
+                    Branch = TaskIntegrationStatusService.DeliveryRefFor(job)
+                             ?? job.Provenance?.Branch
+                             ?? string.Empty,
+                    InIntegration = inIntegration,
+                    InRelease = inRelease,
+                    IntegrationBranch = entries.Count == 1 ? entries[0].IntegrationBranch : "multiple",
+                    ReleaseBranch = entries.Count == 1 ? entries[0].ReleaseBranch : "multiple",
+                    IntegrationSha = inIntegration ? Short(anchor) : null,
+                    ReleaseSha = inRelease ? Short(anchor) : null,
+                    Repositories = entries,
+                };
+            }
+            return result;
+        }
 
         // Group the anchored cards by resolved repo root so the batched ancestor
         // sets are computed ONCE per repository, not per card.

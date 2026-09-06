@@ -9,7 +9,17 @@
         [attr.aria-label]="ariaLabel()"
         [cacTooltip]="tooltip()">
     <span class="integration-badge__glyph" aria-hidden="true">{{ glyph() }}</span>
-    <span class="integration-badge__label">{{ label() }}</span>
+    @if (repositoryLines().length > 0) {
+      <span class="integration-badge__repositories">
+        @for (repository of repositoryLines(); track repository.key) {
+          <span class="integration-badge__repository"
+                data-testid="integration-repository-line"
+                [cacTooltip]="repository.detail">{{ repository.text }}</span>
+        }
+      </span>
+    } @else {
+      <span class="integration-badge__label">{{ label() }}</span>
+    }
   </span>
   @if (recoveryAvailable() && jobId()) {
     <button type="button"
