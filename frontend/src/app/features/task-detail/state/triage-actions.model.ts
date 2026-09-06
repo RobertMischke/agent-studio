@@ -13,6 +13,7 @@
 import { TaskState } from '../../../models/task.model';
 import type { TaskInfo } from '../../../models/task.model';
 import type { LandedState } from '../../../features/git';
+import { laneShortName } from '../../../models/lane-presentation';
 
 export type TriageActionIntent =
   | { kind: 'move'; targetState: string }
@@ -128,20 +129,6 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
   ],
 };
 
-export const LANE_LABELS: Record<string, string> = {
-  [TaskState.Backlog]:          'Backlog',
-  [TaskState.Preparation]:      'Preparation',
-  [TaskState.OrchestratorPrep]: 'Orchestrator Prep',
-  [TaskState.Ready]:            'Ready',
-  [TaskState.Progress]:         'In Progress',
-  [TaskState.CodeNotComplete]:  'Code not complete',
-  [TaskState.AutoReview]:       'Post Processing',
-  [TaskState.HumanReview]:      'Review',
-  [TaskState.Escalated]:        'Escalated',
-  [TaskState.Completed]:        'Delivered',
-  [TaskState.Archive]:          'Archive',
-};
-
 /**
  * Lanes the orchestrator owns: a job lands here because the runner picked
  * it up (3-progress) or the auto-reviewer is judging it (4-auto-review),
@@ -192,7 +179,7 @@ export function laneActionsFor(state: string): TriageButton[] {
 }
 
 export function laneLabelFor(state: string): string {
-  return LANE_LABELS[state] ?? state;
+  return laneShortName(state);
 }
 
 /** Returns the lane's primary (index 0 with variant=primary) or null. */

@@ -5,6 +5,7 @@
  */
 
 import { TaskState } from '../models/task.model';
+import { lanePresentation, type LanePresentation } from '../models/lane-presentation';
 
 export interface LaneSortStrategyMeta {
   /** Strategy id sent to the backend (empty string clears the override). */
@@ -89,6 +90,9 @@ export interface SortableLaneMeta {
   state: string;
   label: string;
   icon: string;
+  sentence: string;
+  toneToken: LanePresentation['toneToken'];
+  docTopic: string;
 }
 
 /**
@@ -99,17 +103,29 @@ export interface SortableLaneMeta {
  * in-place on 1-preparation as the optional `pre-orchestrator-prep`
  * pipeline step (see PipelineCatalogue), so there is no lane to sort.
  */
-export const SORTABLE_LANES: readonly SortableLaneMeta[] = [
-  { state: TaskState.Backlog, label: 'Backlog', icon: '🗒️' },
-  { state: TaskState.Preparation, label: 'In Preparation', icon: '📋' },
-  { state: TaskState.Ready, label: 'Ready', icon: '📦' },
-  { state: TaskState.Progress, label: 'In Progress', icon: '🔵' },
-  { state: TaskState.AutoReview, label: 'Post Processing', icon: '🤖' },
-  { state: TaskState.Escalated, label: 'Escalated', icon: '⚠️' },
-  { state: TaskState.HumanReview, label: 'Review', icon: '👁️' },
-  { state: TaskState.Completed, label: 'Delivered', icon: '🟢' },
-  { state: TaskState.Archive, label: 'Archive', icon: '🗄️' },
-];
+const SORTABLE_LANE_STATES = [
+  TaskState.Backlog,
+  TaskState.Preparation,
+  TaskState.Ready,
+  TaskState.Progress,
+  TaskState.AutoReview,
+  TaskState.Escalated,
+  TaskState.HumanReview,
+  TaskState.Completed,
+  TaskState.Archive,
+] as const;
+
+export const SORTABLE_LANES: readonly SortableLaneMeta[] = SORTABLE_LANE_STATES.map((state) => {
+  const presentation = lanePresentation(state)!;
+  return {
+    state,
+    label: presentation.name,
+    icon: presentation.glyph,
+    sentence: presentation.sentence,
+    toneToken: presentation.toneToken,
+    docTopic: presentation.docTopic,
+  };
+});
 
 /**
  * Map a board display-state to the backend lane key its sort strategy is

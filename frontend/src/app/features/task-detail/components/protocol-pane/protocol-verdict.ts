@@ -1,6 +1,7 @@
 import type { CliExecution, TaskOutcomeIssue, TaskSummaryStatus } from '../../../../models/task.model';
 import type { PipelineExecutionRecord } from '../../../task-pipeline';
 import type { OutcomeAssessment } from '../agent-outcome.util';
+import { lanePresentation } from '../../../../models/lane-presentation';
 
 /** Legacy visual tone retained for selectors and color-token compatibility. */
 export type ProtocolVerdictKind = 'ok' | 'problem' | 'unclear';
@@ -11,6 +12,8 @@ export interface RunOutcomeSignal {
   status: AuthoritativeRunOutcomeStatus;
   label: string;
   detail: string;
+  toneToken?: string;
+  glyph?: string;
 }
 
 export interface ProtocolVerdict {
@@ -22,6 +25,8 @@ export interface ProtocolVerdict {
   emoji: string;
   label: string;
   detail: string;
+  /** Lane tone when the authoritative outcome is the current lane. */
+  toneToken?: string;
   /**
    * Run duration as written by the runner into the `# Status` header of
    * status.md (e.g. `4 min`). Surfaced as a compact inline stat beside the
@@ -77,7 +82,7 @@ export function deriveProtocolVerdict(input: ProtocolVerdictInputs): ProtocolVer
     ));
   }
   const leading = resolveAuthoritativeRunOutcome(signals)!;
-  return presentation(leading.status, leading.label, leading.detail, signals, input.statusMarkdown);
+  return presentation(leading.status, leading.label, leading.detail, signals, input.statusMarkdown, leading);
 }
 
 const OUTCOME_RANK: Record<AuthoritativeRunOutcomeStatus, number> = {
@@ -157,10 +162,25 @@ function collectSignals(input: ProtocolVerdictInputs): RunOutcomeSignal[] {
       break;
   }
 
+  const lane = lanePresentation(input.laneState);
   if (input.laneState === '5-human-review' || input.laneState === '5e-escalated') {
-    signals.push(signal('lane', 'needs-decision', 'Human review lane', 'The task is waiting for a human decision.'));
+    signals.push(signal(
+      'lane',
+      'needs-decision',
+      lane?.name ?? input.laneState,
+      lane ? `${lane.sentence}.` : 'The task is waiting for a decision.',
+      lane?.toneToken,
+      lane?.glyph,
+    ));
   } else if (input.laneState === '6-completed' || input.laneState === '7-archive') {
-    signals.push(signal('lane', 'succeeded', 'Completed lane', `The task is in ${input.laneState}.`));
+    signals.push(signal(
+      'lane',
+      'succeeded',
+      lane?.name ?? input.laneState,
+      lane ? `${lane.sentence}.` : `The task is in ${input.laneState}.`,
+      lane?.toneToken,
+      lane?.glyph,
+    ));
   }
 
   if (input.summaryStatus === 'failed') {
@@ -240,8 +260,15 @@ function activitySignal(activity: OutcomeAssessment): RunOutcomeSignal {
   return signal('activity', 'unclear', 'Agent reply unclear', activity.summary || 'The agent reply has no clear terminal verdict.');
 }
 
-function signal(source: RunOutcomeSignal['source'], status: AuthoritativeRunOutcomeStatus, label: string, detail: string): RunOutcomeSignal {
-  return { source, status, label, detail };
+function signal(
+  source: RunOutcomeSignal['source'],
+  status: AuthoritativeRunOutcomeStatus,
+  label: string,
+  detail: string,
+  toneToken?: string,
+  glyph?: string,
+): RunOutcomeSignal {
+  return { source, status, label, detail, toneToken, glyph };
 }
 
 function presentation(
@@ -250,10 +277,11 @@ function presentation(
   detail: string,
   signals: RunOutcomeSignal[],
   markdown: string | null | undefined,
+  leading?: RunOutcomeSignal,
 ): ProtocolVerdict {
   const kind: ProtocolVerdictKind = status === 'failed' ? 'problem' : status === 'succeeded' ? 'ok' : 'unclear';
-  const emoji = status === 'failed' ? '🔴' : status === 'succeeded' ? '🟢' : status === 'needs-decision' ? '🟠' : '🟡';
-  return { kind, status, signals, emoji, label, detail, duration: parseDuration(markdown) };
+  const emoji = leading?.glyph ?? (status === 'failed' ? '🔴' : status === 'succeeded' ? '🟢' : status === 'needs-decision' ? '🟠' : '🟡');
+  return { kind, status, signals, emoji, label, detail, toneToken: leading?.toneToken, duration: parseDuration(markdown) };
 }
 
 const DURATION_RE = /^\s*-\s*Duration:\s*(.+?)\s*$/im;

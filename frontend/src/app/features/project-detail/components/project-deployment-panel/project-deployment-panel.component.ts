@@ -89,7 +89,7 @@ export class ProjectDeploymentPanelComponent {
     if (target.template === 'deploy-stable') {
       return this.parameterValues()['stableIdle'] === true ? 'Idle confirmed' : 'Idle required';
     }
-    return target.runnable ? 'Ready' : 'Setup required';
+    return target.runnable ? 'Ready' : 'Setup required'; // lane-presentation-lint: allow, deployment readiness
   }
 
   targetStatusReady(target: ProjectDeploymentTarget): boolean {

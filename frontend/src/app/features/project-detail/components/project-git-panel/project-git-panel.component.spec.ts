@@ -147,7 +147,7 @@ describe('ProjectGitPanelComponent', () => {
     const commitRow = root.querySelector<HTMLElement>('[data-testid="git-commit-row"]')!;
     const chips = [...commitRow.querySelectorAll<HTMLElement>('[data-tone]')]
       .map(chip => chip.textContent?.trim());
-    expect(chips).toEqual(['Integrated · develop', 'Deployed · runner', 'AGT-1', 'In progress']);
+    expect(chips).toEqual(['Integrated · develop', 'Deployed · runner', 'AGT-1', 'In Progress']);
     commitRow.querySelector<HTMLButtonElement>('[data-kind="task"]')!.click();
     expect(openTaskKey).toHaveBeenCalledWith('Demo::task-1');
     expect(root.querySelector('[data-testid="git-cleanup"]')).toBeNull();

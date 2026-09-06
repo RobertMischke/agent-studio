@@ -903,6 +903,12 @@
       background: color-mix(in srgb, var(--severity-high) 18%, transparent);
     }
 
+    &[data-lane-tone] {
+      color: var(--decision-tone);
+      border-color: color-mix(in srgb, var(--decision-tone) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--decision-tone) 16%, transparent);
+    }
+
     &:focus-visible {
       outline: 2px solid var(--studio-accent-2);
       outline-offset: 1px;

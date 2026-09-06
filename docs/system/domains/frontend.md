@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-08-12
+Version: 2026-09-06
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -44,6 +44,25 @@ groups, and a failed domain reports an error without hiding successful domains.
   playbook.
 - [docs/quality/frontend/audits/architecture-review-2026-05-09.md](../../quality/frontend/audits/architecture-review-2026-05-09.md)
   is the maintainability map for large components and service extraction.
+
+## Lane presentation
+
+`frontend/src/app/models/lane-presentation.ts` is the single source for every
+task lane's display name, compact name, sentence, glyph, semantic tone token,
+help topic, and grouped-response key. Board columns, task headers, Result and
+verdict projections, badges, workflow settings, Explorer metrics, and lane
+info buttons resolve those values from the catalogue. Components do not author
+lane names or assign their own lane colours.
+
+Each canonical state maps to one `--studio-lane-*` token declared for both
+themes in `frontend/src/styles/_tokens-semantic.scss`. Surfaces may vary shape
+or tint strength, but the lane pigment remains the same. Compatibility display
+states resolve through the catalogue before presentation.
+
+`npm --prefix frontend run lint:structure` rejects authored lane-name string
+literals in product TypeScript outside the catalogue. A same-line
+`lane-presentation-lint: allow` marker is reserved for text that happens to
+match a lane name but describes a different domain concept.
 
 ## Studio route restoration
 

@@ -1,4 +1,5 @@
 import { TaskState } from '../../../../models/task.model';
+import { laneShortName } from '../../../../models/lane-presentation';
 import type { TaskInfo, ClientSummary, CliType, TagRegistryEntry, EpicRollup, AutoLoopSnapshot, PendingIntent, TaskMode } from '../../../../models/task.model';
 import type { TaskCommitInfo } from '../../../../features/git';
 import type { StructuredTooltip } from 'coding-agent-chat/shared';
@@ -1005,7 +1006,7 @@ function pipelineView(
     pre: 'Pre steps',
     run: 'Core agent work',
     post: 'Post steps',
-    review: 'Review',
+    review: laneShortName(TaskState.HumanReview),
   };
   const doneIndex = doneThrough ? order.indexOf(doneThrough) : -1;
   const dots = order.map((id, index): PipelineDot => ({

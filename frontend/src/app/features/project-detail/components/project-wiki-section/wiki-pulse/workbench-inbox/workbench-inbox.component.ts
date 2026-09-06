@@ -17,7 +17,7 @@ interface LifecycleGroup {
 
 const GROUPS: readonly { state: WikiLifecycleState; label: string }[] = [
   { state: 'review-requested', label: 'New, wants review' },
-  { state: 'in-progress', label: 'In progress' },
+  { state: 'in-progress', label: 'In progress' }, // lane-presentation-lint: allow, document lifecycle
   { state: 'decided', label: 'Decided' },
   { state: 'documented', label: 'Documented' },
   { state: 'done', label: 'Archived' },

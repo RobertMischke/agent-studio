@@ -55,24 +55,24 @@ describe('OrchestratorContextHeaderComponent', () => {
     const task = text(fixture, 'orch-context-task');
     expect(task).toContain('AGT-1916');
     expect(task).toContain('Add orchestrator header');
-    expect(text(fixture, 'orch-context-lane')).toBe('progress');
+    expect(text(fixture, 'orch-context-lane')).toBe('In Progress');
     const header = fixture.nativeElement.querySelector('[data-testid="orch-context-header"]');
     expect(header.getAttribute('data-scope')).toBe('task');
     expect(fixture.nativeElement.querySelector('[data-testid="orch-context-board"]')).toBeNull();
   });
 
-  it('maps lane keys to a coarse tone', async () => {
+  it('maps lane keys to their shared semantic tone', async () => {
     const fixture = await makeFixture();
     const c = fixture.componentInstance;
     fixture.componentRef.setInput('project', 'p');
     fixture.componentRef.setInput('taskState', '3-progress');
-    expect(c.laneTone()).toBe('progress');
+    expect(c.laneTone()).toBe('var(--studio-lane-progress)');
     fixture.componentRef.setInput('taskState', '5-human-review');
-    expect(c.laneTone()).toBe('review');
+    expect(c.laneTone()).toBe('var(--studio-lane-human-review)');
     fixture.componentRef.setInput('taskState', '6-completed');
-    expect(c.laneTone()).toBe('done');
+    expect(c.laneTone()).toBe('var(--studio-lane-completed)');
     fixture.componentRef.setInput('taskState', '2-ready');
-    expect(c.laneTone()).toBe('neutral');
+    expect(c.laneTone()).toBe('var(--studio-lane-ready)');
   });
 
   it('renders the live-run pill with model + ticking duration when a run is active', async () => {

@@ -276,7 +276,7 @@ export class WorkbenchDecisionPanelComponent {
       case 'failed': return 'Retry needed';
       case 'succeeded': return 'Decided';
       case 'archived': return 'Archived';
-      default: return this.gateReady() ? 'Decision ready' : 'In progress';
+      default: return this.gateReady() ? 'Decision ready' : 'In progress'; // lane-presentation-lint: allow, decision stage
     }
   }
 

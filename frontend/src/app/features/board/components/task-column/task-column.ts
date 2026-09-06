@@ -33,6 +33,7 @@ import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lan
 import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { PostProcessingSummaryComponent } from '../post-processing-summary/post-processing-summary.component';
 import { BoardDragStateService } from '../../state/board-drag-state.service';
+import { lanePresentation, laneToneValue } from '../../../../models/lane-presentation';
 
 /** ASS-1727: Archive pagination and typed-filter debounce. */
 const ARCHIVE_PAGE_SIZE = 50;
@@ -86,6 +87,11 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
    * change detection is OnPush-friendly.
    */
   readonly nowMs = input<number>(0);
+
+  readonly presentation = computed(() => lanePresentation(this.state()));
+  readonly displayTitle = computed(() => this.presentation()?.name ?? this.title());
+  readonly displayGlyph = computed(() => this.presentation()?.glyph ?? this.icon());
+  readonly laneTone = computed(() => laneToneValue(this.state()));
 
   readonly stalledCount = computed(() => this.state() === TaskState.Progress
     ? this.jobs().filter((job) => deriveStalledTaskState(job, this.nowMs() || Date.now()) !== null).length
@@ -369,15 +375,8 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
     return this.state() === TaskState.Archive || this.state() === '6-archive';
   }
 
-  /**
-   * Every lane carries an info trigger: each one maps to a committed
-   * concept doc under <c>docs/app/help/lane-guides/lane-*.md</c>, served by
-   * <c>GET /api/concept-docs/{topic}</c> and shown in the lane-info
-   * modal. Virtual sub-lanes (e.g. <c>2-ready-intake</c>, <c>4-review</c>)
-   * collapse to their parent's doc. Returns <c>null</c> only for a state
-   * with no doc, in which case the trigger is hidden.
-   */
-  readonly infoTopic = computed<string | null>(() => laneDocTopic(this.state()));
+  /** Contextual-help topic for the current lane. */
+  readonly infoTopic = computed<string | null>(() => this.presentation()?.docTopic ?? laneDocTopic(this.state()));
 
   /**
    * The ADR-0025 swim-lanes are now real columns; the in-column

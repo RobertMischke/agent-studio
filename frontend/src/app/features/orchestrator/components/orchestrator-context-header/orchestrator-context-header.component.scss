@@ -133,22 +133,10 @@
   white-space: nowrap;
 }
 
-.octx__pill--lane[data-tone='progress'] {
-  border-color: color-mix(in srgb, var(--studio-accent-3) 45%, transparent);
-  background: color-mix(in srgb, var(--studio-accent-3) 16%, transparent);
-  color: var(--studio-accent-3-strong);
-}
-
-.octx__pill--lane[data-tone='review'] {
-  border-color: color-mix(in srgb, var(--severity-warn) 45%, transparent);
-  background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
-  color: var(--severity-warn);
-}
-
-.octx__pill--lane[data-tone='done'] {
-  border-color: color-mix(in srgb, var(--studio-accent-success) 45%, transparent);
-  background: color-mix(in srgb, var(--studio-accent-success) 14%, transparent);
-  color: var(--studio-accent-success-strong);
+.octx__pill--lane[data-lane-tone] {
+  border-color: color-mix(in srgb, var(--lane-tone) 45%, transparent);
+  background: color-mix(in srgb, var(--lane-tone) 16%, transparent);
+  color: var(--lane-tone);
 }
 
 /* Live-run telemetry — the only animated element in the header. */

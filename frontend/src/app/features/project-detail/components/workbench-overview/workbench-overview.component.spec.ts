@@ -172,14 +172,14 @@ describe('WorkbenchOverviewComponent', () => {
     const activeCard = fixture.nativeElement.querySelector(
       '[data-testid="workbench-overview-task-Demo-pending-AGT-1"]',
     );
-    expect(activeCard.querySelector('.task-ref__lane-dot')?.getAttribute('data-tone')).toBe('active');
+    expect(activeCard.getAttribute('data-lane-tone')).toBe('--studio-lane-progress');
     const activeCardLink = activeCard.querySelector('a') as HTMLAnchorElement;
     expect(activeCardLink.getAttribute('href')).toBe('#task:AGT-1');
     activeCardLink.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     vi.advanceTimersByTime(300);
     expect(document.querySelector(
       '[data-testid="workbench-overview-task-Demo-pending-AGT-1-tooltip"]',
-    )?.textContent).toContain('In progress');
+    )?.textContent).toContain('In Progress');
     activeCardLink.click();
     expect(openTaskKey).toHaveBeenCalledWith('Demo::active-card');
     expect(fixture.nativeElement.querySelector(

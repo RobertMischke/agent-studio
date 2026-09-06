@@ -316,7 +316,7 @@ export class WorkspaceManagementComponent implements OnInit {
 
   /** F45b — archive (or un-archive) a project. */
   toggleRegistryProjectArchived(projId: string, archived: boolean): void {
-    const verb = archived ? 'Un-archive' : 'Archive';
+    const verb = archived ? 'Un-archive' : 'Archive'; // lane-presentation-lint: allow, project registry action
     const ok = window.confirm(`${verb} project ${projId}? Archived projects are hidden from the tree by default.`);
     if (!ok) return;
     this.runProjectPatch(projId, { archived: !archived });

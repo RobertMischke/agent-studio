@@ -42,7 +42,7 @@ describe('buildGitCommitChips', () => {
       'Integrated · develop',
       'Deployed · runner',
       'AGT-1',
-      'In progress',
+      'In Progress',
       'Remote',
     ]);
     expect(chips.some(chip => chip.label === 'develop' || chip.label === 'origin/develop')).toBe(false);

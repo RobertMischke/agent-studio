@@ -52,7 +52,7 @@ export interface GitTreeGroup {
 }
 
 const GROUP_LABELS: Record<GitTreeGroupId, string> = {
-  active: 'In progress',
+  active: 'In progress', // lane-presentation-lint: allow, Git branch group status
   worktrees: 'Worktrees & checkouts',
   integration: 'Integration branches',
   feature: 'Feature branches',

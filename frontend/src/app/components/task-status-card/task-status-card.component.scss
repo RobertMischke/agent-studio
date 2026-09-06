@@ -79,32 +79,9 @@ app-task-status-card {
   }
 
   &__lane {
-    color: var(--studio-fg);
-  }
-
-  // Lane-tone variants: pull the same semantic tokens the rest of the
-  // shell uses (accent / accent-warn / accent-success / accent-6) so the
-  // card adapts to the dark/light theme override block without carrying
-  // its own palette.
-  &__lane[data-state^='3-progress'],
-  &__lane[data-state='3-progress'] {
-    color: var(--studio-accent-success);
-    border-color: var(--studio-accent-success);
-  }
-
-  &__lane[data-state='5-human-review'] {
-    color: var(--studio-accent-warn);
-    border-color: var(--studio-accent-warn);
-  }
-
-  &__lane[data-state='5e-escalated'] {
-    color: var(--lane-escalated);
-    border-color: var(--lane-escalated);
-  }
-
-  &__lane[data-state='4-auto-review'] {
-    color: var(--studio-accent);
-    border-color: var(--studio-accent);
+    color: var(--lane-tone, var(--studio-fg));
+    border-color: var(--lane-tone, var(--studio-border));
+    background: color-mix(in srgb, var(--lane-tone, var(--studio-fg)) 10%, transparent);
   }
 
   &__lane-dot {

@@ -288,6 +288,21 @@
   --lane-archive:      #6e6e6e;
   --lane-failed:       var(--color-mocha-red);
 
+  // Canonical lane presentation tones. TypeScript references only these
+  // --studio-lane-* names; legacy --lane-* aliases remain for untouched
+  // surfaces while they migrate to the shared presentation catalogue.
+  --studio-lane-backlog:          var(--lane-backlog);
+  --studio-lane-preparation:      var(--lane-prep);
+  --studio-lane-ready:            var(--lane-ready);
+  --studio-lane-progress:         var(--lane-progress);
+  --studio-lane-failed-pickup:    var(--lane-failed);
+  --studio-lane-code-not-complete: var(--lane-failed);
+  --studio-lane-auto-review:      var(--lane-auto-review);
+  --studio-lane-human-review:     var(--lane-human-review);
+  --studio-lane-escalated:        var(--lane-escalated);
+  --studio-lane-completed:        var(--lane-completed);
+  --studio-lane-archive:          var(--lane-archive);
+
   // Board nav lane counters. Subtle, titlebar/sidebar-grade pigments distinct
   // from the saturated kanban lane colours so the Explorer stays calm.
   --studio-board-nav-lane-ready-fg:        var(--color-slate-300);
@@ -790,6 +805,18 @@
   --lane-completed:    var(--color-green-700);
   --lane-archive:      var(--color-grey-850);
   --lane-failed:       var(--color-red-700);
+
+  --studio-lane-backlog:          var(--lane-backlog);
+  --studio-lane-preparation:      var(--lane-prep);
+  --studio-lane-ready:            var(--lane-ready);
+  --studio-lane-progress:         var(--lane-progress);
+  --studio-lane-failed-pickup:    var(--lane-failed);
+  --studio-lane-code-not-complete: var(--lane-failed);
+  --studio-lane-auto-review:      var(--lane-auto-review);
+  --studio-lane-human-review:     var(--lane-human-review);
+  --studio-lane-escalated:        var(--lane-escalated);
+  --studio-lane-completed:        var(--lane-completed);
+  --studio-lane-archive:          var(--lane-archive);
 
   --studio-board-nav-lane-ready-fg:        var(--color-slate-600);
   --studio-board-nav-lane-ready-bg:        color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 10%, transparent);

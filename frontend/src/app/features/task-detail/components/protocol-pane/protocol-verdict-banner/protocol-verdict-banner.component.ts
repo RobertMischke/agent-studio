@@ -12,6 +12,10 @@ import type { ProtocolVerdict } from '../protocol-verdict';
 })
 export class ProtocolVerdictBannerComponent {
   readonly verdict = input.required<ProtocolVerdict>();
+  readonly laneTone = computed(() => {
+    const token = this.verdict().toneToken;
+    return token ? `var(${token})` : null;
+  });
   readonly running = input(false);
   readonly canRequestInterim = input(false);
   readonly interimInFlight = input(false);

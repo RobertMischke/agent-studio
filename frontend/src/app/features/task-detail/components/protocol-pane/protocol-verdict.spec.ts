@@ -578,4 +578,16 @@ describe('deriveProtocolVerdict', () => {
     });
   });
 
+  it('projects human review name, sentence, glyph, and tone from the lane catalogue', () => {
+    const verdict = deriveProtocolVerdict(baseInputs({
+      laneState: '5-human-review',
+      statusMarkdown: '# Status\n\n- Result: Success',
+    }));
+
+    expect(verdict.label).toBe('Human review');
+    expect(verdict.detail).toBe('Waiting for a human decision.');
+    expect(verdict.emoji).toBe('👁️');
+    expect(verdict.toneToken).toBe('--studio-lane-human-review');
+  });
+
 });

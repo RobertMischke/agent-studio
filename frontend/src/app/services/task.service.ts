@@ -37,7 +37,7 @@ import type {
   PublishAutomationMode,
   PublishWorkflowRun,
 } from '../models/task.model';
-import { TaskState } from '../models/task.model';
+import { LANE_PRESENTATIONS } from '../models/lane-presentation';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CliModelCatalog, CliCompletionContract, CliUsageReport, CliSessionDetail, CliSessionDeleteResult, CliWorkingMemoryReport, CliWorkingMemoryDeleteResult } from '../features/cli';
 import type { GitFileChange, GitStatus, TaskCommitDetail, TaskProvenanceView } from '../features/git';
@@ -188,20 +188,12 @@ type LaneKey = keyof GroupedJobs;
 // populates it, board no longer renders it). The mapping stays so a
 // historical folder still parses into its group while the boot drain empties
 // the lane.
-const STATE_TO_LANE: Record<string, LaneKey> = {
-  [TaskState.Backlog]: 'backlog',
-  [TaskState.Preparation]: 'preparation',
-  [TaskState.OrchestratorPrep]: 'orchestratorPrep',
-  [TaskState.Ready]: 'ready',
-  [TaskState.Progress]: 'progress',
-  [TaskState.FailedPickup]: 'failedPickup',
-  [TaskState.CodeNotComplete]: 'codeNotComplete',
-  [TaskState.AutoReview]: 'autoReview',
-  [TaskState.HumanReview]: 'humanReview',
-  [TaskState.Escalated]: 'escalated',
-  [TaskState.Completed]: 'completed',
-  [TaskState.Archive]: 'archive',
-};
+const STATE_TO_LANE: Record<string, LaneKey> = Object.fromEntries(
+  Object.values(LANE_PRESENTATIONS).map((presentation) => [
+    presentation.state,
+    presentation.groupKey as LaneKey,
+  ]),
+);
 
 /**
  * The grouped response already contains every live board task. Build the flat

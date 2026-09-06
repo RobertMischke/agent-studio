@@ -47,7 +47,8 @@
       <div class="octx__row octx__row--meta">
         @if (laneLabel(); as lane) {
           <span class="octx__pill octx__pill--lane"
-                [attr.data-tone]="laneTone()"
+                [attr.data-lane-tone]="lanePresentation()?.toneToken"
+                [style.--lane-tone]="laneTone()"
                 data-testid="orch-context-lane">{{ lane }}</span>
         }
 

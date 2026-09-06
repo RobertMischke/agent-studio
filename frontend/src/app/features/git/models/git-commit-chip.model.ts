@@ -1,4 +1,6 @@
 import type { GitGraphCommit, GitTaskBadge } from './git.model';
+import { TaskState } from '../../../models/task.model';
+import { laneName } from '../../../models/lane-presentation';
 
 export type GitCommitChipKind = 'presence' | 'deployment' | 'task' | 'work';
 export type GitCommitChipTone =
@@ -74,8 +76,8 @@ export function buildGitCommitChips(commit: GitGraphCommit): GitCommitChip[] {
       'work:in-progress',
       'work',
       'in-progress',
-      'In progress',
-      `${cards} ${inProgress.length === 1 ? 'is' : 'are'} currently in the In Progress lane.`,
+      laneName(TaskState.Progress),
+      `${cards} ${inProgress.length === 1 ? 'is' : 'are'} currently in the ${laneName(TaskState.Progress)} lane.`,
     ));
   }
 

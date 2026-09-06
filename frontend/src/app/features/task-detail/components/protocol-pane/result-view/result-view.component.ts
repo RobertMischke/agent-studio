@@ -53,6 +53,10 @@ export class ResultViewComponent {
 
   readonly doc = computed(() => buildResultDocument(this.detail(), this.verdict()));
   readonly caseMeta = computed(() => RESULT_CASE_META[this.doc().case.case]);
+  readonly laneTone = computed(() => {
+    const token = this.verdict().toneToken;
+    return token ? `var(${token})` : null;
+  });
   readonly outcomeTone = computed(() => {
     const status = this.verdict().status;
     if (status === 'failed') return 'problem';
@@ -60,5 +64,4 @@ export class ResultViewComponent {
     if (status === 'succeeded') return 'accent';
     return 'neutral';
   });
-
 }

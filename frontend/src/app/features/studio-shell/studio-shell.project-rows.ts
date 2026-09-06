@@ -2,6 +2,12 @@ import { excludeEpics } from '../board';
 import type { GroupedJobs, TaskInfo } from '../../models/task.model';
 import { projectIdentity } from '../../services/project-identity.util';
 import type { StructuredTooltip } from 'coding-agent-chat/shared';
+import { TaskState } from '../../models/task.model';
+import { lanePresentation } from '../../models/lane-presentation';
+
+const READY_LANE = lanePresentation(TaskState.Ready)!;
+const PROGRESS_LANE = lanePresentation(TaskState.Progress)!;
+const HUMAN_REVIEW_LANE = lanePresentation(TaskState.HumanReview)!;
 
 export interface ExplorerLaneCounts {
   ready: number;
@@ -18,16 +24,16 @@ export interface ExplorerLaneCounts {
  */
 export const BOARD_LANE_COUNT_TOOLTIPS: Record<keyof ExplorerLaneCounts, StructuredTooltip> = {
   ready: {
-    title: 'Ready',
-    body: 'Refined tasks queued for a coding agent. The orchestrator runs the top card next when a slot frees up.',
+    title: READY_LANE.name,
+    body: `${READY_LANE.sentence}. The orchestrator runs the top card next when a slot frees up.`,
   },
   progress: {
-    title: 'In Progress',
-    body: 'Tasks the orchestrator is actively running now, or resuming between attempts. One per project at a time.',
+    title: PROGRESS_LANE.name,
+    body: `${PROGRESS_LANE.sentence}, or resuming between attempts. One per project at a time.`,
   },
   humanReview: {
-    title: 'Human Review',
-    body: 'Finished runs waiting for your review, including escalations that need a decision. Accept the work or send it back for another pass.',
+    title: HUMAN_REVIEW_LANE.name,
+    body: `${HUMAN_REVIEW_LANE.sentence}, including escalations. Accept the work or send it back for another pass.`,
   },
 };
 
@@ -56,7 +62,7 @@ export function laneCountsFor(project: { laneCounts?: ExplorerLaneCounts }): Exp
 
 export function boardLaneCountsLabel(project: { laneCounts?: ExplorerLaneCounts }): string {
   const counts = laneCountsFor(project);
-  return `${counts.ready} ready, ${counts.progress} in progress, ${counts.humanReview} human review`;
+  return `${counts.ready} ${READY_LANE.name}, ${counts.progress} ${PROGRESS_LANE.name}, ${counts.humanReview} ${HUMAN_REVIEW_LANE.name}`;
 }
 
 export function buildProjectSidebarRows(

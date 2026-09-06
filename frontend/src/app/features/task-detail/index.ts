@@ -27,7 +27,6 @@ export {
   primaryActionFor,
   laneLabelFor,
   mergeAcceptViewFor,
-  LANE_LABELS,
   type MergeAcceptView,
   type TriageActionPayload,
   type TriageButton,

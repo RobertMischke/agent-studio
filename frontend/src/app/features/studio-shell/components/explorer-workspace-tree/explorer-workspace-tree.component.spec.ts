@@ -267,8 +267,8 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     const progress = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-count-progress-Alpha"]');
     const review = root.querySelector<HTMLElement>('[data-testid="studio-explorer-project-board-count-human-review-Alpha"]');
 
-    expect(board?.getAttribute('aria-label')).toBe('Board, 3 ready, 2 in progress, 5 human review');
-    expect(counts?.getAttribute('aria-label')).toBe('3 ready, 2 in progress, 5 human review');
+    expect(board?.getAttribute('aria-label')).toBe('Board, 3 Ready, 2 In Progress, 5 Human review');
+    expect(counts?.getAttribute('aria-label')).toBe('3 Ready, 2 In Progress, 5 Human review');
     expect(ready?.textContent?.trim()).toBe('3');
     expect(progress?.textContent?.trim()).toBe('2');
     expect(review?.textContent?.trim()).toBe('5');
@@ -292,7 +292,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
 
     expect(tipFor('studio-explorer-project-board-count-ready-Alpha')).toMatchObject({ title: 'Ready' });
     expect(tipFor('studio-explorer-project-board-count-progress-Alpha')).toMatchObject({ title: 'In Progress' });
-    expect(tipFor('studio-explorer-project-board-count-human-review-Alpha')).toMatchObject({ title: 'Human Review' });
+    expect(tipFor('studio-explorer-project-board-count-human-review-Alpha')).toMatchObject({ title: 'Human review' });
   });
 
   it('renders a capped, stably ordered dot dashboard with numeric a11y text', () => {
@@ -310,7 +310,7 @@ describe('ExplorerWorkspaceTreeComponent', () => {
     const dots = Array.from(dashboard?.querySelectorAll<HTMLElement>('[data-lane]') ?? []);
 
     expect(root.querySelector('[data-testid="studio-explorer-project-board-counts-Alpha"]')).toBeNull();
-    expect(dashboard?.getAttribute('aria-label')).toBe('4 ready, 3 in progress, 13 human review');
+    expect(dashboard?.getAttribute('aria-label')).toBe('4 Ready, 3 In Progress, 13 Human review');
     expect(dots).toHaveLength(15);
     expect(dots.map(dot => dot.dataset['lane'])).toEqual([
       ...Array(4).fill('ready'),

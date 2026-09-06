@@ -124,6 +124,18 @@ and do not contain `Tab` or `Escape`. The detailed embedding contract and its
 CAC-22 precedent are recorded in the
 [Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html#panel-keyboard-containment).
 
+### R9 - One lane identity on every surface
+
+Every task lane keeps one name, glyph, explanatory sentence, help topic, and
+`--studio-lane-*` tone across the board, task header, Result, verdict signals,
+badges, workflow settings, Explorer, and related task references. Resolve that
+identity from `frontend/src/app/models/lane-presentation.ts`; do not author a
+lane label or choose a substitute status colour inside a component.
+
+Surfaces may use the catalogue's explicit compact name where space is bounded,
+and may vary tint strength or shape. They must not rename the lane or change
+its pigment. `lint:structure` rejects lane-name literals outside the catalogue.
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../../AGENTS.md) and

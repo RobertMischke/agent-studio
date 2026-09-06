@@ -31,6 +31,7 @@ import { PendingButtonDirective } from '../../../../components/async-feedback';
 import { ExecutionLocationBadgeComponent } from '../../../../components/execution-location-badge/execution-location-badge.component';
 import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
 import { RemoteDispatchRejectionComponent } from '../../../../components/remote-dispatch-rejection/remote-dispatch-rejection.component';
+import { lanePresentation, laneShortName, laneToneValue } from '../../../../models/lane-presentation';
 /** Top header of the job-detail view: back button, editable title, state pill,
  * and the lane's primary triage action plus
  * an overflow menu of the remaining lane actions. The bottom-of-detail
@@ -165,13 +166,13 @@ export class DetailHeaderComponent {
    * lane is omitted too (prep runs in-place on 1-preparation now).
    */
   readonly laneOptions: readonly { state: string; label: string }[] = [
-    { state: TaskState.Preparation,   label: 'Preparation' },
-    { state: TaskState.Ready,         label: 'Ready' },
-    { state: TaskState.HumanReview,   label: 'Review' },
-    { state: TaskState.Escalated,     label: 'Escalated' },
-    { state: TaskState.Completed,     label: 'Delivered' },
-    { state: TaskState.Archive,       label: 'Archive' },
-  ];
+    TaskState.Preparation,
+    TaskState.Ready,
+    TaskState.HumanReview,
+    TaskState.Escalated,
+    TaskState.Completed,
+    TaskState.Archive,
+  ].map((state) => ({ state, label: laneShortName(state) }));
 
   isStandardLane(state: string): boolean {
     return this.laneOptions.some(o => o.state === state);
@@ -184,6 +185,8 @@ export class DetailHeaderComponent {
 
   /** Lane the dropdown shows as selected (pager lane, fallback to job state). */
   readonly selectedLane = computed(() => this.pagerLaneState() || this.info().state);
+  readonly selectedLanePresentation = computed(() => lanePresentation(this.selectedLane()));
+  readonly selectedLaneTone = computed(() => laneToneValue(this.selectedLane()));
 
   onStateSelect(event: Event) {
     const target = event.target as HTMLSelectElement;

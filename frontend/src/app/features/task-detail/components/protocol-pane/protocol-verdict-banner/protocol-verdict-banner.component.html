@@ -3,6 +3,8 @@
 <div class="protocol-verdict"
      [attr.data-kind]="v.kind"
      [attr.data-status]="v.status || null"
+     [attr.data-lane-tone]="v.toneToken"
+     [style.--verdict-tone]="laneTone()"
      [class.protocol-verdict--expanded]="expanded()"
      [attr.data-testid]="'protocol-verdict-' + v.kind"
      role="status">
@@ -69,7 +71,10 @@
     @if (expanded()) {
       <ul class="protocol-verdict-signals__list" data-testid="protocol-verdict-signals-list">
         @for (signal of v.signals; track signal.source + signal.label) {
-          <li class="protocol-verdict-signals__item" [attr.data-status]="signal.status">
+          <li class="protocol-verdict-signals__item"
+              [attr.data-status]="signal.status"
+              [attr.data-lane-tone]="signal.toneToken"
+              [style.--signal-tone]="signal.toneToken ? 'var(' + signal.toneToken + ')' : null">
             <span class="protocol-verdict-signals__dot" aria-hidden="true"></span>
             <span class="protocol-verdict-signals__source">{{ signal.source }}</span>
             <strong>{{ signal.label }}</strong>

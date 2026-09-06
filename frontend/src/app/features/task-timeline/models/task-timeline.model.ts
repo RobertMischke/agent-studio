@@ -221,7 +221,7 @@ export function verdictLabel(v: CompletionLoopVerdict | null): string {
     case 'accepted':  return 'Accepted';
     case 'reopened':  return 'Re-opened';
     case 'escalated': return 'Escalated to human';
-    default:          return 'In progress';
+    default:          return 'In progress'; // lane-presentation-lint: allow, completion-loop verdict
   }
 }
 

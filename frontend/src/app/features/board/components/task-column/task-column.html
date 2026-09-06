@@ -3,15 +3,16 @@
               class="column-rail"
               [class.column-rail--dragover]="isDragOver"
               [attr.data-testid]="'lane-rail-' + state()"
-              [attr.data-state]="state()"
+              [attr.data-state]="state()" [attr.data-lane-tone]="presentation()?.toneToken"
+              [style.--lane-tone]="laneTone()"
               [cacTooltip]="railTooltip()"
               (click)="collapseToggle.emit()"
               (dragover)="onDragOver($event)"
               (dragleave)="onDragLeave($event)"
               (drop)="onDrop($event)">
-          <span class="column-rail__icon" aria-hidden="true">{{ icon() }}</span>
+          <span class="column-rail__icon" aria-hidden="true">{{ displayGlyph() }}</span>
           <span class="column-rail__count" data-testid="lane-rail-count">{{ headerCount() }}</span>
-          <span class="column-rail__title">{{ title() }}</span>
+          <span class="column-rail__title">{{ displayTitle() }}</span>
           <span class="column-rail__indicators" aria-hidden="true">
             @if (indicators().running > 0) {
               <span class="column-rail__dot column-rail__dot--running"
@@ -37,19 +38,17 @@
           <span class="column-rail__expand" aria-hidden="true">›</span>
       </button>
     } @else {
-    <div class="column"
-         [class.column--dragover]="isDragOver"
+    <div class="column" [class.column--dragover]="isDragOver"
          [class.column--archive]="isArchive()"
          [attr.data-testid]="'lane-' + state()"
-         [attr.data-state]="state()"
+         [attr.data-state]="state()" [attr.data-lane-tone]="presentation()?.toneToken"
+         [style.--lane-tone]="laneTone()"
          (dragover)="onDragOver($event)"
          (dragleave)="onDragLeave($event)"
          (drop)="onDrop($event)">
       <div class="column__header">
-        <span class="column__icon" [attr.data-testid]="'lane-header-avatar-' + state()"
-              aria-hidden="true">{{ icon() }}</span>
-        <h2 class="column__title" [attr.data-testid]="'lane-title-' + state()"
-            [cacTooltip]="title()">{{ title() }}</h2>
+        <span class="column__icon" [attr.data-testid]="'lane-header-avatar-' + state()" aria-hidden="true">{{ displayGlyph() }}</span>
+        <h2 class="column__title" [attr.data-testid]="'lane-title-' + state()" [cacTooltip]="displayTitle()">{{ displayTitle() }}</h2>
         <span class="column__count" [attr.data-testid]="'lane-count-' + state()">
           <span>{{ headerCount() }}</span>
           @if (stalledCount() > 0) { <span class="column__stalled-count" data-testid="lane-stalled-count">· {{ stalledCount() }} stalled</span> }
@@ -67,27 +66,13 @@
         @if (infoTopic(); as topic) {
           <app-info-button [topic]="topic" />
         }
-        <!-- Lane status cluster (In-Progress only, project-scoped).
-             Shows WHAT IS RUNNING, WHAT COMES NEXT,
-             and HOW MANY ARE WAITING without contradiction. The mode chip
-             is the click target that flips auto-pickup; the run + queue
-             chips are read-only indicators. -->
         @if (statusCluster(); as cluster) {
-          <span class="column__status-cluster"
-                [attr.data-testid]="'lane-status-cluster-' + state()">
+          <span class="column__status-cluster" [attr.data-testid]="'lane-status-cluster-' + state()">
             @if (cluster.running; as run) {
-              <!-- Running indicator is the dot ONLY. All the detail (job id,
-                   elapsed, model, foreign-backend note) lives in the tooltip
-                   so the header never renders a hard-truncated label fragment
-                   next to the dot. The foreign case is a hollow-ring variant,
-                   still text-free. -->
               <span class="column__running-dot"
                     [class.column__running-dot--foreign]="run.foreign"
-                    [attr.data-testid]="'lane-running-pill-' + state()"
-                    [attr.data-job-id]="run.jobId"
-                    [attr.data-foreign]="run.foreign ? 'true' : null"
-                    [cacTooltip]="run.tooltip"
-                    role="img"
+                    [attr.data-testid]="'lane-running-pill-' + state()" [attr.data-job-id]="run.jobId"
+                    [attr.data-foreign]="run.foreign ? 'true' : null" [cacTooltip]="run.tooltip" role="img"
                     [attr.aria-label]="run.tooltip"></span>
             }
             <button type="button"
@@ -133,7 +118,7 @@
         <button type="button"
                 class="column__collapse"
                 [attr.data-testid]="'lane-collapse-' + state()"
-                [cacTooltip]="'Collapse ' + title() + ' lane'"
+                [cacTooltip]="'Collapse ' + displayTitle() + ' lane'"
                 (click)="collapseToggle.emit()">‹</button>
       </div>
       @if (state() === '5-human-review') {

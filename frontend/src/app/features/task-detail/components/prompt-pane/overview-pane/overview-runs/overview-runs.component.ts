@@ -110,7 +110,7 @@ export class OverviewRunsComponent {
     if (run.durationSeconds != null && run.durationSeconds >= 0) {
       return formatDuration(run.durationSeconds);
     }
-    if (run.status.trim().toLowerCase() === 'running') return 'In progress';
+    if (run.status.trim().toLowerCase() === 'running') return 'In progress'; // lane-presentation-lint: allow, run duration state
     return this.isLegacyUnrecorded(run)
       ? 'Not recorded (legacy run)'
       : 'Unknown (not recorded)';

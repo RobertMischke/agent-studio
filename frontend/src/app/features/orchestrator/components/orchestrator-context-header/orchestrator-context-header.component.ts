@@ -8,8 +8,8 @@ import {
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import { NowTickService } from '../../../../services/now-tick.service';
-import { shortModelName, stateLabel } from '../../../../services/format.util';
-import { TaskState } from '../../../../models/task.model';
+import { shortModelName } from '../../../../services/format.util';
+import { lanePresentation, laneShortName, laneToneValue } from '../../../../models/lane-presentation';
 
 /**
  * "Where am I right now" header for the orchestrator side sheet.
@@ -74,7 +74,7 @@ export class OrchestratorContextHeaderComponent {
   readonly laneLabel = computed<string | null>(() => {
     const state = this.taskState()?.trim();
     if (!state) return null;
-    return stateLabel(state);
+    return laneShortName(state);
   });
 
   /**
@@ -82,16 +82,8 @@ export class OrchestratorContextHeaderComponent {
    * consumer re-deriving the mapping. Mirrors the board's lane grouping:
    * progress → live accent, review lanes → warn, delivered → success.
    */
-  readonly laneTone = computed<'progress' | 'review' | 'done' | 'neutral'>(() => {
-    const state = this.taskState()?.trim();
-    if (!state) return 'neutral';
-    if (state === TaskState.Progress) return 'progress';
-    if (state === TaskState.AutoReview || state === TaskState.HumanReview || state === TaskState.Escalated) {
-      return 'review';
-    }
-    if (state === TaskState.Completed || state === TaskState.Archive) return 'done';
-    return 'neutral';
-  });
+  readonly lanePresentation = computed(() => lanePresentation(this.taskState()?.trim()));
+  readonly laneTone = computed(() => laneToneValue(this.taskState()?.trim()));
 
   readonly runModelLabel = computed<string>(() => shortModelName(this.runModel()));
 

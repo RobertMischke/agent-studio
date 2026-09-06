@@ -2,20 +2,6 @@
     <app-offline-banner />
     <app-public-demo-banner />
     @if (featureFlags.vsCodeLayout()) {
-      <!--
-        Agent Software Studio redesign — VS-Code-inspired shell.
-        Currently behind the `vsCodeLayout` flag; flip to default once
-        Project Hub, full diff view, and full activity view are
-        migrated. The legacy dashboard + detail markup is projected
-        into the shell's editor slot so the existing handlers
-        (drag/drop, triage, dialogs) keep working unchanged.
-
-        The wrapper is a flex row so the persistent right-edge sheets
-        (CLI usage, orchestrator chat) push the studio-shell when they
-        open rather than overlaying it. The filter UI is no longer a
-        right-edge sheet (F25); it lives only as the inline panel
-        projected into studio-shell's activity-bar "Filters" slot.
-      -->
       <div class="app-shell" data-testid="app-shell">
       <app-studio-shell data-testid="studio-shell-root"
                         [knownProjectNames]="projectNames()"
@@ -45,12 +31,6 @@
           (openCliAdmin)="openCliAdmin()"
           (defaultCliChange)="onDefaultCliChange($event)"
           (defaultModelChange)="onDefaultModelChange($event)" />
-        <!-- Orchestrator rail lives inside studio-shell now (right-edge
-             column of studio-body) so the titlebar + statusbar + activity
-             bar all wrap around it. Previously sat as a sibling of
-             studio-shell in .app-shell and pushed the whole shell left
-             when opened, leaving status/nav bars cut off short of the
-             panel. -->
         <app-orchestrator-side-sheet
           studioOrchestratorRail
           #orchSideSheet
@@ -66,11 +46,6 @@
           (openJobDetail)="onOpenJobDetailFromSheet($event)"
           (navigateToContext)="onNavigateToChatContext($event)"
           (openSettings)="openOrchestratorSettings()" />
-        <!-- Inline filter UI for the activity-bar Filter panel. Same
-             component as the right-edge sheet, just rendered without
-             the slide-in chrome. Hosted inside studio-shell's filter
-             panel slot so the user can scope the board from the left
-             sidebar instead of opening a separate sheet. -->
         <app-kanban-filter-sidesheet
           studioFilterPanel
           [inline]="true"
@@ -188,6 +163,9 @@
             <span class="studio-tab-actions-sep" aria-hidden="true"></span>
             <select class="studio-tab-action studio-tab-action--lane-select"
                     [class]="'studio-tab-action studio-tab-action--lane-select state--' + studioPagerLaneState()"
+                    [attr.data-lane-tone]="studioPagerLanePresentation()?.toneToken"
+                    [style.--lane-tone]="studioPagerLaneTone()"
+                    [style.color]="studioPagerLaneTone()"
                     [value]="studioPagerLaneState()"
                     data-testid="studio-lane-select"
                     aria-label="Page through lane"

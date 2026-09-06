@@ -344,6 +344,8 @@
       font-family: inherit;
       line-height: 1;
       transition: filter 0.15s ease, box-shadow 0.15s ease;
+      color: var(--lane-tone, currentColor);
+      background-color: color-mix(in srgb, var(--lane-tone, var(--studio-fg)) 15%, transparent);
     }
     .detail__state--select:hover:not(:disabled) {
       filter: brightness(1.25);

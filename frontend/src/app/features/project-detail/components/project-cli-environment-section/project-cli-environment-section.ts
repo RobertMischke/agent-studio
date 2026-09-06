@@ -191,7 +191,7 @@ export class ProjectCliEnvironmentSectionComponent implements OnInit {
   }
 
   statusLabel(row: ProjectCliEnvironmentRow): string {
-    if (row.available) return 'Ready';
+    if (row.available) return 'Ready'; // lane-presentation-lint: allow, CLI availability
     return row.error ? 'Issue' : 'Not detected';
   }
 

@@ -1,4 +1,5 @@
-import { TaskInfo } from '../../../models/task.model';
+import { TaskInfo, TaskState } from '../../../models/task.model';
+import { laneShortName } from '../../../models/lane-presentation';
 
 /**
  * Splits 4-review jobs into the two swim-lane sub-sections rendered by
@@ -26,6 +27,6 @@ export function groupReviewJobs(jobs: readonly TaskInfo[]): readonly ReviewSubSe
   }
   return [
     { kind: 'orchestrator', label: 'Orchestrator review', icon: '🤖', jobs: orchestrator },
-    { kind: 'human',        label: 'Human review',        icon: '👤', jobs: human }
+    { kind: 'human',        label: laneShortName(TaskState.HumanReview), icon: '👤', jobs: human }
   ];
 }

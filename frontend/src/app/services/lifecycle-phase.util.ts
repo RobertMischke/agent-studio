@@ -1,3 +1,6 @@
+import { TaskState } from '../models/task.model';
+import { laneShortName } from '../models/lane-presentation';
+
 /**
  * Single source of truth for lifecycle-phase display text (Run-Liveness Slice
  * C). Both surfaces that show the `phase` substate - the board task-card pill
@@ -36,7 +39,7 @@ export function formatPhaseElapsed(elapsedMs: number): string {
  * so no surface ever renders a raw kebab-case id.
  */
 export const PHASE_LABELS: Readonly<Record<string, string>> = {
-  'human-ready': 'Ready',
+  'human-ready': laneShortName(TaskState.Ready),
   'intake-running': 'Intake running',
   'intake-blocked': 'Intake blocked',
   'intake-passed': 'Intake passed',
