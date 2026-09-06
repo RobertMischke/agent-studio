@@ -1,0 +1,49 @@
+@if (target(); as host) {
+  <app-dialog
+    eyebrow="Provider authentication"
+    [title]="'Sign in Codex on ' + host.hostName"
+    subtitle="The browser receives a one-time device code. The credential stays on the host."
+    kind="primary"
+    testid="codex-sign-in-dialog"
+    (closeRequest)="close()"
+    (backdropClick)="close()">
+    <div class="codex-sign-in" [attr.data-state]="phase()">
+      <label>
+        <span>SSH target</span>
+        <input data-testid="codex-sign-in-ssh-target"
+               autocomplete="off"
+               [disabled]="phase() === 'starting' || phase() === 'pending' || phase() === 'awaiting-probe'"
+               [ngModel]="sshTarget()"
+               (ngModelChange)="sshTarget.set($event)" />
+      </label>
+
+      @if (verificationUrl(); as url) {
+        <section class="codex-sign-in__challenge" aria-live="polite">
+          <a data-testid="codex-sign-in-url" [href]="url" target="_blank" rel="noopener noreferrer">
+            Open the Codex verification page
+          </a>
+          @if (userCode(); as code) {
+            <button type="button" class="codex-sign-in__code" data-testid="codex-sign-in-code" (click)="copyCode()">
+              <span>{{ code }}</span>
+              <small>{{ copied() ? 'Copied' : 'Copy code' }}</small>
+            </button>
+          }
+        </section>
+      }
+
+      <p class="codex-sign-in__status" data-testid="codex-sign-in-status" [attr.data-state]="phase()" role="status">
+        <span aria-hidden="true"></span>{{ detail() }}
+      </p>
+    </div>
+
+    <div footer class="codex-sign-in__actions">
+      <button type="button" class="codex-sign-in__secondary" (click)="close()">Cancel</button>
+      @if (phase() === 'idle' || phase() === 'failed') {
+        <button type="button" class="codex-sign-in__primary" data-testid="codex-sign-in-start"
+                [disabled]="!sshTarget().trim()" (click)="start()">
+          {{ phase() === 'failed' ? 'Try again' : 'Start sign-in' }}
+        </button>
+      }
+    </div>
+  </app-dialog>
+}

@@ -500,7 +500,7 @@
       @if (workspaceManager.onboardProjectOpen()) {
         <app-onboard-project-dialog />
       }
-      <app-notification-stack />
+      <app-notification-stack /><app-codex-sign-in-dialog />
       <app-media-lightbox />
       <app-cost-breakdown-dialog />
       @if (errorDialog.activeError(); as error) {
@@ -900,7 +900,7 @@
       @if (workspaceManager.onboardProjectOpen()) {
         <app-onboard-project-dialog />
       }
-      <app-notification-stack />
+      <app-notification-stack /><app-codex-sign-in-dialog />
       <app-media-lightbox />
 
       @defer (when verboseDebugContext() !== null) {

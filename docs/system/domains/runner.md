@@ -157,6 +157,14 @@ state.
   but returns only modification and expiry timestamps and never token values.
   Provider-specific environment files, including `claude.env`, are outside the
   contract.
+- Codex renewal is a host-owned device-auth session exposed by
+  `POST /api/v1/management/remote-hosts/{id}/codex-sign-in` and its handle-only
+  status endpoint. The fixed SSH script runs `codex login --device-auth` and
+  `codex login status` as the runner user, times out after 15 minutes, and
+  restarts installed runner units to force a fresh provider capability probe.
+  Studio does not persist the verification URL, one-time code, transcript, or
+  credential. The terminal operator-feed receipt contains only host, provider,
+  actor, and outcome.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task

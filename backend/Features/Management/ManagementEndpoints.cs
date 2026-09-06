@@ -56,6 +56,50 @@ public static class ManagementEndpoints
                     statusCode: 502);
             }
         });
+        group.MapPost("/remote-hosts/{id}/codex-sign-in", async (
+            string id,
+            HttpContext context,
+            CodexSignInStartRequest request,
+            CodexDeviceSignInService signIn,
+            IConfiguration configuration,
+            CancellationToken ct) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            if (!TryAuthorize(context, configuration, out var denied, out var actor, out _)) return denied!;
+            var validation = CodexSignInPolicy.Validate(id, request);
+            if (validation is not null)
+                return Results.Json(new { error = "invalid-codex-sign-in-request", message = validation }, statusCode: 400);
+            try
+            {
+                return Results.Ok(await signIn.StartAsync(id, request, actor!, ct));
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.Json(new { error = "invalid-codex-sign-in-request", message = ex.Message }, statusCode: 400);
+            }
+            catch (CodexSignInException ex)
+            {
+                return Results.Json(new { error = "codex-sign-in-failed", message = ex.Message }, statusCode: 502);
+            }
+            catch (CodexSignInConflictException ex)
+            {
+                return Results.Json(new { error = "codex-sign-in-already-pending", message = ex.Message }, statusCode: 409);
+            }
+        });
+        group.MapGet("/remote-hosts/{id}/codex-sign-in/{handle}", (
+            string id,
+            string handle,
+            HttpContext context,
+            CodexDeviceSignInService signIn,
+            IConfiguration configuration) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            if (!TryAuthorize(context, configuration, out var denied, out _, out _)) return denied!;
+            var status = signIn.Get(id, handle);
+            return status is null
+                ? Results.Json(new { error = "codex-sign-in-session-not-found" }, statusCode: 404)
+                : Results.Ok(status);
+        });
         group.MapPost("/commands", (HttpContext context, ManagementCommandRequest request, ManagementService service, IConfiguration configuration) =>
         {
             context.Response.Headers.CacheControl = "no-store";

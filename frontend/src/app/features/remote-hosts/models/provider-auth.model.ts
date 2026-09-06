@@ -30,6 +30,9 @@ export interface ProviderAuthBadge {
 
 export interface ProviderAuthWaitReason {
   provider: string;
+  hostId: string;
+  hostName: string;
+  aliases: readonly string[];
   label: string;
   tooltip: string;
   hostNames: readonly string[];
@@ -51,6 +54,31 @@ export interface ProviderAuthProvisioningResponse {
   requestedAt: string;
   restartedServices: readonly string[];
   processEnvironmentVerified: boolean;
+}
+
+export interface CodexSignInStartRequest {
+  sshTarget: string;
+}
+
+export interface CodexSignInStartResponse {
+  handle: string;
+  hostId: string;
+  provider: 'codex';
+  state: 'pending';
+  verificationUrl: string;
+  userCode: string;
+  expiresAt: string;
+}
+
+export interface CodexSignInStatusResponse {
+  handle: string;
+  hostId: string;
+  provider: 'codex';
+  state: 'pending' | 'completed' | 'failed';
+  detail: string;
+  requestedAt: string;
+  expiresAt: string;
+  completedAt: string | null;
 }
 
 const PROVIDER_AUTH_PREFIX = 'provider-auth:';
@@ -124,6 +152,9 @@ export function providerAuthWaitReason(
         : `No reachable runner capability snapshot advertises provider-auth:${provider}.`;
   return {
     provider,
+    hostId: candidates[0]?.hostId ?? configuredRunner ?? '',
+    hostName: candidates[0]?.hostName ?? configuredRunner ?? 'execution host',
+    aliases: candidates[0]?.aliases ?? (configuredRunner ? [configuredRunner] : []),
     label: limited
       ? `${providerLabel} rate-limited on ${target}${limited.limitedUntil ? ` until ${limited.limitedUntil}` : ''}`
       : `Waiting for ${providerLabel} sign-in on ${target}`,

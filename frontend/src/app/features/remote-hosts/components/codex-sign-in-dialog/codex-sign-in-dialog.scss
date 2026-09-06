@@ -1,0 +1,55 @@
+:host { display: contents; }
+
+.codex-sign-in { display: grid; gap: var(--studio-spacing-4); }
+.codex-sign-in label { display: grid; gap: var(--studio-spacing-2); color: var(--studio-fg-muted); font-size: 11px; }
+.codex-sign-in input {
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-bg-input);
+  color: var(--studio-fg);
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  font: inherit;
+}
+.codex-sign-in__challenge {
+  display: grid;
+  gap: var(--studio-spacing-3);
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-bg-sidebar);
+  padding: var(--studio-spacing-4);
+  text-align: center;
+}
+.codex-sign-in__challenge a { color: var(--studio-accent); font-weight: 600; }
+.codex-sign-in__code {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  border: 1px solid var(--studio-accent);
+  border-radius: 8px;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg-strong);
+  padding: var(--studio-spacing-3);
+  cursor: pointer;
+}
+.codex-sign-in__code span { font: 700 24px/1.2 var(--font-mono, monospace); font-variant-numeric: tabular-nums; letter-spacing: 0.12em; }
+.codex-sign-in__code small { color: var(--studio-fg-muted); }
+.codex-sign-in__status { display: flex; align-items: flex-start; gap: var(--studio-spacing-2); margin: 0; color: var(--studio-fg-muted); }
+.codex-sign-in__status > span { width: 8px; height: 8px; margin-top: var(--studio-spacing-1); border-radius: 50%; background: var(--studio-fg-dim); flex: none; }
+.codex-sign-in__status[data-state='pending'] > span,
+.codex-sign-in__status[data-state='awaiting-probe'] > span { background: var(--severity-medium); }
+.codex-sign-in__status[data-state='failed'] > span { background: var(--severity-high); }
+.codex-sign-in__actions { display: flex; gap: var(--studio-spacing-2); }
+.codex-sign-in__primary,
+.codex-sign-in__secondary {
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  padding: var(--studio-spacing-2) var(--studio-spacing-3);
+  font: inherit;
+  cursor: pointer;
+}
+.codex-sign-in__primary { border-color: var(--studio-accent); background: var(--studio-accent); color: var(--studio-bg-editor); }
+.codex-sign-in__secondary { background: transparent; color: var(--studio-fg); }
+.codex-sign-in__primary:disabled { cursor: default; opacity: 0.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-sign-in *, .codex-sign-in *::before, .codex-sign-in *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+}

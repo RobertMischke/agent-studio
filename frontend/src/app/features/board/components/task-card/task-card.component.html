@@ -121,13 +121,25 @@
       </button>
     }
     @if (providerAuthWait(); as authWait) {
-      <span class="task-card__provider-auth-wait"
-            data-testid="task-card-provider-auth-wait"
-            role="status"
-            [cacTooltip]="authWait.tooltip">
-        <span class="task-card__provider-auth-dot" aria-hidden="true"></span>
-        {{ authWait.label }}
-      </span>
+      @if (authWait.provider === 'codex') {
+        <button class="task-card__provider-auth-wait"
+                data-testid="task-card-provider-auth-wait"
+                type="button"
+                [cacTooltip]="authWait.tooltip"
+                [appCodexSignInTrigger]="authWait">
+          <span class="task-card__provider-auth-dot" aria-hidden="true"></span>
+          {{ authWait.label }}
+          <span class="task-card__provider-auth-action">Sign in Codex</span>
+        </button>
+      } @else {
+        <span class="task-card__provider-auth-wait"
+              data-testid="task-card-provider-auth-wait"
+              role="status"
+              [cacTooltip]="authWait.tooltip">
+          <span class="task-card__provider-auth-dot" aria-hidden="true"></span>
+          {{ authWait.label }}
+        </span>
+      }
     }
     <app-review-decision-badges [job]="job()" />
     @if (phaseBadge(); as pb) {

@@ -134,6 +134,7 @@
                     {{ auth.expiryLabel }}
                   </span>
                 }
+                @if (auth.provider === 'codex' && (auth.state === 'unavailable' || auth.state === 'expiring')) { <button type="button" class="provider-auth__action" data-testid="remote-host-codex-sign-in" (click)="requestCodexSignIn()">Sign in Codex</button> }
                 @if (latestAuthTransition(auth); as transition) {
                   <span class="provider-auth__history"
                         [attr.data-testid]="'remote-host-provider-auth-history-' + auth.provider">

@@ -589,6 +589,8 @@
       font-weight: 650;
       line-height: 1.35;
     }
+    button.task-card__provider-auth-wait { cursor: pointer; font-family: inherit; }
+    .task-card__provider-auth-action { color: var(--studio-accent); }
 
     .task-card__provider-auth-dot {
       width: 6px;

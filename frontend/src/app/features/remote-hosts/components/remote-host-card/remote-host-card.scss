@@ -196,6 +196,16 @@
 .provider-auth__badge[data-state='expiring'] .provider-auth__dot { background: var(--severity-medium); }
 .provider-auth__expiry { color: var(--notify-warning-icon-fg); font-size: 10px; }
 .provider-auth__history { color: var(--studio-fg-muted); font-size: 10px; }
+.provider-auth__action {
+  border: 1px solid var(--studio-accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--studio-accent);
+  padding: var(--studio-spacing-1) var(--studio-spacing-2);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
 
 .chips {
   flex-wrap: wrap;

@@ -44,6 +44,26 @@ from the secret.
 
 ## 2. Renew through Studio
 
+### Codex device sign-in
+
+For an unavailable or expiring Codex badge, choose **Sign in Codex** on the
+Execution Hosts provider badge. A Ready card held on
+`provider-auth:codex` exposes the same action on its wait chip.
+
+Studio starts `codex login --device-auth` on the selected execution host as the
+`agent` runner user. Open the verification link shown in the dialog, copy the
+large one-time code, and complete the browser flow. The dialog polls an opaque
+in-memory session handle. After Codex exits, the host runs `codex login status`
+and restarts each installed runner unit so a fresh provider probe is advertised.
+The dialog closes only after that newer probe reports **OK**.
+
+The 15-minute session timeout terminates the SSH process and the remote `codex`
+process. Studio never receives the resulting credential and does not persist
+the URL, code, CLI transcript, or session metadata. The operator feed receives
+one terminal `provider_sign_in` event with host, provider, actor, and outcome.
+
+### Claude credential provisioning
+
 1. Open the affected host in **Execution Hosts** and choose **Set up agent
    host**.
 2. In **Provider authentication**, select `CLAUDE_CODE_OAUTH_TOKEN` or
@@ -52,7 +72,7 @@ from the secret.
 4. Wait for **Latest runner probe: OK**. The dialog clears the input after both
    successful and failed requests.
 
-Studio sends the value to the selected host through SSH stdin. It never places
+Studio sends the Claude value to the selected host through SSH stdin. It never places
 the value on the SSH command line, in shell history, in the setup task, in the
 Studio database, in logs, in the repository, or in `results/`. The host
 atomically updates the shared file, restarts the installed Coding and Review

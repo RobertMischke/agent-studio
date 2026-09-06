@@ -7,6 +7,9 @@ import {
   type ProviderAuthBadge,
   type ProviderAuthProvisioningRequest,
   type ProviderAuthProvisioningResponse,
+  type CodexSignInStartRequest,
+  type CodexSignInStartResponse,
+  type CodexSignInStatusResponse,
 } from '../models/provider-auth.model';
 import type { TaskServerRunnerCapabilitySnapshot } from '../models/remote-host.model';
 
@@ -83,6 +86,44 @@ export class ProviderAuthStatusService implements OnDestroy {
     return this.http.post<ProviderAuthProvisioningResponse>(
       '/api/v1/management/remote-hosts/provider-auth',
       request,
+    );
+  }
+
+  startCodexSignIn(hostId: string, request: CodexSignInStartRequest): Observable<CodexSignInStartResponse> {
+    if (!this.http) throw new Error('Codex sign-in requires the Studio HTTP client.');
+    return this.http.post<CodexSignInStartResponse>(
+      `/api/v1/management/remote-hosts/${encodeURIComponent(hostId)}/codex-sign-in`,
+      request,
+    );
+  }
+
+  pollCodexSignIn(hostId: string, handle: string): Observable<CodexSignInStatusResponse> {
+    if (!this.http) throw new Error('Codex sign-in polling requires the Studio HTTP client.');
+    return this.http.get<CodexSignInStatusResponse>(
+      `/api/v1/management/remote-hosts/${encodeURIComponent(hostId)}/codex-sign-in/${encodeURIComponent(handle)}`,
+    );
+  }
+
+  waitForReadyProbe(
+    provider: string,
+    aliases: readonly string[],
+    baselineAdvertisedAt: string | null,
+    timeoutMs = 90_000,
+  ): Observable<ProviderAuthBadge> {
+    if (!this.http) throw new Error('Provider-auth verification requires the Studio HTTP client.');
+    const baseline = baselineAdvertisedAt ? Date.parse(baselineAdvertisedAt) : Number.NEGATIVE_INFINITY;
+    const normalizedAliases = new Set(aliases.filter(Boolean).map(alias => alias.toLowerCase()));
+    return timer(0, 2_000).pipe(
+      switchMap(() => this.http!.get<TaskServerRunnerCapabilitySnapshot[]>('/api/v1/management/remote-hosts')),
+      tap(snapshots => this.ingest(snapshots ?? [])),
+      map(() => this.statuses().find(status =>
+        status.provider === provider
+        && status.state === 'ok'
+        && status.aliases.some(alias => normalizedAliases.has(alias.toLowerCase()))
+        && (status.advertisedAt ? Date.parse(status.advertisedAt) > baseline : false))),
+      filter((status): status is ProviderAuthBadge => !!status),
+      take(1),
+      timeout({ first: timeoutMs }),
     );
   }
 

@@ -16,6 +16,7 @@ import {
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
+import { CodexSignInDialogService } from '../../services/codex-sign-in-dialog.service';
 import {
   RemoteHostTableState,
   type RemoteHostSortKey,
@@ -51,6 +52,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   private readonly tasks = inject(TaskService);
   private readonly reviewQueue = inject(ReviewQueueService);
   private readonly tableState = new RemoteHostTableState();
+  private readonly codexSignIn = inject(CodexSignInDialogService);
 
   readonly hosts = this.service.hosts;
   readonly loading = this.service.loading;
@@ -167,6 +169,14 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   closeWizard(): void { this.wizardOpen.set(false); }
   openSetup(host: RemoteHost): void { this.setupHost.set(host); }
   closeSetup(): void { this.setupHost.set(null); }
+  openCodexSignIn(host: RemoteHost): void {
+    this.codexSignIn.open({
+      hostId: host.id,
+      hostName: host.name,
+      sshTarget: host.address ?? host.name,
+      aliases: [host.id, host.clientId, host.capacityHostId ?? '', host.name].filter(Boolean),
+    });
+  }
 
   onSetupTaskCreated(task: VisibleCliTaskCreated): void {
     this.setupHost.set(null);

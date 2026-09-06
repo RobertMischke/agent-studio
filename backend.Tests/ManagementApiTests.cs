@@ -232,6 +232,38 @@ public sealed class ManagementApiTests : IDisposable
     }
 
     [Fact]
+    public async Task CodexSignIn_RequiresOperator_ReturnsChallenge_AndPollsSanitizedOutcome()
+    {
+        var processFactory = new CodexDeviceSignInTests.FakeSshProcessFactory([
+            "Open https://auth.openai.com/codex/device",
+            "Enter code WXYZ-2468",
+            "provider-sign-in-status=authenticated",
+        ]);
+        await using var factory = BuildFactory(codexProcessFactory: processFactory);
+        using var client = factory.CreateClient();
+        const string path = "/api/v1/management/remote-hosts/runner-01/codex-sign-in";
+
+        var denied = await client.PostAsJsonAsync(path, new CodexSignInStartRequest("agent@runner-01"));
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+        Assert.Null(processFactory.StartInfo);
+
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+        var accepted = await client.PostAsJsonAsync(path, new CodexSignInStartRequest("agent@runner-01"));
+        accepted.EnsureSuccessStatusCode();
+        var started = await accepted.Content.ReadFromJsonAsync<CodexSignInStartResponse>();
+        Assert.NotNull(started);
+        Assert.Equal("WXYZ-2468", started!.UserCode);
+        Assert.Contains("no-store", accepted.Headers.CacheControl?.ToString() ?? string.Empty);
+
+        var statusResponse = await client.GetAsync($"{path}/{started.Handle}");
+        statusResponse.EnsureSuccessStatusCode();
+        var statusBody = await statusResponse.Content.ReadAsStringAsync();
+        Assert.Contains("completed", statusBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("WXYZ-2468", statusBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("auth.openai.com", statusBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task BackupCreate_VerifiesRealArchive_OutsideDataDirectory()
     {
         await using var factory = BuildFactory(Environments.Production);
@@ -418,7 +450,8 @@ public sealed class ManagementApiTests : IDisposable
 
     private WebApplicationFactory<Program> BuildFactory(
         string environment = "Test",
-        IProviderAuthProvisioner? provisioner = null) =>
+        IProviderAuthProvisioner? provisioner = null,
+        ICodexSignInSshProcessFactory? codexProcessFactory = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment(environment);
@@ -440,6 +473,11 @@ public sealed class ManagementApiTests : IDisposable
             {
                 services.RemoveAll<IProviderAuthProvisioner>();
                 services.AddSingleton(provisioner);
+            }
+            if (codexProcessFactory is not null)
+            {
+                services.RemoveAll<ICodexSignInSshProcessFactory>();
+                services.AddSingleton(codexProcessFactory);
             }
         });
     });

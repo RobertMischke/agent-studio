@@ -100,6 +100,7 @@ export class RemoteHostCardComponent {
   readonly capacityChange = output<RuntimeCapacityChange>();
   readonly projectPolicyChange = output<HostProjectPolicyChange>();
   readonly setup = output<RemoteHost>();
+  readonly codexSignIn = output<RemoteHost>();
   readonly expandedChange = output<boolean>();
   readonly expandedSections = signal<readonly DetailSection[]>([]);
 
@@ -286,6 +287,11 @@ export class RemoteHostCardComponent {
     const host = this.host();
     if (host.role !== 'remote' || host.status === 'retired' || host.busyAction) return;
     this.setup.emit(host);
+  }
+
+  requestCodexSignIn(): void {
+    const host = this.host();
+    if (host.role === 'remote' && host.status !== 'retired') this.codexSignIn.emit(host);
   }
 
 }
