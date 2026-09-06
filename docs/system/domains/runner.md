@@ -156,7 +156,12 @@ state.
   reads the runner user's native Claude and Codex credential files when present,
   but returns only modification and expiry timestamps and never token values.
   Provider-specific environment files, including `claude.env`, are outside the
-  contract.
+  contract. Codex device authentication remains native and host-owned:
+  `backend/Features/Management/CodexSignIn.cs` starts the runner user's
+  `codex login --device-auth` through the validated SSH target, keeps only an
+  in-memory 15-minute session, verifies with `codex login status`, and restarts
+  active runner units to force a fresh startup probe. Its terminal
+  `provider_sign_in` bus event is scrubbed to host, provider, actor, and outcome.
 - `backend/Features/Orchestrator/OrchestratorContextKey.cs`,
   `OrchestratorSessionRegistry.cs`, `OrchestratorSessionEndpoints.cs`, and
   `OrchestratorTurnService.cs`: context-keyed global, project, and task

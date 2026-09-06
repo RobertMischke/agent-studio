@@ -44,6 +44,8 @@ from the secret.
 
 ## 2. Renew through Studio
 
+### Claude
+
 1. Open the affected host in **Execution Hosts** and choose **Set up agent
    host**.
 2. In **Provider authentication**, select `CLAUDE_CODE_OAUTH_TOKEN` or
@@ -61,6 +63,27 @@ for a newer runner probe.
 
 Provisioning one Claude credential replaces the other Claude variable while
 preserving entries for future providers in the shared file.
+
+### Codex
+
+1. On an **Unavailable** or **Expiring** Codex badge, choose **Sign in Codex**.
+   The same action is available on a Ready card waiting for
+   `provider-auth:codex`.
+2. Confirm the prefilled SSH alias or `user@host` target and choose **Start
+   Codex sign-in**.
+3. Open the displayed HTTPS verification link and enter the large one-time
+   code. The dialog remains pending while `codex login --device-auth` runs as
+   the runner user on that host.
+4. Wait for the dialog to close after `codex login status` succeeds and a fresh
+   runner capability reports Codex authentication ready.
+
+The device flow times out after 15 minutes. Studio keeps only the in-memory
+session handle and outcome; the remote process owns credential storage in the
+runner user's `~/.codex/auth.json`. Neither the resulting token nor the
+one-time code is written to Studio storage, tasks, logs, operator-feed events,
+or evidence. Active Coding and Review units restart after successful status
+verification so the provider probe and blocked Ready cards recover without an
+operator SSH session.
 
 ## 3. Verify recovery
 

@@ -1334,6 +1334,47 @@ describe('TaskCardComponent (smoke)', () => {
     expect(fixture.componentInstance.providerAuthWait()?.tooltip).toContain('Not logged in');
   });
 
+  it('opens Codex device sign-in from a Ready-card authentication wait', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '2-ready', cliType: 'codex', execution: null,
+      executionLocation: {
+        state: 'queued-remote', executionKind: 'remote', runnerId: 'agent-runner-01',
+        configuredRunnerId: 'agent-runner-01', connectionState: 'connected',
+        leaseState: 'queued', trustReason: 'Project execution assignment targets this runner.',
+      },
+    }));
+    const now = new Date();
+    TestBed.inject(ProviderAuthStatusService).ingest([{
+      runnerId: 'agent-runner-01', name: 'runner-berlin', hostId: 'host-01', instanceId: 'coding-01',
+      runnerVersion: '1.0.0', protocolVersion: 2, status: 'active',
+      registeredAt: now.toISOString(), lastSeenAt: now.toISOString(),
+      hostAdmission: { hostId: 'host-01', admissionState: 'open' },
+      capabilities: [{
+        key: 'cli-execution:codex', category: 'cli-execution', advertisedStatus: 'ready',
+        healthState: 'healthy', advertisedAt: now.toISOString(),
+        freshUntil: new Date(now.getTime() + 120_000).toISOString(), isFresh: true,
+        consecutiveFailures: 0, affectedClaims: [], recoveryHistory: [],
+      }, {
+        key: 'provider-auth:codex', category: 'provider-auth', advertisedStatus: 'unavailable',
+        healthState: 'healthy', advertisedAt: now.toISOString(),
+        freshUntil: new Date(now.getTime() + 120_000).toISOString(), isFresh: true,
+        consecutiveFailures: 0, detail: 'Not logged in', signal: 'signed-out',
+        affectedClaims: [], recoveryHistory: [],
+      }],
+    }]);
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('[data-testid="task-card-codex-sign-in"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const dialog = fixture.nativeElement.querySelector('[data-testid="codex-sign-in-dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain('Sign in Codex on runner-berlin');
+    expect((dialog.querySelector('[data-testid="codex-sign-in-ssh-target"]') as HTMLInputElement).value)
+      .toBe('runner-berlin');
+  });
+
   it('renders a compact family code and named thinking level without model text', async () => {
     const fixture = await renderCard(makeJob({
       state: '2-ready', cliType: 'claude', model: 'claude-opus-4-8', thinkingLevel: 'xhigh',

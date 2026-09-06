@@ -30,9 +30,27 @@ export interface ProviderAuthBadge {
 
 export interface ProviderAuthWaitReason {
   provider: string;
+  runnerId: string | null;
   label: string;
   tooltip: string;
   hostNames: readonly string[];
+}
+
+export interface CodexSignInRequest {
+  sshTarget: string;
+}
+
+export interface CodexSignInResponse {
+  handle: string;
+  runnerId: string;
+  host: string;
+  state: 'pending' | 'completed' | 'failed';
+  detail: string;
+  requestedAt: string;
+  expiresAt: string;
+  verificationUrl: string | null;
+  userCode: string | null;
+  completedAt: string | null;
 }
 
 export interface ProviderAuthProvisioningRequest {
@@ -124,6 +142,7 @@ export function providerAuthWaitReason(
         : `No reachable runner capability snapshot advertises provider-auth:${provider}.`;
   return {
     provider,
+    runnerId: candidates[0]?.runnerId ?? configuredRunner,
     label: limited
       ? `${providerLabel} rate-limited on ${target}${limited.limitedUntil ? ` until ${limited.limitedUntil}` : ''}`
       : `Waiting for ${providerLabel} sign-in on ${target}`,

@@ -1,0 +1,40 @@
+:host { display: contents; }
+
+.codex-sign-in { width: min(620px, 96vw); }
+.codex-sign-in__fields { grid-template-columns: 1fr; }
+.codex-sign-in__device {
+  display: grid;
+  gap: var(--studio-spacing-3);
+  margin-top: var(--studio-spacing-4);
+  padding: var(--studio-spacing-4);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 8px;
+  background: var(--studio-bg-selected);
+  text-align: center;
+}
+.codex-sign-in__device p { margin: 0; color: var(--studio-fg); font-size: 12px; }
+.codex-sign-in__device a { color: var(--studio-accent-strong); overflow-wrap: anywhere; }
+.codex-sign-in__code {
+  display: grid;
+  gap: var(--studio-spacing-1);
+  justify-self: center;
+  padding: var(--studio-spacing-3) var(--studio-spacing-5);
+  border: 1px solid var(--studio-accent);
+  border-radius: 8px;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg-strong);
+  cursor: pointer;
+  font-family: var(--font-mono, monospace);
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.codex-sign-in__code small {
+  color: var(--studio-fg-muted);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: normal;
+}
+.codex-sign-in__code:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }

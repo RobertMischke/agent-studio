@@ -185,6 +185,31 @@ describe('RemoteHostCardComponent', () => {
       .toContain('ready → unavailable');
   });
 
+  it('offers Codex sign-in for an unavailable badge and emits the selected host', () => {
+    const host: RemoteHost = {
+      ...HOST,
+      capabilityHealth: [{
+        key: 'cli-execution:codex', category: 'cli-execution', advertisedStatus: 'ready',
+        healthState: 'healthy', advertisedAt: '2026-07-10T11:59:30Z',
+        freshUntil: '2026-07-10T12:02:30Z', isFresh: true, consecutiveFailures: 0,
+        affectedClaims: [], recoveryHistory: [],
+      }, {
+        key: 'provider-auth:codex', category: 'provider-auth', advertisedStatus: 'unavailable',
+        healthState: 'healthy', advertisedAt: '2026-07-10T11:59:30Z',
+        freshUntil: '2026-07-10T12:02:30Z', isFresh: true, consecutiveFailures: 0,
+        detail: 'Not logged in', signal: 'signed-out', affectedClaims: [], recoveryHistory: [],
+      }],
+    };
+    const fixture = mount(host);
+    const selected: { host: RemoteHost; auth: { provider: string } }[] = [];
+    fixture.componentInstance.codexSignIn.subscribe(value => selected.push(value));
+
+    (fixture.nativeElement.querySelector('[data-testid="remote-host-codex-sign-in"]') as HTMLButtonElement).click();
+
+    expect(selected[0]?.host.id).toBe(host.id);
+    expect(selected[0]?.auth.provider).toBe('codex');
+  });
+
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
     const el: HTMLElement = mount({
       ...HOST,

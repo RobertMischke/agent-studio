@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.IO.Compression;
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -232,6 +233,58 @@ public sealed class ManagementApiTests : IDisposable
     }
 
     [Fact]
+    public async Task CodexSignIn_StreamsDeviceTranscript_ThenReportsVerifiedCompletionWithoutPersistingCode()
+    {
+        const string deviceCode = "ABCD-EFGH";
+        var transport = new FakeCodexSignInTransport(deviceCode);
+        await using var factory = BuildFactory(codexTransport: transport);
+        using var client = factory.CreateClient();
+        var unauthorized = await client.PostAsJsonAsync(
+            "/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in",
+            new CodexSignInRequest("agent@runner-01"));
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+        Assert.Null(transport.SshTarget);
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+
+        var accepted = await client.PostAsJsonAsync(
+            "/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in",
+            new CodexSignInRequest("agent@runner-01"));
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        var started = await accepted.Content.ReadFromJsonAsync<CodexSignInResponse>();
+        Assert.NotNull(started);
+        Assert.Equal("pending", started.State);
+        Assert.Equal("https://auth.openai.com/codex/device", started.VerificationUrl);
+        Assert.Equal(deviceCode, started.UserCode);
+        Assert.Equal("agent@runner-01", transport.SshTarget);
+
+        transport.Process.Complete(0);
+        CodexSignInResponse? completed = null;
+        for (var attempt = 0; attempt < 50 && completed?.State != "completed"; attempt++)
+        {
+            await Task.Delay(20);
+            completed = await client.GetFromJsonAsync<CodexSignInResponse>(
+                $"/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in/{started.Handle}");
+        }
+
+        Assert.NotNull(completed);
+        Assert.Equal("completed", completed.State);
+        Assert.Null(completed.VerificationUrl);
+        Assert.Null(completed.UserCode);
+        Assert.True(transport.ProbeRefreshed);
+        var busStore = factory.Services.GetRequiredService<AgentStudio.Bus.AgentMessageBusStore>();
+        for (var attempt = 0; attempt < 50
+             && !busStore.Recent(_root, null, 10).Any(message => message.Topic == "provider_sign_in"); attempt++)
+            await Task.Delay(20);
+        var audit = Assert.Single(busStore.Recent(_root, null, 10), message => message.Topic == "provider_sign_in");
+        var auditJson = JsonSerializer.Serialize(audit);
+        Assert.Contains("agent@runner-01", auditJson, StringComparison.Ordinal);
+        Assert.Contains("local-default", auditJson, StringComparison.Ordinal);
+        Assert.DoesNotContain(deviceCode, auditJson, StringComparison.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+            Assert.DoesNotContain(deviceCode, File.ReadAllText(file), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task BackupCreate_VerifiesRealArchive_OutsideDataDirectory()
     {
         await using var factory = BuildFactory(Environments.Production);
@@ -418,7 +471,8 @@ public sealed class ManagementApiTests : IDisposable
 
     private WebApplicationFactory<Program> BuildFactory(
         string environment = "Test",
-        IProviderAuthProvisioner? provisioner = null) =>
+        IProviderAuthProvisioner? provisioner = null,
+        ICodexSignInTransport? codexTransport = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment(environment);
@@ -440,6 +494,11 @@ public sealed class ManagementApiTests : IDisposable
             {
                 services.RemoveAll<IProviderAuthProvisioner>();
                 services.AddSingleton(provisioner);
+            }
+            if (codexTransport is not null)
+            {
+                services.RemoveAll<ICodexSignInTransport>();
+                services.AddSingleton(codexTransport);
             }
         });
     });
@@ -463,6 +522,62 @@ public sealed class ManagementApiTests : IDisposable
                 ["agent-runner.service"],
                 true));
         }
+    }
+
+    private sealed class FakeCodexSignInTransport(string deviceCode) : ICodexSignInTransport
+    {
+        public FakeCodexDeviceAuthProcess Process { get; } = new(deviceCode);
+        public string? SshTarget { get; private set; }
+        public bool ProbeRefreshed { get; private set; }
+
+        public Task<ICodexDeviceAuthProcess> StartAsync(string sshTarget, CancellationToken cancellationToken)
+        {
+            SshTarget = sshTarget;
+            return Task.FromResult<ICodexDeviceAuthProcess>(Process);
+        }
+
+        public Task<CodexSignInVerification> VerifyAndRefreshAsync(
+            string sshTarget,
+            CancellationToken cancellationToken)
+        {
+            ProbeRefreshed = true;
+            return Task.FromResult(new CodexSignInVerification(
+                true,
+                "Codex reports signed in and the provider probe was refreshed.",
+                ["agent-host.service"]));
+        }
+    }
+
+    private sealed class FakeCodexDeviceAuthProcess : ICodexDeviceAuthProcess
+    {
+        private readonly Channel<string> _output = Channel.CreateUnbounded<string>();
+        private readonly TaskCompletionSource<int> _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public FakeCodexDeviceAuthProcess(string deviceCode)
+        {
+            _output.Writer.TryWrite("Open this URL in your browser: https://auth.openai.com/codex/device");
+            _output.Writer.TryWrite($"Enter this one-time code: {deviceCode}");
+        }
+
+        public IAsyncEnumerable<string> ReadOutputAsync(CancellationToken cancellationToken)
+            => _output.Reader.ReadAllAsync(cancellationToken);
+
+        public Task<int> WaitForExitAsync(CancellationToken cancellationToken)
+            => _exit.Task.WaitAsync(cancellationToken);
+
+        public Task TerminateAsync()
+        {
+            Complete(143);
+            return Task.CompletedTask;
+        }
+
+        public void Complete(int exitCode)
+        {
+            _output.Writer.TryComplete();
+            _exit.TrySetResult(exitCode);
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private static string CreateServerDataDirectory()

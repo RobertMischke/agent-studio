@@ -111,7 +111,6 @@
           </div>
           }
         </section>
-
         <section class="detail" data-testid="remote-host-detail-section-capabilities">
           <app-remote-host-detail-summary label="Capabilities" [summary]="capabilitySummary()"
             testId="remote-host-detail-toggle-capabilities" [expanded]="isSectionExpanded('capabilities')"
@@ -128,6 +127,9 @@
                   <strong>{{ auth.providerLabel }}</strong>
                   <span>{{ auth.state }}</span>
                 </span>
+                @if (auth.provider === 'codex' && (auth.state === 'unavailable' || auth.state === 'expiring')) {
+                  <button class="provider-auth__sign-in" type="button" data-testid="remote-host-codex-sign-in" (click)="requestCodexSignIn(auth)">Sign in Codex</button>
+                }
                 @if (auth.expiresSoon && auth.expiryLabel) {
                   <span class="provider-auth__expiry"
                         [attr.data-testid]="'remote-host-provider-auth-expiry-' + auth.provider">

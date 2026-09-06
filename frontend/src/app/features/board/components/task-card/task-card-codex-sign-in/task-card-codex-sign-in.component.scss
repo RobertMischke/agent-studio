@@ -1,0 +1,17 @@
+:host {
+  display: contents;
+}
+
+button {
+  margin-left: var(--studio-spacing-1);
+  padding: 1px var(--studio-spacing-2);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+
+  &:hover { background: var(--studio-bg-hover); }
+  &:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 2px; }
+}

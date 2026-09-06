@@ -1,0 +1,62 @@
+<div class="setup-backdrop"
+     data-testid="codex-sign-in-dialog"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="codex-sign-in-title"
+     (click)="closeFromBackdrop($event)"
+     (keydown.escape)="cancelled.emit()">
+  <section class="setup codex-sign-in">
+    <header class="setup__header">
+      <div>
+        <span class="setup__eyebrow">Provider authentication</span>
+        <h2 id="codex-sign-in-title">Sign in Codex on {{ hostName() }}</h2>
+        <p>The browser confirms a host-owned device flow. The resulting token stays in the runner user's Codex store and is never sent to Studio.</p>
+      </div>
+      <button class="setup__close" type="button" aria-label="Close Codex sign-in" (click)="cancelled.emit()">×</button>
+    </header>
+
+    <div class="setup__body">
+      <section>
+        <div class="setup__fields codex-sign-in__fields">
+          <label>
+            <span>SSH target</span>
+            <input data-testid="codex-sign-in-ssh-target"
+                   autocomplete="off"
+                   [disabled]="phase() === 'starting' || phase() === 'pending' || phase() === 'verifying'"
+                   [ngModel]="sshTarget()"
+                   (ngModelChange)="sshTarget.set($event)" />
+            <small>Uses the same configured alias or user@host target as host setup.</small>
+          </label>
+        </div>
+
+        @if (verificationUrl(); as url) {
+          <div class="codex-sign-in__device" data-testid="codex-sign-in-device">
+            <p>Open the verification page, then enter this one-time code:</p>
+            <a data-testid="codex-sign-in-url" [href]="url" target="_blank" rel="noopener noreferrer">{{ url }}</a>
+            <button class="codex-sign-in__code" data-testid="codex-sign-in-code" type="button" (click)="copyCode()">
+              {{ userCode() }}
+              <small>{{ copied() ? 'Copied' : 'Copy code' }}</small>
+            </button>
+          </div>
+        }
+
+        <div class="setup__auth-actions">
+          <button class="setup__provision"
+                  data-testid="codex-sign-in-start"
+                  type="button"
+                  [disabled]="!canStart()"
+                  (click)="start()">
+            {{ phase() === 'starting' ? 'Starting…' : phase() === 'failed' ? 'Try again' : 'Start Codex sign-in' }}
+          </button>
+          <span class="setup__auth-status"
+                data-testid="codex-sign-in-status"
+                [attr.data-state]="phase()">
+            <span class="setup__auth-dot" aria-hidden="true"></span>
+            {{ phase() === 'idle' ? 'Not started' : phase() }}
+          </span>
+        </div>
+        <p class="setup__auth-detail" data-testid="codex-sign-in-detail">{{ detail() }}</p>
+      </section>
+    </div>
+  </section>
+</div>

@@ -16,6 +16,8 @@ import {
 import { AddHostWizardComponent, type ProvisionedHostDraft } from '../add-host-wizard/add-host-wizard';
 import { type VisibleCliTaskCreated, type VisibleCliTaskWorkspace } from '../../../visible-cli-task';
 import { RunnerSetupDialogComponent } from '../runner-setup-dialog/runner-setup-dialog';
+import { CodexSignInDialogComponent } from '../codex-sign-in-dialog/codex-sign-in-dialog';
+import type { ProviderAuthBadge } from '../../models/provider-auth.model';
 import {
   RemoteHostTableState,
   type RemoteHostSortKey,
@@ -41,7 +43,7 @@ import {
 @Component({
   selector: 'app-remote-hosts-panel',
   standalone: true,
-  imports: [RemoteHostCardComponent, AddHostWizardComponent, RunnerSetupDialogComponent],
+  imports: [RemoteHostCardComponent, AddHostWizardComponent, RunnerSetupDialogComponent, CodexSignInDialogComponent],
   templateUrl: './remote-hosts-panel.html',
   styleUrl: './remote-hosts-panel.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -59,6 +61,7 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   readonly wizardOpen = signal(false);
   readonly showRetired = signal(false);
   readonly setupHost = signal<RemoteHost | null>(null);
+  readonly codexSignInTarget = signal<{ host: RemoteHost; auth: ProviderAuthBadge } | null>(null);
   readonly pendingConfirmation = signal<{ kind: 'retire' | 'delete'; host: RemoteHost } | null>(null);
   readonly confirmationTitle = computed(() => {
     const pending = this.pendingConfirmation();
@@ -167,6 +170,14 @@ export class RemoteHostsPanelComponent implements OnInit, OnDestroy {
   closeWizard(): void { this.wizardOpen.set(false); }
   openSetup(host: RemoteHost): void { this.setupHost.set(host); }
   closeSetup(): void { this.setupHost.set(null); }
+  openCodexSignIn(target: { host: RemoteHost; auth: ProviderAuthBadge }): void {
+    this.codexSignInTarget.set(target);
+  }
+  closeCodexSignIn(): void { this.codexSignInTarget.set(null); }
+  completeCodexSignIn(): void {
+    this.codexSignInTarget.set(null);
+    this.service.reload();
+  }
 
   onSetupTaskCreated(task: VisibleCliTaskCreated): void {
     this.setupHost.set(null);

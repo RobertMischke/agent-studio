@@ -226,8 +226,12 @@ seeding.
 
 - **Claude.** For a headless host, use the setup-token flow below. An interactive
   host login remains a diagnostic fallback, not the provisioning contract.
-- **Codex.** Same rule: run `codex login` on the host so it writes the host's own
-  `~/.codex/auth.json`; do not copy the operator's. Verify with `codex --version`.
+- **Codex.** Use **Sign in Codex** on the provider badge in Execution Hosts or
+  on a blocked Ready card. Studio starts `codex login --device-auth` as the
+  runner user over SSH and shows the verification URL and one-time code. The
+  completed login writes only the host's own `~/.codex/auth.json`; do not copy
+  the operator's. The terminal fallback remains a host-owned
+  `codex login --device-auth`, verified with `codex login status`.
 - **Rotation is now per host.** Replace only the affected host's provider-auth
   file and restart its units. Other hosts and the operator's normal Claude login
   remain independent.
@@ -322,6 +326,19 @@ placing the secret in a task. It atomically updates the shared file, restarts
 both installed units, verifies the variable name in each daemon's
 `/proc/<MainPID>/environ`, and waits for a fresh runner probe. It never persists
 the value in the Studio database, repository, task, log, or evidence artifact.
+
+Codex uses a separate host-owned device-auth action because its credential is
+not an EnvironmentFile value.
+`POST /api/v1/management/remote-hosts/{id}/codex-sign-in` starts the remote login and
+returns only a session handle, verification URL, one-time code, and 15-minute
+expiry. `GET .../codex-sign-in/{handle}` reports pending, completed, or failed.
+On completion Studio verifies `codex login status` as the runner user and
+restarts active runner units so their startup probe refreshes
+`provider-auth:codex`. The remote `timeout` process terminates an abandoned
+login after 15 minutes even if the Studio connection disappears. Studio does
+not persist the handle, URL, code, command transcript, or credential. The one
+terminal `provider_sign_in` operator-feed event contains only host, provider,
+actor, and outcome.
 
 Provider capability snapshots refresh every 60 seconds. Execution Hosts shows
 **OK**, **Retrying**, **Limited**, **Expiring**, **Unavailable**, or **Unknown**

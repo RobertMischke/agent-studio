@@ -47,18 +47,25 @@ public static partial class ProviderAuthProvisioningPolicy
 
     public static string? Validate(ProviderAuthProvisioningRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.SshTarget)
-            || !SshTargetPattern().IsMatch(request.SshTarget.Trim()))
-            return "SSH target must be a configured alias or user@host without shell characters.";
-        if (string.IsNullOrWhiteSpace(request.RunnerId)
-            || !RunnerIdPattern().IsMatch(request.RunnerId.Trim()))
-            return "Runner identity is required and may contain letters, numbers, dots, underscores, and hyphens.";
+        var targetValidation = ValidateTarget(request.SshTarget, request.RunnerId);
+        if (targetValidation is not null) return targetValidation;
         if (!SupportedEnvironmentVariables.Contains(request.EnvironmentVariable?.Trim() ?? ""))
             return "Choose CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY.";
         if (string.IsNullOrEmpty(request.Secret) || request.Secret.Length is < 16 or > 8192)
             return "Provider credential must contain between 16 and 8192 characters.";
         if (!SecretPattern().IsMatch(request.Secret))
             return "Provider credential contains whitespace or characters that cannot be stored safely in an EnvironmentFile.";
+        return null;
+    }
+
+    public static string? ValidateTarget(string? sshTarget, string? runnerId)
+    {
+        if (string.IsNullOrWhiteSpace(sshTarget)
+            || !SshTargetPattern().IsMatch(sshTarget.Trim()))
+            return "SSH target must be a configured alias or user@host without shell characters.";
+        if (string.IsNullOrWhiteSpace(runnerId)
+            || !RunnerIdPattern().IsMatch(runnerId.Trim()))
+            return "Runner identity is required and may contain letters, numbers, dots, underscores, and hyphens.";
         return null;
     }
 

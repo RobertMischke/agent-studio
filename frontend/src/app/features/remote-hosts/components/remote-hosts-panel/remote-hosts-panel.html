@@ -160,7 +160,8 @@
             (action)="onAction($event)"
             (capacityChange)="onCapacityChange($event)"
             (projectPolicyChange)="onProjectPolicyChange($event)"
-            (setup)="openSetup($event)">
+            (setup)="openSetup($event)"
+            (codexSignIn)="openCodexSignIn($event)">
           </tbody>
         }
       </table>
@@ -177,6 +178,16 @@
       [workspaces]="workspaces()"
       (cancelled)="closeSetup()"
       (taskCreated)="onSetupTaskCreated($event)" />
+  }
+
+  @if (codexSignInTarget(); as target) {
+    <app-codex-sign-in-dialog
+      [runnerId]="target.auth.runnerId"
+      [hostName]="target.host.name"
+      [initialSshTarget]="target.host.address ?? target.host.name"
+      [aliases]="target.auth.aliases"
+      (cancelled)="closeCodexSignIn()"
+      (completed)="completeCodexSignIn()" />
   }
 
 

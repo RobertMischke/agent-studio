@@ -770,6 +770,84 @@ test.describe('Execution Hosts settings section', () => {
     await remote.screenshot({ path: join(SHOT_DIR, 'provider-auth-states-light--mocked.png') });
   });
 
+  test('completes host-owned Codex device sign-in and refreshes the provider badge', async ({ page }) => {
+    const requestedAt = new Date();
+    let finishSignIn = false;
+    const capability = (key: string, status: string, detail: string, advertisedAt: Date) => ({
+      key, category: key.split(':')[0], advertisedStatus: status, healthState: 'healthy',
+      reason: null, advertisedAt: advertisedAt.toISOString(),
+      freshUntil: new Date(advertisedAt.getTime() + 180_000).toISOString(), isFresh: true,
+      firstFailureAt: null, lastFailureAt: null, cooldownUntil: null,
+      canaryClaimId: null, consecutiveFailures: 0, version: null,
+      identity: key.split(':')[1], detail, affectedClaims: [], recoveryHistory: [],
+    });
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => {
+      const observed = finishSignIn ? new Date(requestedAt.getTime() + 30_000) : requestedAt;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{
+          runnerId: 'agent-runner-01', name: 'agent-runner-01', hostId: 'host-berlin',
+          instanceId: 'coding', runnerVersion: '1.2.0', protocolVersion: 2, status: 'active',
+          registeredAt: requestedAt.toISOString(), lastSeenAt: observed.toISOString(),
+          hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
+          capabilities: [
+            capability('cli-execution:codex', 'ready', 'Codex installed.', observed),
+            capability('provider-auth:codex', finishSignIn ? 'ready' : 'unavailable',
+              finishSignIn ? 'Active Codex session confirmed.' : 'Not logged in', observed),
+          ], telemetry: null,
+        }]),
+      });
+    });
+    await page.route('**/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        handle: 'codex-device-session', runnerId: 'agent-runner-01', host: 'agent-runner', state: 'pending',
+        detail: 'Complete sign-in in the browser.', requestedAt: requestedAt.toISOString(),
+        expiresAt: new Date(requestedAt.getTime() + 900_000).toISOString(),
+        verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-EFGH', completedAt: null,
+      }),
+    }));
+    await page.route('**/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in/codex-device-session', route => {
+      const state = finishSignIn ? 'completed' : 'pending';
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          handle: 'codex-device-session', runnerId: 'agent-runner-01', host: 'agent-runner', state,
+          detail: finishSignIn ? 'Codex reports signed in and the runner probe was refreshed.' : 'Complete sign-in in the browser.',
+          requestedAt: requestedAt.toISOString(), expiresAt: new Date(requestedAt.getTime() + 900_000).toISOString(),
+          verificationUrl: state === 'pending' ? 'https://auth.openai.com/codex/device' : null,
+          userCode: state === 'pending' ? 'ABCD-EFGH' : null,
+          completedAt: state === 'completed' ? new Date().toISOString() : null,
+        }),
+      });
+    });
+
+    await page.goto('/#/workspace/settings/remote-hosts');
+    const remote = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expandHost(remote);
+    await remote.getByTestId('remote-host-codex-sign-in').click();
+    await page.getByTestId('codex-sign-in-start').click();
+    await expect(page.getByTestId('codex-sign-in-url')).toHaveAttribute('href', 'https://auth.openai.com/codex/device');
+    await expect(page.getByTestId('codex-sign-in-code')).toContainText('ABCD-EFGH');
+    await setTheme(page, 'light');
+    await page.getByTestId('codex-sign-in-dialog').screenshot({
+      path: join(SHOT_DIR, 'codex-device-sign-in-light--mocked.png'),
+    });
+    await setTheme(page, 'dark');
+    await page.getByTestId('codex-sign-in-dialog').screenshot({
+      path: join(SHOT_DIR, 'codex-device-sign-in-dark--mocked.png'),
+    });
+
+    finishSignIn = true;
+    await expect(page.getByTestId('codex-sign-in-dialog')).toBeHidden({ timeout: 10_000 });
+    await expandHost(remote);
+    await expect(remote.getByTestId('remote-host-provider-auth-codex')).toHaveAttribute('data-state', 'ok');
+  });
+
   test('surfaces a failed startup push probe as a read-only host', async ({ page }) => {
     await page.unroute('**/api/clients');
     await page.route('**/api/clients', route => route.fulfill({

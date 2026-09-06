@@ -127,6 +127,9 @@
             [cacTooltip]="authWait.tooltip">
         <span class="task-card__provider-auth-dot" aria-hidden="true"></span>
         {{ authWait.label }}
+        @if (authWait.provider === 'codex' && authWait.runnerId) {
+          <app-task-card-codex-sign-in [wait]="authWait" />
+        }
       </span>
     }
     <app-review-decision-badges [job]="job()" />

@@ -391,6 +391,12 @@ without a parallel surface.
   machine disclosure opens first to one-line summaries for identity,
   connection, capabilities, capacity, project access, host work, and system
   load; each section discloses its internals independently.
+  An **Unavailable** or **Expiring** Codex provider badge exposes **Sign in
+  Codex**. The reused provider-auth dialog shell starts the host-owned device
+  flow, renders the verification URL and copyable code, polls the opaque
+  handle, and closes only after a fresh runner capability confirms recovery.
+  Ready cards waiting for `provider-auth:codex` expose the same action directly
+  on their wait chip.
 - The System prompts destination is the prompt registry and observability
   surface. Its overview groups runtime-step, orchestrator, drift, and framing
   templates, explains application and project pipeline override precedence, and

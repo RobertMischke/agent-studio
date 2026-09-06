@@ -1,0 +1,10 @@
+<button type="button" data-testid="task-card-codex-sign-in" (click)="open($event)">Sign in</button>
+@if (opened()) {
+  <app-codex-sign-in-dialog
+    [runnerId]="runnerId()"
+    [hostName]="hostName()"
+    [initialSshTarget]="hostName()"
+    [aliases]="[runnerId(), hostName()]"
+    (cancelled)="opened.set(false)"
+    (completed)="complete()" />
+}

@@ -14,11 +14,11 @@ async function installRoutes(page: Page): Promise<void> {
   const now = new Date();
   const task = {
     id: 'AGT-AUTH-WAIT', key: 'AGT-AUTH-WAIT', displayKey: 'AGT-AUTH-WAIT',
-    taskKey: `${WATCH_PATH}::AGT-AUTH-WAIT`, title: 'Claude task waiting for host authentication',
-    state: '2-ready', order: 1, agent: 'claude', cliType: 'claude',
+    taskKey: `${WATCH_PATH}::AGT-AUTH-WAIT`, title: 'Codex task waiting for host authentication',
+    state: '2-ready', order: 1, agent: 'codex', cliType: 'codex',
     createdAt: now.toISOString(), watchPath: WATCH_PATH, projectName: PROJECT,
     folderPath: `${WATCH_PATH}/2-ready/AGT-AUTH-WAIT`, lastActivity: now.toISOString(),
-    sessionName: null, model: 'claude-sonnet-5', useOwnSession: null,
+    sessionName: null, model: 'gpt-5.6-codex', useOwnSession: null,
     lastUsage: null, execution: null, commit: null, ownerClientId: null, tags: [],
     executionLocation: {
       state: 'queued-remote', executionKind: 'remote', runnerId: 'agent-runner-01',
@@ -54,8 +54,8 @@ async function installRoutes(page: Page): Promise<void> {
       registeredAt: now.toISOString(), lastSeenAt: now.toISOString(),
       hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
       capabilities: [
-        capability('cli-execution:claude', 'ready'),
-        capability('provider-auth:claude', 'unavailable', 'Not logged in'),
+        capability('cli-execution:codex', 'ready'),
+        capability('provider-auth:codex', 'unavailable', 'Not logged in'),
       ], telemetry: null,
     }]);
     if (url.includes('/api/clients')) return json(route, [{
@@ -70,7 +70,7 @@ async function installRoutes(page: Page): Promise<void> {
   });
 }
 
-test('Ready card shows the provider sign-in wait reason in both themes', async ({ page }) => {
+test('Ready card opens Codex sign-in from the provider wait chip in both themes', async ({ page }) => {
   const resultsDir = resolve(process.env.JOB_RESULTS_DIR ?? '../results', 'provider-auth');
   mkdirSync(resultsDir, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -78,6 +78,18 @@ test('Ready card shows the provider sign-in wait reason in both themes', async (
     v: 1, tabs: [{ kind: 'board', projectName: '__all__' }], activeKey: 'board:__all__',
   })));
   await installRoutes(page);
+  await page.route('**/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in', route => json(route, {
+    handle: 'ready-card-session', runnerId: 'agent-runner-01', host: 'runner-berlin', state: 'pending',
+    detail: 'Complete sign-in in the browser.', requestedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 900_000).toISOString(),
+    verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'WXYZ-1234', completedAt: null,
+  }));
+  await page.route('**/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in/ready-card-session', route => json(route, {
+    handle: 'ready-card-session', runnerId: 'agent-runner-01', host: 'runner-berlin', state: 'pending',
+    detail: 'Complete sign-in in the browser.', requestedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 900_000).toISOString(),
+    verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'WXYZ-1234', completedAt: null,
+  }));
   await page.goto('/?includeFixtures=true', { waitUntil: 'domcontentloaded' });
   await dismissDevErrorDialog(page);
   await page.addStyleTag({
@@ -85,7 +97,7 @@ test('Ready card shows the provider sign-in wait reason in both themes', async (
   });
 
   const wait = page.getByTestId('task-card-provider-auth-wait');
-  await expect(wait).toContainText('Waiting for Claude sign-in on runner-berlin');
+  await expect(wait).toContainText('Waiting for Codex sign-in on runner-berlin');
   await wait.hover();
   await expect(page.getByRole('tooltip')).toContainText('Not logged in');
 
@@ -95,4 +107,9 @@ test('Ready card shows the provider sign-in wait reason in both themes', async (
       path: join(resultsDir, `ready-card-provider-auth-wait-${theme}--mocked.png`),
     });
   }
+
+  await page.getByTestId('task-card-codex-sign-in').click();
+  await expect(page.getByTestId('codex-sign-in-dialog')).toBeVisible();
+  await page.getByTestId('codex-sign-in-start').click();
+  await expect(page.getByTestId('codex-sign-in-code')).toContainText('WXYZ-1234');
 });

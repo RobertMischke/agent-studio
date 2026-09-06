@@ -1,12 +1,13 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, OnDestroy, computed, inject, signal } from '@angular/core';
-import { Observable, filter, map, switchMap, take, tap, timer, timeout } from 'rxjs';
+import { Observable, filter, map, switchMap, take, takeWhile, tap, timer, timeout } from 'rxjs';
 import { NotificationService } from '../../../services/notification.service';
 import {
   providerAuthBadgesForSnapshot,
   type ProviderAuthBadge,
   type ProviderAuthProvisioningRequest,
   type ProviderAuthProvisioningResponse,
+  type CodexSignInResponse,
 } from '../models/provider-auth.model';
 import type { TaskServerRunnerCapabilitySnapshot } from '../models/remote-host.model';
 
@@ -83,6 +84,24 @@ export class ProviderAuthStatusService implements OnDestroy {
     return this.http.post<ProviderAuthProvisioningResponse>(
       '/api/v1/management/remote-hosts/provider-auth',
       request,
+    );
+  }
+
+  startCodexSignIn(runnerId: string, sshTarget: string): Observable<CodexSignInResponse> {
+    if (!this.http) throw new Error('Codex sign-in requires the Studio HTTP client.');
+    return this.http.post<CodexSignInResponse>(
+      `/api/v1/management/remote-hosts/${encodeURIComponent(runnerId)}/codex-sign-in`,
+      { sshTarget },
+    );
+  }
+
+  watchCodexSignIn(runnerId: string, handle: string): Observable<CodexSignInResponse> {
+    if (!this.http) throw new Error('Codex sign-in status requires the Studio HTTP client.');
+    return timer(0, 2_000).pipe(
+      switchMap(() => this.http!.get<CodexSignInResponse>(
+        `/api/v1/management/remote-hosts/${encodeURIComponent(runnerId)}/codex-sign-in/${encodeURIComponent(handle)}`,
+      )),
+      takeWhile(session => session.state === 'pending', true),
     );
   }
 
