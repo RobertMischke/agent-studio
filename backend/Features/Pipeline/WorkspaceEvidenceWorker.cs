@@ -20,6 +20,7 @@ public sealed class WorkspaceEvidenceWorker : BackgroundService
     private readonly IConfiguration _config;
     private readonly ILogger<WorkspaceEvidenceWorker> _logger;
     private readonly TimeProvider _time;
+    private DateTimeOffset _nextSweepAt;
 
     public WorkspaceEvidenceWorker(
         WorkspaceEvidenceQueue queue,
@@ -35,6 +36,7 @@ public sealed class WorkspaceEvidenceWorker : BackgroundService
         _config = config;
         _logger = logger;
         _time = time ?? TimeProvider.System;
+        _nextSweepAt = _time.GetUtcNow();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -67,6 +69,12 @@ public sealed class WorkspaceEvidenceWorker : BackgroundService
                                 "workspace-evidence-flush-failed repo={Repo} error={Error}",
                                 flush.GitRoot, flush.Result.Error);
                     }
+                }
+
+                if (_time.GetUtcNow() >= _nextSweepAt)
+                {
+                    _nextSweepAt = _time.GetUtcNow() + ResolveSweepInterval();
+                    RunTrackedDriftSweep();
                 }
             }
             catch (Exception ex)
@@ -130,5 +138,20 @@ public sealed class WorkspaceEvidenceWorker : BackgroundService
     {
         var seconds = _config.GetValue<int?>("WorkspaceEvidence:TickSeconds") ?? 2;
         return TimeSpan.FromSeconds(Math.Clamp(seconds, 1, 60));
+    }
+
+    private TimeSpan ResolveSweepInterval()
+    {
+        var minutes = _config.GetValue<int?>("WorkspaceEvidence:SweepIntervalMinutes") ?? 60;
+        return TimeSpan.FromMinutes(Math.Clamp(minutes, 1, 60));
+    }
+
+    private void RunTrackedDriftSweep()
+    {
+        var result = _batcher.SweepTrackedDrift();
+        if (result.DidCommit)
+            _logger.LogInformation("workspace-tracked-drift-sweep-committed sha={Sha}", result.Sha);
+        else if (!result.Success)
+            _logger.LogWarning("workspace-tracked-drift-sweep-failed error={Error}", result.Error);
     }
 }

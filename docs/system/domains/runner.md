@@ -1,6 +1,6 @@
 # Runner Domain Map
 
-Version: 2026-08-12
+Version: 2026-09-06
 Status: System-of-record map for runner-side changes.
 
 Use this when a change touches task pickup, active execution, post-run outcome
@@ -318,7 +318,9 @@ state.
   neither can mint or recover attempt write authority. Failed authority-store
   persistence restores the last durable snapshot before the error escapes, so
   the live process cannot retain a fence, epoch, or attempt that restart would
-  forget.
+  forget. The live file, daily archives, backups, and temporary variants are
+  runtime-only and never staged in the Task Repository; see the
+  [workspace repository lifecycle](../../operations/workspace-repository-lifecycle.md).
   Server restart recovery is cooperative rather than a takeover: durable leased
   records may be re-adopted after expiry only when the runner supplies every
   unchanged authority field. Re-adoption preserves the attempt and fence,

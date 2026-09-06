@@ -23,6 +23,7 @@ public sealed class WorkspaceArtifactCommitService
     private readonly WorkspaceArtifactPushQueue? _pushQueue;
     private readonly int _indexLockRetryAttempts;
     private readonly int _indexLockRetryBackoffMs;
+    private readonly long _maxFileSizeBytes;
 
     // Per-repo serialization gate. The punctual job-folder commits and the
     // debounced Transition-Committer's evidence batches both mutate the same
@@ -33,7 +34,7 @@ public sealed class WorkspaceArtifactCommitService
     private static readonly ConcurrentDictionary<string, object> RepoGates =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private static object RepoGate(string gitRoot) =>
+    internal static object RepositoryGate(string gitRoot) =>
         RepoGates.GetOrAdd(gitRoot, _ => new object());
 
     public WorkspaceArtifactCommitService(
@@ -48,6 +49,10 @@ public sealed class WorkspaceArtifactCommitService
             configuration.GetValue<int?>("WorkspaceEvidence:IndexLockRetryAttempts") ?? 5, 1, 50);
         _indexLockRetryBackoffMs = Math.Clamp(
             configuration.GetValue<int?>("WorkspaceEvidence:IndexLockRetryBackoffMs") ?? 100, 0, 5000);
+        _maxFileSizeBytes = Math.Clamp(
+            configuration.GetValue<long?>("WorkspaceArtifacts:MaxFileSizeBytes") ?? 50L * 1024 * 1024,
+            1L * 1024 * 1024,
+            50L * 1024 * 1024);
     }
 
     public WorkspaceArtifactCommitResult TryCommitRunBoundary(
@@ -149,13 +154,17 @@ public sealed class WorkspaceArtifactCommitService
             // any concurrent job-folder commit) on this repo, with an
             // index.lock retry so a lost race with an external git process is
             // recovered rather than surfaced as a failure.
-            lock (RepoGate(gitRoot))
+            lock (RepositoryGate(gitRoot))
             {
+                var refused = FindRefusedFiles(gitRoot, pathspecs);
+                UnstageRefusedFiles(gitRoot, refused);
                 var addArgs = new List<string> { "add", "-A", "--" };
                 addArgs.AddRange(pathspecs);
+                addArgs.AddRange(BuildExactExcludePathspecs(refused));
                 var add = RunGitRetryingIndexLock(gitRoot, addArgs);
                 if (add.Code != 0)
                     return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
+                UnstageRefusedFiles(gitRoot, refused);
 
                 var changed = RunGit(gitRoot, ["diff", "--cached", "--quiet", "--", .. pathspecs]);
                 if (changed.Code == 0)
@@ -175,6 +184,7 @@ public sealed class WorkspaceArtifactCommitService
                     "commit", "-F", "-", "--"
                 };
                 commitArgs.AddRange(pathspecs);
+                commitArgs.AddRange(BuildExactExcludePathspecs(refused));
                 var commit = RunGitRetryingIndexLock(gitRoot, commitArgs, plan.Message);
                 if (commit.Code != 0)
                 {
@@ -435,16 +445,20 @@ public sealed class WorkspaceArtifactCommitService
             var excludeCommitSpecs = BuildExcludePathspecs(excludeGlobs);
 
             string? shortSha;
-            lock (RepoGate(gitRoot))
+            lock (RepositoryGate(gitRoot))
             {
+                var refused = FindRefusedFiles(gitRoot, pathspecs);
+                UnstageRefusedFiles(gitRoot, refused);
                 // Stage the data paths (git add already honours the workspace
                 // repo's .gitignore), then unstage the exclude globs from the
                 // index.
                 var addArgs = new List<string> { "add", "-A", "--" };
                 addArgs.AddRange(pathspecs);
+                addArgs.AddRange(BuildExactExcludePathspecs(refused));
                 var add = RunGitRetryingIndexLock(gitRoot, addArgs);
                 if (add.Code != 0)
                     return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
+                UnstageRefusedFiles(gitRoot, refused);
 
                 if (resetSpecs.Count > 0)
                 {
@@ -471,6 +485,7 @@ public sealed class WorkspaceArtifactCommitService
                 };
                 commitArgs.AddRange(pathspecs);
                 commitArgs.AddRange(excludeCommitSpecs);
+                commitArgs.AddRange(BuildExactExcludePathspecs(refused));
                 var commit = RunGitRetryingIndexLock(gitRoot, commitArgs, message);
                 if (commit.Code != 0)
                 {
@@ -494,6 +509,182 @@ public sealed class WorkspaceArtifactCommitService
             return WorkspaceArtifactCommitResult.Failed("exception", ex.Message);
         }
     }
+
+    /// <summary>
+    /// Commits repository-wide tracked drift plus untracked bus records. This
+    /// bounded hourly backstop prevents a tracked path outside a job folder
+    /// from remaining dirty indefinitely. Attempt-authority runtime files and
+    /// files above the hard size ceiling are never staged.
+    /// </summary>
+    public WorkspaceArtifactCommitResult TryCommitTrackedSweep(string? workspaceRoot)
+    {
+        try
+        {
+            var gitRoot = ResolveWorkspaceGitRoot(workspaceRoot);
+            if (gitRoot == null)
+                return WorkspaceArtifactCommitResult.Skipped("workspace-missing");
+
+            string? shortSha;
+            lock (RepositoryGate(gitRoot))
+            {
+                var tracked = RunGit(gitRoot, ["diff", "HEAD", "--name-only", "-z"]);
+                if (tracked.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-diff", tracked.ErrorText);
+                var bus = RunGit(gitRoot,
+                    ["ls-files", "--others", "--exclude-standard", "-z", "--", "logs/bus"]);
+                if (bus.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-ls-files", bus.ErrorText);
+
+                var candidates = ParseNullSeparatedPaths(tracked.Out)
+                    .Concat(ParseNullSeparatedPaths(bus.Out))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (candidates.Count == 0)
+                    return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
+
+                var refused = FindRefusedFiles(gitRoot, candidates, candidatesAreFiles: true);
+                UnstageRefusedFiles(gitRoot, refused);
+                var eligible = candidates
+                    .Except(refused.Select(file => file.Path), StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (eligible.Count == 0)
+                    return WorkspaceArtifactCommitResult.Skipped("all-files-refused");
+
+                var pathInput = string.Join('\0', eligible) + '\0';
+                var add = RunGitRetryingIndexLock(
+                    gitRoot,
+                    ["add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul"],
+                    pathInput);
+                if (add.Code != 0)
+                    return WorkspaceArtifactCommitResult.Failed("git-add", add.ErrorText);
+                UnstageRefusedFiles(gitRoot, refused);
+
+                var commit = RunGitRetryingIndexLock(
+                    gitRoot,
+                    [
+                        "-c", $"user.name={CommitterName}",
+                        "-c", $"user.email={CommitterEmail}",
+                        "commit", "-m", "chore(workspace): sweep tracked repository drift",
+                        "--pathspec-from-file=-", "--pathspec-file-nul"
+                    ],
+                    pathInput);
+                if (commit.Code != 0)
+                {
+                    if (commit.ErrorText.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                        return WorkspaceArtifactCommitResult.Skipped("nothing-to-commit");
+                    return WorkspaceArtifactCommitResult.Failed("git-commit", commit.ErrorText);
+                }
+
+                var sha = RunGit(gitRoot, ["rev-parse", "--short", "HEAD"]);
+                shortSha = sha.Code == 0 ? sha.Out.Trim() : null;
+            }
+
+            _logger.LogInformation(
+                "workspace-tracked-drift-sweep repo={Repo} sha={Sha}",
+                gitRoot,
+                shortSha ?? string.Empty);
+            if (WorkspaceAutoPushEnabled() && _pushQueue != null)
+            {
+                if (!_pushQueue.Enqueue(new WorkspaceArtifactPushRequest(gitRoot, "tracked-drift-sweep")))
+                    _logger.LogWarning("workspace-artifact-push enqueue failed jobId=tracked-drift-sweep repo={Repo}", gitRoot);
+            }
+            return WorkspaceArtifactCommitResult.Committed(shortSha, 0, "tracked-drift-sweep");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "workspace-tracked-drift-sweep failed");
+            return WorkspaceArtifactCommitResult.Failed("exception", ex.Message);
+        }
+    }
+
+    private IReadOnlyList<RefusedWorkspaceFile> FindRefusedFiles(
+        string gitRoot,
+        IReadOnlyList<string> pathspecs,
+        bool candidatesAreFiles = false)
+    {
+        IReadOnlyList<string> candidates;
+        if (candidatesAreFiles)
+        {
+            candidates = pathspecs;
+        }
+        else
+        {
+            var args = new List<string>
+            {
+                "ls-files", "--modified", "--others", "--exclude-standard", "-z", "--"
+            };
+            args.AddRange(pathspecs);
+            var listed = RunGit(gitRoot, args);
+            if (listed.Code != 0)
+            {
+                _logger.LogWarning(
+                    "workspace-artifact-size-check failed repo={Repo} error={Error}",
+                    gitRoot,
+                    listed.ErrorText);
+                throw new InvalidOperationException(
+                    $"Could not enumerate files for the staging size guard: {listed.ErrorText}");
+            }
+            candidates = ParseNullSeparatedPaths(listed.Out);
+        }
+
+        var refused = new List<RefusedWorkspaceFile>();
+        foreach (var relativePath in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var normalized = relativePath.Replace('\\', '/').TrimStart('/');
+            if (IsAttemptAuthorityPath(normalized))
+            {
+                refused.Add(new RefusedWorkspaceFile(normalized, null, "attempt-authority-runtime-state"));
+                _logger.LogWarning(
+                    "workspace-artifact-file-refused repo={Repo} path={Path} reason={Reason}",
+                    gitRoot,
+                    normalized,
+                    "attempt-authority-runtime-state");
+                continue;
+            }
+
+            var fullPath = Path.GetFullPath(Path.Combine(gitRoot, normalized));
+            if (!File.Exists(fullPath)) continue;
+            var size = new FileInfo(fullPath).Length;
+            if (size <= _maxFileSizeBytes) continue;
+            refused.Add(new RefusedWorkspaceFile(normalized, size, "single-file-size-limit"));
+            _logger.LogWarning(
+                "workspace-artifact-file-refused repo={Repo} path={Path} sizeBytes={SizeBytes} limitBytes={LimitBytes} reason={Reason}",
+                gitRoot,
+                normalized,
+                size,
+                _maxFileSizeBytes,
+                "single-file-size-limit");
+        }
+        return refused;
+    }
+
+    private void UnstageRefusedFiles(string gitRoot, IReadOnlyList<RefusedWorkspaceFile> refused)
+    {
+        if (refused.Count == 0) return;
+        var resetArgs = new List<string> { "reset", "-q", "HEAD", "--" };
+        resetArgs.AddRange(refused.Select(file => file.Path));
+        var reset = RunGit(gitRoot, resetArgs);
+        if (reset.Code != 0)
+            _logger.LogWarning(
+                "workspace-artifact-refused-file-reset-failed repo={Repo} error={Error}",
+                gitRoot,
+                reset.ErrorText);
+    }
+
+    private static IReadOnlyList<string> BuildExactExcludePathspecs(
+        IReadOnlyList<RefusedWorkspaceFile> refused) =>
+        refused.Select(file => $":(top,exclude,literal){file.Path}").ToList();
+
+    private static IReadOnlyList<string> ParseNullSeparatedPaths(string output) =>
+        output.Split('\0', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    internal static bool IsAttemptAuthorityPath(string relativePath) =>
+        relativePath.Replace('\\', '/').StartsWith(
+            ".metadata/attempt-authority",
+            StringComparison.OrdinalIgnoreCase);
+
+    private sealed record RefusedWorkspaceFile(string Path, long? SizeBytes, string Reason);
 
     /// <summary>Normalize exclude globs into git reset pathspecs (default magic,
     /// where <c>*</c> also matches <c>/</c>), dropping blanks.</summary>

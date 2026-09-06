@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-27
+Version: 2026-09-06
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -29,6 +29,16 @@ pipeline view.
 
 ## Key Code
 
+- `WorkspaceArtifactCommitService`, `WorkspaceEvidenceBatcher`,
+  `WorkspaceArtifactPushWorker`, and `WorkspaceRepositoryMaintenanceService`
+  own Task Repository durability. Job and transition evidence commits include
+  durable `logs/bus/**`; an hourly tracked-drift sweep closes other scope gaps.
+  Attempt-authority runtime files and files above 50 MiB are rejected before
+  staging. Push timeouts switch to the configurable catch-up budget, with
+  single-flight per repository and a supervisor advisory after exhaustion.
+  Scheduled loose-object consolidation and incremental repack wait on the host
+  load gate. Operational settings and recovery commands live in the
+  [workspace repository lifecycle](../../operations/workspace-repository-lifecycle.md).
 - [Model Routing Policy](./model-routing-policy.md) is the canonical model and
   thinking-level selection policy, including weighted criteria, correctness
   floors, benchmark confidence, quota handling, and reissue promotion.

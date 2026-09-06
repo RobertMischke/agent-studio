@@ -146,6 +146,23 @@ public sealed class WorkspaceEvidenceBatcherTests : IDisposable
     }
 
     [Fact]
+    public void FlushDue_IncludesWorkspaceBusAsDurableEvidence()
+    {
+        var time = new FakeTimeProvider(new DateTime(2026, 9, 6, 12, 0, 0, DateTimeKind.Utc));
+        var batcher = BuildBatcher(time, debounce: 5, maxDelay: 60);
+        WriteEvidence("ASS-BUS", "status.md", "ready\n");
+        var busDirectory = Path.Combine(_root, "logs", "bus", Project);
+        Directory.CreateDirectory(busDirectory);
+        File.WriteAllText(Path.Combine(busDirectory, "2026-09-06.jsonl"), "{\"topic\":\"test\"}\n");
+
+        batcher.Ingest(Request("ASS-BUS", TaskStates.Ready, TaskStates.Progress));
+        time.Advance(TimeSpan.FromSeconds(6));
+
+        Assert.True(Assert.Single(batcher.FlushDue()).Result.DidCommit);
+        Assert.Contains("logs/bus/demo/2026-09-06.jsonl", CommittedFiles());
+    }
+
+    [Fact]
     public void FlushDue_ExcludesTrackedOrchestratorRuntime_NotJustUntracked()
     {
         var time = new FakeTimeProvider(new DateTime(2026, 5, 5, 12, 0, 0, DateTimeKind.Utc));
@@ -321,7 +338,7 @@ public sealed class WorkspaceEvidenceBatcherTests : IDisposable
         var flushed = batcher.CatchUp(new[] { _watchPath });
         var result = Assert.Single(flushed);
         Assert.True(result.Result.DidCommit, result.Result.Error);
-        Assert.Contains("evidence: catch-up nach neustart", LastCommitMessage());
+        Assert.Contains("evidence: catch up after restart", LastCommitMessage());
         Assert.Contains(
             "projects/demo/3-progress/ASS-4/pipeline-execution.json",
             CommittedFiles());

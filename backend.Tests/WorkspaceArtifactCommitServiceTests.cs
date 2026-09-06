@@ -212,10 +212,184 @@ public sealed class WorkspaceArtifactCommitServiceTests : IDisposable
             new WorkspaceArtifactPushRequest(_root, "ASS-OFFLINE"), default);
 
         Assert.False(pushed);
-        var pushFailure = Assert.Single(store.Recent(_root, project: null, limit: 10));
-        Assert.Equal("managed-repo-push-failed", pushFailure.Topic);
-        Assert.Equal("error", pushFailure.Kind);
+        var pushFailure = Assert.Single(store.Recent(_root, project: "workspace", limit: 10));
+        Assert.Equal("workspace-repository-push-blocked", pushFailure.Topic);
+        Assert.Equal("advisory", pushFailure.Kind);
         Assert.Equal("ASS-OFFLINE", pushFailure.JobId);
+        Assert.Contains(_root, pushFailure.Body);
+        Assert.Contains("Ahead count: 1", pushFailure.Body);
+    }
+
+    [Fact]
+    public async Task WorkspacePushWorker_UsesCatchUpBudgetAfterTimeout()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WorkspaceArtifacts:PushRetrySeconds"] = "0",
+                ["WorkspaceArtifacts:PushTimeoutSeconds"] = "30",
+                ["WorkspaceArtifacts:CatchUpPushTimeoutSeconds"] = "600",
+            })
+            .Build();
+        var pushTimeouts = new List<TimeSpan>();
+        var pushAttempts = 0;
+        Task<GitProcessResult> Run(WorkspaceGitInvocation invocation, CancellationToken _)
+        {
+            if (invocation.Arguments[0] == "rev-list")
+                return Task.FromResult(new GitProcessResult(
+                    0,
+                    invocation.Arguments.Contains("--count") ? "2000\n" : "209715200\n",
+                    string.Empty,
+                    GitProcessFailureKind.None));
+
+            pushTimeouts.Add(invocation.Timeout);
+            pushAttempts++;
+            return Task.FromResult(pushAttempts == 1
+                ? new GitProcessResult(
+                    -1,
+                    string.Empty,
+                    "timed out",
+                    GitProcessFailureKind.TimedOut)
+                : new GitProcessResult(0, string.Empty, string.Empty, GitProcessFailureKind.None));
+        }
+
+        var worker = new WorkspaceArtifactPushWorker(
+            new WorkspaceArtifactPushQueue(),
+            NullLogger<WorkspaceArtifactPushWorker>.Instance,
+            config,
+            bus: null,
+            Run);
+
+        var pushed = await worker.ProcessAsync(
+            new WorkspaceArtifactPushRequest(_root, "ASS-CATCH-UP"),
+            default);
+
+        Assert.True(pushed);
+        Assert.Equal([TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(10)], pushTimeouts);
+    }
+
+    [Theory]
+    [InlineData(49, 99, false)]
+    [InlineData(50, 99, true)]
+    [InlineData(1, 100, true)]
+    public void WorkspacePushRetryPolicy_WarnsAtEitherBacklogThreshold(
+        long ahead,
+        long bytes,
+        bool expected) =>
+        Assert.Equal(expected, WorkspacePushRetryPolicy.ShouldWarn(ahead, bytes, 50, 100));
+
+    [Fact]
+    public async Task WorkspacePushWorker_IsSingleFlightPerRepository()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WorkspaceArtifacts:PushRetrySeconds"] = "0",
+            })
+            .Build();
+        var releaseFirstPush = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstPushStarted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var pushCalls = 0;
+        var activePushes = 0;
+        var maximumActivePushes = 0;
+
+        async Task<GitProcessResult> Run(WorkspaceGitInvocation invocation, CancellationToken _)
+        {
+            if (invocation.Arguments[0] == "rev-list")
+                return new GitProcessResult(
+                    0,
+                    "1\n",
+                    string.Empty,
+                    GitProcessFailureKind.None);
+
+            Interlocked.Increment(ref pushCalls);
+            var active = Interlocked.Increment(ref activePushes);
+            maximumActivePushes = Math.Max(maximumActivePushes, active);
+            firstPushStarted.TrySetResult();
+            await releaseFirstPush.Task;
+            Interlocked.Decrement(ref activePushes);
+            return new GitProcessResult(0, string.Empty, string.Empty, GitProcessFailureKind.None);
+        }
+
+        var worker = new WorkspaceArtifactPushWorker(
+            new WorkspaceArtifactPushQueue(),
+            NullLogger<WorkspaceArtifactPushWorker>.Instance,
+            config,
+            bus: null,
+            Run);
+
+        var first = worker.ProcessAsync(new WorkspaceArtifactPushRequest(_root, "first"), default);
+        await firstPushStarted.Task;
+        var second = worker.ProcessAsync(new WorkspaceArtifactPushRequest(_root, "second"), default);
+
+        Assert.Equal(1, Volatile.Read(ref pushCalls));
+        releaseFirstPush.SetResult();
+        Assert.True(await first);
+        Assert.True(await second);
+        Assert.Equal(1, maximumActivePushes);
+        Assert.Equal(2, pushCalls);
+    }
+
+    [Fact]
+    public void TrackedDriftSweep_CommitsTrackedFilesAndBusButNeverAttemptAuthority()
+    {
+        var busDirectory = Path.Combine(_root, "logs", "bus", "_workspace");
+        var metadata = Path.Combine(_root, ".metadata");
+        Directory.CreateDirectory(busDirectory);
+        Directory.CreateDirectory(metadata);
+        var busFile = Path.Combine(busDirectory, "2026-09-06.jsonl");
+        var tracked = Path.Combine(_root, "tracked.txt");
+        var authority = Path.Combine(metadata, "attempt-authority.json");
+        File.WriteAllText(busFile, "{\"event\":1}\n");
+        File.WriteAllText(tracked, "before\n");
+        File.WriteAllText(authority, "{\"attempts\":[]}\n");
+        RunGit(_root, "add", "logs/bus", "tracked.txt", ".metadata/attempt-authority.json");
+        RunGit(_root, "commit", "-q", "-m", "tracked fixtures");
+
+        File.AppendAllText(busFile, "{\"event\":2}\n");
+        File.WriteAllText(Path.Combine(busDirectory, "new.jsonl"), "{\"event\":3}\n");
+        File.WriteAllText(tracked, "after\n");
+        File.WriteAllText(authority, "{\"attempts\":[1]}\n");
+
+        var result = _service.TryCommitTrackedSweep(_root);
+
+        Assert.True(result.DidCommit, result.Error);
+        var committed = RunGitCapture(_root, "show", "--name-only", "--pretty=format:", "HEAD")
+            .Replace('\\', '/')
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Contains("tracked.txt", committed);
+        Assert.Contains("logs/bus/_workspace/2026-09-06.jsonl", committed);
+        Assert.Contains("logs/bus/_workspace/new.jsonl", committed);
+        Assert.DoesNotContain(".metadata/attempt-authority.json", committed);
+        Assert.Contains(".metadata/attempt-authority.json", RunGitCapture(_root, "status", "--short"));
+        Assert.Empty(RunGitCapture(_root, "diff", "--cached", "--name-only"));
+    }
+
+    [Fact]
+    public void RunBoundaryCommit_RefusesFileAboveFiftyMegabytes()
+    {
+        var job = JobFolder("ASS-LARGE");
+        Directory.CreateDirectory(job);
+        File.WriteAllText(Path.Combine(job, "status.md"), "small evidence\n");
+        var oversized = Path.Combine(job, "oversized-evidence.bin");
+        using (var stream = new FileStream(oversized, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            stream.SetLength(50L * 1024 * 1024 + 1);
+
+        var result = _service.TryCommitArtifactUpload(
+            _root,
+            "ASS-LARGE",
+            job,
+            ["status.md", "oversized-evidence.bin"]);
+
+        Assert.True(result.DidCommit, result.Error);
+        var committed = RunGitCapture(_root, "show", "--name-only", "--pretty=format:", "HEAD")
+            .Replace('\\', '/');
+        Assert.Contains("ASS-LARGE/status.md", committed);
+        Assert.DoesNotContain("oversized-evidence.bin", committed);
+        Assert.Contains("oversized-evidence.bin", RunGitCapture(_root, "status", "--short"));
+        Assert.Empty(RunGitCapture(_root, "diff", "--cached", "--name-only"));
     }
 
     [Fact]

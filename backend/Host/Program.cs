@@ -678,6 +678,12 @@ builder.Services.AddSingleton<AgentStudio.Pipeline.WorkspaceEvidenceBatcher>(sp 
         sp.GetService<AgentStudio.Pipeline.WorkspaceArtifactPushQueue>()));
 if (!publicDemoExecutionProfile)
     builder.Services.AddHostedService<AgentStudio.Pipeline.WorkspaceEvidenceWorker>();
+if (!publicDemoExecutionProfile)
+    builder.Services.AddHostedService(sp =>
+        new AgentStudio.Pipeline.WorkspaceRepositoryMaintenanceService(
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<ILogger<AgentStudio.Pipeline.WorkspaceRepositoryMaintenanceService>>(),
+            sp.GetRequiredService<AgentStudio.Runner.ILoadThrottleGate>()));
 // Intelligente Abbruch-Bewertung (ADR-0032): the post-abort LLM review step.
 // Forwarded into ProjectRunner via TaskRunnerService; default-OFF per project.
 builder.Services.AddSingleton<AgentStudio.Runner.PostAbortReviewStepService>();

@@ -18,7 +18,8 @@ namespace AgentStudio.Pipeline;
 /// touched <c>projects/&lt;name&gt;</c> watch-path folders are staged, so the
 /// <em>repo-root</em> runtime noise (<c>identities/</c>, <c>telemetry/</c>,
 /// <c>logs/</c>, <c>adhoc-usage.jsonl</c>) is excluded without depending on
-/// <c>.gitignore</c>. Runtime state that lives <em>inside</em> a project folder
+/// <c>.gitignore</c>, except <c>logs/bus</c>, which is durable evidence and is
+/// included in each batch when present. Runtime state that lives <em>inside</em> a project folder
 /// — chiefly the tracked, high-churn <c>projects/&lt;name&gt;/.orchestrator/</c>
 /// session/event files — is NOT handled by scoping and is dropped by the
 /// <see cref="ExcludeGlobs"/>, which the committer applies as <c>:(exclude)</c>
@@ -91,7 +92,7 @@ public sealed class WorkspaceEvidenceBatcher
 
     public bool Enabled => _config.GetValue<bool?>("WorkspaceEvidence:Enabled") ?? true;
 
-    private bool PushEnabled => _config.GetValue<bool?>("WorkspaceEvidence:Push") ?? false;
+    private bool PushEnabled => _config.GetValue<bool?>("WorkspaceEvidence:Push") ?? true;
 
     private TimeSpan Debounce => TimeSpan.FromSeconds(
         Math.Clamp(_config.GetValue<int?>("WorkspaceEvidence:DebounceSeconds") ?? 15, 1, 3600));
@@ -216,8 +217,9 @@ public sealed class WorkspaceEvidenceBatcher
         foreach (var kv in buckets)
         {
             var repo = kv.Value;
+            var watchPaths = WithDurableBusPath(kv.Key, repo.WatchPaths);
             var result = _commit.TryCommitEvidence(
-                kv.Key, repo.WatchPaths.ToList(), ExcludeGlobs, BuildMessage(repo.Count, repo.Items));
+                kv.Key, watchPaths, ExcludeGlobs, BuildMessage(repo.Count, repo.Items));
             MaybeEnqueuePush(kv.Key, result, "evidence");
             results.Add(new WorkspaceEvidenceFlushResult(kv.Key, repo.Count, result));
         }
@@ -254,12 +256,35 @@ public sealed class WorkspaceEvidenceBatcher
         var results = new List<WorkspaceEvidenceFlushResult>(byRoot.Count);
         foreach (var kv in byRoot)
         {
+            var durablePaths = WithDurableBusPath(kv.Key, kv.Value);
             var result = _commit.TryCommitEvidence(
-                kv.Key, kv.Value, ExcludeGlobs, "evidence: catch-up nach neustart\n");
+                kv.Key, durablePaths, ExcludeGlobs, "evidence: catch up after restart\n");
             MaybeEnqueuePush(kv.Key, result, "evidence-catchup");
             results.Add(new WorkspaceEvidenceFlushResult(kv.Key, 0, result));
         }
         return results;
+    }
+
+    /// <summary>
+    /// Hourly backstop for tracked repository drift and bus records written
+    /// without a lane transition. The commit service owns all staging guards.
+    /// </summary>
+    public WorkspaceArtifactCommitResult SweepTrackedDrift()
+    {
+        var root = TaskRepoGitRoot();
+        return root == null
+            ? WorkspaceArtifactCommitResult.Skipped("workspace-missing")
+            : _commit.TryCommitTrackedSweep(root);
+    }
+
+    private static IReadOnlyList<string> WithDurableBusPath(
+        string gitRoot,
+        IEnumerable<string> watchPaths)
+    {
+        var result = watchPaths.ToList();
+        var busPath = Path.Combine(gitRoot, "logs", "bus");
+        if (Directory.Exists(busPath)) result.Add(busPath);
+        return result;
     }
 
     /// <summary>
