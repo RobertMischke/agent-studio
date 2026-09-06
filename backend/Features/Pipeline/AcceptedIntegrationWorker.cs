@@ -175,6 +175,12 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
             return;
         }
 
+        if (decision == AcceptedIntegrationLaneDecision.RetryLater)
+        {
+            LeaveForRetry(request, job, result);
+            return;
+        }
+
         if (job.State == TaskStates.Completed && _transitions != null)
         {
             var moveReason = $"Acceptance integration ended with {result.Outcome}: "
@@ -212,6 +218,49 @@ public sealed class AcceptedIntegrationWorker : BackgroundService
             TimelineEventKinds.IntegrationFailed,
             TimelineActors.System,
             $"Integration failed ({result.Outcome}); the task is in Human Review.",
+            details: new Dictionary<string, string>
+            {
+                ["outcome"] = result.Outcome.ToString(),
+                ["integrationBranch"] = request.IntegrationBranch,
+                ["detail"] = result.Error ?? string.Empty,
+            });
+    }
+
+    /// <summary>
+    /// Keeps the card where it is after a gate-host fault. No lane move and no
+    /// terminal failure document: the delivery was never judged, and the durable
+    /// merge step already carries the environment reason.
+    /// <para>
+    /// The phase is set to <see cref="LifecyclePhases.Integrating"/> so the card
+    /// stays a recovery candidate for the accepted-integration backstop in both
+    /// lanes it can be in here. A card left in Human Review with no phase is
+    /// invisible to <c>AcceptedIntegrationBackstopPolicy.IsRecoveryCandidate</c>,
+    /// which would strand it exactly as CAC-18 was stranded (AGT-2720).
+    /// </para>
+    /// <para>
+    /// The retry terminates by construction: the gate evicted the cache entry it
+    /// blamed, so the replay installs from the lockfile and reaches a real
+    /// verdict. If the host stays broken the 30-minute
+    /// accepted-without-integration alert is the escape hatch.
+    /// </para>
+    /// </summary>
+    private void LeaveForRetry(
+        AcceptedIntegrationRequest request,
+        TaskInfo job,
+        MergeIntoIntegrationResult result)
+    {
+        _mutations.SetJobPhase(job.FolderPath, LifecyclePhases.Integrating);
+        _logger.LogWarning(
+            "accepted-integration-gate-environment project={Project} job={JobId} branch={IntegrationBranch} detail={Detail}",
+            job.ProjectName,
+            request.JobId,
+            request.IntegrationBranch,
+            result.Error ?? string.Empty);
+        _timeline?.Append(
+            job.FolderPath,
+            TimelineEventKinds.IntegrationFailed,
+            TimelineActors.System,
+            $"Integration is still pending: {result.Error ?? "the gate environment could not run the pre-main full suite."} The acceptance rail retries it.",
             details: new Dictionary<string, string>
             {
                 ["outcome"] = result.Outcome.ToString(),

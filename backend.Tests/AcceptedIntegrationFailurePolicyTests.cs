@@ -72,6 +72,12 @@ public sealed class AcceptedIntegrationFailurePolicyTests
             AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
             false
         },
+        {
+            "gate-environment",
+            "The gate environment could not run the pre-main full suite before the merge.",
+            AcceptedIntegrationFailureCodes.GateEnvironment,
+            false
+        },
     };
 
     [Theory]

@@ -239,6 +239,19 @@ filesystem mutation under `agent-taskboard-workspace/projects/**` or
   gate failure, unavailable task-key validation, an invalid review subject,
   a missing task branch, and a generic integration error without changing the
   legacy top-level `conflict-skipped` compatibility status.
+- The `gate-environment` code is the one failure that is not terminal. It means
+  the pre-main full suite died inside a cache-restored dependency tree before a
+  single test was discovered, so the delivery was never judged. The card keeps
+  the reason and the `Gate environment` label but stays `pending`, never
+  `partial` or `conflict-skipped`, even when some attributed commits already
+  landed. `AcceptanceIntegrationPolicy.Decide` returns `RetryLater`; both the
+  worker and the accepted-integration backstop honour it, the worker sets the
+  `integrating` phase so the card stays a recovery candidate in either lane, and
+  the backstop replays the merge on its next sweep. The replay reaches a real
+  verdict because the gate evicted the cache entry it blamed, so the retry
+  cannot loop; the 30-minute accepted-without-integration alert stays the escape
+  hatch if the host never recovers. CAC-18 read as `partial` with 1 of 107
+  commits on main for four weeks under exactly this fault.
 - `AcceptanceRailHostedService` is the platform-owned mover for routine
   post-integration progress. By default it runs immediately at backend startup
   and every 180 seconds. It accepts a coding card from `5-human-review` only

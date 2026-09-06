@@ -32,6 +32,8 @@ public static class AcceptanceIntegrationPolicy
     {
         if (operatorOverride || !integrationRequired)
             return AcceptedIntegrationLaneDecision.Complete;
+        if (outcome == MergeIntoIntegrationOutcome.GateEnvironmentBlocked)
+            return AcceptedIntegrationLaneDecision.RetryLater;
 
         return outcome.IsSuccessfulIntegration()
             ? AcceptedIntegrationLaneDecision.Complete
@@ -43,4 +45,11 @@ public enum AcceptedIntegrationLaneDecision
 {
     Complete,
     ReturnToHumanReview,
+    /// <summary>
+    /// The attempt reached no verdict about the delivery because the gate host
+    /// failed. The card keeps its lane and the accepted-integration backstop
+    /// replays the merge; sending it to Human Review would ask an operator to
+    /// judge work that was never tested.
+    /// </summary>
+    RetryLater,
 }

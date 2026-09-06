@@ -19,6 +19,12 @@ public sealed class AcceptanceIntegrationPolicyTests
     [InlineData(MergeIntoIntegrationOutcome.AgentRoundRequired, false, true, AcceptedIntegrationLaneDecision.ReturnToHumanReview)]
     [InlineData(MergeIntoIntegrationOutcome.NoTaskBranch, true, true, AcceptedIntegrationLaneDecision.Complete)]
     [InlineData(MergeIntoIntegrationOutcome.NoTaskBranch, false, false, AcceptedIntegrationLaneDecision.Complete)]
+    // AGT-2720: the gate host failed before any test ran. The delivery is
+    // unjudged, so the card keeps its lane and the rail retries instead of
+    // asking an operator to review work nothing tested.
+    [InlineData(MergeIntoIntegrationOutcome.GateEnvironmentBlocked, false, true, AcceptedIntegrationLaneDecision.RetryLater)]
+    [InlineData(MergeIntoIntegrationOutcome.GateEnvironmentBlocked, true, true, AcceptedIntegrationLaneDecision.Complete)]
+    [InlineData(MergeIntoIntegrationOutcome.GateEnvironmentBlocked, false, false, AcceptedIntegrationLaneDecision.Complete)]
     public void WorkerOutcomeMatrix_DecidesAcceptedLane(
         MergeIntoIntegrationOutcome outcome,
         bool operatorOverride,

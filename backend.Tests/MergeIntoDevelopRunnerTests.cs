@@ -708,6 +708,60 @@ public sealed class MergeIntoDevelopRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_MainTarget_GateEnvironmentFailureIsRetryableNotAProductFailure()
+    {
+        // AGT-2720: the full suite exited before vitest listed a file because the
+        // studio's vite install was truncated. Main stays untouched either way,
+        // but this must not be recorded as a delivery that failed its tests.
+        var repo = SeedRepo("runner-main-gate-environment");
+        RunGit(repo, "checkout -q -b task/52");
+        File.WriteAllText(Path.Combine(repo, "task.txt"), "unjudged release work");
+        Commit(repo, "feat: unjudged release work");
+        var mainBefore = RunGit(repo, "rev-parse main").Out.Trim();
+        RunGit(repo, "checkout -q main");
+
+        var (git, log, settings) = BuildWithSettings(repo);
+        var gateRunner = new CapturingBuildTestGateRunner(new BuildTestGateResult(
+            BuildTestGateVerdict.Fail,
+            1,
+            20,
+            "at testCaseInsensitiveFS (node_modules/vite/dist/node/chunks/config.js:1911:42)",
+            "`npm test` exit 1; dependency-cache=.:hit(lock-unchanged); test-level=full",
+            false,
+            true)
+        {
+            FailureKind = BuildTestGateFailureKind.GateEnvironment,
+            DependencyCache =
+            [
+                new BuildTestGateDependencyCacheEvidence(
+                    ".", "hit", "lock-unchanged", "abc123", ["package-lock.json"], false),
+            ],
+        });
+        var runner = new MergeIntoDevelopRunner(
+            git,
+            log,
+            NullLogger<MergeIntoDevelopRunner>.Instance,
+            projectSettings: settings,
+            preMainTestGate: new PreMainTestGate(gateRunner));
+        var jobFolder = BeginRun(log, repo, jobId: "52");
+
+        var outcome = await runner.RunAsync(
+            "Fixture", "52", jobFolder, repo, "main", CancellationToken.None);
+
+        Assert.Equal(MergeIntoIntegrationOutcome.GateEnvironmentBlocked, outcome.Outcome);
+        Assert.Contains("gate environment could not run the pre-main full suite", outcome.Error);
+        Assert.Equal(mainBefore, RunGit(repo, "rev-parse main").Out.Trim());
+
+        var step = ReadMergeStep(log, jobFolder);
+        Assert.NotNull(step);
+        Assert.Equal("gate-environment", step!.Verdict);
+        Assert.Equal(AcceptedIntegrationFailureCodes.GateEnvironment, step.FailureCode);
+        // The cache decision has to travel with the reason so a hit on a broken
+        // tree is readable on the card, not only in the gate transcript.
+        Assert.Contains("dependency-cache=.:hit(lock-unchanged)", step.Reason);
+    }
+
+    [Fact]
     public async Task RunAsync_MainTarget_SourceMovesDuringSuiteLeavesMainUnchanged()
     {
         var repo = SeedRepo("runner-main-source-moved");

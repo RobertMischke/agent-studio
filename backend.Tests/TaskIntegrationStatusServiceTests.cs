@@ -595,6 +595,89 @@ public sealed class TaskIntegrationStatusServiceTests : IDisposable
         Assert.True(status.Failure?.RebaseRecoveryAvailable);
     }
 
+    [Fact]
+    public void BuildLookup_RecordedGateEnvironmentFailure_StaysPendingWithTheReason()
+    {
+        // AGT-2720: the pre-main full suite died in vite before vitest listed a
+        // file. Nothing about the delivery was judged, so the card must not read
+        // as conflict-skipped, and the acceptance rail must replay the merge.
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/gate-environment");
+        File.WriteAllText(Path.Combine(repo, "gate-environment.txt"), "wip");
+        Commit(repo, "feat: gate environment wip");
+        var anchor = RunGit(repo, "rev-parse task/gate-environment").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("gate-environment", "AGT-2720", project, repo, log,
+            commits: [Commit(anchor)], prov: Prov(branch: "task/gate-environment"));
+        log.EnsureRun(job.FolderPath, PipelineCatalogue.Standard, project, job.Id);
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "gate-environment",
+            Reason = "The gate environment could not run the pre-main full suite before the merge: "
+                     + "`npm test` exit 1; dependency-cache=.:hit(lock-unchanged)",
+            FailureCode = AcceptedIntegrationFailureCodes.GateEnvironment,
+        });
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Pending, status.Status);
+        Assert.Equal(AcceptedIntegrationFailureCodes.GateEnvironment, status.Failure?.Code);
+        Assert.Equal("Gate environment", status.Failure?.Label);
+        Assert.False(status.Failure?.RebaseRecoveryAvailable);
+        Assert.Contains("dependency-cache=.:hit(lock-unchanged)", status.Detail);
+
+        var recovery = svc.ResolveAcceptedIntegrationRecovery(job, status);
+        Assert.Equal(AcceptedIntegrationRecoveryAction.Retry, recovery.Action);
+    }
+
+    [Fact]
+    public void BuildLookup_GateEnvironmentFailureWithSomeCommitsLanded_IsPendingNotPartial()
+    {
+        // The CAC-18 shape: one of many attributed commits reached main long ago,
+        // and every later attempt died in the gate host. Reading that as
+        // "1/107 integrated" blamed the delivery for a broken studio.
+        var repo = SeedDevelopMainRepo();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "checkout -q -b task/gate-environment-partial");
+        File.WriteAllText(Path.Combine(repo, "landed.txt"), "landed");
+        Commit(repo, "feat: landed work");
+        var landed = RunGit(repo, "rev-parse task/gate-environment-partial").Out.Trim();
+        RunGit(repo, "checkout -q develop");
+        RunGit(repo, "merge --no-ff --no-edit task/gate-environment-partial");
+        RunGit(repo, "checkout -q task/gate-environment-partial");
+        File.WriteAllText(Path.Combine(repo, "not-landed.txt"), "not landed");
+        Commit(repo, "feat: not landed work");
+        var notLanded = RunGit(repo, "rev-parse task/gate-environment-partial").Out.Trim();
+
+        var svc = BuildService(repo, out var project, out var log);
+        var job = Job("gate-environment-partial", "CAC-18", project, repo, log,
+            commits: [Commit(landed), Commit(notLanded)],
+            prov: Prov(branch: "task/gate-environment-partial"));
+        log.EnsureRun(job.FolderPath, PipelineCatalogue.Standard, project, job.Id);
+        log.RecordStep(job.FolderPath, new PipelineStepExecution
+        {
+            StepId = PipelineCatalogue.MergeIntoDevelopStepId,
+            Kind = StepKind.Tool,
+            Status = PipelineStepStatus.Failed,
+            Verdict = "gate-environment",
+            Reason = "The gate environment could not run the pre-main full suite before the merge.",
+            FailureCode = AcceptedIntegrationFailureCodes.GateEnvironment,
+        });
+
+        var status = svc.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal(IntegrationStatuses.Pending, status.Status);
+        Assert.Equal(AcceptedIntegrationFailureCodes.GateEnvironment, status.Failure?.Code);
+        // The landed-commit arithmetic stays visible, it just no longer decides.
+        Assert.Contains("1/2", status.Detail!);
+    }
+
     [Theory]
     [InlineData(
         "Release source 'origin/result' must be rebased onto 'main' before the full-suite gate.",

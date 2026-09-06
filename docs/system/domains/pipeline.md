@@ -480,6 +480,42 @@ steer the pipeline in this policy version.
   commands, including `installCmd`, use the same `bash -lc` contract as
   build-profile validation on every host. Convention-derived commands retain
   the host shell.
+- The `.nm-state` marker records the lock hash **and** whether that install left
+  npm's `node_modules/.package-lock.json` ledger behind. Recording the observed
+  fact instead of inferring it from the lockfile name is what separates a
+  truncated npm tree (ledger was there, now gone) from a scope whose installer
+  never writes one; inferring it would disable the cache permanently and
+  silently for yarn, pnpm, and mixed-lockfile repositories. A tree whose marker
+  expected a ledger and no longer has one is `miss reason=install-incomplete`,
+  and it is never published into the cache. Markers written before this rule
+  carry no ledger record, so an npm scope keeps the protection at the cost of
+  one cold install.
+- Saving publishes per item: each tree moves into a staging sibling and is
+  renamed into the entry only after its own move succeeded. Publication is never
+  all-or-nothing, because consecutive gates on one repository legitimately cache
+  different subtrees and a whole-entry swap would delete the ones this run never
+  staged. One unpublishable scope is skipped by name
+  (`dependency-cache save skipped scope=<scope> reason=install-incomplete`)
+  while its healthy siblings still publish. Without these rules one interrupted
+  transfer became a permanent `hit` on a truncated `node_modules`, and every
+  later gate died in vite before the first test while remote review stayed green
+  (CAC-18, 10 August to 6 September 2026).
+- A verify command that dies inside its own toolchain is a `GateEnvironment`
+  failure rather than a product failure only when the dependency tree it died in
+  came from the shared cache. `GateEnvironmentFailurePolicy` requires all three:
+  a restored (not freshly installed) tree, a toolchain signature that names
+  installed tooling rather than repository sources, and no test-discovery
+  output. The cache-ownership condition is load-bearing twice over. It preserves
+  the AGT-2110 rule that a completed process reports its own result, so a
+  delivery whose own import is broken stays a product failure even though it
+  prints `Cannot find module` and never reaches a test. And it makes the retry
+  terminate: the gate evicts the entry it blamed
+  (`dependency-cache evicted scope=<scope> reason=<reason>`), the next attempt
+  installs from the lockfile, and a repeated failure is no longer cache-owned,
+  so it classifies as product code and reaches an operator by the ordinary path.
+  A failing gate reason also names the cache decision
+  (`dependency-cache=<scope>:<state>(<reason>)`) so a hit on a broken tree is
+  visible on the card, not only in the transcript.
 - Immutable Remote Review plans carry that same preparation command, lockfile
   scopes, and preserve globs to the Review Executor. Preparation runs before
   verification in both the candidate and any materialized baseline workspace.

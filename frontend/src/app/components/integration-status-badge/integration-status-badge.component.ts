@@ -73,7 +73,10 @@ export class IntegrationStatusBadgeComponent {
     switch (value.status) {
       case 'integrated': return value.sha ? `merged @${value.sha}` : 'merged';
       case 'partial': return 'teilweise integriert';
-      case 'pending': return 'NICHT integriert';
+      // A pending card can still carry a typed reason: a gate-environment fault
+      // stopped the pre-main suite before it judged anything, and the card
+      // retries. Naming it beats a bare "not integrated" (AGT-2720).
+      case 'pending': return value.failure?.label ?? 'NICHT integriert';
       case 'conflict-skipped': return value.failure?.label ?? 'Integration failed';
       default: return 'kein Branch';
     }

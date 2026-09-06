@@ -111,10 +111,26 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
                     PipelineTypes.Resolve(job));
                 attemptOutcomes.Add(result.Outcome);
                 attemptRecorded = true;
-                if (result.Outcome.IsSuccessfulIntegration())
+                var lane = AcceptanceIntegrationPolicy.Decide(
+                    result.Outcome,
+                    integrationRequired: AcceptanceIntegrationPolicy.IsIntegrationRequired(job));
+                if (lane == AcceptedIntegrationLaneDecision.Complete)
                 {
                     FinalizeTransactionalAccept(job);
                     ClearPendingTag(job);
+                }
+                else if (lane == AcceptedIntegrationLaneDecision.RetryLater)
+                {
+                    // AGT-2720: the replay also failed in the gate host before any
+                    // test ran. The delivery is still unjudged, so parking it in
+                    // front of an operator as a rejected change would repeat the
+                    // CAC-18 lie. Leave it for the next sweep; the 30-minute
+                    // accepted-without-integration alert owns the escalation.
+                    _logger.LogWarning(
+                        "accepted-integration-backstop gate-environment project={Project} job={JobId} detail={Detail}",
+                        job.ProjectName,
+                        job.Id,
+                        result.Error ?? string.Empty);
                 }
                 else
                 {
@@ -245,6 +261,7 @@ public sealed class AcceptedIntegrationBackstopHostedService : BackgroundService
             "no-branch" => nameof(MergeIntoIntegrationOutcome.NoTaskBranch),
             "conflict" => nameof(MergeIntoIntegrationOutcome.Conflict),
             "gate-failed" => nameof(MergeIntoIntegrationOutcome.GateFailed),
+            "gate-environment" => nameof(MergeIntoIntegrationOutcome.GateEnvironmentBlocked),
             "pushed-for-review" => nameof(MergeIntoIntegrationOutcome.PushedForReview),
             "error" => nameof(MergeIntoIntegrationOutcome.Error),
             null or "" => null,

@@ -241,6 +241,17 @@ public sealed class TaskIntegrationStatusService
                 lastMerge);
         }
 
+        // AGT-2720: the last attempt failed inside the gate host's toolchain
+        // before the first test. Nothing about the delivery was decided, so the
+        // merge is replayed rather than handed to an operator.
+        if (string.Equals(lastMerge?.Verdict, "gate-environment", StringComparison.OrdinalIgnoreCase))
+        {
+            return new AcceptedIntegrationRecoveryDecision(
+                AcceptedIntegrationRecoveryAction.Retry,
+                "The last attempt failed in the gate environment before any test ran; the delivery is unjudged and the merge is replayed.",
+                lastMerge);
+        }
+
         // BP-02: a crash can leave the merge commit in local ancestry while the
         // exact-SHA gate verdict is still pending. That state must resume the
         // runner rather than treating ancestry as proof that the gate ran.
@@ -300,29 +311,39 @@ public sealed class TaskIntegrationStatusService
         foreach (var sha in attributed)
             if (!AncestorSetContains(reach.DevelopAncestors, sha)) missing.Add(sha);
 
+        // ALL attributed commits landed. Attempt history and recorded merge
+        // provenance are deliberately irrelevant to this result, so this branch
+        // never reads the pipeline record.
+        if (missing.Count == 0)
+            return Integrated(Short(attributed[^1]), branchName, deliveryRef, "anchor-ancestor");
+
+        // One read for every not-fully-integrated card, and one place where a
+        // recorded failure outranks commit membership.
+        var failure = ReadIntegrationFailure(job);
+
         // NONE of the attributed commits landed → conflict-skipped / pending
         // (no-branch is impossible here: there IS attributed work).
         if (missing.Count == attributed.Count)
-            return ClassifyNotIntegrated(job, branchName, deliveryRef);
-
-        var newest = attributed[^1];
-
-        // ALL attributed commits landed. Attempt history and recorded merge
-        // provenance are deliberately irrelevant to this result.
-        if (missing.Count == 0)
-            return Integrated(Short(newest), branchName, deliveryRef, "anchor-ancestor");
+            return ClassifyNotIntegrated(job, branchName, deliveryRef, failure);
 
         // SOME landed, some did not → partial, naming the missing short-SHAs so the
         // tooltip says exactly which attributed commits are not in develop yet.
         var integratedCount = attributed.Count - missing.Count;
-        var missingShort = string.Join(", ", missing.Select(Short));
+        var progress = $"{integratedCount}/{attributed.Count} attributed commits integrated; "
+                       + $"missing: {string.Join(", ", missing.Select(Short))}";
+
+        // A gate host that never reached the first test is not evidence that the
+        // rest of the delivery was rejected. CAC-18 read as "1/107 integrated"
+        // for four weeks while every remote review was green (AGT-2720).
+        if (failure is { Code: AcceptedIntegrationFailureCodes.GateEnvironment } blocked)
+            return GateEnvironmentPending(blocked, branchName, deliveryRef, progress);
+
         return new TaskIntegrationStatus
         {
             Status = IntegrationStatuses.Partial,
             DeliveryRef = deliveryRef,
             IntegrationBranch = branchName,
-            Detail = $"{integratedCount}/{attributed.Count} attributed commits integrated; "
-                     + $"missing: {missingShort}",
+            Detail = progress,
         };
     }
 
@@ -337,13 +358,27 @@ public sealed class TaskIntegrationStatusService
         TaskInfo job,
         string branchName,
         string? deliveryRef = null)
+        => ClassifyNotIntegrated(job, branchName, deliveryRef, ReadIntegrationFailure(job));
+
+    /// <summary>
+    /// Overload for callers that already resolved the durable failure, so one
+    /// card never reads its pipeline record twice in a single classification.
+    /// </summary>
+    private TaskIntegrationStatus ClassifyNotIntegrated(
+        TaskInfo job,
+        string branchName,
+        string? deliveryRef,
+        AcceptedIntegrationFailure? recordedFailure)
     {
         deliveryRef ??= DeliveryRefFor(job);
         var anchor = AnchorFor(job);
         var hasWork = anchor != null || deliveryRef != null;
 
-        if (ReadIntegrationFailure(job) is { } failure)
+        if (recordedFailure is { } failure)
         {
+            if (failure.Code == AcceptedIntegrationFailureCodes.GateEnvironment)
+                return GateEnvironmentPending(failure, branchName, deliveryRef, progressDetail: null);
+
             var visibleReason = VisibleFailureReason(job, branchName, failure);
             return new TaskIntegrationStatus
             {
@@ -380,6 +415,35 @@ public sealed class TaskIntegrationStatusService
                 : $"Delivery ref '{deliveryRef}' is not yet integrated into {branchName}.",
         };
     }
+
+    /// <summary>
+    /// A pre-main gate that died in its own toolchain before the first test
+    /// judged nothing about the delivery. The card keeps the environment reason
+    /// so the operator reads "gate environment" instead of a bare status, but it
+    /// stays pending: the acceptance rail retries, and neither
+    /// <c>partial</c> nor <c>conflict-skipped</c> may claim the delivery was
+    /// rejected (AGT-2720).
+    /// </summary>
+    private static TaskIntegrationStatus GateEnvironmentPending(
+        AcceptedIntegrationFailure failure,
+        string branchName,
+        string? deliveryRef,
+        string? progressDetail) => new()
+    {
+        Status = IntegrationStatuses.Pending,
+        DeliveryRef = deliveryRef,
+        IntegrationBranch = branchName,
+        Detail = string.IsNullOrWhiteSpace(progressDetail)
+            ? failure.Reason
+            : $"{failure.Reason} ({progressDetail})",
+        Failure = new TaskIntegrationFailure
+        {
+            Code = failure.Code,
+            Label = failure.Label,
+            Reason = failure.Reason,
+            RebaseRecoveryAvailable = false,
+        },
+    };
 
     private static TaskIntegrationStatus Integrated(
         string sha,

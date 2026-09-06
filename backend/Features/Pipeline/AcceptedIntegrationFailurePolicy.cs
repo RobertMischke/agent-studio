@@ -24,6 +24,14 @@ public static class AcceptedIntegrationFailureCodes
     /// describes the push step (AGT-2688).
     /// </summary>
     public const string IntegrationPushBlocked = "integration-push-blocked";
+
+    /// <summary>
+    /// The pre-main full suite never reached its first test because the gate
+    /// host's toolchain failed. Unlike every other code here this one is not
+    /// terminal: the delivery is unjudged, so the card stays pending and the
+    /// acceptance rail retries (AGT-2720).
+    /// </summary>
+    public const string GateEnvironment = "gate-environment";
 }
 
 /// <summary>
@@ -115,6 +123,14 @@ public static class AcceptedIntegrationFailurePolicy
                     verdictSummary,
                     "The accepted coding card had no delivery branch to integrate."),
                 RebaseRecoveryAvailable: false),
+            AcceptedIntegrationFailureCodes.GateEnvironment => new(
+                code,
+                "Gate environment",
+                FirstNonBlank(
+                    reason,
+                    verdictSummary,
+                    "The gate environment could not run the pre-main full suite; the delivery was never judged."),
+                RebaseRecoveryAvailable: false),
             AcceptedIntegrationFailureCodes.IntegrationPushBlocked => new(
                 code,
                 "Integration push blocked",
@@ -137,6 +153,8 @@ public static class AcceptedIntegrationFailurePolicy
             return AcceptedIntegrationFailureCodes.MergeConflict;
         if (string.Equals(verdict, "gate-failed", StringComparison.OrdinalIgnoreCase))
             return AcceptedIntegrationFailureCodes.BuildGateFailed;
+        if (string.Equals(verdict, "gate-environment", StringComparison.OrdinalIgnoreCase))
+            return AcceptedIntegrationFailureCodes.GateEnvironment;
         if (string.Equals(verdict, "delivery-gate-failed", StringComparison.OrdinalIgnoreCase))
             return AcceptedIntegrationFailureCodes.DeliveryGateFailed;
         if (string.Equals(verdict, "no-branch", StringComparison.OrdinalIgnoreCase))
@@ -182,6 +200,7 @@ public static class AcceptedIntegrationFailurePolicy
             AcceptedIntegrationFailureCodes.NoTaskBranch => AcceptedIntegrationFailureCodes.NoTaskBranch,
             AcceptedIntegrationFailureCodes.IntegrationError => AcceptedIntegrationFailureCodes.IntegrationError,
             AcceptedIntegrationFailureCodes.IntegrationPushBlocked => AcceptedIntegrationFailureCodes.IntegrationPushBlocked,
+            AcceptedIntegrationFailureCodes.GateEnvironment => AcceptedIntegrationFailureCodes.GateEnvironment,
             _ => null,
         };
     }

@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
 
+using AgentStudio.TaskServer.Contracts;
+
 using Xunit;
 using Xunit.Abstractions;
 
@@ -813,6 +815,57 @@ public sealed class BuildTestGateRunnerBehaviorTests : IDisposable
             && cache.InstallRan);
         Assert.Contains(changed.Processes, process =>
             process.Phase == "preparation" && process.Command == "npm ci");
+    }
+
+    [Fact]
+    public async Task ExactSubjectNodeFixture_CorruptedCacheEntryHealsInsteadOfRepeating()
+    {
+        // AGT-2720 end to end against a real npm install: this is the CAC-18
+        // shape. A published entry loses the install ledger the way an
+        // interrupted transfer loses it, while its .nm-state marker still
+        // matches the lockfile hash and still records that the ledger was there.
+        // Before this change the next gate read "hit", skipped npm ci, and died
+        // in the toolchain on every attempt for four weeks. It must now miss,
+        // reinstall, and pass.
+        WriteFixtureFile("package.json", """
+            {
+              "name": "gate-node-heal-fixture",
+              "version": "1.0.0",
+              "scripts": { "build": "node -e \"require('fixture-dep')\"" },
+              "dependencies": { "fixture-dep": "file:fixture-dep" }
+            }
+            """);
+        WriteFixtureFile("fixture-dep/package.json", """
+            { "name": "fixture-dep", "version": "1.0.0", "main": "index.js" }
+            """);
+        WriteFixtureFile("fixture-dep/index.js", "module.exports = 'installed';");
+        WriteFixtureFile("package-lock.json", NodeFixtureLock("1.0.0"));
+        var sha = InitializeGitRepository();
+
+        var cold = await RunExactNodeGate(sha);
+        Assert.Equal(BuildTestGateVerdict.Ok, cold.Verdict);
+
+        var entry = Path.Combine(
+            GateDependencyCacheSession.CachePath(BuildTestGateRunner.ReviewWorkspaceRoot, _root),
+            "content");
+        var ledger = Path.Combine(
+            entry,
+            DependencyPreparationState.DependencyDirectoryName,
+            DependencyPreparationState.InstallLedgerFileName);
+        Assert.True(File.Exists(ledger), $"Expected a published install ledger at {ledger}.");
+        File.Delete(ledger);
+        Assert.True(File.Exists(Path.Combine(
+            entry, DependencyPreparationState.MarkerFileName)));
+
+        var healed = await RunExactNodeGate(sha);
+
+        Assert.True(
+            healed.Verdict == BuildTestGateVerdict.Ok,
+            $"{healed.Reason}\n{healed.Output}");
+        Assert.Contains(healed.DependencyCache, cache =>
+            cache.State == "miss" && cache.Reason == "install-incomplete" && cache.InstallRan);
+        Assert.Contains(healed.Processes, process =>
+            process.Phase == "preparation" && process.Command == "npm ci" && process.ExitCode == 0);
     }
 
     [Fact]

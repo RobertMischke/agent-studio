@@ -97,6 +97,13 @@ public enum MergeIntoIntegrationOutcome
     /// needs a steer round - never silently "delivered".
     /// </summary>
     GateFailed,
+    /// <summary>
+    /// The pre-main full suite could not run: the toolchain on the gate host
+    /// died before a single test was discovered. Nothing was merged and nothing
+    /// was judged, so the delivery stays pending and the acceptance rail replays
+    /// the merge instead of recording a product failure (AGT-2720).
+    /// </summary>
+    GateEnvironmentBlocked,
     /// <summary>A precondition failed (dirty tree, missing branch, checkout failure) or git errored.</summary>
     Error,
     /// <summary>

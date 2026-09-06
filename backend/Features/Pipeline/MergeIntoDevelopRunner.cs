@@ -845,13 +845,7 @@ public sealed class MergeIntoDevelopRunner
                 ct).ConfigureAwait(false);
             RecordGateEvidence(jobFolderPath, "pre-main-test-gate", gate);
             if (gate.Verdict != BuildTestGateVerdict.Ok)
-            {
-                return (
-                    MergeIntoIntegrationResult.Of(
-                        MergeIntoIntegrationOutcome.Error,
-                        error: $"Pre-main full suite blocked the develop-to-main fast-forward: {gate.Reason}"),
-                    gate);
-            }
+                return (PreMainGateBlocked(gate, "the develop-to-main fast-forward"), gate);
         }
 
         return (
@@ -1004,13 +998,7 @@ public sealed class MergeIntoDevelopRunner
         RecordGateEvidence(jobFolderPath, "pre-main-test-gate", gate);
 
         if (gate.Verdict != BuildTestGateVerdict.Ok)
-        {
-            return (
-                MergeIntoIntegrationResult.Of(
-                    MergeIntoIntegrationOutcome.Error,
-                    error: $"Pre-main full suite blocked the merge: {gate.Reason}"),
-                gate);
-        }
+            return (PreMainGateBlocked(gate, "the merge"), gate);
 
         var merge = _git.MergeBranchFastForward(
             repoRoot,
@@ -1358,6 +1346,23 @@ public sealed class MergeIntoDevelopRunner
     private static string ShaSuffix(string? sha) =>
         string.IsNullOrWhiteSpace(sha) ? string.Empty : $" ({Short(sha!)})";
 
+    /// <summary>
+    /// Projects a red pre-main full suite onto an integration outcome. A gate
+    /// that died in its own toolchain before the first test judged nothing, so
+    /// it becomes a retryable environment block instead of a terminal error the
+    /// card carries as a rejected delivery (AGT-2720).
+    /// </summary>
+    private static MergeIntoIntegrationResult PreMainGateBlocked(
+        BuildTestGateResult gate,
+        string subject)
+        => gate.FailureKind == BuildTestGateFailureKind.GateEnvironment
+            ? MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.GateEnvironmentBlocked,
+                error: $"The gate environment could not run the pre-main full suite before {subject}: {gate.Reason}")
+            : MergeIntoIntegrationResult.Of(
+                MergeIntoIntegrationOutcome.Error,
+                error: $"Pre-main full suite blocked {subject}: {gate.Reason}");
+
     private void Record(
         string jobFolderPath,
         string project,
@@ -1572,6 +1577,12 @@ public sealed class MergeIntoDevelopRunner
                     "already-merged",
                     $"Task branch already contained in {integrationBranch}; no merge needed.{exactGate}",
                     preDevelopResult?.Reason);
+            case MergeIntoIntegrationOutcome.GateEnvironmentBlocked:
+                return (
+                    PipelineStepStatus.Failed,
+                    "gate-environment",
+                    result.Error ?? "The gate environment could not run the pre-main full suite.",
+                    preMainResult?.Reason);
             case MergeIntoIntegrationOutcome.NoTaskBranch:
                 return (PipelineStepStatus.Skipped, "no-branch", result.Error ?? "No task branch to merge.", null);
             case MergeIntoIntegrationOutcome.PushedForReview:

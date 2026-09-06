@@ -57,6 +57,31 @@ describe('IntegrationStatusBadgeComponent', () => {
     expect(badge.classList.contains('integration-badge--acute')).toBe(true);
   });
 
+  it('names a gate-environment fault on a pending badge without offering recovery', () => {
+    // AGT-2720: the pre-main suite died in the gate host's toolchain before it
+    // judged anything. The card stays pending and retries, but a bare
+    // "NICHT integriert" hides why nothing moved for weeks.
+    const fixture = render(integration('pending', {
+      detail: 'The gate environment could not run the pre-main full suite; '
+        + 'dependency-cache=.:hit(lock-unchanged)',
+      failure: {
+        code: 'gate-environment',
+        label: 'Gate environment',
+        reason: 'The gate environment could not run the pre-main full suite; '
+          + 'dependency-cache=.:hit(lock-unchanged)',
+        rebaseRecoveryAvailable: false,
+      },
+    }));
+    const badge = fixture.nativeElement.querySelector('[data-testid="integration-status-badge"]') as HTMLElement;
+
+    expect(badge.textContent).toContain('Gate environment');
+    expect(badge.dataset['kind']).toBe('pending');
+    expect(fixture.componentInstance.tooltip()).toContain('dependency-cache=.:hit(lock-unchanged)');
+    expect(fixture.nativeElement.querySelector(
+      '[data-testid="task-card-integration-recovery"]',
+    )).toBeNull();
+  });
+
   it('renders partial as an orange "teilweise integriert" badge with missing SHAs in the tooltip', () => {
     const fixture = render(
       integration('partial', { detail: '1/2 attributed commits integrated; missing: beef123' }),

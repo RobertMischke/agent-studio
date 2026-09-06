@@ -362,7 +362,13 @@ public sealed class RemoteReviewWorkspaceTests : IDisposable
             ["package-lock.json"] = "lock-v1",
             [".gitignore"] = "node_modules/\n.nm-state\n",
         });
-        var shell = $"mkdir -p node_modules && printf x >> '{counter}'";
+        // The fake install leaves what npm leaves, including the
+        // node_modules/.package-lock.json ledger, so the cached tree is checked
+        // under the same rule a real npm scope gets: the marker records that the
+        // ledger existed, and losing it later is a miss (AGT-2720).
+        var shell =
+            $"mkdir -p node_modules && printf '{{}}' > node_modules/.package-lock.json "
+            + $"&& printf x >> '{counter}'";
         var preparation = new ReviewPreparationCommandDto(
             "prepare-1",
             PosixShell.RequirePath(),

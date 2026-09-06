@@ -29,6 +29,13 @@ public enum BuildTestGateFailureKind
     Cancellation,
     MissingSource,
     ReviewModel,
+    /// <summary>
+    /// The toolchain on the gate host died before a single test was discovered
+    /// (bundler startup, unresolvable dependency, native binding mismatch). The
+    /// delivery was never judged, so this is a host fault to retry, never a
+    /// product failure (AGT-2720).
+    /// </summary>
+    GateEnvironment,
 }
 
 public sealed record BuildTestGateRequest(
@@ -411,14 +418,18 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                     completed = completed with
                     {
                         TestSelection = completedAudit,
-                        Reason = CoverageReason(completed.Reason, completedAudit),
+                        Reason = CoverageReason(
+                            completed.Verdict == BuildTestGateVerdict.Fail
+                                ? WithCacheDecision(completed.Reason, completed.DependencyCache)
+                                : completed.Reason,
+                            completedAudit),
                     };
                 }
             }
 
             if (workspaceLease is not null)
             {
-                completed = SaveDependencyCache(completed!, dependencyCache);
+                completed = FinalizeDependencyCache(completed!, dependencyCache);
                 dependencyCacheSaved = true;
                 var cleanupError = await workspaceLease.RemoveAsync(
                     infrastructureTimeout, CancellationToken.None).ConfigureAwait(false);
@@ -468,7 +479,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
                 if (!dependencyCacheSaved)
                 {
                     if (completed is not null)
-                        completed = SaveDependencyCache(completed, dependencyCache);
+                        completed = FinalizeDependencyCache(completed, dependencyCache);
                     else
                         dependencyCache?.Save();
                 }
@@ -652,6 +663,12 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             }
         }
 
+        // Whether any dependency tree in this workspace came from the shared
+        // cache rather than from an install this run performed. Only that makes
+        // a toolchain crash the host's fault instead of the delivery's.
+        var usedRestoredDependencies = dependencyCache.Any(entry =>
+            string.Equals(entry.State, "hit", StringComparison.Ordinal));
+
         foreach (var command in commands)
         {
             var workingDirectory = ResolveWorkingDirectory(repositoryPath, command);
@@ -685,7 +702,7 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
             evidence.Add(process);
             if (process.ExitCode != 0 || process.TimedOut || process.Cancelled || process.LaunchError is not null)
             {
-                var kind = ClassifyFailure(process);
+                var kind = ClassifyFailure(process, usedRestoredDependencies);
                 if (kind == BuildTestGateFailureKind.Code && !command.BlocksWorkPackage)
                 {
                     findings.Add(new BuildTestGateFinding(
@@ -1507,7 +1524,9 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         };
     }
 
-    internal static BuildTestGateFailureKind ClassifyFailure(BuildTestGateProcessEvidence process)
+    internal static BuildTestGateFailureKind ClassifyFailure(
+        BuildTestGateProcessEvidence process,
+        bool usedRestoredDependencies = false)
     {
         if (process.LaunchError is not null) return BuildTestGateFailureKind.ProcessLaunch;
         if (process.Cancelled) return BuildTestGateFailureKind.Cancellation;
@@ -1515,6 +1534,14 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         if (process.ExitCode == 137 || string.Equals(process.TerminationSignal, "SIGKILL", StringComparison.Ordinal))
             return BuildTestGateFailureKind.OutOfMemory;
         var evidence = process.StandardError + "\n" + process.StandardOutput;
+        // A toolchain that crashed inside a dependency tree THIS RUN RESTORED
+        // FROM CACHE judged nothing about the delivery. The cache-ownership
+        // condition is what keeps the AGT-2110 rule below intact: a tree this
+        // run installed from the lockfile is the delivery's own, so a crash in
+        // it stays a product failure. It also makes the retry terminate, because
+        // the evicted entry forces the next attempt to install fresh (AGT-2720).
+        if (GateEnvironmentFailurePolicy.IsRestoredToolchainFault(evidence, usedRestoredDependencies))
+            return BuildTestGateFailureKind.GateEnvironment;
         var classified = ClassifyFailure(evidence);
         if (classified == BuildTestGateFailureKind.None)
             return BuildTestGateFailureKind.Code;
@@ -1610,16 +1637,42 @@ public sealed class BuildTestGateRunner : IBuildTestGateRunner
         }, kind);
     }
 
-    private static BuildTestGateResult SaveDependencyCache(
+    /// <summary>
+    /// Decides what happens to the shared dependency cache once the gate is
+    /// done. A run that died in its toolchain before test discovery is the one
+    /// signal that the restored tree itself may be the fault, so its entry is
+    /// dropped instead of republished. Without that step a corrupted entry
+    /// survives every retry, which is how one interrupted save cost CAC-18
+    /// four weeks of red pre-main gates (AGT-2720).
+    /// </summary>
+    private static BuildTestGateResult FinalizeDependencyCache(
         BuildTestGateResult result,
         GateDependencyCacheSession? session)
     {
         if (session is null) return result;
+        var evict = result.FailureKind == BuildTestGateFailureKind.GateEnvironment;
+        var messages = evict
+            ? session.Evict($"gate-environment-failure fingerprint={result.FailureFingerprint ?? "none"}")
+            : session.Save();
         var output = result.Output;
-        foreach (var message in session.Save())
+        foreach (var message in messages)
             output = AppendOutput(output, $"# {message}");
         return result with { Output = output };
     }
+
+    /// <summary>
+    /// Appends the cache decision to a failing gate reason so a hit on a broken
+    /// tree is visible on the card instead of only in the transcript.
+    /// </summary>
+    internal static string WithCacheDecision(
+        string reason,
+        IReadOnlyList<BuildTestGateDependencyCacheEvidence> cache)
+        => cache.Count == 0
+            ? reason
+            : $"{reason}; dependency-cache=" + string.Join(
+                ",",
+                cache.Select(entry =>
+                    $"{entry.WorkingSubdir}:{entry.State}({entry.Reason})"));
 
     private static string AppendOutput(string current, string? addition)
     {
