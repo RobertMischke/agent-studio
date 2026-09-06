@@ -54,7 +54,7 @@ export function bounded(value: string, length: number): string {
 }
 
 export function laneLabel(lane: string | null): string {
-  return lane === '1-preparation' ? 'Preparation' : lane ?? 'Unknown lane';
+  return lane ? laneDisplayName(lane) : 'Unknown lane';
 }
 
 export function actionErrorMessage(error: unknown): string {
@@ -69,3 +69,4 @@ export function createOperationId(): string {
     ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   return `workbench-ui-${random}`;
 }
+import { laneDisplayName } from '../../../../models/lane-presentation';

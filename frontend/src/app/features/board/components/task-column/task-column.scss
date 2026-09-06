@@ -65,6 +65,7 @@
       flex-shrink: 0;
       display: inline-flex;
       align-items: center;
+      color: var(--lane-tone, var(--studio-fg-dim));
     }
     .column__title {
       margin: 0;
@@ -396,7 +397,11 @@
       padding-block: var(--studio-rail-item-padding-block);
       flex: 0 0 auto;
     }
-    .column-rail__icon { font-size: 16px; line-height: 1; }
+    .column-rail__icon {
+      font-size: 16px;
+      line-height: 1;
+      color: var(--lane-tone, var(--studio-fg-dim));
+    }
     .column-rail__count {
       background: var(--studio-bg-hover);
       color: var(--studio-fg-dim);

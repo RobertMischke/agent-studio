@@ -1802,8 +1802,9 @@
     padding: 0 24px 0 10px;
     font-family: inherit;
     font-weight: 600;
-    color: var(--studio-fg);
-    background-color: transparent;
+    color: var(--lane-tone, var(--studio-fg));
+    -webkit-text-fill-color: var(--lane-tone, var(--studio-fg));
+    background-color: color-mix(in srgb, var(--lane-tone, var(--studio-fg)) 15%, transparent);
     background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
                       linear-gradient(135deg, currentColor 50%, transparent 50%);
     background-position: calc(100% - 12px) 55%, calc(100% - 8px) 55%;
@@ -1823,6 +1824,9 @@
       color: var(--studio-fg);
       background: var(--studio-bg-elevated);
       font-weight: 400;
+    }
+    option:checked {
+      color: var(--lane-tone, var(--studio-fg));
     }
   }
 }

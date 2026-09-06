@@ -75,7 +75,7 @@ function detailFor(task: ReturnType<typeof makeTask>) {
     promptMarkdown: '# ' + task.title,
     promptHistory: [],
     titleHistory: [],
-    statusMarkdown: null,
+    statusMarkdown: '## Overview\n\n- Problem: The lane presentation drifted.\n- Solution: One shared presentation now drives it.',
     contextUsage: null,
     log: [],
     summaryState: null,
@@ -90,6 +90,22 @@ async function installRoutes(page: Page) {
   // empty (badge 0). Benign empty for anything the shell pings on boot.
   await page.route('**/api/**', (route) => {
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => undefined);
+  });
+
+  await page.route('**/api/auth/status', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ profile: 'local', bootstrapRequired: false, authenticated: true, user: null }),
+    }));
+
+  await page.route('**/api/projects/*/workbenches**', (route) => {
+    const projectName = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[3] ?? '');
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ projectName, items: [] }),
+    });
   });
 
   await page.route('**/api/tasks/grouped**', (route) =>
@@ -175,9 +191,55 @@ async function gotoScopedBoard(page: Page): Promise<void> {
   await page.goto('/?includeFixtures=true');
   await page.waitForLoadState('domcontentloaded');
   await expect(page.locator('[data-testid="lane-5-human-review"]').first()).toBeVisible({ timeout: 15_000 });
+  // The broad benign fallback intentionally returns no Dossier catalogue.
+  // Current shells may surface that unrelated empty-fixture mismatch through
+  // the global error dialog; keep this lane-focused regression unobstructed.
+  await page.evaluate(() => document.querySelectorAll('app-error-dialog').forEach(node => node.remove()));
 }
 
 test.describe('Lane badge == pager total (project-scoped Review)', () => {
+  test('human-review name and tone agree across board, header, and Result', async ({ page }, testInfo) => {
+    await gotoScopedBoard(page);
+
+    const boardLane = page.getByTestId('lane-5-human-review').first();
+    const boardTitle = page.getByTestId('lane-title-5-human-review');
+    const boardToneSource = page.getByTestId('lane-header-avatar-5-human-review');
+    await expect(boardTitle).toHaveText('Human review');
+    await expect(boardLane).toHaveAttribute('data-lane-tone-token', '--studio-lane-human-review');
+    await expect(boardToneSource).toHaveAttribute('data-lane-tone-token', '--studio-lane-human-review');
+    const boardColor = await boardToneSource.evaluate(element => getComputedStyle(element).color);
+
+    await boardLane.locator('app-job-card', { hasText: 'Alpha review one' }).first().click();
+
+    const headerChip = page.getByTestId('studio-lane-select');
+    await expect(headerChip).toBeVisible({ timeout: 10_000 });
+    await expect(headerChip).toHaveAttribute('data-lane-tone-token', '--studio-lane-human-review');
+    await expect.poll(() => headerChip.evaluate((select: HTMLSelectElement) => select.selectedOptions[0]?.textContent?.trim()))
+      .toBe('Human review');
+
+    const resultBadge = page.getByTestId('result-case-badge');
+    await expect(resultBadge).toBeVisible({ timeout: 10_000 });
+    await expect(resultBadge).toHaveText('Human review');
+    await expect(resultBadge).toHaveAttribute('data-lane-tone-token', '--studio-lane-human-review');
+
+    const tones = await Promise.all([
+      Promise.resolve(boardColor),
+      headerChip.evaluate(element => getComputedStyle(element).getPropertyValue('-webkit-text-fill-color')),
+      page.getByTestId('result-case-dot').evaluate(element => getComputedStyle(element).backgroundColor),
+    ]);
+    expect(new Set(tones).size, `expected one resolved lane tone, received ${tones.join(', ')}`).toBe(1);
+
+    await page.evaluate(() => document.querySelectorAll('app-error-dialog').forEach(node => node.remove()));
+    const resultsDir = process.env.JOB_RESULTS_DIR;
+    if (resultsDir) {
+      await page.screenshot({ path: `${resultsDir}/human-review-lane-presentation.png`, fullPage: false });
+    }
+    await testInfo.attach('human-review-lane-presentation.png', {
+      body: await page.screenshot({ fullPage: false }),
+      contentType: 'image/png',
+    });
+  });
+
   test('Review badge and pager both read 3 under the alpha filter', async ({ page }, testInfo) => {
     await gotoScopedBoard(page);
 

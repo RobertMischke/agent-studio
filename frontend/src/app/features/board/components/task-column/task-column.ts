@@ -33,6 +33,7 @@ import { laneSortStrategyMeta, isManualStrategy } from '../../../../services/lan
 import { deriveStalledTaskState } from '../../../../services/run-activity.util';
 import { PostProcessingSummaryComponent } from '../post-processing-summary/post-processing-summary.component';
 import { BoardDragStateService } from '../../state/board-drag-state.service';
+import { lanePresentation, laneToneValue } from '../../../../models/lane-presentation';
 
 /** ASS-1727: Archive pagination and typed-filter debounce. */
 const ARCHIVE_PAGE_SIZE = 50;
@@ -86,6 +87,8 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
    * change detection is OnPush-friendly.
    */
   readonly nowMs = input<number>(0);
+  readonly presentation = computed(() => lanePresentation(this.state()));
+  readonly laneTone = computed(() => laneToneValue(this.state()));
 
   readonly stalledCount = computed(() => this.state() === TaskState.Progress
     ? this.jobs().filter((job) => deriveStalledTaskState(job, this.nowMs() || Date.now()) !== null).length

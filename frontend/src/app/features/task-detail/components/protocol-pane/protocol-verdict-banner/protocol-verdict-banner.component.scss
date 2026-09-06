@@ -29,11 +29,15 @@
   &[data-kind="unclear"] {
     background: color-mix(in srgb, var(--severity-warn) 8%, transparent);
   }
+  &[data-lane-tone-token] {
+    background: color-mix(in srgb, var(--lane-tone) 8%, transparent);
+  }
 
   &__emoji {
     font-size: 14px;
     line-height: 1;
     flex: 0 0 auto;
+    color: var(--lane-tone, currentColor);
   }
 
   &__label {

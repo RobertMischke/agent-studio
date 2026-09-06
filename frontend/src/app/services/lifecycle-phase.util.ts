@@ -36,7 +36,7 @@ export function formatPhaseElapsed(elapsedMs: number): string {
  * so no surface ever renders a raw kebab-case id.
  */
 export const PHASE_LABELS: Readonly<Record<string, string>> = {
-  'human-ready': 'Ready',
+  'human-ready': lanePresentation(TaskState.Ready)!.shortName,
   'intake-running': 'Intake running',
   'intake-blocked': 'Intake blocked',
   'intake-passed': 'Intake passed',
@@ -84,3 +84,5 @@ export function lifecyclePhaseLabel(
   const since = startedAt ? Date.parse(startedAt) : NaN;
   return Number.isFinite(since) ? `${base} ${formatPhaseElapsed(nowMs - since)}` : base;
 }
+import { TaskState } from '../models/task.model';
+import { lanePresentation } from '../models/lane-presentation';

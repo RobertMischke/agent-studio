@@ -124,6 +124,16 @@ and do not contain `Tab` or `Escape`. The detailed embedding contract and its
 CAC-22 precedent are recorded in the
 [Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html#panel-keyboard-containment).
 
+### R9 - A lane has one presentation everywhere
+
+Every surface that names or colours a task lane reads
+`frontend/src/app/models/lane-presentation.ts`. The board column, task header,
+Result header, verdict signals, badges, workflow list, and help affordances use
+the same display name and `--studio-lane-*` tone token for a given `TaskState`.
+Do not hard-code a lane name in a component and do not map a lane to a generic
+severity colour. Responsive surfaces may use the map's short name, but they do
+not invent another synonym.
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../../AGENTS.md) and

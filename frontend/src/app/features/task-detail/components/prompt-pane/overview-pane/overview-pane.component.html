@@ -399,6 +399,8 @@
               <span class="ov-pl-step__verdict ov-pl-step__final-decision"
                     tabindex="0"
                     [attr.data-tone]="badge?.tone"
+                    [style.--lane-tone]="badge ? (badge.toneToken ? 'var(' + badge.toneToken + ')' : null) : null"
+                    [attr.data-lane-tone-token]="badge?.toneToken"
                     [attr.data-verdict]="badge?.verdict"
                     [cacTooltip]="badge?.tooltip ?? 'Decision pending'"
                     [tooltipSeverity]="badge?.severity ?? 'info'"

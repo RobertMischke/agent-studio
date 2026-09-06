@@ -16,7 +16,10 @@
       [appTooltipTestId]="testId() + '-tooltip'"
     >
       @if (variant() === 'lane-dot') {
-        <i class="task-ref__lane-dot" [attr.data-tone]="laneTone()" aria-hidden="true"></i>
+        <i class="task-ref__lane-dot"
+           [style.--lane-tone]="laneToneValue()"
+           [attr.data-lane-tone-token]="laneToneToken()"
+           aria-hidden="true"></i>
       } @else {
         <i class="task-ref__project" aria-hidden="true"></i>
         <strong>{{ status().key }}</strong>
@@ -24,7 +27,10 @@
           <span class="task-ref__title">{{ status().title }}</span>
           <span class="task-ref__lane-label">{{ laneLabel() }}</span>
         }
-        <span class="task-ref__lane" [attr.data-tone]="laneTone()" aria-hidden="true">{{
+        <span class="task-ref__lane"
+              [style.--lane-tone]="laneToneValue()"
+              [attr.data-lane-tone-token]="laneToneToken()"
+              aria-hidden="true">{{
           laneIcon()
         }}</span>
         @if (status().merge; as merge) {
@@ -44,7 +50,7 @@
       [appTooltipTestId]="testId() + '-tooltip'"
     >
       @if (variant() === 'lane-dot') {
-        <i class="task-ref__lane-dot" data-tone="ghost" aria-hidden="true"></i>
+        <i class="task-ref__lane-dot task-ref__lane-dot--ghost" aria-hidden="true"></i>
       } @else {
         <i class="task-ref__project" aria-hidden="true"></i><strong>{{ status().key }}</strong
         ><span aria-hidden="true">◇</span>

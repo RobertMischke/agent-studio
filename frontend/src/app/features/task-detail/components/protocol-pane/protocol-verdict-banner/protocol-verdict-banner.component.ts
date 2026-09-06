@@ -18,6 +18,10 @@ export class ProtocolVerdictBannerComponent {
   readonly interimElapsedSeconds = input(0);
 
   readonly requestInterim = output<void>();
+  readonly toneValue = computed(() => {
+    const token = this.verdict().toneToken;
+    return token ? `var(${token})` : null;
+  });
 
   /** Whether the reason and raw signals are shown in full. */
   readonly expanded = signal(false);

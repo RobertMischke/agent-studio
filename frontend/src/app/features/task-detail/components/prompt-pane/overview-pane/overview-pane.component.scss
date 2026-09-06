@@ -897,6 +897,12 @@
       background: color-mix(in srgb, var(--severity-warn) 16%, transparent);
     }
 
+    &[data-lane-tone-token] {
+      color: var(--lane-tone);
+      border-color: color-mix(in srgb, var(--lane-tone) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--lane-tone) 16%, transparent);
+    }
+
     &[data-tone='danger'] {
       color: var(--severity-high);
       border-color: color-mix(in srgb, var(--severity-high) 58%, var(--studio-border));

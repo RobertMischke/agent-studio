@@ -14,6 +14,7 @@ import { StudioIconComponent } from '../../../../components/studio-icon/studio-i
 import { TaskService } from '../../../../services/task.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import type { EpicRollup } from '../../../../models/task.model';
+import { laneDisplayName } from '../../../../models/lane-presentation';
 import { EpicCreateDialogComponent } from '../epic-create-dialog/epic-create-dialog.component';
 
 /** Project the overview is scoped to; null means the cross-project view. */
@@ -168,8 +169,7 @@ export class EpicOverviewScreenComponent implements OnInit {
 
   /** "6-completed" -> "completed" for the sub-task lane label. */
   laneLabel(state: string): string {
-    const name = state.includes('-') ? state.substring(state.indexOf('-') + 1) : state;
-    return name.replace(/-/g, ' ');
+    return laneDisplayName(state);
   }
 
   verdictLabel(verdict: string | null | undefined): string | null {

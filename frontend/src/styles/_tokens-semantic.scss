@@ -288,19 +288,34 @@
   --lane-archive:      #6e6e6e;
   --lane-failed:       var(--color-mocha-red);
 
+  // Canonical lane-presentation tones. UI surfaces consume only these
+  // semantic aliases; the shorter --lane-* palette remains the pigment layer.
+  --studio-lane-backlog:          var(--lane-backlog);
+  --studio-lane-preparation:      var(--lane-prep);
+  --studio-lane-orchestrator-prep: var(--lane-prep);
+  --studio-lane-ready:            var(--lane-ready);
+  --studio-lane-progress:         var(--lane-progress);
+  --studio-lane-failed-pickup:    var(--lane-failed);
+  --studio-lane-code-not-complete: var(--lane-failed);
+  --studio-lane-auto-review:      var(--lane-auto-review);
+  --studio-lane-human-review:     var(--lane-human-review);
+  --studio-lane-escalated:        var(--lane-escalated);
+  --studio-lane-completed:        var(--lane-completed);
+  --studio-lane-archive:          var(--lane-archive);
+
   // Board nav lane counters. Subtle, titlebar/sidebar-grade pigments distinct
   // from the saturated kanban lane colours so the Explorer stays calm.
-  --studio-board-nav-lane-ready-fg:        var(--color-slate-300);
+  --studio-board-nav-lane-ready-fg:        var(--studio-lane-ready);
   --studio-board-nav-lane-ready-bg:        color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 12%, transparent);
   --studio-board-nav-lane-ready-border:    color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 24%, transparent);
-  --studio-board-nav-lane-progress-fg:     var(--studio-accent-warn-strong);
+  --studio-board-nav-lane-progress-fg:     var(--studio-lane-progress);
   --studio-board-nav-lane-progress-bg:     color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 12%, transparent);
   --studio-board-nav-lane-progress-border: color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 24%, transparent);
   // Review reads in the Review lane's own hue. It used to borrow the success
   // green, which collided with Delivered/green and told the operator "done"
   // about the one lane that means "needs you" (operator 2026-08-23). Green
   // stays reserved for --lane-completed.
-  --studio-board-nav-lane-human-review-fg: var(--lane-human-review);
+  --studio-board-nav-lane-human-review-fg: var(--studio-lane-human-review);
   --studio-board-nav-lane-human-review-bg: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 12%, transparent);
   --studio-board-nav-lane-human-review-border: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 24%, transparent);
 
@@ -791,14 +806,27 @@
   --lane-archive:      var(--color-grey-850);
   --lane-failed:       var(--color-red-700);
 
-  --studio-board-nav-lane-ready-fg:        var(--color-slate-600);
+  --studio-lane-backlog:          var(--lane-backlog);
+  --studio-lane-preparation:      var(--lane-prep);
+  --studio-lane-orchestrator-prep: var(--lane-prep);
+  --studio-lane-ready:            var(--lane-ready);
+  --studio-lane-progress:         var(--lane-progress);
+  --studio-lane-failed-pickup:    var(--lane-failed);
+  --studio-lane-code-not-complete: var(--lane-failed);
+  --studio-lane-auto-review:      var(--lane-auto-review);
+  --studio-lane-human-review:     var(--lane-human-review);
+  --studio-lane-escalated:        var(--lane-escalated);
+  --studio-lane-completed:        var(--lane-completed);
+  --studio-lane-archive:          var(--lane-archive);
+
+  --studio-board-nav-lane-ready-fg:        var(--studio-lane-ready);
   --studio-board-nav-lane-ready-bg:        color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 10%, transparent);
   --studio-board-nav-lane-ready-border:    color-mix(in srgb, var(--studio-board-nav-lane-ready-fg) 22%, transparent);
-  --studio-board-nav-lane-progress-fg:     var(--color-amber-700);
+  --studio-board-nav-lane-progress-fg:     var(--studio-lane-progress);
   --studio-board-nav-lane-progress-bg:     color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 10%, transparent);
   --studio-board-nav-lane-progress-border: color-mix(in srgb, var(--studio-board-nav-lane-progress-fg) 22%, transparent);
   // Review = the Review lane hue here too; green stays Delivered-only.
-  --studio-board-nav-lane-human-review-fg: var(--lane-human-review);
+  --studio-board-nav-lane-human-review-fg: var(--studio-lane-human-review);
   --studio-board-nav-lane-human-review-bg: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 10%, transparent);
   --studio-board-nav-lane-human-review-border: color-mix(in srgb, var(--studio-board-nav-lane-human-review-fg) 22%, transparent);
 

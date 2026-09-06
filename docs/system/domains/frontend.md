@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-08-12
+Version: 2026-09-06
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -44,6 +44,23 @@ groups, and a failed domain reports an error without hiding successful domains.
   playbook.
 - [docs/quality/frontend/audits/architecture-review-2026-05-09.md](../../quality/frontend/audits/architecture-review-2026-05-09.md)
   is the maintainability map for large components and service extraction.
+
+## Lane presentation
+
+`frontend/src/app/models/lane-presentation.ts` is the only source for a task
+lane's display name, chip name, sentence, glyph, documentation topic, and
+`--studio-lane-*` tone token. Board columns, detail headers, Result verdicts,
+workflow rows, badges, lane-aware metrics, and info buttons resolve their copy
+and tone through that map. A component must not define a parallel lane label or
+choose a severity colour as a substitute for the lane tone.
+
+The semantic lane tones live in
+`frontend/src/styles/_tokens-semantic.scss` and resolve separately in both
+themes. `npm run lint:structure` reads the names from the presentation map and
+rejects new hard-coded lane-name literals elsewhere in production frontend
+code. `lane-presentation.spec.ts` locks map completeness, while
+`e2e/task-detail/lane-badge-equals-pager-total.spec.ts` locks the name and
+resolved tone across the board, task header, and Result surface.
 
 ## Studio route restoration
 

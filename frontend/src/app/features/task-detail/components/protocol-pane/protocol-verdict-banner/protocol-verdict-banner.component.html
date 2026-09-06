@@ -3,6 +3,8 @@
 <div class="protocol-verdict"
      [attr.data-kind]="v.kind"
      [attr.data-status]="v.status || null"
+     [style.--lane-tone]="toneValue()"
+     [attr.data-lane-tone-token]="v.toneToken || null"
      [class.protocol-verdict--expanded]="expanded()"
      [attr.data-testid]="'protocol-verdict-' + v.kind"
      role="status">

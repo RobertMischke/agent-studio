@@ -1,4 +1,5 @@
-import type { CliExecution, TaskOutcomeIssue, TaskSummaryStatus } from '../../../../models/task.model';
+import { TaskState, type CliExecution, type TaskOutcomeIssue, type TaskSummaryStatus } from '../../../../models/task.model';
+import { lanePresentation } from '../../../../models/lane-presentation';
 import type { PipelineExecutionRecord } from '../../../task-pipeline';
 import type { OutcomeAssessment } from '../agent-outcome.util';
 
@@ -11,6 +12,7 @@ export interface RunOutcomeSignal {
   status: AuthoritativeRunOutcomeStatus;
   label: string;
   detail: string;
+  toneToken?: string | null;
 }
 
 export interface ProtocolVerdict {
@@ -29,6 +31,8 @@ export interface ProtocolVerdict {
    * Null when status.md has no Duration line yet.
    */
   duration: string | null;
+  /** Lane tone when the lane itself is the authoritative outcome signal. */
+  toneToken?: string | null;
 }
 
 export interface ProtocolVerdictInputs {
@@ -77,7 +81,7 @@ export function deriveProtocolVerdict(input: ProtocolVerdictInputs): ProtocolVer
     ));
   }
   const leading = resolveAuthoritativeRunOutcome(signals)!;
-  return presentation(leading.status, leading.label, leading.detail, signals, input.statusMarkdown);
+  return presentation(leading.status, leading.label, leading.detail, signals, input.statusMarkdown, leading.toneToken);
 }
 
 const OUTCOME_RANK: Record<AuthoritativeRunOutcomeStatus, number> = {
@@ -157,10 +161,12 @@ function collectSignals(input: ProtocolVerdictInputs): RunOutcomeSignal[] {
       break;
   }
 
-  if (input.laneState === '5-human-review' || input.laneState === '5e-escalated') {
-    signals.push(signal('lane', 'needs-decision', 'Human review lane', 'The task is waiting for a human decision.'));
-  } else if (input.laneState === '6-completed' || input.laneState === '7-archive') {
-    signals.push(signal('lane', 'succeeded', 'Completed lane', `The task is in ${input.laneState}.`));
+  if (input.laneState === TaskState.HumanReview || input.laneState === TaskState.Escalated) {
+    const lane = lanePresentation(input.laneState)!;
+    signals.push(signal('lane', 'needs-decision', lane.displayName, `${lane.sentence}.`, lane.toneToken));
+  } else if (input.laneState === TaskState.Completed || input.laneState === TaskState.Archive) {
+    const lane = lanePresentation(input.laneState)!;
+    signals.push(signal('lane', 'succeeded', lane.displayName, `${lane.sentence}.`, lane.toneToken));
   }
 
   if (input.summaryStatus === 'failed') {
@@ -240,8 +246,14 @@ function activitySignal(activity: OutcomeAssessment): RunOutcomeSignal {
   return signal('activity', 'unclear', 'Agent reply unclear', activity.summary || 'The agent reply has no clear terminal verdict.');
 }
 
-function signal(source: RunOutcomeSignal['source'], status: AuthoritativeRunOutcomeStatus, label: string, detail: string): RunOutcomeSignal {
-  return { source, status, label, detail };
+function signal(
+  source: RunOutcomeSignal['source'],
+  status: AuthoritativeRunOutcomeStatus,
+  label: string,
+  detail: string,
+  toneToken: string | null = null,
+): RunOutcomeSignal {
+  return { source, status, label, detail, toneToken };
 }
 
 function presentation(
@@ -250,10 +262,11 @@ function presentation(
   detail: string,
   signals: RunOutcomeSignal[],
   markdown: string | null | undefined,
+  toneToken: string | null = null,
 ): ProtocolVerdict {
   const kind: ProtocolVerdictKind = status === 'failed' ? 'problem' : status === 'succeeded' ? 'ok' : 'unclear';
   const emoji = status === 'failed' ? '🔴' : status === 'succeeded' ? '🟢' : status === 'needs-decision' ? '🟠' : '🟡';
-  return { kind, status, signals, emoji, label, detail, duration: parseDuration(markdown) };
+  return { kind, status, signals, emoji, label, detail, duration: parseDuration(markdown), toneToken };
 }
 
 const DURATION_RE = /^\s*-\s*Duration:\s*(.+?)\s*$/im;

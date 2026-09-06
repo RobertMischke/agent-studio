@@ -6,6 +6,8 @@
         <span class="result__case"
               [attr.data-tone]="outcomeTone()"
               [attr.data-outcome]="verdict().status || verdict().kind"
+              [style.--lane-tone]="laneToneValue()"
+              [attr.data-lane-tone-token]="verdict().toneToken || null"
               data-testid="result-case-badge"
               [cacTooltip]="verdict().detail">
           <span class="result__case-dot" data-testid="result-case-dot" aria-hidden="true"></span>
