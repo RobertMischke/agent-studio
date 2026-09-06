@@ -419,7 +419,7 @@ test.describe('Pipeline: orchestrator-review rows are distinct, single final ver
     expect(Math.max(...phaseHeights) - Math.min(...phaseHeights), JSON.stringify(phaseHeights)).toBeLessThanOrEqual(1);
 
     await finalVerdict.hover();
-    await expect(page.getByTestId('cac-tooltip')).toContainText('Run outcome: Human review lane');
+    await expect(page.getByTestId('cac-tooltip')).toContainText('Run outcome: Human review');
     await expect(page.getByTestId('cac-tooltip')).toContainText('waiting for a human decision');
 
     if (RESULTS_DIR) {

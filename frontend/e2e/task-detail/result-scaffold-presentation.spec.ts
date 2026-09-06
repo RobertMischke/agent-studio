@@ -285,4 +285,59 @@ test.describe('Result scaffold presentation', () => {
       }
     });
   }
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`human-review lane name and tone agree across board, task header, and Result in ${theme} theme`, async ({ page }) => {
+      await page.addInitScript((selectedTheme) => {
+        localStorage.setItem('atp.studio.theme', selectedTheme);
+        localStorage.setItem('atp.studio.tabs.v1', JSON.stringify({
+          v: 1,
+          tabs: [{ kind: 'board', projectName: '__all__' }],
+          activeKey: 'board:__all__',
+        }));
+      }, theme);
+      await installRoutes(page);
+      await page.setViewportSize({ width: 1600, height: 1000 });
+      mkdirSync(SHOTS_DIR, { recursive: true });
+      await page.goto('/?includeFixtures=true', { waitUntil: 'domcontentloaded' });
+
+      const lane = page.getByTestId('lane-5-human-review');
+      const laneTitle = page.getByTestId('lane-title-5-human-review');
+      await expect(lane).toBeVisible();
+      await expect(lane).toHaveAttribute('data-tone-token', '--studio-lane-human-review');
+      await expect(laneTitle).toHaveText('Human review');
+      const laneColor = await laneTitle.evaluate((element) => getComputedStyle(element).color);
+
+      await page.goto(
+        `/?job=${encodeURIComponent(FIXTURES[0].id)}&watchPath=${encodeURIComponent(WATCH_PATH)}`,
+        { waitUntil: 'domcontentloaded' },
+      );
+      const headerChip = page.getByTestId('studio-lane-select');
+      await expect(headerChip).toBeVisible();
+      await expect(headerChip).toHaveValue('5-human-review');
+      await expect(headerChip).toHaveAttribute('data-tone-token', '--studio-lane-human-review');
+      await expect(headerChip.locator('option:checked')).toHaveText('Human review');
+
+      const resultTab = page.getByTestId('inspector-tab-protocol');
+      if (await resultTab.getAttribute('aria-selected') !== 'true') await resultTab.click();
+      const resultBadge = page.getByTestId('result-case-badge');
+      const resultDot = page.getByTestId('result-case-dot');
+      await expect(resultBadge).toHaveText('Human review');
+      await expect(resultBadge).toHaveAttribute('data-tone-token', '--studio-lane-human-review');
+
+      const [headerColor, resultColor, dotColor] = await Promise.all([
+        headerChip.evaluate((element) => getComputedStyle(element).color),
+        resultBadge.evaluate((element) => getComputedStyle(element).color),
+        resultDot.evaluate((element) => getComputedStyle(element).backgroundColor),
+      ]);
+      expect(headerColor).toBe(laneColor);
+      expect(resultColor).toBe(laneColor);
+      expect(dotColor).toBe(laneColor);
+
+      await page.screenshot({
+        path: join(SHOTS_DIR, `lane-presentation-human-review-${theme}.png`),
+        fullPage: false,
+      });
+    });
+  }
 });

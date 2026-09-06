@@ -11,6 +11,7 @@
  */
 
 import { TaskState } from '../../../models/task.model';
+import { LANE_PRESENTATIONS, PRESENTED_TASK_STATES } from '../../../models/lane-presentation';
 import type { TaskInfo } from '../../../models/task.model';
 import type { LandedState } from '../../../features/git';
 
@@ -128,19 +129,9 @@ export const LANE_ACTIONS: Record<string, TriageButton[]> = {
   ],
 };
 
-export const LANE_LABELS: Record<string, string> = {
-  [TaskState.Backlog]:          'Backlog',
-  [TaskState.Preparation]:      'Preparation',
-  [TaskState.OrchestratorPrep]: 'Orchestrator Prep',
-  [TaskState.Ready]:            'Ready',
-  [TaskState.Progress]:         'In Progress',
-  [TaskState.CodeNotComplete]:  'Code not complete',
-  [TaskState.AutoReview]:       'Post Processing',
-  [TaskState.HumanReview]:      'Review',
-  [TaskState.Escalated]:        'Escalated',
-  [TaskState.Completed]:        'Delivered',
-  [TaskState.Archive]:          'Archive',
-};
+export const LANE_LABELS: Record<string, string> = Object.fromEntries(
+  PRESENTED_TASK_STATES.map((state) => [state, LANE_PRESENTATIONS[state].displayName]),
+);
 
 /**
  * Lanes the orchestrator owns: a job lands here because the runner picked

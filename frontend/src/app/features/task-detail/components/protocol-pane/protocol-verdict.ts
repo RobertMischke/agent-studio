@@ -1,4 +1,5 @@
-import type { CliExecution, TaskOutcomeIssue, TaskSummaryStatus } from '../../../../models/task.model';
+import { TaskState, type CliExecution, type TaskOutcomeIssue, type TaskSummaryStatus } from '../../../../models/task.model';
+import { lanePresentation } from '../../../../models/lane-presentation';
 import type { PipelineExecutionRecord } from '../../../task-pipeline';
 import type { OutcomeAssessment } from '../agent-outcome.util';
 
@@ -157,10 +158,22 @@ function collectSignals(input: ProtocolVerdictInputs): RunOutcomeSignal[] {
       break;
   }
 
-  if (input.laneState === '5-human-review' || input.laneState === '5e-escalated') {
-    signals.push(signal('lane', 'needs-decision', 'Human review lane', 'The task is waiting for a human decision.'));
-  } else if (input.laneState === '6-completed' || input.laneState === '7-archive') {
-    signals.push(signal('lane', 'succeeded', 'Completed lane', `The task is in ${input.laneState}.`));
+  if (input.laneState === TaskState.HumanReview || input.laneState === TaskState.Escalated) {
+    const lane = lanePresentation(input.laneState);
+    signals.push(signal(
+      'lane',
+      'needs-decision',
+      lane?.displayName ?? input.laneState,
+      `${lane?.sentence ?? 'Waiting for a decision'}.`,
+    ));
+  } else if (input.laneState === TaskState.Completed || input.laneState === TaskState.Archive) {
+    const lane = lanePresentation(input.laneState);
+    signals.push(signal(
+      'lane',
+      'succeeded',
+      lane?.displayName ?? input.laneState,
+      `${lane?.sentence ?? `The task is in ${input.laneState}`}.`,
+    ));
   }
 
   if (input.summaryStatus === 'failed') {

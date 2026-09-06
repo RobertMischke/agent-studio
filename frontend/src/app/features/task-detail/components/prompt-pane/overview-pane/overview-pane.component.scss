@@ -885,6 +885,12 @@
     white-space: nowrap;
     cursor: help;
 
+    &[data-tone-token][data-tone-token] {
+      color: var(--lane-tone);
+      border-color: color-mix(in srgb, var(--lane-tone) 56%, var(--studio-border));
+      background: color-mix(in srgb, var(--lane-tone) 16%, transparent);
+    }
+
     &[data-tone='ok'] {
       color: var(--severity-pass);
       border-color: color-mix(in srgb, var(--severity-pass) 56%, var(--studio-border));

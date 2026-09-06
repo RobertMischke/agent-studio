@@ -51,6 +51,7 @@
   &[data-tone="info"]    { --result-tone: var(--studio-accent-3); }
   &[data-tone="problem"] { --result-tone: var(--severity-high); }
   &[data-tone="neutral"] { --result-tone: var(--studio-fg-muted); }
+  &[data-tone="lane"]    { --result-tone: var(--lane-tone, var(--studio-fg-muted)); }
 }
 
 .result__case-dot {

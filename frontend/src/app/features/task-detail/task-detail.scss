@@ -343,6 +343,8 @@
       background-repeat: no-repeat;
       font-family: inherit;
       line-height: 1;
+      color: var(--lane-tone, var(--studio-fg));
+      background-color: color-mix(in srgb, var(--lane-tone, var(--studio-fg)) 15%, transparent);
       transition: filter 0.15s ease, box-shadow 0.15s ease;
     }
     .detail__state--select:hover:not(:disabled) {

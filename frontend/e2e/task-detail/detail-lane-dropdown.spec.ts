@@ -84,7 +84,7 @@ test.describe('Detail view — lane dropdown (navigation)', () => {
       await expect(select).toBeVisible({ timeout: 10_000 });
       await expect(select).toHaveValue('1-preparation');
 
-      // Pick "Review" (5-human-review) — the lane the pager should now iterate.
+      // Pick "Human review" (5-human-review), the lane the pager should now iterate.
       // Retry to absorb the grouped-signal first-poll race: until the
       // human-review peer lands in the grouped data, navigateToLane no-ops and
       // the native <select> reverts to the current lane.

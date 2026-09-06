@@ -104,6 +104,17 @@ describe('deriveProtocolVerdict', () => {
     expect(v.label).toBe('Result summary failed');
   });
 
+  it('uses the canonical human-review lane presentation for its decision signal', () => {
+    const verdict = deriveProtocolVerdict(baseInputs({ laneState: '5-human-review' }));
+
+    expect(verdict.label).toBe('Human review');
+    expect(verdict.detail).toBe('Waiting for a human decision.');
+    expect(verdict.signals).toContainEqual(expect.objectContaining({
+      source: 'lane',
+      label: 'Human review',
+    }));
+  });
+
   it('keeps an exhausted summary gate reviewable as a typed degraded Result', () => {
     const v = deriveProtocolVerdict(baseInputs({ summaryStatus: 'degraded', statusMarkdown: null }));
     expect(v.kind).toBe('unclear');

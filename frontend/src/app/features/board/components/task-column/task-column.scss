@@ -65,13 +65,14 @@
       flex-shrink: 0;
       display: inline-flex;
       align-items: center;
+      color: var(--lane-tone, var(--studio-fg));
     }
     .column__title {
       margin: 0;
       font-size: var(--studio-lane-header-primary-size);
       line-height: 1;
       font-weight: 600;
-      color: var(--studio-fg, #e2e8f0);
+      color: var(--lane-tone, var(--studio-fg, #e2e8f0));
       flex: 1 1 auto;
       min-width: 0;
       overflow: hidden;

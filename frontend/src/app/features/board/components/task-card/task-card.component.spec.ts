@@ -1992,6 +1992,11 @@ describe('buildPipelineDots', () => {
     expect(dots.dots.find((dot) => dot.id === 'post')?.status).toBe('active');
     expect(dots.dots.find((dot) => dot.id === 'run')?.status).toBe('done');
   });
+
+  it('uses the canonical human-review name for the final pipeline dot', () => {
+    const dots = buildPipelineDots(makeJob({ state: '5-human-review' }));
+    expect(dots.dots.find((dot) => dot.id === 'review')?.label).toBe('Human review');
+  });
 });
 
 function makeOwner(overrides: Partial<ClientSummary> = {}): ClientSummary {

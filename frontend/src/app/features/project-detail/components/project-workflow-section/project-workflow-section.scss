@@ -54,6 +54,7 @@
 }
 
 .wf__lane-icon {
+  color: var(--lane-tone, var(--studio-fg));
   font-size: 0.95rem;
   text-align: center;
 }
@@ -66,7 +67,7 @@
 }
 
 .wf__lane-label {
-  color: var(--studio-fg);
+  color: var(--lane-tone, var(--studio-fg));
   font-size: 0.85rem;
   font-weight: 600;
 }

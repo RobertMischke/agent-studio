@@ -20,6 +20,7 @@ import {
   ProjectRunnerStatus,
   TaskState,
 } from '../../../../models/task.model';
+import { lanePresentation, laneToneValue } from '../../../../models/lane-presentation';
 import { TaskService } from '../../../../services/task.service';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { DecisionBacklogHintComponent } from '../decision-backlog-hint/decision-backlog-hint.component';
@@ -54,6 +55,7 @@ const ARCHIVE_SEARCH_DEBOUNCE_MS = 300;
   styleUrl: './task-column.scss'
 })
 export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
+  protected readonly TaskState = TaskState;
   private readonly taskService = inject(TaskService);
   private readonly boardDrag = inject(BoardDragStateService);
 
@@ -79,13 +81,10 @@ export class TaskColumnComponent implements OnInit, OnChanges, OnDestroy {
   readonly autoMode = input<string>('manual');
   /** Project runner snapshot behind the In-Progress status cluster. */
   readonly runnerStatus = input<ProjectRunnerStatus | null>(null);
-  /**
-   * Live wall-clock tick used so the RUNNING pill's duration string
-   * (`3m24s`) advances without re-polling the runner status. The board
-   * passes a 1-Hz signal; the column does the read inside a computed so
-   * change detection is OnPush-friendly.
-   */
+  /** Live wall-clock tick keeps duration text fresh without runner polling. */
   readonly nowMs = input<number>(0);
+  readonly lanePresentation = computed(() => lanePresentation(this.state()));
+  readonly laneTone = computed(() => laneToneValue(this.state()));
 
   readonly stalledCount = computed(() => this.state() === TaskState.Progress
     ? this.jobs().filter((job) => deriveStalledTaskState(job, this.nowMs() || Date.now()) !== null).length

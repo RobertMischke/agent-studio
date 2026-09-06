@@ -203,7 +203,7 @@ Do **not** select by CSS class names; they belong to styling and change often.
 | `kanban-ready-lane-width.spec.ts` | Ready lane width parity and lack of horizontal scrollbar |
 | `kanban-reorder-drop-on-top.spec.ts` | Kanban lane reorder: drop-on-top must set order=1 |
 | `kanban-seven-lanes.spec.ts` | ADR-0025 seven-lane kanban |
-| `lane-rename-no-human-prefix.spec.ts` | renders Ready / Review / Post Processing headings and never legacy human or auto-review headings |
+| `lane-rename-no-human-prefix.spec.ts` | renders canonical Ready / Human review / Post Processing headings without legacy variants |
 | `lane-reorder-default-sort.repro.spec.ts` | REPRO default-sort within-lane reorder |
 | `lane-reorder-drag.spec.ts` | Lane drag-and-drop reorder |
 | `lane-reorder-drop-on-card.spec.ts` | Within-lane drag-drop never drops the card from the lane |

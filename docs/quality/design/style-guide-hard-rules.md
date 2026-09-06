@@ -124,6 +124,19 @@ and do not contain `Tab` or `Escape`. The detailed embedding contract and its
 CAC-22 precedent are recorded in the
 [Admin Surface Design Guideline](../../operations/admin-design-guideline/index.html#panel-keyboard-containment).
 
+### R9 - One lane identity on every surface
+
+A workflow lane has one name, glyph, help topic, and semantic colour token.
+Every lane-bearing surface reads those values from the frontend
+`LanePresentation` map. Do not redefine a lane label in a component, shorten it
+through a badge normaliser, or substitute a generic severity colour. The board
+column header, task header chip, Result header dot, verdict badge, workflow
+description, and help button must agree in both themes.
+
+Lane colours use `--studio-lane-*` tokens from `_tokens-semantic.scss`. Raw
+palette values and older `--lane-*` compatibility aliases are not a source for
+new lane UI.
+
 ## How this is enforced
 
 - **Prompt anchoring:** referenced from [AGENTS.md](../../../AGENTS.md) and

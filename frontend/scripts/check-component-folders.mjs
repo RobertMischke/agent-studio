@@ -25,9 +25,10 @@ import { basename, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 
 const root = 'src/app';
-const files = execSync(`git ls-files --cached --others --exclude-standard ${root}`, { encoding: 'utf8' })
+const sourcePaths = execSync(`git ls-files --cached --others --exclude-standard ${root}`, { encoding: 'utf8' })
   .split('\n')
-  .filter(existsSync)
+  .filter(existsSync);
+const files = sourcePaths
   .filter(f => f.endsWith('.ts') && !f.endsWith('.spec.ts') && !f.endsWith('.d.ts'));
 
 const errors = [];
@@ -72,6 +73,47 @@ for (const [dir, entries] of byDir) {
   }
 }
 
+// Lane presentation is a structural boundary, not a component convention.
+// Read the canonical names from the map itself so this lint gate cannot drift
+// when product wording changes. Files that work with TaskState may not author
+// those names again. Distinctive multi-word lane names are protected globally,
+// which also catches a component that uses a raw transport key instead of
+// importing TaskState.
+const lanePresentationFile = `${root}/models/lane-presentation.ts`;
+const lanePresentationSource = readFileSync(lanePresentationFile, 'utf8');
+const laneNames = [...new Set(
+  [...lanePresentationSource.matchAll(/(?:displayName|shortName): '([^']+)'/g)].map(match => match[1]),
+)];
+const globallyReservedLaneNames = new Set([
+  'Human review',
+  'Post Processing',
+  'Orchestrator Prep',
+  'Failed pickup',
+  'Code not complete',
+]);
+
+for (const file of sourcePaths) {
+  if (file === lanePresentationFile || file.endsWith('.spec.ts') || !/\.(?:ts|html)$/.test(file)) continue;
+  const source = readFileSync(file, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+  const usesTaskState = source.includes('TaskState.');
+
+  for (const name of laneNames) {
+    if (!usesTaskState && !globallyReservedLaneNames.has(name)) continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const literal = new RegExp("(['\"`])" + escaped + '\\1', 'g');
+    for (const match of source.matchAll(literal)) {
+      const line = source.slice(0, match.index).split('\n').length;
+      errors.push({
+        file: `${file}:${line}`,
+        reason: `hard-coded lane name '${name}'; read it from LanePresentation`,
+      });
+    }
+  }
+}
+
 if (warnings.length > 0) {
   console.warn(`\n${warnings.length} folder-name baseline exception(s) (non-blocking):\n`);
   for (const w of warnings) {
@@ -86,8 +128,8 @@ if (errors.length > 0) {
     console.error(`  - ${v.file}`);
     console.error(`    ${v.reason}`);
   }
-  console.error('\nRule: every Angular component (.ts file with @Component) must live in its');
-  console.error('own matching folder alongside its .html and .scss files. No two components per folder.');
+  console.error('\nRules: each Angular component owns a matching folder, and lane presentation');
+  console.error('strings live only in src/app/models/lane-presentation.ts.');
   console.error('See AGENTS.md (Frontend / folder-per-component) for details.\n');
   process.exit(1);
 }

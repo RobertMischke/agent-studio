@@ -1,6 +1,6 @@
 # Frontend Domain Map
 
-Version: 2026-08-12
+Version: 2026-09-06
 Status: System-of-record map for frontend changes.
 
 Use this when a change touches Angular code, visual design, task-detail,
@@ -460,6 +460,13 @@ unseen again, and renders missing reviewed artifacts as no longer actionable.
 
 ## Invariants
 
+- Lane presentation is defined only in
+  `frontend/src/app/models/lane-presentation.ts`. Board columns, detail header
+  chips, Result outcomes, verdict badges, workflow descriptions, and lane help
+  buttons resolve their display name, short name, sentence, glyph, doc topic,
+  and `--studio-lane-*` tone through that map. Components may retain transport
+  keys for state comparisons, but may not author lane names or colours. The
+  `lint:structure` gate rejects hard-coded lane presentation strings.
 - Angular components are standalone. Do not introduce NgModules.
 - State should use Angular signals and existing stores before new state
   mechanisms.

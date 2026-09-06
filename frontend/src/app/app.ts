@@ -108,6 +108,7 @@ import { ClientService } from './services/client.service';
 import { NotificationService } from './services/notification.service';
 import type { TaskDetail, TaskInfo, WatchPathEntry, CliType } from './models/task.model';
 import { CLI_TYPES, TaskState } from './models/task.model';
+import { lanePresentation } from './models/lane-presentation';
 import { ErrorDialogService } from './services/error-dialog.service';
 import {
   cliTypeLabel as fmtCliTypeLabel,
@@ -567,6 +568,16 @@ export class App implements OnInit, OnDestroy {
   // epics still surface there and via the Epic navigation. See `excludeEpics`.
   readonly displayGrouped = computed(() => excludeEpics(this.filteredGrouped()));
 
+  private laneView(state: string, jobs: TaskInfo[]) {
+    const presentation = lanePresentation(state);
+    return {
+      state,
+      title: presentation?.displayName ?? state,
+      icon: presentation?.glyph ?? '',
+      jobs,
+    };
+  }
+
   readonly focusGroups = computed(() => {
     const grouped = this.displayGrouped();
     // ADR-0025: seven lanes. The robot icon is the orchestrator's machine
@@ -576,28 +587,23 @@ export class App implements OnInit, OnDestroy {
     // (see PipelineCatalogue), so the retired 1a lane is not rendered.
     // Backlog-lane spec: 0-backlog leads the focus list when populated.
     const lanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [
-      { state: TaskState.Backlog, title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] },
-      { state: TaskState.Preparation, title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
+      this.laneView(TaskState.Backlog, grouped.backlog ?? []),
+      this.laneView(TaskState.Preparation, grouped.preparation),
     ];
     lanes.push(
-      { state: TaskState.Ready, title: 'Ready', icon: '📦', jobs: grouped.ready },
-      { state: TaskState.Progress, title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+      this.laneView(TaskState.Ready, grouped.ready),
+      this.laneView(TaskState.Progress, grouped.progress),
     );
     // 3b-code-not-complete: hide-when-empty park lane.
     if ((grouped.codeNotComplete ?? []).length > 0) {
-      lanes.push({
-        state: TaskState.CodeNotComplete,
-        title: 'Code not complete',
-        icon: '🚧',
-        jobs: grouped.codeNotComplete,
-      });
+      lanes.push(this.laneView(TaskState.CodeNotComplete, grouped.codeNotComplete));
     }
     lanes.push(
-      { state: TaskState.AutoReview, title: 'Post Processing', icon: '🤖', jobs: grouped.autoReview },
-      { state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: grouped.escalated ?? [] },
-      { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
-      { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
-      { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
+      this.laneView(TaskState.AutoReview, grouped.autoReview),
+      this.laneView(TaskState.Escalated, grouped.escalated ?? []),
+      this.laneView(TaskState.HumanReview, grouped.humanReview),
+      this.laneView(TaskState.Completed, grouped.completed),
+      this.laneView(TaskState.Archive, grouped.archive ?? []),
     );
     return lanes;
   });
@@ -622,37 +628,17 @@ export class App implements OnInit, OnDestroy {
     //   3. 0-backlog                         — fresh inbox / triage
     const readySplit = splitReadyByPhase(grouped.ready);
     const backlogLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [];
-    backlogLanes.push({
-      state: TaskState.Ready,
-      title: 'Ready',
-      icon: '📦',
-      jobs: readySplit.humanReady,
-    });
+    backlogLanes.push(this.laneView(TaskState.Ready, readySplit.humanReady));
     if (readySplit.intake.length > 0) {
       // Own "Preparation" lane: only pushed (so only rendered) while the
       // orchestrator-prep/intake loop is actually working a card, so the lane
       // is hidden whenever nothing is mid-preparation.
-      backlogLanes.push({
-        state: '2-ready-intake',
-        title: 'Preparation',
-        icon: '🛂',
-        jobs: readySplit.intake,
-      });
+      backlogLanes.push(this.laneView('2-ready-intake', readySplit.intake));
     }
-    backlogLanes.push({
-      state: TaskState.Preparation,
-      title: 'In Preparation',
-      icon: '📋',
-      jobs: grouped.preparation,
-    });
-    backlogLanes.push({
-      state: TaskState.Backlog,
-      title: 'Backlog',
-      icon: '🗒️',
-      jobs: grouped.backlog ?? [],
-    });
+    backlogLanes.push(this.laneView(TaskState.Preparation, grouped.preparation));
+    backlogLanes.push(this.laneView(TaskState.Backlog, grouped.backlog ?? []));
     const activeLanes: { state: string; title: string; icon: string; jobs: TaskInfo[] }[] = [
-      { state: TaskState.Progress, title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+      this.laneView(TaskState.Progress, grouped.progress),
     ];
     // 3b-code-not-complete is a hide-when-empty park lane: the runner moves a
     // task here when it exhausts its auto-pickup retry budget without reaching
@@ -660,19 +646,9 @@ export class App implements OnInit, OnDestroy {
     // running. It sits at 3-progress / before review so the operator sees stuck
     // work next to what is actively running.
     if ((grouped.codeNotComplete ?? []).length > 0) {
-      activeLanes.push({
-        state: TaskState.CodeNotComplete,
-        title: 'Code not complete',
-        icon: '🚧',
-        jobs: grouped.codeNotComplete,
-      });
+      activeLanes.push(this.laneView(TaskState.CodeNotComplete, grouped.codeNotComplete));
     }
-    activeLanes.push({
-      state: TaskState.AutoReview,
-      title: 'Post Processing',
-      icon: '🤖',
-      jobs: grouped.autoReview,
-    });
+    activeLanes.push(this.laneView(TaskState.AutoReview, grouped.autoReview));
     const escalatedJobs = grouped.escalated ?? [];
     // Future option: metadata could apply this empty-lane policy to exception
     // lanes such as 1-preparation. For now it is intentionally Escalated-only.
@@ -680,7 +656,7 @@ export class App implements OnInit, OnDestroy {
     return [
       {
         id: 'backlog',
-        label: 'Backlog',
+        label: lanePresentation(TaskState.Backlog)!.displayName,
         lanes: backlogLanes,
       },
       {
@@ -693,10 +669,10 @@ export class App implements OnInit, OnDestroy {
         label: 'Done & Decide',
         lanes: [
           // Intervention comes before acceptance in the visible workflow.
-          ...(showEscalated ? [{ state: TaskState.Escalated, title: 'Escalated', icon: '⚠️', jobs: escalatedJobs }] : []),
-          { state: TaskState.HumanReview, title: 'Review', icon: '👁️', jobs: grouped.humanReview },
-          { state: TaskState.Completed, title: 'Delivered', icon: '🟢', jobs: grouped.completed },
-          { state: TaskState.Archive, title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
+          ...(showEscalated ? [this.laneView(TaskState.Escalated, escalatedJobs)] : []),
+          this.laneView(TaskState.HumanReview, grouped.humanReview),
+          this.laneView(TaskState.Completed, grouped.completed),
+          this.laneView(TaskState.Archive, grouped.archive ?? []),
         ],
       },
     ];
@@ -743,13 +719,22 @@ export class App implements OnInit, OnDestroy {
    * targets, matching the context menu that refuses them as move targets.
    */
   readonly studioLaneOptions: readonly { state: string; label: string }[] = [
-    { state: TaskState.Preparation,   label: 'Preparation' },
-    { state: TaskState.Ready,         label: 'Ready' },
-    { state: TaskState.Escalated,     label: 'Escalated' },
-    { state: TaskState.HumanReview,   label: 'Review' },
-    { state: TaskState.Completed,     label: 'Delivered' },
-    { state: TaskState.Archive,       label: 'Archive' },
-  ];
+    TaskState.Preparation,
+    TaskState.Ready,
+    TaskState.Escalated,
+    TaskState.HumanReview,
+    TaskState.Completed,
+    TaskState.Archive,
+  ].map((state) => ({ state, label: lanePresentation(state)!.shortName }));
+
+  laneTone(state: string): string {
+    const token = lanePresentation(state)?.toneToken;
+    return token ? `var(${token})` : 'var(--studio-fg-muted)';
+  }
+
+  laneToneToken(state: string): string | null {
+    return lanePresentation(state)?.toneToken ?? null;
+  }
 
   isStandardLane(state: string): boolean {
     return this.studioLaneOptions.some((o) => o.state === state);

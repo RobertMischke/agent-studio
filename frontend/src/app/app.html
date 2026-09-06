@@ -187,9 +187,9 @@
                     (click)="onTriageNext(detail.info)">›</button>
             <span class="studio-tab-actions-sep" aria-hidden="true"></span>
             <select class="studio-tab-action studio-tab-action--lane-select"
-                    [class]="'studio-tab-action studio-tab-action--lane-select state--' + studioPagerLaneState()"
-                    [value]="studioPagerLaneState()"
-                    data-testid="studio-lane-select"
+                    [class]="'studio-tab-action studio-tab-action--lane-select state--' + studioPagerLaneState()" [style.--lane-tone]="laneTone(studioPagerLaneState())"
+                    [value]="studioPagerLaneState()" [style.color]="laneTone(studioPagerLaneState())"
+                    data-testid="studio-lane-select" [attr.data-tone-token]="laneToneToken(studioPagerLaneState())"
                     aria-label="Page through lane"
                     [cacTooltip]="'Select which lane to page through'"
                     (change)="onStudioLaneChange(detail.info, $event)">

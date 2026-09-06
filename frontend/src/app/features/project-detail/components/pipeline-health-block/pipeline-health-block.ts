@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, effect, inject, input, signal } from '@angular/core';
 import { TaskService } from '../../../../services/task.service';
 import type { PipelineHealthSnapshot, PipelineLaneDrainHealth } from '../../../task-pipeline';
+import { laneDisplayName } from '../../../../models/lane-presentation';
 
 @Component({
   selector: 'app-pipeline-health-block',
@@ -26,13 +27,7 @@ export class PipelineHealthBlockComponent implements OnDestroy {
   }
 
   laneLabel(lane: string): string {
-    switch (lane) {
-      case '2-ready': return 'Ready';
-      case '3-progress': return 'In progress';
-      case '4-auto-review': return 'Post processing';
-      case '5-human-review': return 'Review';
-      default: return lane;
-    }
+    return laneDisplayName(lane);
   }
 
   drainRate(lane: PipelineLaneDrainHealth): string {

@@ -41,14 +41,15 @@
          [class.column--dragover]="isDragOver"
          [class.column--archive]="isArchive()"
          [attr.data-testid]="'lane-' + state()"
-         [attr.data-state]="state()"
+         [attr.data-state]="state()" [attr.data-tone-token]="lanePresentation()?.toneToken"
+         [style.--lane-tone]="laneTone()"
          (dragover)="onDragOver($event)"
          (dragleave)="onDragLeave($event)"
          (drop)="onDrop($event)">
       <div class="column__header">
         <span class="column__icon" [attr.data-testid]="'lane-header-avatar-' + state()"
               aria-hidden="true">{{ icon() }}</span>
-        <h2 class="column__title" [attr.data-testid]="'lane-title-' + state()"
+        <h2 class="column__title" [attr.data-testid]="'lane-title-' + state()" [style.color]="laneTone()"
             [cacTooltip]="title()">{{ title() }}</h2>
         <span class="column__count" [attr.data-testid]="'lane-count-' + state()">
           <span>{{ headerCount() }}</span>
@@ -136,7 +137,7 @@
                 [cacTooltip]="'Collapse ' + title() + ' lane'"
                 (click)="collapseToggle.emit()">‹</button>
       </div>
-      @if (state() === '5-human-review') {
+      @if (state() === TaskState.HumanReview) {
         <app-decision-backlog-hint [tasks]="jobs()" [allTasks]="allBoardJobs()" (taskClick)="jobClick.emit($event)" />
       }
       <div class="column__body"

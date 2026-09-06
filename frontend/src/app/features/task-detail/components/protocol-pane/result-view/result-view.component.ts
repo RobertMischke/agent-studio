@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { TooltipDirective } from 'coding-agent-chat/shared';
 import type { TaskDetail } from '../../../../../models/task.model';
+import { lanePresentation, laneToneValue } from '../../../../../models/lane-presentation';
 import type { ProtocolVerdict } from '../protocol-verdict';
 import { buildResultDocument } from '../result-document';
 import { RESULT_CASE_META } from '../result-case';
@@ -53,7 +54,10 @@ export class ResultViewComponent {
 
   readonly doc = computed(() => buildResultDocument(this.detail(), this.verdict()));
   readonly caseMeta = computed(() => RESULT_CASE_META[this.doc().case.case]);
+  readonly lanePresentation = computed(() => lanePresentation(this.detail().info.state));
+  readonly laneTone = computed(() => laneToneValue(this.detail().info.state));
   readonly outcomeTone = computed(() => {
+    if (this.verdict().label === this.lanePresentation()?.displayName) return 'lane';
     const status = this.verdict().status;
     if (status === 'failed') return 'problem';
     if (status === 'needs-decision') return 'warn';
