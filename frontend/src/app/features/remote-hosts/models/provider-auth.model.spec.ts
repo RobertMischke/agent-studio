@@ -123,6 +123,24 @@ describe('provider auth projection', () => {
     expect(limited?.label).toContain('Claude rate-limited');
     expect(limited?.label).not.toContain('sign-in');
   });
+
+  it('attaches a Codex device sign-in target to an unavailable Ready-card wait', () => {
+    const task = {
+      state: '2-ready',
+      cliType: 'codex',
+      executionLocation: { configuredRunnerId: 'agent-runner-01' },
+    } as TaskInfo;
+    const waiting = providerAuthWaitReason(task, providerAuthBadgesForSnapshot(
+      snapshot('unavailable', 'healthy', true, 'Not logged in', null, 'signed-out', null, 'codex'),
+      NOW,
+    ));
+
+    expect(waiting?.signInTarget).toMatchObject({
+      hostId: 'host-berlin',
+      runnerId: 'agent-runner-01',
+      hostName: 'runner-berlin',
+    });
+  });
 });
 
 function snapshot(
@@ -133,6 +151,7 @@ function snapshot(
   expiresAt: string | null = null,
   signal: 'ok' | 'transient-auth-error' | 'rate-limited' | 'signed-out' | 'credentials-expiring' = 'ok',
   limitedUntil: string | null = null,
+  provider = 'claude',
 ): TaskServerRunnerCapabilitySnapshot {
   return {
     runnerId: 'agent-runner-01',
@@ -146,7 +165,7 @@ function snapshot(
     lastSeenAt: '2026-08-04T11:59:50Z',
     hostAdmission: { hostId: 'host-berlin', admissionState: 'open' },
     capabilities: [{
-      key: 'cli-execution:claude',
+      key: `cli-execution:${provider}`,
       category: 'cli-execution',
       advertisedStatus: 'ready',
       healthState: 'healthy',
@@ -157,7 +176,7 @@ function snapshot(
       affectedClaims: [],
       recoveryHistory: [],
     }, {
-      key: 'provider-auth:claude',
+      key: `provider-auth:${provider}`,
       category: 'provider-auth',
       advertisedStatus,
       healthState,
