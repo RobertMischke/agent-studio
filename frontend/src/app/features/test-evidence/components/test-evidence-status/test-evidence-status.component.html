@@ -4,17 +4,50 @@
        [attr.data-evidence-state]="evidence.evidenceState"
        [attr.data-match-quality]="evidence.matchQuality"
        [attr.data-testid]="testId()"
-       [appTooltip]="tooltipText()">
-    <span class="test-evidence__dot" aria-hidden="true"></span>
-    <span class="test-evidence__copy">
-      <strong>{{ evidence.summary }}</strong>
-      @if (evidence.runId) {
-        <small>{{ evidence.runId }} · {{ evidence.runState }}{{ evidence.runResult ? ' · ' + evidence.runResult : '' }}</small>
-      } @else if (evidence.sources?.length) {
-        <small>{{ sourceDetail() }}</small>
-      } @else {
-        <small>No SHA-linked project run, build gate, or review grade is recorded.</small>
-      }
-    </span>
+       [attr.aria-label]="tooltipText()"
+       [appTooltip]="variant() === 'card' ? tooltipText() : null">
+    @if (variant() === 'card' || !evidence.sources?.length) {
+      <div class="test-evidence__summary">
+        <span class="test-evidence__dot" aria-hidden="true"></span>
+        <span class="test-evidence__copy">
+          <strong>{{ evidence.summary }}</strong>
+          @if (evidence.runId) {
+            <small>{{ evidence.runId }} · {{ evidence.runState }}{{ evidence.runResult ? ' · ' + evidence.runResult : '' }}</small>
+          } @else if (evidence.sources?.length) {
+            <small>{{ sourceDetail() }}</small>
+          } @else {
+            <small>No SHA-linked project run, build gate, or review grade is recorded.</small>
+          }
+        </span>
+      </div>
+    }
+    @if (variant() === 'panel' && evidence.sources?.length) {
+      <ul class="test-evidence__sources" data-testid="test-evidence-sources">
+        @for (source of evidence.sources; track source.kind + ':' + source.id) {
+          <li class="test-evidence__source"
+              [attr.data-result]="source.result"
+              [attr.data-tone]="sourceTone(source.result)"
+              [attr.data-testid]="'test-evidence-source-' + source.kind"
+              [attr.aria-label]="source.summary + '. ' + sourceReason(source)"
+              [appTooltip]="sourceReason(source)">
+            <span class="test-evidence__source-dot" aria-hidden="true"></span>
+            <span class="test-evidence__source-copy">
+              <strong>{{ source.summary }}</strong>
+              <small>{{ sourceReason(source) }}</small>
+              <span class="test-evidence__source-meta">
+                {{ sourceLabel(source.kind) }} · {{ source.id }}
+                @if (reportHref(source); as href) {
+                  <a [href]="href"
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     [attr.aria-label]="'Open report. ' + sourceReason(source)"
+                     [appTooltip]="sourceReason(source)">Open report</a>
+                }
+              </span>
+            </span>
+          </li>
+        }
+      </ul>
+    }
   </div>
 }

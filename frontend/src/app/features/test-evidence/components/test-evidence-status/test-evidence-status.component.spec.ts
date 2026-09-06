@@ -18,6 +18,8 @@ const missingEvidence: TaskTestRunEvidence = {
 
 function task(state: string, overrides: Partial<TaskInfo> = {}): TaskInfo {
   return {
+    id: 'job-1',
+    watchPath: '/workspace',
     state,
     commit: null,
     commits: [],
@@ -136,6 +138,8 @@ describe('TestEvidenceStatusComponent', () => {
         result: sourceResult,
         observedAt: '2026-08-08T10:00:00Z',
         summary,
+        reason: state === 'not-applicable' ? 'No verify commands are defined.' : 'The pipeline stopped before command execution.',
+        reportRef: 'post-steps/build-test-gate-1.log',
       }],
     } satisfies TaskTestRunEvidence;
     fixture.componentRef.setInput('task', task(TaskState.HumanReview, { testEvidence: evidence }));
@@ -166,6 +170,8 @@ describe('TestEvidenceStatusComponent', () => {
           result: 'passed',
           observedAt: '2026-07-29T20:41:22Z',
           summary: 'Review build-tests Pass at d1649ce9',
+          reason: 'verify-1 and verify-2 passed.',
+          reportRef: 'remote-review-grade-review-42.md',
         },
         {
           kind: 'build-test-gate',
@@ -174,6 +180,8 @@ describe('TestEvidenceStatusComponent', () => {
           result: 'passed',
           observedAt: '2026-07-29T20:40:00Z',
           summary: 'Build/test gate green at d1649ce9',
+          reason: 'All selected commands passed.',
+          reportRef: 'post-steps/build-test-gate-1.log',
         },
       ],
     } satisfies TaskTestRunEvidence;
@@ -184,5 +192,55 @@ describe('TestEvidenceStatusComponent', () => {
     expect(element.textContent).toContain('Review build-tests Pass at d1649ce9');
     expect(element.textContent).toContain('Build/test gate green at d1649ce9');
     expect(element.textContent).not.toContain('Evidence pending');
+  });
+
+  it('renders passing build proof and a blocked aspect as independent reasoned report rows', async () => {
+    await TestBed.configureTestingModule({ imports: [TestEvidenceStatusComponent] }).compileComponents();
+    const fixture = TestBed.createComponent(TestEvidenceStatusComponent);
+    const evidence = {
+      ...missingEvidence,
+      matchQuality: 'perfect',
+      direction: 'exact',
+      distance: 0,
+      diffContained: true,
+      evidenceState: 'proven',
+      summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+      sources: [
+        {
+          kind: 'review-build-tests',
+          id: 'review_ad5cca8e',
+          commit: '491ddd64',
+          result: 'passed',
+          observedAt: '2026-08-31T20:41:22Z',
+          summary: 'Review build-tests Pass at 491ddd64 (verify-1, verify-2)',
+          reason: 'verify-1 and verify-2 passed.',
+          reportRef: 'remote-review-grade-review_ad5cca8e.md',
+        },
+        {
+          kind: 'review-aspects',
+          id: 'review_ad5cca8e:documentation-impact',
+          commit: '491ddd64',
+          result: 'blocked',
+          observedAt: '2026-08-31T20:41:22Z',
+          summary: 'Review blocked by documentation-impact',
+          reason: 'documentation-impact blocked: Public API and state-file contract changed without corresponding load-bearing doc updates.',
+          reportRef: 'remote-review-grade-review_ad5cca8e.md',
+        },
+      ],
+    } satisfies TaskTestRunEvidence;
+    fixture.componentRef.setInput('task', task(TaskState.HumanReview, { testEvidence: evidence }));
+    fixture.componentRef.setInput('variant', 'panel');
+    fixture.detectChanges();
+
+    const build = fixture.nativeElement.querySelector('[data-testid="test-evidence-source-review-build-tests"]') as HTMLElement;
+    const aspect = fixture.nativeElement.querySelector('[data-testid="test-evidence-source-review-aspects"]') as HTMLElement;
+    expect(build.dataset['tone']).toBe('good');
+    expect(build.textContent).toContain('verify-1 and verify-2 passed.');
+    expect(aspect.dataset['tone']).toBe('warn');
+    expect(aspect.textContent).toContain('documentation-impact blocked');
+    expect(aspect.getAttribute('aria-label')).toContain('Public API and state-file contract changed');
+    const report = aspect.querySelector('a') as HTMLAnchorElement;
+    expect(report.textContent).toContain('Open report');
+    expect(report.getAttribute('href')).toContain('/api/tasks/job-1/files/remote-review-grade-review_ad5cca8e.md');
   });
 });

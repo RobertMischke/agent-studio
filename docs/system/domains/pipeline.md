@@ -135,6 +135,15 @@ steer the pipeline in this policy version.
   host, state, result, duration, and derived card attachments through
   `GET /api/projects/{project}/test-runs`. They do not replace per-task pipeline
   step telemetry.
+  Task-scoped evidence keeps verification and review judgment as independent
+  facts. A Remote Review grade derives `review-build-tests` only from its
+  `build-tests` verdict rows; an overall `ProductFailure` or blocking semantic
+  aspect cannot turn passing commands into missing proof. Each blocking aspect
+  is projected separately as `review-aspects` with result `blocked`. Every
+  source carries a one-sentence `reason` and a `reportRef` to its originating
+  grade or gate log. `Not proven` is reserved for a grade with no build-tests
+  verdict row, and its reason identifies the affected verify command when the
+  command table provides that identity.
 - `backend/Features/Pipeline/RemoteDeliveryIntegration.cs` and
   `backend/Features/Pipeline/MergeIntoDevelopRunner.cs`: the immediate Remote
   admission policy, per-project delivery-order queue, and common

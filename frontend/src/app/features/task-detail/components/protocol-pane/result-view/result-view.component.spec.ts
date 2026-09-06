@@ -118,6 +118,8 @@ describe('ResultViewComponent', () => {
           result: state,
           observedAt: null,
           summary,
+          reason: 'The gate did not produce conclusive proof.',
+          reportRef: 'post-steps/build-test-gate-1.log',
         }],
       },
     }), verdict());

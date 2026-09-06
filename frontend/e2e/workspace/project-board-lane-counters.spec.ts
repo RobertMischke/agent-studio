@@ -391,6 +391,8 @@ test('archived-card evidence incident renders honest before and SHA-linked after
               result: 'passed',
               observedAt: '2026-07-29T20:41:22Z',
               summary: `Review build-tests Pass at ${sha}`,
+              reason: 'Every reported build-tests check passed.',
+              reportRef: `remote-review-grade-${reviewId}.md`,
             }],
           }
         : {

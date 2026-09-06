@@ -355,7 +355,12 @@ public sealed class TestRunService
 
     private static TaskTestRunEvidence FromTaskScoped(IReadOnlyList<ScopedEvidenceMatch> matches)
     {
-        var selected = matches[0];
+        // Aspect blockers are review facts, not test verdicts. Keep them in the
+        // source list for the Evidence tab, but derive the aggregate test state
+        // from a build/test source only.
+        var selected = matches.FirstOrDefault(match =>
+                           !string.Equals(match.Source.Kind, "review-aspects", StringComparison.OrdinalIgnoreCase))
+                       ?? matches[0];
         var evidenceState = selected.Source.Result switch
         {
             "passed" => "proven",

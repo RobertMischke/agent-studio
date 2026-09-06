@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
-import { TaskState, type TaskInfo, type TaskTestRunEvidence } from '../../../../models/task.model';
+import { TaskState, type TaskInfo, type TaskTestEvidenceSource, type TaskTestRunEvidence } from '../../../../models/task.model';
 
-type TestEvidenceContext = Pick<TaskInfo, 'state' | 'commit' | 'commits' | 'integration' | 'testEvidence'>;
+type TestEvidenceContext = Pick<TaskInfo, 'id' | 'watchPath' | 'state' | 'commit' | 'commits' | 'integration' | 'testEvidence'>;
 export type TestEvidenceStatusVariant = 'card' | 'panel';
 
 const MISSING_EVIDENCE_RELEVANT_STATES = new Set<string>([
@@ -53,7 +53,7 @@ export class TestEvidenceStatusComponent {
     const details = evidence.runId
       ? [`Project test run ${evidence.runId} at ${evidence.runCommit || 'unknown commit'}`]
       : [];
-    details.push(...(evidence.sources ?? []).map(source => source.summary));
+    details.push(...(evidence.sources ?? []).map(source => `${source.summary}: ${this.sourceReason(source)}`));
     return details.length > 0 ? details.join(' · ') : evidence.summary;
   }
 
@@ -64,10 +64,36 @@ export class TestEvidenceStatusComponent {
     return '';
   }
 
-  private sourceLabel(kind: string): string {
+  sourceLabel(kind: string): string {
     if (kind === 'review-build-tests') return 'Remote review';
+    if (kind === 'review-aspects') return 'Review aspect';
     if (kind === 'pre-develop-build-gate') return 'Pre-develop gate';
     if (kind === 'pre-main-test-gate') return 'Pre-main gate';
     return 'Build/test gate';
+  }
+
+  sourceReason(source: TaskTestEvidenceSource): string {
+    return source.reason?.trim() || 'No reason was reported.';
+  }
+
+  sourceTone(result: string): 'good' | 'warn' | 'bad' | 'neutral' {
+    if (result === 'passed') return 'good';
+    if (result === 'blocked') return 'warn';
+    if (result === 'failed') return 'bad';
+    return 'neutral';
+  }
+
+  reportHref(source: TaskTestEvidenceSource): string | null {
+    const task = this.task();
+    const jobId = task.id?.trim();
+    const reportRef = source.reportRef?.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!jobId || !reportRef) return null;
+    const segments = reportRef.split('/');
+    if (segments.some(segment => !segment || segment === '.' || segment === '..')) return null;
+
+    const path = segments.map(encodeURIComponent).join('/');
+    const query = new URLSearchParams({ scope: 'workspace' });
+    if (task.watchPath?.trim()) query.set('watchPath', task.watchPath.trim());
+    return `/api/tasks/${encodeURIComponent(jobId)}/files/${path}?${query.toString()}`;
   }
 }

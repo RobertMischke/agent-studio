@@ -72,6 +72,10 @@ function makeDetail(state: string, gateStatus: 'passed' | 'notApplicable' | 'ski
             result: evidenceState,
             observedAt: '2026-06-02T08:00:02Z',
             summary: evidenceSummary,
+            reason: evidenceState === 'not-applicable'
+              ? 'No verify commands are defined.'
+              : 'The pipeline stopped before command execution.',
+            reportRef: 'post-steps/build-test-gate-d1649ce9.log',
           },
         ],
       },
