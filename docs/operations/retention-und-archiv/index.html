@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aufbewahrung und Archiv | Konzept-Dossier</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --surface-2: #f2f1ee; --surface-3: #e9e8e3;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8983; --line: #d8d6cf;
+    --develop: #2a78d6; --taskbr: #4a3aa7; --salvage: #eb6834; --rescue: #b58500;
+    --ok: #008300; --bad: #c93736; --warn: #9a6b00;
+    --accent-soft: #eaf1fb; --bad-soft: #fbecec; --ok-soft: #eaf4ea; --warn-soft: #f8f0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2c2c2a;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a8983; --line: #3d3d3a;
+      --develop: #3987e5; --taskbr: #9085e9; --salvage: #e5723f; --rescue: #d0a02a;
+      --ok: #4eae4e; --bad: #e66767; --warn: #d9a63f;
+      --accent-soft: #1e2a3a; --bad-soft: #382222; --ok-soft: #1f2f1f; --warn-soft: #33301e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 80px; background: var(--surface-1); color: var(--ink-1); font: 16px/1.6 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+  header.page { border-bottom: 1px solid var(--line); padding: 44px 0 26px; margin-bottom: 8px; }
+  .kicker { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  .lede { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0; }
+  .meta { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px; font-size: 13px; color: var(--ink-3); }
+  .meta b { color: var(--ink-2); font-weight: 600; }
+  h2 { font-size: 24px; margin: 56px 0 6px; scroll-margin-top: 20px; }
+  h2 .no { color: var(--ink-3); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 18px; margin: 34px 0 4px; }
+  p { max-width: 76ch; }
+  .box { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 18px 22px; margin: 20px 0; }
+  .box.accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--develop) 30%, var(--line)); }
+  .box.bad { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 30%, var(--line)); }
+  .box.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .box.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .box h4 { margin: 0 0 8px; font-size: 15px; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-1); }
+  figcaption { font-size: 13.5px; color: var(--ink-2); margin-top: 10px; max-width: 86ch; }
+  figcaption b { color: var(--ink-1); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  td b { font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
+  code, .mono { font: 13px/1.5 ui-monospace, Consolas, monospace; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 10px; vertical-align: 1px; }
+  .pill.done { background: var(--ok-soft); color: var(--ok); }
+  .pill.queued { background: var(--accent-soft); color: var(--develop); }
+  .pill.new { background: var(--warn-soft); color: var(--warn); }
+  .pill.open { background: var(--bad-soft); color: var(--bad); }
+  ul { padding-left: 22px; }
+  li { margin: 5px 0; max-width: 76ch; }
+  .toc { columns: 2; gap: 40px; font-size: 14.5px; }
+  .toc a { color: var(--ink-2); text-decoration: none; }
+  .toc a:hover { color: var(--ink-1); text-decoration: underline; }
+  .toc li { break-inside: avoid; }
+  .stx { margin: 10px 0 0; padding: 7px 12px; border-radius: 8px; font-size: 13px; border: 1px solid; }
+  .stx-ok { border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); background: var(--ok-soft); color: var(--ok); }
+  .stx-part { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); background: var(--warn-soft); color: var(--warn); }
+  .stx-open { border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); background: var(--bad-soft); color: var(--bad); }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); padding: 12px 14px; }
+  .stat b { display: block; font-size: 22px; line-height: 1.2; }
+  .stat span { font-size: 12.5px; color: var(--ink-2); }
+  .dnum { display: inline-block; min-width: 28px; font-weight: 700; color: var(--develop); }
+  .s-node { fill: var(--surface-2); stroke: var(--line); }
+  .s-node2 { fill: var(--surface-3); stroke: var(--line); }
+  .s-cold { fill: var(--accent-soft); stroke: color-mix(in srgb, var(--develop) 40%, var(--line)); }
+  .s-label { fill: var(--ink-1); font: 600 13px system-ui, sans-serif; }
+  .s-sub { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+  .s-tiny { fill: var(--ink-3); font: 11px system-ui, sans-serif; }
+  .s-flow { stroke: var(--ink-3); stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+  .badge-warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .badge-ok { fill: var(--ok-soft); stroke: var(--ok); }
+  .t-warn { fill: var(--warn); font: 600 12px system-ui, sans-serif; }
+  .t-ok { fill: var(--ok); font: 600 12px system-ui, sans-serif; }
+  @media (max-width: 760px) { .toc { columns: 1; } h1 { font-size: 27px; } .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+<main>
+
+<header class="page">
+  <p class="kicker">Konzept-Dossier · Agent Studio</p>
+  <h1>Aufbewahrung und Archiv</h1>
+  <p class="lede">Welche Task-Daten heiß bleiben, welche nach Größe und Alter in ein kaltes Archiv außerhalb des
+  Repositories wandern, wie der Task-Server das als Schnittstelle mit guten Standardwerten anbietet, und wie die
+  Regeln in der Admin-UI konfiguriert werden.</p>
+  <div class="meta">
+    <span><b>Stand:</b> 06.09.2026, Messung 22:30 Uhr am Live-Repository</span>
+    <span><b>Anlass:</b> 2.819 unpushte Commits mit 28,7 GB Rohdaten, 134.000 lose Objekte, Board-API auf über 200 s; Roberts Auftrag vom 06.09.</span>
+    <span><b>Entscheidungen:</b> vom Orchestrator getroffen (Freigabe Robert 06.09.: „gehe das Thema autonom an, werte allein aus und setze um")</span>
+  </div>
+</header>
+
+<p style="margin:18px 0 0;padding:9px 14px;border:1px solid;border-color:color-mix(in srgb,currentColor 22%,transparent);border-radius:8px;font:14px/1.5 system-ui,'Segoe UI',sans-serif;opacity:.9"><b>Löst ab:</b>
+Dossier <i>Task-Logs: Aufbewahrung, Deckelung und Bereinigung</i> (AGT-W11, 27.07.) und den Entwurf
+<i>Workspace-Repo Nachhaltigkeit</i> (25.07.). Deren umgesetzter Teil, die 10-MiB-Deckelung von
+<code>cli-output.log</code> an der Quelle, bleibt bestehen; der Rest geht in dieses Dossier auf.</p>
+
+<nav class="box" aria-label="Inhalt">
+  <h4>Inhalt</h4>
+  <ul class="toc">
+    <li><a href="#tldr">Kernaussagen</a></li>
+    <li><a href="#zahlen">§1 Messung am Live-Repository</a></li>
+    <li><a href="#ursachen">§2 Drei Ursachen</a></li>
+    <li><a href="#klassen">§3 Datenklassen</a></li>
+    <li><a href="#regeln">§4 Regelmodell und Standardwerte</a></li>
+    <li><a href="#archiv">§5 Kaltes Archiv</a></li>
+    <li><a href="#taskserver">§6 Schnittstelle des Task-Servers</a></li>
+    <li><a href="#sofort">§7 Sofortmaßnahmen im heutigen Repository</a></li>
+    <li><a href="#admin">§8 Admin-UI</a></li>
+    <li><a href="#migration">§9 Zusammenspiel mit Phase B</a></li>
+    <li><a href="#programm">§10 Umsetzungsprogramm</a></li>
+    <li><a href="#entscheidungen">§11 Entscheidungen</a></li>
+  </ul>
+</nav>
+
+<section id="tldr" class="box accent">
+  <h4>Kernaussagen</h4>
+  <ul>
+    <li><b>Der Bestand ist klein, die Historie ist das Problem.</b> Der Arbeitsbaum hält 7,6 GB für 2.264 Tasks.
+        Die Git-Historie der letzten elf Tage hält 28,7 GB, davon 27,3 GB in 5.416 Versionen von
+        <code>cli-output.log</code>. Einzelne Tasks tragen 1,1 bis 1,8 GB Historie durch wiederholte
+        Zwischenstände desselben Logs.</li>
+    <li><b>Vier Datenklassen, ein Regelmodell.</b> Autorität (nie archivieren), Evidenz (mit dem Task archivieren),
+        schwere Arbeitsdaten (nach Größe und Alter archivieren), Laufzeitdaten (nie ins Repository, nach Alter löschen).</li>
+    <li><b>Standardwerte ohne Konfiguration.</b> Schwere Daten abgeschlossener Tasks wandern nach 30 Tagen ins kalte
+        Archiv, ganze Tasks nach 180 Tagen; pro Datei höchstens 10 MiB heiß, pro Task 64 MiB Budget, 50 MiB harte
+        Ablehnung. Aktive Tasks und Tasks in Human-Review werden nie archiviert.</li>
+    <li><b>Kaltes Archiv außerhalb des Repositories.</b> Manifest mit Hashes plus ein Nutzlast-Archiv je Task,
+        lokaler Pfad zuerst, S3-kompatibler Speicher als zweites Ziel; im Studio bleibt ein lesbarer Stub mit
+        „Wiederherstellen".</li>
+    <li><b>Der Task-Server besitzt die Schnittstelle.</b> Richtlinie, Vorschau, Lauf, Verlauf, Archiv und Restore
+        unter <code>/api/v1/management/retention</code>; ein Zeitplan im Server; dieselbe Engine läuft heute gegen den
+        Dateibaum und nach dem Cutover gegen den SQLite-Store.</li>
+    <li><b>Sofort wirksam:</b> Das Log wird nur noch am Run-Ende committet, nicht bei jedem Zwischenstand. Das nimmt
+        rund 90 % des Historienwachstums, ohne Historie umzuschreiben.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ -->
+<h2 id="zahlen"><span class="no">§1</span>Messung am Live-Repository</h2>
+<p>Gemessen am 06.09.2026 gegen <code>C:\Projects\agent-taskboard-workspace</code>: Arbeitsbaum über alle
+<code>projects/*/tasks/*/*/task.json</code>, Historie über den unpushten Bereich <code>origin/main..HEAD</code>
+(26.08. 10:25 bis 06.09. 22:20, 2.819 Commits). Die Familien folgen den Pfadmustern aus §3.</p>
+
+<div class="stats">
+  <div class="stat"><b>2.264</b><span>Tasks im Arbeitsbaum, davon 1.828 im Archiv-Lane</span></div>
+  <div class="stat"><b>7,6 GB</b><span>Arbeitsbaum der Task-Ordner (ohne <code>.git</code>)</span></div>
+  <div class="stat"><b>28,7 GB</b><span>Rohdaten in der Historie von elf Tagen (2,6 GB je Tag)</span></div>
+  <div class="stat"><b>134.000</b><span>lose Git-Objekte, 18 GB, ohne Maintenance</span></div>
+</div>
+
+<h3>Arbeitsbaum nach Familie</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>Familie</th><th class="num">MB</th><th class="num">Tasks</th><th>Bemerkung</th></tr></thead>
+  <tbody>
+    <tr><td><code>logs/cli-output.log</code> und <code>.1</code></td><td class="num">4.826</td><td class="num">1.852</td><td>Roher CLI-Strom, je Datei bei 10 MiB gedeckelt; Rotationsdatei ist bereits ungetrackt</td></tr>
+    <tr><td><code>results/</code></td><td class="num">2.208</td><td class="num">849</td><td>Playwright-Traces, Screenshots, Reports; per <code>.gitignore</code> nicht im Repository, nur auf Platte</td></tr>
+    <tr><td>sonstiges (Reports, Enrichment, Post-Steps, Review-Grades)</td><td class="num">345</td><td class="num">1.894</td><td>Kleine Evidenzdateien</td></tr>
+    <tr><td>übrige <code>logs/</code></td><td class="num">158</td><td class="num">1.748</td><td>Timeline, Bus-Auszüge, Run-Marker</td></tr>
+    <tr><td>Review-Stdout-Logs</td><td class="num">16</td><td class="num">119</td><td>Remote-Review-Kandidaten</td></tr>
+    <tr><td><code>task.json</code>, <code>status.md</code>, Prompt, Session-Events</td><td class="num">24</td><td class="num">2.264</td><td>Autorität und Kernevidenz, zusammen unter 25 MB</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Arbeitsbaum nach Lane und Alter</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>Lane</th><th class="num">Tasks</th><th class="num">MB</th><th>Alter der letzten Aktivität</th><th class="num">Tasks</th><th class="num">MB</th></tr></thead>
+  <tbody>
+    <tr><td>7-archive</td><td class="num">1.828</td><td class="num">6.791</td><td>unter 7 Tagen</td><td class="num">57</td><td class="num">140</td></tr>
+    <tr><td>4-auto-review</td><td class="num">12</td><td class="num">337</td><td>7 bis 30 Tage</td><td class="num">240</td><td class="num">2.332</td></tr>
+    <tr><td>5-human-review</td><td class="num">148</td><td class="num">227</td><td>30 bis 90 Tage</td><td class="num">763</td><td class="num">4.896</td></tr>
+    <tr><td>2-ready</td><td class="num">32</td><td class="num">165</td><td>90 bis 180 Tage</td><td class="num">1.143</td><td class="num">220</td></tr>
+    <tr><td>3-progress</td><td class="num">7</td><td class="num">56</td><td>über 180 Tage</td><td class="num">61</td><td class="num">2</td></tr>
+    <tr><td>übrige Lanes</td><td class="num">237</td><td class="num">13</td><td></td><td></td><td></td></tr>
+  </tbody>
+</table></div>
+<p>Median eines Task-Ordners: 0,3 MB. P90: 11 MB. P99: 28 MB. Maximum: 188 MB (QS-89, 831 Dateien). Die Masse liegt in
+den letzten 90 Tagen, weil die Log-Deckelung erst seit Ende Juli gilt und die Review-Wellen der Quality-Studio-Karten
+sehr lange Läufe erzeugen.</p>
+
+<h3>Historie der letzten elf Tage nach Familie</h3>
+<div class="tablewrap"><table>
+  <thead><tr><th>Familie</th><th class="num">Blobs</th><th class="num">MB roh</th><th>Lesart</th></tr></thead>
+  <tbody>
+    <tr><td><code>cli-output.log</code></td><td class="num">5.416</td><td class="num">27.289</td><td>95 % des Wachstums; QS-93 allein 1.814 MB, elf weitere QS-Tasks je über 1.000 MB</td></tr>
+    <tr><td>übrige <code>logs/</code></td><td class="num">4.304</td><td class="num">1.058</td><td>Timeline und Bus-Auszüge, viele kleine Versionen</td></tr>
+    <tr><td><code>task.json</code></td><td class="num">4.217</td><td class="num">213</td><td>Eine Version je Übergang, unkritisch</td></tr>
+    <tr><td>Session-Events, Bus-Logs, Metadaten, Reviews, Status</td><td class="num">10.000</td><td class="num">170</td><td>unkritisch</td></tr>
+  </tbody>
+</table></div>
+
+<!-- ============================================================ -->
+<h2 id="ursachen"><span class="no">§2</span>Drei Ursachen</h2>
+<div class="box bad">
+  <h4>Ursache 1: Das lebende Log wird bei jedem Zwischenstand committet</h4>
+  <p>Der Evidenz-Committer (<code>WorkspaceEvidenceBatcher</code>, Debounce 15 s, harte Grenze 60 s) und die
+  Run-Grenzen (<code>WorkspaceArtifactCommitService</code>) nehmen <code>cli-output.log</code> in jeden Commit auf,
+  solange der Run läuft. Ein Run von zwei Stunden erzeugt so 100 und mehr Versionen einer wachsenden und rotierenden
+  10-MiB-Datei. Zeitstempel in jeder Zeile lassen Git-Deltas schlecht greifen. Ergebnis: 1,1 bis 1,8 GB Historie je
+  langem QS-Task, 2,6 GB je Tag insgesamt.</p>
+</div>
+<div class="box warn">
+  <h4>Ursache 2: Keine Alters- und Größenregel für abgeschlossene Tasks</h4>
+  <p>1.828 archivierte Tasks halten 6,8 GB heiß, obwohl sie niemand mehr liest. <code>results/</code> mit 2,2 GB liegt
+  nur auf Platte, aber ebenfalls ohne Regel. Der Task-Server der Zielarchitektur kennt bisher nur eine Frist für
+  entfernte Git-Refs (<code>ResultRefGc</code>, 30 Tage) und löscht nie eine Zeile oder ein BLOB.</p>
+</div>
+<div class="box warn">
+  <h4>Ursache 3: Laufzeitdaten im oder neben dem Repository ohne Rotation</h4>
+  <p><code>.metadata/attempt-authority.json</code> mit 118 MB plus Sicherungskopien und Tagesarchive (352 MB
+  untracked), <code>logs/bus/</code> getrackt aber seit 19.07. nicht committet, 134.000 lose Git-Objekte ohne
+  <code>gc.auto</code>. Das ist keine Aufbewahrungsfrage, sondern fehlende Rotation; es gehört trotzdem in dieselbe
+  Regelmaschine, weil der Operator eine Stelle für alle Fristen braucht.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="klassen"><span class="no">§3</span>Datenklassen</h2>
+<p>Jede Datei, die der Task-Server schreibt, fällt in genau eine Klasse. Der Klassifizierer ist Code in der
+gemeinsamen <code>retention/</code>-Bibliothek und wird von beiden Speichern benutzt (Dateibaum heute, SQLite nach
+dem Cutover). Die Pfadmuster sind die des heutigen Dateibaums; im SQLite-Store trägt jede Artefaktzeile die Klasse
+als Spalte.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Klasse</th><th>Inhalt</th><th>Wert</th><th>Regel</th></tr></thead>
+  <tbody>
+    <tr><td><b>A Autorität</b></td><td><code>task.json</code>, Events und Timeline, Leases, Fences, Review-Attempts, Audit, Orchestrator-Chat-Turns</td><td>Wahrheit über Zustand und Zuständigkeit</td><td>Nie archivieren, nie löschen, solange der Task existiert. Klein halten ist Aufgabe des Schemas, nicht der Retention.</td></tr>
+    <tr><td><b>B Evidenz</b></td><td><code>status.md</code>, Prompt und Prompt-Historie, Review-Grades und Reports, Integrationsdatensätze, Commit-Listen, <code>session-events.jsonl</code>, Enrichment, Post-Step-Ergebnisse</td><td>Prüfbarer Nachweis, klein (unter 25 MB im ganzen Bestand)</td><td>Bleibt heiß, solange der Task heiß ist; wandert mit dem ganzen Task ins kalte Archiv (Regel „ganzer Task").</td></tr>
+    <tr><td><b>C Schwere Arbeitsdaten</b></td><td><code>logs/cli-output.log</code> und Rotation, Review-Stdout-Logs, <code>results/</code> (Traces, Screenshots, Reports), <code>attachments/</code></td><td>Nützlich für Nachvollzug in den ersten Wochen, danach selten gelesen</td><td>Größe je Datei und Budget je Task heiß; nach Alter ab Terminal ins kalte Archiv; einzelne Datei über 50 MiB wird abgelehnt.</td></tr>
+    <tr><td><b>D Laufzeit</b></td><td><code>.metadata/attempt-authority*</code>, <code>logs/bus/</code>, <code>.runtime/</code>, Caches, Rotationsdateien, temporäre Dateien</td><td>Nur für den laufenden Betrieb</td><td>Nie ins Repository, nie ins kalte Archiv; nach Alter löschen (Rotation).</td></tr>
+  </tbody>
+</table></div>
+
+<!-- ============================================================ -->
+<h2 id="regeln"><span class="no">§4</span>Regelmodell und Standardwerte</h2>
+<p>Eine Richtlinie besteht aus Regeln je Klasse. Es gibt eine Workspace-Richtlinie mit Standardwerten und optionale
+Projekt-Overrides je Regel. Fristen zählen ab dem Terminal-Zeitpunkt (Eintritt in <code>6-completed</code> oder
+<code>7-archive</code>), nie ab Erstellung. Lanes mit menschlicher Entscheidung sind ausgenommen.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Regel</th><th>Klasse</th><th>Standard</th><th>Begründung</th></tr></thead>
+  <tbody>
+    <tr><td><code>hotCapBytesPerFile</code></td><td>C</td><td>10 MiB (Log), 10 MiB (Review-Log), 25 MiB (Ergebnisdatei)</td><td>Bestehende Log-Deckelung; Playwright-Traces bis 25 MiB sind die Regel, darüber die Ausnahme</td></tr>
+    <tr><td><code>refuseAboveBytes</code></td><td>C</td><td>50 MiB</td><td>Harte Grenze weit unter GitHubs 100 MB; eine einzelne Datei darf einen Push nie mehr blockieren</td></tr>
+    <tr><td><code>hotBudgetBytesPerTask</code></td><td>C</td><td>64 MiB warnen, 256 MiB älteste schwere Dateien vorzeitig archivieren</td><td>P99 liegt bei 28 MB; nur Ausreißer wie QS-89 (188 MB) greifen</td></tr>
+    <tr><td><code>archiveHeavyAfterDaysTerminal</code></td><td>C</td><td>30 Tage</td><td>Nach 30 Tagen liest niemand mehr Rohlogs; entspricht der bestehenden Result-Ref-Frist</td></tr>
+    <tr><td><code>archiveTaskAfterDaysTerminal</code></td><td>B und C</td><td>180 Tage</td><td>Halbes Jahr History im Hot-Store reicht für Suche und Dossiers; Stub bleibt</td></tr>
+    <tr><td><code>neverArchiveLanes</code></td><td>alle</td><td><code>0..5</code> inklusive <code>5-human-review</code>, <code>5e-escalated</code></td><td>Was auf einen Menschen wartet, darf nicht verschwinden</td></tr>
+    <tr><td><code>deleteAfterDays</code></td><td>D</td><td>Bus-Logs 30 Tage, Attempt-Authority-Tagesarchive 90 Tage, Rotationsdateien 7 Tage</td><td>Laufzeitdaten haben keinen Nachweiswert nach Ablauf</td></tr>
+    <tr><td><code>commitHeavyOnlyAtRunEnd</code></td><td>C</td><td>an</td><td>Die Ursache-1-Bremse: eine Version je Run statt hundert (§7)</td></tr>
+    <tr><td><code>scheduleDaily</code></td><td>Lauf</td><td>03:00 Serverzeit, Last-Gate beachtet, in Draining und ReadOnly übersprungen</td><td>Nachtfenster, kein Wettbewerb mit Runs</td></tr>
+  </tbody>
+</table></div>
+<p>Validierung im Vertrag: Fristen mindestens 7 Tage, Budgets mindestens die Dateideckelung, die Ablehnungsgrenze
+höchstens 95 MiB. Ein Override kann eine Frist verlängern oder verkürzen, aber <code>neverArchiveLanes</code> nicht
+verkleinern.</p>
+
+<!-- ============================================================ -->
+<h2 id="archiv"><span class="no">§5</span>Kaltes Archiv</h2>
+<figure>
+<svg viewBox="0 0 1040 360" role="img" aria-label="Datenfluss: heißer Store, Planer, kaltes Archiv mit Manifest, Stub im Studio, Wiederherstellung">
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <rect class="s-node" x="30" y="40" width="270" height="200" rx="10"/>
+  <text class="s-label" x="52" y="70">Heißer Store</text>
+  <text class="s-sub" x="52" y="92">heute Dateibaum, nach Cutover SQLite</text>
+  <rect class="s-node2" x="52" y="108" width="226" height="26" rx="6"/><text class="s-tiny" x="64" y="126">A Autorität · bleibt immer</text>
+  <rect class="s-node2" x="52" y="140" width="226" height="26" rx="6"/><text class="s-tiny" x="64" y="158">B Evidenz · bleibt bis 180 Tage</text>
+  <rect class="badge-warn" x="52" y="172" width="226" height="26" rx="6" stroke-width="1.2"/><text class="t-warn" x="64" y="190">C schwer · 10 MiB / 64 MiB / 30 Tage</text>
+  <rect class="s-node2" x="52" y="204" width="226" height="26" rx="6"/><text class="s-tiny" x="64" y="222">D Laufzeit · Rotation, nie ins Archiv</text>
+
+  <rect class="s-node" x="385" y="40" width="270" height="200" rx="10"/>
+  <text class="s-label" x="407" y="70">Retention-Engine</text>
+  <text class="s-sub" x="407" y="92">retention/ · eine Bibliothek, zwei Adapter</text>
+  <rect class="s-node2" x="407" y="108" width="226" height="26" rx="6"/><text class="s-tiny" x="419" y="126">Klassifizierer · Richtlinie · Planer</text>
+  <rect class="s-node2" x="407" y="140" width="226" height="26" rx="6"/><text class="s-tiny" x="419" y="158">plan (Vorschau) · apply · restore</text>
+  <rect class="s-node2" x="407" y="172" width="226" height="26" rx="6"/><text class="s-tiny" x="419" y="190">Zeitplan 03:00 · Audit · Lauf-Report</text>
+  <rect class="badge-ok" x="407" y="204" width="226" height="26" rx="6" stroke-width="1.2"/><text class="t-ok" x="419" y="222">CLI im Task-Server-Binary</text>
+
+  <rect class="s-cold" x="740" y="40" width="270" height="200" rx="10"/>
+  <text class="s-label" x="762" y="70">Kaltes Archiv</text>
+  <text class="s-sub" x="762" y="92">außerhalb von Repo und Hot-Store</text>
+  <rect class="s-node2" x="762" y="108" width="226" height="26" rx="6"/><text class="s-tiny" x="774" y="126">&lt;projekt&gt;/&lt;key&gt;/&lt;zeit&gt;/manifest.json</text>
+  <rect class="s-node2" x="762" y="140" width="226" height="26" rx="6"/><text class="s-tiny" x="774" y="158">payload.zip · sha256 je Datei</text>
+  <rect class="s-node2" x="762" y="172" width="226" height="26" rx="6"/><text class="s-tiny" x="774" y="190">Ziel 1 lokaler Pfad · Ziel 2 S3</text>
+  <rect class="s-node2" x="762" y="204" width="226" height="26" rx="6"/><text class="s-tiny" x="774" y="222">wöchentliche Integritätsprobe</text>
+
+  <path class="s-flow" d="M300,140 L385,140"/>
+  <path class="s-flow" d="M655,140 L740,140"/>
+  <text class="s-tiny" x="318" y="132">Inventar</text>
+  <text class="s-tiny" x="673" y="132">archivieren</text>
+  <path class="s-flow" d="M760,250 C700,320 340,320 300,250"/>
+  <text class="s-tiny" x="470" y="300">restore · Hash geprüft · Stub wird wieder voll</text>
+
+  <rect class="s-node" x="30" y="275" width="270" height="60" rx="10"/>
+  <text class="s-label" x="52" y="300">Studio</text>
+  <text class="s-tiny" x="52" y="320">Stub: „Archiviert am …, 41 MB kalt" · Wiederherstellen</text>
+</svg>
+<figcaption><b>Abb. 1: Datenfluss.</b> Der heiße Store liefert das Inventar, die Engine plant nach Richtlinie, das Archiv
+nimmt Manifest und Nutzlast außerhalb von Repository und Hot-Store auf. Im Studio bleibt ein Stub, der die Wiederherstellung
+auslöst. Klasse A verlässt den heißen Store nie.</figcaption>
+</figure>
+
+<h3>Ablage</h3>
+<ul>
+  <li><b>Pfad:</b> <code>ARCHIVE_PATH/&lt;projekt&gt;/&lt;task-key&gt;/&lt;archivedAt&gt;/</code> mit <code>manifest.json</code> und
+      <code>payload.zip</code>. Standard für das heutige Workspace-Repository: das Geschwisterverzeichnis
+      <code>C:\Projects\agent-taskboard-archive</code>, nie innerhalb des Git-Repositories. Standard für den Task-Server im
+      Container: <code>/var/lib/agent-orchestrator/archive</code> als eigenes Volume.</li>
+  <li><b>Manifest:</b> Task-Key, Id, Projekt, Lane und Terminal-Zeit, angewandte Regel-Ids, Richtlinien-Version, Dateien mit
+      relativem Pfad, Größe und SHA-256, Gesamtgröße, Kompression, Ziel und dessen Prüfsummen, Zeit und Akteur.</li>
+  <li><b>Stub im heißen Store:</b> Dateibaum: <code>archive-manifest.json</code> neben <code>task.json</code>; SQLite: Spalten
+      <code>archive_state</code> und <code>archived_at</code> am Task, Artefaktzeilen behalten Hash und Größe, verlieren nur den Inhalt.</li>
+  <li><b>Restore:</b> liest die Nutzlast, prüft jede SHA-256, schreibt zurück, setzt <code>restoredAt</code>; niemals verändert
+      ein Archiv- oder Restore-Lauf Klasse A.</li>
+  <li><b>Zweites Ziel:</b> S3-kompatibel (Hetzner Object Storage, MinIO in CI); lokal zuerst schreiben, dann kopieren und
+      verifizieren; Löschung des lokalen Exemplars ist konfigurierbar. Wöchentliche Stichprobe der Hashes gegen das Ziel.</li>
+  <li><b>Archiv-Lebensdauer:</b> standardmäßig unbegrenzt; eine Löschfrist in Jahren ist möglich, verlangt eine zweistufige
+      Bestätigung und hinterlässt das Manifest als Grabstein.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="taskserver"><span class="no">§6</span>Schnittstelle des Task-Servers</h2>
+<p>Der Task-Server ist Eigentümer von Richtlinie, Läufen und Archiv. Das Muster ist dasselbe wie bei
+<code>RuntimeCapacitySettingsService</code>: eigene Tabelle, versionsgeprüftes Update, Audit-Zeile je Änderung,
+<code>RequireWritable</code>-Gate.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Route</th><th>Zweck</th><th>Scope</th></tr></thead>
+  <tbody>
+    <tr><td><code>GET/PUT /api/v1/management/retention/policy</code></td><td>Workspace-Richtlinie lesen und mit erwarteter Version schreiben</td><td>management</td></tr>
+    <tr><td><code>GET/PUT /api/v1/management/retention/policy/projects/{projectId}</code></td><td>Projekt-Override lesen, setzen, löschen</td><td>management</td></tr>
+    <tr><td><code>POST /api/v1/management/retention/plan</code></td><td>Trockenlauf: Report mit Zählungen und Bytes je Regel und Projekt, gespeichert als Lauf im Modus <i>plan</i></td><td>management</td></tr>
+    <tr><td><code>POST /api/v1/management/retention/apply</code></td><td>Lauf jetzt; überspringt Tasks mit aktiven Leases; in ReadOnly und Maintenance abgelehnt</td><td>management</td></tr>
+    <tr><td><code>GET /api/v1/management/retention/runs[/{id}]</code></td><td>Verlauf mit vollständigen Reports</td><td>tasks:read</td></tr>
+    <tr><td><code>GET /api/v1/management/retention/archive/{taskId}</code></td><td>Manifest eines archivierten Tasks</td><td>tasks:read</td></tr>
+    <tr><td><code>POST /api/v1/management/retention/archive/{taskId}</code></td><td>Einen Task jetzt archivieren</td><td>management</td></tr>
+    <tr><td><code>POST /api/v1/management/retention/archive/{taskId}/restore</code></td><td>Wiederherstellen, Hashes geprüft</td><td>management</td></tr>
+  </tbody>
+</table></div>
+<ul>
+  <li><b>Tabellen:</b> <code>retention_policies</code> (Scope, JSON, Version, Zeit, Akteur), <code>archive_runs</code> (Auslöser,
+      Modus, Richtlinien-Version, Zählungen, Bytes, Report), <code>archive_manifests</code> (Task, Manifest, Nutzlast, Hash, Zustand).</li>
+  <li><b>Zeitplan:</b> ein Hosted Service mit <code>PeriodicTimer</code> wie <code>ResultRefGcHostedService</code>; Ereignis
+      <code>retention.run.completed</code> für den Feed; Fehler stoppen nie den Server.</li>
+  <li><b>Artefakt-Lesen:</b> archivierter Inhalt liefert 409 <code>artifact-archived</code> mit Manifest-Referenz statt eines
+      leeren Bodys.</li>
+  <li><b>CLI:</b> <code>TaskServer retention plan|apply|restore --workspace &lt;pfad&gt; | --store &lt;STORE_PATH&gt;</code>, dieselben
+      Reports als JSON; damit sind Migration, Notfall und Skripte ohne UI bedient.</li>
+  <li><b>Bis zum Cutover:</b> OrchestratorApi hostet dieselbe Engine mit dem Dateibaum-Adapter unter
+      <code>/api/workspaces/{id}/retention/*</code> und <code>/api/projects/{name}/retention-policy</code>; die Richtlinie liegt in
+      <code>.metadata/retention-policy.json</code> im selben JSON-Vertrag. Der Connector (AGT-2734) leitet nach dem Cutover auf die
+      Task-Server-Routen; die UI kennt nur eine Routenfamilie.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="sofort"><span class="no">§7</span>Sofortmaßnahmen im heutigen Repository</h2>
+<p class="stx stx-part"><b>Stand 06.09. 22:30:</b> Ignore-Regel für <code>.metadata/attempt-authority*</code> gesetzt,
+gedriftete Bus-Logs und Task-Zustände committet, Einzel-Push abgebrochen (über 2 GB), Repack der losen Objekte läuft,
+Block-Push zu 250 Commits läuft (erster Block in 303 s). Die übrigen Punkte sind Teil von R1 (§10).</p>
+<ol>
+  <li><b>Log nur am Run-Ende committen.</b> <code>WorkspaceEvidenceBatcher</code> und die Run-Grenzen schließen Klasse C
+      während eines laufenden Runs aus; erst der Abschluss des Runs committet eine Version. Erwartete Wirkung: rund 90 %
+      weniger Historienwachstum (27,3 von 28,7 GB stammen aus Zwischenständen).</li>
+  <li><b>Bus-Logs aus dem Repository.</b> <code>logs/bus/</code> wird Klasse D: <code>.gitignore</code>, Index-Entfernung in
+      einem Commit, Rotation nach 30 Tagen an der Quelle.</li>
+  <li><b>Attempt-Authority-Archive rotieren.</b> Tagesarchive älter als 90 Tage löschen; die 118-MB-Live-Datei bleibt
+      Gegenstand der offenen Kompaktierung (nicht Teil dieses Dossiers).</li>
+  <li><b>Ablehnungsgrenze 50 MiB</b> in den Commit-Pfaden, mit Logzeile.</li>
+  <li><b>Erster Archivlauf</b> mit den Standardwerten: schwere Daten aller Tasks, die seit über 30 Tagen terminal sind, und
+      ganze Tasks über 180 Tage. Erwartung aus §1: rund 4,9 GB aus dem Fenster 30 bis 90 Tage plus 0,2 GB darüber verlassen den
+      Arbeitsbaum; die Löschungen werden als ein Evidenz-Commit je Projekt geschrieben.</li>
+  <li><b>Keine Umschreibung der Historie.</b> Der Aufwand (Safety-Bundle, filter-repo, Neuklonen auf dem Runner) steht in
+      keinem Verhältnis, weil das Repository nach dem Phase-B-Cutover eingefroren wird und dann als Bundle ins kalte Archiv
+      geht. Die Historie stört nur beim Push, und der läuft ab jetzt in Blöcken und mit gebremstem Wachstum.</li>
+  <li><b>Git-Maintenance</b> (Repack-Zeitplan, <code>gc.auto</code>) bleibt bei AGT-2728.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="admin"><span class="no">§8</span>Admin-UI</h2>
+<p>Eine Seite „Aufbewahrung" in den Workspace-Einstellungen nach der Admin-Design-Richtlinie: flache Abschnitte, ein
+Raster je Tabelle, jede Tatsache genau einmal, beide Themes.</p>
+<ul>
+  <li><b>Regeltabelle</b> je Klasse mit Standardwert-Badge („Platform default") bis zur ersten Änderung; Projekt-Overrides auf dem
+      Projekt-Einstellungspanel mit „Workspace default" oder Override und einem Klick zum Zurücksetzen.</li>
+  <li><b>Vorschau</b> als Trockenlauf: eine Zeile mit Tasks, Bytes archivieren, Bytes löschen, Dauer; darunter eine sortierbare
+      Tabelle der betroffenen Tasks. Ausführen ist eine zweite, ausdrückliche Aktion und zeigt danach denselben Report.</li>
+  <li><b>Verlauf</b> der Läufe mit einer Disclosure-Zeile für den vollen Report; Zeitplan und nächster Lauf als eine ruhige Zeile.</li>
+  <li><b>Archivierter Task:</b> Hinweis in voller Breite („Archiviert am …, 41 MB kalt", eine Aktion „Wiederherstellen"), Files-Tab
+      zeigt Manifest-Einträge gedämpft statt fehlschlagender Requests; die Archiv-Lane trägt eine leise „kalt"-Markierung; Suche und
+      Dossiers lösen weiterhin auf den Stub auf.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="migration"><span class="no">§9</span>Zusammenspiel mit Phase B</h2>
+<ul>
+  <li><b>AGT-2732 Migration:</b> der Import ruft den Planer mit der aktiven Richtlinie; schwere Daten über den Fristen gehen beim
+      Import direkt ins kalte Archiv, der Import-Report weist die Bytes aus. Das eingefrorene Workspace-Repository wird nach dem
+      Cutover als Git-Bundle ins Archiv gelegt.</li>
+  <li><b>AGT-2733 Control-Plane in Docker:</b> Archiv-Volume und Variablen (<code>ARCHIVE_PATH</code>, S3-Zugang) sind Teil der
+      Compose-Datei; AGT-2738 Installer fragt das Ziel ab.</li>
+  <li><b>AGT-2739 Regressionsszenario:</b> jede Retention-Karte fügt genau einen Szenario-Schritt hinzu (Plan leer, Task altern,
+      archivieren, wiederherstellen, Inventar-Hash von Klasse A unverändert).</li>
+  <li><b>AGT-2728 Hygiene:</b> Push-Catch-up und Git-Maintenance bleiben dort; dieses Dossier nimmt ihm die Commit-Scope-Entscheidung
+      ab (Bus-Logs = Klasse D).</li>
+  <li><b>Sicherungen:</b> SQLite-Backups enthalten den Stub, nicht die kalte Nutzlast; das Archiv hat seine eigene Kopie- und
+      Integritätsregel (R4).</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="programm"><span class="no">§10</span>Umsetzungsprogramm</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Karte</th><th>Inhalt</th><th>Abhängigkeit</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><b>R1</b> AGT-2743 · Engine und Dateibaum</td><td>Bibliothek <code>retention/</code> (Vertrag, Klassifizierer, Planer, Store-Interface), Dateibaum-Adapter, kaltes Archiv lokal mit Manifest und Restore, CLI, Ablehnungsgrenze, Log nur am Run-Ende, Bus-Log-Rotation, erster Archivlauf am heutigen Repository mit Vorher-Nachher-Zahlen</td><td>keine</td><td><span class="pill queued">Ready</span></td></tr>
+    <tr><td><b>R2</b> AGT-2744 · Task-Server</td><td>Tabellen, SQLite-Adapter, Management-API, Zeitplan, 409 bei archiviertem Inhalt, Import-Hook, CLI gegen den Store</td><td>R1</td><td><span class="pill queued">Ready</span></td></tr>
+    <tr><td><b>R3</b> AGT-2745 · Admin-UI</td><td>Seite „Aufbewahrung", Projekt-Overrides, Vorschau, Verlauf, Stub mit Restore, Suche und Dossiers</td><td>R1, R2</td><td><span class="pill queued">Ready</span></td></tr>
+    <tr><td><b>R4</b> AGT-2746 · Objektspeicher</td><td>S3-Ziel, Kopie und Verifikation, wöchentliche Integritätsprobe, Archiv-Löschfrist mit Grabstein, Compose und Installer</td><td>R2</td><td><span class="pill queued">Ready</span></td></tr>
+  </tbody>
+</table></div>
+<p>Alle vier Karten verweisen auf AGT-2739 und liefern je einen Szenario-Schritt. AGT-2743 steht an der Spitze der
+Ready-Queue; die Konzeptkarte AGT-2742 wurde durch dieses Dossier abgelöst und archiviert.</p>
+
+<!-- ============================================================ -->
+<h2 id="entscheidungen"><span class="no">§11</span>Entscheidungen</h2>
+<p>Getroffen am 06.09.2026 vom Orchestrator unter Roberts Auftrag, das Thema autonom, gründlich und als eigenes Stück zu
+lösen. Jede Entscheidung ist in der Admin-UI änderbar, außer den mit „fest" markierten.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th></th><th>Entscheidung</th><th>Wert</th><th>Warum</th></tr></thead>
+  <tbody>
+    <tr><td><span class="dnum">E1</span></td><td>Klassen A bis D als einziges Ordnungsprinzip</td><td>fest</td><td>Eine Stelle für alle Fristen; keine Sonderfälle je Dateiname in der UI</td></tr>
+    <tr><td><span class="dnum">E2</span></td><td>Schwere Daten archivieren nach</td><td>30 Tage ab Terminal</td><td>Result-Ref-Frist und Lesegewohnheit decken sich</td></tr>
+    <tr><td><span class="dnum">E3</span></td><td>Ganze Tasks archivieren nach</td><td>180 Tage ab Terminal</td><td>Halbjahres-History reicht für Suche und Dossiers; Stub bleibt lesbar</td></tr>
+    <tr><td><span class="dnum">E4</span></td><td>Deckelung je Datei und Ablehnung</td><td>10 MiB Log, 25 MiB Ergebnis, 50 MiB Ablehnung</td><td>Bestand P99 bei 28 MB; nie wieder ein 100-MB-Blocker</td></tr>
+    <tr><td><span class="dnum">E5</span></td><td>Lanes ohne Archivierung</td><td>0 bis 5 inklusive Human-Review und Escalated, fest</td><td>Offene Entscheidungen dürfen nicht verschwinden</td></tr>
+    <tr><td><span class="dnum">E6</span></td><td>Kaltes Ziel</td><td>lokal zuerst, S3-kompatibel als zweites Ziel</td><td>Sofort nutzbar; Off-Host folgt mit der Control-Plane in Docker</td></tr>
+    <tr><td><span class="dnum">E7</span></td><td>Historie umschreiben</td><td>nein</td><td>Repository wird nach dem Cutover eingefroren; Blockpush plus Wachstumsbremse reichen</td></tr>
+    <tr><td><span class="dnum">E8</span></td><td>Log-Commit-Kadenz</td><td>nur am Run-Ende, fest</td><td>95 % des Wachstums stammen aus Zwischenständen</td></tr>
+    <tr><td><span class="dnum">E9</span></td><td>Eigentümer der Schnittstelle</td><td>Task-Server; OrchestratorApi hostet bis zum Cutover dieselbe Engine</td><td>Roberts Vorgabe; eine Engine, zwei Adapter, keine Doppelimplementierung</td></tr>
+    <tr><td><span class="dnum">E10</span></td><td>Reihenfolge</td><td>R1, dann R2 und R4, R3 sobald R2 liegt</td><td>Erst Wachstum bremsen und Bestand entlasten, dann Schnittstelle, dann UI</td></tr>
+  </tbody>
+</table></div>
+
+</main>
+</body>
+</html>
