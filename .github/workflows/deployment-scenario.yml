@@ -1,0 +1,48 @@
+name: Deployment scenario
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployment-scenario-${{ github.ref }}-${{ matrix.os }}
+  cancel-in-progress: true
+
+jobs:
+  inproc-smoke:
+    name: Card gate (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run two consecutive in-process smoke proofs
+        shell: bash
+        env:
+          JOB_RESULTS_DIR: ${{ runner.temp }}/deployment-scenario
+        run: scripts/scenario.sh --target inproc --level smoke --repeat 2
+
+      - name: Attach deployment scenario report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-scenario-${{ matrix.os }}
+          path: ${{ runner.temp }}/deployment-scenario
+          if-no-files-found: error

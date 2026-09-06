@@ -49,43 +49,49 @@ services:
   agent-host-coding:
     build:
       context: .
-      dockerfile: runner/Dockerfile
+      dockerfile: ${RUNNER_DOCKERFILE:-runner/Dockerfile}
     profiles: ["runner"]
     restart: unless-stopped
     depends_on:
       - orchestrator-api
     env_file:
-      - path: ./runner.env
+      - path: ${RUNNER_ENV_FILE:-./runner.env}
         required: true
     environment:
-      RUNNER_SERVER_URL: http://orchestrator-api:5031
+      RUNNER_SERVER_URL: ${RUNNER_SERVER_URL:-http://orchestrator-api:5031}
       RUNNER_ROLE: coding
+      RUNNER_ID: ${RUNNER_CODING_ID:-}
+      RUNNER_NAME: ${RUNNER_CODING_NAME:-}
+      RUNNER_HOSTNAME: ${RUNNER_CODING_HOSTNAME:-}
       # Compose-internal network: plain HTTP is an explicit, contained opt-in.
       RUNNER_ALLOW_INSECURE_HTTP: "1"
       RUNNER_AUTH_TOKEN_FILE: /run/secrets/runner.token
     volumes:
       - runner-coding:/var/lib/agent-host
-      - ./runner.token:/run/secrets/runner.token:ro
+      - ${RUNNER_TOKEN_FILE:-./runner.token}:/run/secrets/runner.token:ro
 
   agent-host-review:
     build:
       context: .
-      dockerfile: runner/Dockerfile
+      dockerfile: ${RUNNER_DOCKERFILE:-runner/Dockerfile}
     profiles: ["runner"]
     restart: unless-stopped
     depends_on:
       - orchestrator-api
     env_file:
-      - path: ./runner.env
+      - path: ${RUNNER_ENV_FILE:-./runner.env}
         required: true
     environment:
-      RUNNER_SERVER_URL: http://orchestrator-api:5031
+      RUNNER_SERVER_URL: ${RUNNER_SERVER_URL:-http://orchestrator-api:5031}
       RUNNER_ROLE: review
+      RUNNER_ID: ${RUNNER_REVIEW_ID:-}
+      RUNNER_NAME: ${RUNNER_REVIEW_NAME:-}
+      RUNNER_HOSTNAME: ${RUNNER_REVIEW_HOSTNAME:-}
       RUNNER_ALLOW_INSECURE_HTTP: "1"
       RUNNER_AUTH_TOKEN_FILE: /run/secrets/runner.token
     volumes:
       - runner-review:/var/lib/agent-host
-      - ./runner.token:/run/secrets/runner.token:ro
+      - ${RUNNER_TOKEN_FILE:-./runner.token}:/run/secrets/runner.token:ro
 
   task-server:
     build:
@@ -97,6 +103,12 @@ services:
       - "127.0.0.1:${STUDIO_TASKSERVER_PORT:-5071}:5071"
     volumes:
       - orchestrator-data:/var/lib/agent-orchestrator
+    environment:
+      # The distributed service is reachable on the Compose network, so the
+      # Task Server's non-loopback contract requires authentication.
+      AUTH: bearer
+      AUTH_TOKEN: ${TASK_SERVER_AUTH_TOKEN:-compose-local-task-server-token-000001}
+      AllowedHosts: "*"
 
   orchestrator-engine:
     build:
@@ -117,6 +129,9 @@ services:
       - task-server
     ports:
       - "127.0.0.1:${STUDIO_BFF_PORT:-5072}:5072"
+    environment:
+      TaskServer__BaseUrl: http://task-server:5071
+      TaskServer__AuthToken: ${TASK_SERVER_AUTH_TOKEN:-compose-local-task-server-token-000001}
 
 volumes:
   workspace:

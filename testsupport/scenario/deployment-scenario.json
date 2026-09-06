@@ -1,0 +1,102 @@
+{
+  "$schema": "./deployment-scenario.schema.json",
+  "schemaVersion": 1,
+  "id": "deployment-regression-v1",
+  "smokeBudgetSeconds": 180,
+  "clock": {
+    "startedAtUtc": "2026-09-06T12:00:00.000Z",
+    "stepOffsetMilliseconds": 1000
+  },
+  "fixture": {
+    "repository": "fixture-repository",
+    "workspaceName": "Deployment regression",
+    "projectName": "Deployment scenario",
+    "taskKeyPrefix": "DSR",
+    "dossierTitle": "Deployment decision dossier",
+    "epicTitle": "Deployment proof epic",
+    "epicTasks": [
+      "Run the deterministic deployment proof",
+      "Retain the deployment evidence"
+    ]
+  },
+  "steps": [
+    {
+      "id": "bootstrap-principals",
+      "level": "smoke",
+      "assertion": { "type": "audit.actor-set", "expected": ["scenario-operator", "scenario-card"] },
+      "evidence": "bootstrap-principals.json"
+    },
+    {
+      "id": "register-runner",
+      "level": "smoke",
+      "assertion": { "type": "runner.status", "expected": "active" },
+      "evidence": "register-runner.json"
+    },
+    {
+      "id": "create-task",
+      "level": "smoke",
+      "assertion": { "type": "task.state", "expected": "2-ready" },
+      "evidence": "create-task.json"
+    },
+    {
+      "id": "claim",
+      "level": "smoke",
+      "assertion": { "type": "claim.status", "expected": "claimed" },
+      "evidence": "claim.json"
+    },
+    {
+      "id": "run-fake-cli",
+      "level": "smoke",
+      "assertion": { "type": "fixture.tests", "expected": { "before": "failed", "after": "passed", "commit": true, "log": true } },
+      "evidence": "run-fake-cli.json"
+    },
+    {
+      "id": "auto-review",
+      "level": "smoke",
+      "assertion": { "type": "review.outcome", "expected": "Pass" },
+      "evidence": "auto-review.json"
+    },
+    {
+      "id": "integrate",
+      "level": "full",
+      "assertion": { "type": "orchestration.status", "expected": "completed" },
+      "evidence": "integrate.json"
+    },
+    {
+      "id": "complete",
+      "level": "full",
+      "assertion": { "type": "task.state", "expected": "6-completed" },
+      "evidence": "complete.json"
+    },
+    {
+      "id": "orchestrator-chat",
+      "level": "full",
+      "assertion": { "type": "chat.receipt", "expected": "persisted" },
+      "evidence": "orchestrator-chat.json"
+    },
+    {
+      "id": "dossier-decision",
+      "level": "full",
+      "assertion": { "type": "dossier.decision", "expected": "approved" },
+      "evidence": "dossier-decision.json"
+    },
+    {
+      "id": "backup",
+      "level": "full",
+      "assertion": { "type": "backup.verified", "expected": true },
+      "evidence": "backup.json"
+    },
+    {
+      "id": "restore-empty-store",
+      "level": "full",
+      "assertion": { "type": "restore.verified", "expected": true },
+      "evidence": "restore-empty-store.json"
+    },
+    {
+      "id": "inventory-hash-equality",
+      "level": "full",
+      "assertion": { "type": "inventory.sha256", "expected": "equal" },
+      "evidence": "inventory-hash-equality.json"
+    }
+  ]
+}

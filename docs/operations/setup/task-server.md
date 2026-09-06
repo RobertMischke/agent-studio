@@ -449,6 +449,12 @@ evidence.
 
 ## Release topology rehearsal
 
+The reusable deployment regression suite is documented in
+[Deployment regression scenario](../testing/deployment-scenario.md). Run its
+`inproc smoke` target for every deployment card and its `compose full` target
+for release qualification. The lower-level topology commands below remain the
+process, outage, transport, and binary compatibility proofs used beside it.
+
 The release-blocking harness is intentionally separate from browser E2E. Build
 the deployables once, then run the topology and compatibility gate:
 

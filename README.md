@@ -54,6 +54,21 @@ To add execution capacity after the Studio is running, follow the
 contributors use the separate
 [contributor setup](./docs/operations/setup/contributor-setup.md).
 
+## Testing deployments
+
+Every deployment change uses the same small, data-defined regression run. The
+host-native smoke level is the card gate; releases additionally run the complete
+Docker Compose level. Both write JUnit XML, a Markdown step report, and per-step
+JSON evidence.
+
+```bash
+scripts/scenario.sh --target inproc --level smoke
+scripts/scenario.sh --target compose --level full
+```
+
+See the [deployment scenario runbook](./docs/operations/testing/deployment-scenario.md)
+for remote execution, report interpretation, and the extension contract.
+
 ## More
 
 Agent Studio is part of the agent-orc ecosystem. It uses

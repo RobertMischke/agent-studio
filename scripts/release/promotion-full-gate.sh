@@ -66,8 +66,12 @@ run_at "$repo/frontend" 'Production dependency audit' \
   npm audit --omit=dev --audit-level=critical
 run_at "$repo" 'Release shell contract tests' \
   bash scripts/release/release-scripts.test.sh
+run_at "$repo" 'Deployment scenario contracts' \
+  node --test scripts/scenario.test.mjs
 run_at "$repo" '.NET Release build' \
   dotnet build agent-taskboard.sln --configuration Release --no-restore --nologo
+run_at "$repo" 'Deployment scenario smoke' \
+  env SCENARIO_SKIP_BUILD=1 scripts/scenario.sh --target inproc --level smoke
 run_at "$repo" '.NET full non-machine-bound suite' \
   dotnet test agent-taskboard.sln --configuration Release --no-build \
     --filter 'Category!=MachineBound' --logger 'console;verbosity=minimal' --nologo

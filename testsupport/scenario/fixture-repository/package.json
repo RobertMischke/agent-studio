@@ -1,0 +1,7 @@
+{
+  "name": "agent-studio-deployment-scenario-fixture",
+  "private": true,
+  "scripts": {
+    "test": "node --test scenario.test.mjs"
+  }
+}

@@ -72,6 +72,7 @@ jobs:
       - name: Test release shell contracts
         run: |
           bash scripts/release/release-scripts.test.sh
+          node --test scripts/scenario.test.mjs
           python3 -m unittest discover \
             -s deploy/agent-host/tests \
             -p 'test_*.py'
@@ -93,6 +94,19 @@ jobs:
             --configuration Release --no-build \
             --filter "FullyQualifiedName~TaskServer.Tests.TopologyTests|FullyQualifiedName~TaskServer.Tests.ProtocolTests" \
             --logger "console;verbosity=normal"
+
+      - name: Run full Compose deployment scenario
+        env:
+          JOB_RESULTS_DIR: ${{ runner.temp }}/deployment-scenario
+        run: scripts/scenario.sh --target compose --level full
+
+      - name: Attach deployment scenario report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-scenario-release
+          path: ${{ runner.temp }}/deployment-scenario
+          if-no-files-found: error
 
       - name: Lint and type-check frontend
         working-directory: frontend

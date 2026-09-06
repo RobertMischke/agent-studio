@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-orchestrator.dev/schemas/deployment-scenario-v1.json",
+  "title": "Deployment regression scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "smokeBudgetSeconds", "clock", "fixture", "steps"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "smokeBudgetSeconds": { "type": "integer", "maximum": 180, "minimum": 1 },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedAtUtc", "stepOffsetMilliseconds"],
+      "properties": {
+        "startedAtUtc": { "type": "string", "format": "date-time" },
+        "stepOffsetMilliseconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "fixture": { "type": "object" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "level", "assertion", "evidence"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "level": { "enum": ["smoke", "full"] },
+          "assertion": {
+            "type": "object",
+            "required": ["type", "expected"],
+            "properties": { "type": { "type": "string" }, "expected": true }
+          },
+          "evidence": { "type": "string", "pattern": "^[a-z0-9-]+\\.json$" }
+        }
+      }
+    }
+  }
+}
