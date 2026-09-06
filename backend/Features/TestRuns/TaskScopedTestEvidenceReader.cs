@@ -32,7 +32,7 @@ internal static class TaskScopedTestEvidenceReader
                          SearchOption.TopDirectoryOnly))
             {
                 AddSignature(path, signature);
-                if (ReadRemoteReview(path) is { } review) sources.Add(review);
+                sources.AddRange(ReadRemoteReview(path));
             }
 
             var postSteps = Path.Combine(task.FolderPath, "post-steps");
@@ -58,58 +58,109 @@ internal static class TaskScopedTestEvidenceReader
             string.Join('|', signature.OrderBy(value => value, StringComparer.Ordinal)));
     }
 
-    private static TaskTestEvidenceSource? ReadRemoteReview(string path)
+    private static IReadOnlyList<TaskTestEvidenceSource> ReadRemoteReview(string path)
     {
         string text;
         try { text = File.ReadAllText(path); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
 
         var frontmatter = ReadFrontmatter(text);
         if (!string.Equals(frontmatter.GetValueOrDefault("type"), "remote-review-grade", StringComparison.OrdinalIgnoreCase))
-            return null;
+            return [];
 
-        var buildStatuses = text.Split('\n')
+        var rows = text.Split('\n')
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("|", StringComparison.Ordinal))
             .Select(ParseTableRow)
-            .Where(columns => columns.Count >= 2
-                              && string.Equals(columns[0], "build-tests", StringComparison.OrdinalIgnoreCase))
-            .Select(columns => columns[1])
             .ToList();
-        if (buildStatuses.Count == 0) return null;
+        var verdictRows = rows
+            .Where(columns => columns.Count >= 4 && IsAspectStatus(columns[1]))
+            .ToList();
+        var buildRows = verdictRows
+            .Where(columns => string.Equals(columns[0], "build-tests", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var buildSteps = rows
+            .Where(columns => columns.Count >= 3
+                              && string.Equals(columns[0], "build-tests", StringComparison.OrdinalIgnoreCase)
+                              && !IsAspectStatus(columns[1]))
+            .Select(columns => columns[2])
+            .Where(step => !string.IsNullOrWhiteSpace(step)
+                           && !step.Equals("Step", StringComparison.OrdinalIgnoreCase)
+                           && !step.StartsWith("---", StringComparison.Ordinal))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        var outcome = frontmatter.GetValueOrDefault("outcome") ?? "";
-        var failed = buildStatuses.Any(status =>
-            status.Equals("fail", StringComparison.OrdinalIgnoreCase)
-            || status.Equals("failed", StringComparison.OrdinalIgnoreCase))
-            || outcome.Equals("Fail", StringComparison.OrdinalIgnoreCase)
-            || outcome.Equals("Failed", StringComparison.OrdinalIgnoreCase);
-        var passed = !failed
-                     && buildStatuses.All(status => status.Equals("pass", StringComparison.OrdinalIgnoreCase))
-                     && outcome.Equals("Pass", StringComparison.OrdinalIgnoreCase);
-        var result = failed ? "failed" : passed ? "passed" : "not-proven";
         var commit = frontmatter.GetValueOrDefault("actualHead")
                      ?? frontmatter.GetValueOrDefault("expectedResultSha")
                      ?? "";
-        if (string.IsNullOrWhiteSpace(commit)) return null;
+        if (string.IsNullOrWhiteSpace(commit)) return [];
 
         var observedAt = ParseDate(frontmatter.GetValueOrDefault("receivedAt"))
                          ?? File.GetLastWriteTimeUtc(path);
+        var attemptId = frontmatter.GetValueOrDefault("attemptId") ?? Path.GetFileNameWithoutExtension(path);
+        var reportRef = Path.GetFileName(path);
+        var result = buildRows.Count == 0
+            ? "not-proven"
+            : buildRows.All(row => row[1].Equals("pass", StringComparison.OrdinalIgnoreCase))
+                ? "passed"
+                : "failed";
         var resultLabel = result switch
         {
             "passed" => "Pass",
             "failed" => "Failed",
             _ => "Not proven",
         };
-        return new TaskTestEvidenceSource
+        var stepSuffix = buildSteps.Count > 0 ? $" ({string.Join(", ", buildSteps)})" : "";
+        var buildSummary = buildRows.Select(row => row[3]).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        var buildReason = result switch
         {
-            Kind = "review-build-tests",
-            Id = frontmatter.GetValueOrDefault("attemptId") ?? Path.GetFileNameWithoutExtension(path),
-            Commit = commit,
-            Result = result,
-            ObservedAt = observedAt,
-            Summary = $"Review build-tests {resultLabel} at {Short(commit)}",
+            "passed" when buildSteps.Count > 0 => Sentence($"{JoinWords(buildSteps)} passed"),
+            "passed" when !string.IsNullOrWhiteSpace(buildSummary) => Sentence($"build-tests passed: {buildSummary}"),
+            "passed" => "build-tests passed.",
+            "failed" when !string.IsNullOrWhiteSpace(buildSummary) => Sentence($"build-tests failed: {buildSummary}"),
+            "failed" when buildSteps.Count > 0 => Sentence($"{JoinWords(buildSteps)} did not all pass"),
+            "failed" => "build-tests did not pass.",
+            _ when buildSteps.Count > 0 => Sentence($"The build-tests verdict is missing after {JoinWords(buildSteps)}"),
+            _ => "The build-tests command evidence is missing from the Remote Review report.",
         };
+        var sources = new List<TaskTestEvidenceSource>
+        {
+            new()
+            {
+                Kind = "review-build-tests",
+                Id = attemptId,
+                Commit = commit,
+                Result = result,
+                ObservedAt = observedAt,
+                Summary = $"Review build-tests {resultLabel} at {Short(commit)}{stepSuffix}",
+                Reason = buildReason,
+                ReportRef = reportRef,
+            },
+        };
+
+        foreach (var row in verdictRows.Where(row =>
+                     !row[0].Equals("build-tests", StringComparison.OrdinalIgnoreCase)
+                     && IsBlocked(row[1])))
+        {
+            var aspect = row[0];
+            var summary = row[3];
+            var reason = Sentence(string.IsNullOrWhiteSpace(summary)
+                ? $"{aspect} blocked the review"
+                : $"{aspect} blocked: {summary}");
+            sources.Add(new TaskTestEvidenceSource
+            {
+                Kind = "review-aspects",
+                Id = $"{attemptId}:{aspect}",
+                Commit = commit,
+                Result = "blocked",
+                ObservedAt = observedAt,
+                Summary = $"Review blocked by {aspect} at {Short(commit)}",
+                Reason = reason,
+                ReportRef = reportRef,
+            });
+        }
+
+        return sources;
     }
 
     private static TaskTestEvidenceSource? ReadGate(string path, string kind, string label)
@@ -167,7 +218,37 @@ internal static class TaskScopedTestEvidenceReader
             Summary = result == "not-applicable" && kind == "build-test-gate"
                 ? "No build/test defined"
                 : $"{label} {resultLabel} at {Short(commit)}",
+            Reason = Sentence(string.IsNullOrWhiteSpace(reason)
+                ? $"{label} reported {resultLabel}"
+                : reason),
+            ReportRef = $"post-steps/{Path.GetFileName(path)}",
         };
+    }
+
+    private static bool IsAspectStatus(string value) => value.Equals("pass", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("fail", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("failed", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("block", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("blocked", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("concerns", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBlocked(string value) => value.Equals("block", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("blocked", StringComparison.OrdinalIgnoreCase);
+
+    private static string JoinWords(IReadOnlyList<string> values) => values.Count switch
+    {
+        0 => "build-tests commands",
+        1 => values[0],
+        2 => $"{values[0]} and {values[1]}",
+        _ => $"{string.Join(", ", values.Take(values.Count - 1))}, and {values[^1]}",
+    };
+
+    private static string Sentence(string value)
+    {
+        var compact = string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return compact.EndsWith('.') || compact.EndsWith('!') || compact.EndsWith('?')
+            ? compact
+            : compact + ".";
     }
 
     private static Dictionary<string, string> ReadFrontmatter(string text)

@@ -118,6 +118,8 @@ describe('ResultViewComponent', () => {
           result: state,
           observedAt: null,
           summary,
+          reason: state === 'not-applicable' ? 'No verify commands are defined.' : 'The build command is missing.',
+          reportRef: 'post-steps/build-test-gate-1.log',
         }],
       },
     }), verdict());

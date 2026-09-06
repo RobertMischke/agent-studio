@@ -1,20 +1,56 @@
 @if (evidence(); as evidence) {
-  <div class="test-evidence"
-       [class.test-evidence--panel]="variant() === 'panel'"
-       [attr.data-evidence-state]="evidence.evidenceState"
-       [attr.data-match-quality]="evidence.matchQuality"
-       [attr.data-testid]="testId()"
-       [appTooltip]="tooltipText()">
-    <span class="test-evidence__dot" aria-hidden="true"></span>
-    <span class="test-evidence__copy">
-      <strong>{{ evidence.summary }}</strong>
-      @if (evidence.runId) {
-        <small>{{ evidence.runId }} · {{ evidence.runState }}{{ evidence.runResult ? ' · ' + evidence.runResult : '' }}</small>
-      } @else if (evidence.sources?.length) {
-        <small>{{ sourceDetail() }}</small>
-      } @else {
-        <small>No SHA-linked project run, build gate, or review grade is recorded.</small>
+  @if (variant() === 'panel' && sources().length > 0) {
+    <div class="test-evidence test-evidence--panel"
+         role="list"
+         aria-label="Build and review evidence"
+         [attr.data-evidence-state]="evidence.evidenceState"
+         [attr.data-match-quality]="evidence.matchQuality"
+         [attr.data-testid]="testId()">
+      @for (source of sources(); track source.kind + ':' + source.id + ':' + source.reportRef) {
+        <div class="test-evidence__source"
+             role="listitem"
+             [attr.data-source-kind]="source.kind"
+             [attr.data-source-result]="source.result"
+             [attr.data-tone]="sourceTone(source)"
+             [attr.data-testid]="'test-evidence-source-' + source.kind"
+             [attr.aria-label]="sourceAriaLabel(source)"
+             [appTooltip]="sourceReason(source)"
+             [appTooltipTestId]="'test-evidence-reason-tooltip-' + source.kind">
+          <span class="test-evidence__dot" aria-hidden="true"></span>
+          <span class="test-evidence__copy">
+            <strong>{{ source.summary }}</strong>
+            <small class="test-evidence__reason">{{ sourceReason(source) }}</small>
+          </span>
+          @if (reportHref(source); as href) {
+            <a class="test-evidence__report"
+               [href]="href"
+               target="_blank"
+               rel="noopener noreferrer"
+               [attr.data-testid]="'test-evidence-report-' + source.kind"
+               [attr.aria-label]="'Open ' + source.reportRef + '. ' + sourceReason(source)">View report</a>
+          }
+        </div>
       }
-    </span>
-  </div>
+    </div>
+  } @else {
+    <div class="test-evidence"
+         [class.test-evidence--panel]="variant() === 'panel'"
+         [attr.data-evidence-state]="evidence.evidenceState"
+         [attr.data-match-quality]="evidence.matchQuality"
+         [attr.data-testid]="testId()"
+         [attr.aria-label]="tooltipText()"
+         [appTooltip]="tooltipText()">
+      <span class="test-evidence__dot" aria-hidden="true"></span>
+      <span class="test-evidence__copy">
+        <strong>{{ evidence.summary }}</strong>
+        @if (evidence.runId) {
+          <small>{{ evidence.runId }} · {{ evidence.runState }}{{ evidence.runResult ? ' · ' + evidence.runResult : '' }}</small>
+        } @else if (evidence.sources?.length) {
+          <small>{{ sourceDetail() }}</small>
+        } @else {
+          <small>No SHA-linked project run, build gate, or review grade is recorded.</small>
+        }
+      </span>
+    </div>
+  }
 }

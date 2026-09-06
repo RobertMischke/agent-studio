@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { AppTooltipDirective } from '../../../../components/tooltip/app-tooltip.directive';
-import { TaskState, type TaskInfo, type TaskTestRunEvidence } from '../../../../models/task.model';
+import { TaskState, type TaskInfo, type TaskTestEvidenceSource, type TaskTestRunEvidence } from '../../../../models/task.model';
 
-type TestEvidenceContext = Pick<TaskInfo, 'state' | 'commit' | 'commits' | 'integration' | 'testEvidence'>;
+type TestEvidenceContext = Pick<TaskInfo, 'id' | 'watchPath' | 'state' | 'commit' | 'commits' | 'integration' | 'testEvidence'>;
 export type TestEvidenceStatusVariant = 'card' | 'panel';
 
 const MISSING_EVIDENCE_RELEVANT_STATES = new Set<string>([
@@ -46,6 +46,7 @@ export class TestEvidenceStatusComponent {
   readonly variant = input<TestEvidenceStatusVariant>('card');
   readonly testId = input('task-card-test-evidence');
   readonly evidence = computed(() => visibleTestEvidence(this.task()));
+  readonly sources = computed(() => this.evidence()?.sources ?? []);
 
   tooltipText(): string {
     const evidence = this.evidence();
@@ -53,7 +54,7 @@ export class TestEvidenceStatusComponent {
     const details = evidence.runId
       ? [`Project test run ${evidence.runId} at ${evidence.runCommit || 'unknown commit'}`]
       : [];
-    details.push(...(evidence.sources ?? []).map(source => source.summary));
+    details.push(...(evidence.sources ?? []).map(source => `${source.summary}: ${this.sourceReason(source)}`));
     return details.length > 0 ? details.join(' · ') : evidence.summary;
   }
 
@@ -64,10 +65,38 @@ export class TestEvidenceStatusComponent {
     return '';
   }
 
-  private sourceLabel(kind: string): string {
+  sourceLabel(kind: string): string {
     if (kind === 'review-build-tests') return 'Remote review';
+    if (kind === 'review-aspects') return 'Review aspects';
     if (kind === 'pre-develop-build-gate') return 'Pre-develop gate';
     if (kind === 'pre-main-test-gate') return 'Pre-main gate';
     return 'Build/test gate';
+  }
+
+  sourceReason(source: TaskTestEvidenceSource): string {
+    return source.reason?.trim() || 'No reason was recorded for this evidence source.';
+  }
+
+  sourceTone(source: TaskTestEvidenceSource): 'good' | 'warn' | 'bad' | 'neutral' {
+    if (source.kind === 'review-aspects' && source.result === 'blocked') return 'warn';
+    if (source.result === 'failed') return 'bad';
+    if (source.result === 'passed') return 'good';
+    return 'neutral';
+  }
+
+  sourceAriaLabel(source: TaskTestEvidenceSource): string {
+    return `${source.summary}. ${this.sourceReason(source)}`;
+  }
+
+  reportHref(source: TaskTestEvidenceSource): string | null {
+    const reportRef = source.reportRef?.trim().replace(/\\/g, '/');
+    if (!reportRef) return null;
+    const segments = reportRef.split('/');
+    if (segments.some(segment => !segment || segment === '.' || segment === '..')) return null;
+    const path = segments.map(encodeURIComponent).join('/');
+    const taskId = encodeURIComponent(this.task().id);
+    const watchPath = this.task().watchPath?.trim();
+    const query = watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '';
+    return `/api/tasks/${taskId}/files/${path}${query}`;
   }
 }

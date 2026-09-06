@@ -250,6 +250,101 @@ public sealed class TestRunServiceTests : IDisposable
         Assert.Equal("review-42", source.Id);
         Assert.Equal(commit, source.Commit);
         Assert.Equal("passed", source.Result);
+        Assert.Equal("build-tests passed: Review command passed.", source.Reason);
+        Assert.Equal("remote-review-grade-review-42.md", source.ReportRef);
+    }
+
+    [Fact]
+    public void CardEvidence_SeparatesPassedBuildTestsFromBlockedReviewAspect()
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+        var folder = Path.Combine(stack.Storage, TaskStates.HumanReview, "agt-2689-review-evidence");
+        Directory.CreateDirectory(folder);
+        const string reportName = "remote-review-grade-review_ad5cca8e3178425fb9ba9cabe329d50e.md";
+        File.WriteAllText(
+            Path.Combine(folder, reportName),
+            $"""
+             ---
+             type: remote-review-grade
+             attemptId: "review_ad5cca8e3178425fb9ba9cabe329d50e"
+             receivedAt: 2026-08-31T18:30:00Z
+             outcome: "ProductFailure"
+             expectedResultSha: "{commit}"
+             actualHead: "{commit}"
+             ---
+
+             | Aspect | Status | Classification | Summary |
+             | --- | --- | --- | --- |
+             | build-tests | pass | CommandPassed | verify-1 and verify-2 passed. |
+             | requirement-fit | pass | Clean | Requirements are satisfied. |
+             | code-quality | pass | Clean | Code quality is acceptable. |
+             | tests-and-evidence | pass | Clean | Test evidence is sufficient. |
+             | documentation-impact | block | ProductFailure | Public API and state-file contract changed without corresponding load-bearing doc updates |
+
+             | Phase | Workspace | Step | Location | Host / executor | Command | Exit | Budget | Output | Errors |
+             | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- |
+             | build-tests | subject | verify-1 | remote | runner / executor | `dotnet build` | 0 | verify | stdout | stderr |
+             | build-tests | subject | verify-2 | remote | runner / executor | `dotnet test` | 0 | verify | stdout | stderr |
+             """);
+        var job = Task("agt-2689-review-evidence", stack.Storage, commit) with
+        {
+            State = TaskStates.HumanReview,
+            FolderPath = folder,
+        };
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal("proven", evidence.EvidenceState);
+        Assert.Equal($"Review build-tests Pass at {commit[..8]} (verify-1, verify-2)", evidence.Summary);
+        var build = Assert.Single(evidence.Sources, source => source.Kind == "review-build-tests");
+        Assert.Equal("passed", build.Result);
+        Assert.Equal("verify-1 and verify-2 passed.", build.Reason);
+        Assert.Equal(reportName, build.ReportRef);
+        var aspects = Assert.Single(evidence.Sources, source => source.Kind == "review-aspects");
+        Assert.Equal("blocked", aspects.Result);
+        Assert.Equal($"Review blocked by documentation-impact at {commit[..8]}", aspects.Summary);
+        Assert.Equal(
+            "documentation-impact blocked: Public API and state-file contract changed without corresponding load-bearing doc updates.",
+            aspects.Reason);
+        Assert.Equal(reportName, aspects.ReportRef);
+    }
+
+    [Fact]
+    public void CardEvidence_UsesNotProvenOnlyWhenRemoteReviewBuildTestsRowIsMissing()
+    {
+        var stack = BuildStack();
+        var commit = RevParse(stack.Repo, "HEAD");
+        var folder = Path.Combine(stack.Storage, TaskStates.HumanReview, "missing-review-build-tests");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(
+            Path.Combine(folder, "remote-review-grade-review-missing.md"),
+            $"""
+             ---
+             type: remote-review-grade
+             attemptId: "review-missing"
+             receivedAt: 2026-08-31T18:30:00Z
+             outcome: "ProductFailure"
+             expectedResultSha: "{commit}"
+             actualHead: "{commit}"
+             ---
+
+             | Aspect | Status | Classification | Summary |
+             | --- | --- | --- | --- |
+             | documentation-impact | block | ProductFailure | Documentation is missing. |
+             """);
+        var job = Task("missing-review-build-tests", stack.Storage, commit) with
+        {
+            State = TaskStates.HumanReview,
+            FolderPath = folder,
+        };
+
+        var evidence = stack.Service.BuildLookup([job])[job.TaskKey];
+
+        Assert.Equal("not-proven", evidence.EvidenceState);
+        var build = Assert.Single(evidence.Sources, source => source.Kind == "review-build-tests");
+        Assert.Equal("not-proven", build.Result);
+        Assert.Equal("The build-tests command evidence is missing from the Remote Review report.", build.Reason);
     }
 
     [Fact]
@@ -276,6 +371,8 @@ public sealed class TestRunServiceTests : IDisposable
         var source = Assert.Single(evidence.Sources);
         Assert.Equal("build-test-gate", source.Kind);
         Assert.Equal("gate-42", source.Id);
+        Assert.Equal("All selected commands passed.", source.Reason);
+        Assert.Equal("post-steps/build-test-gate-1.log", source.ReportRef);
     }
 
     [Theory]

@@ -116,6 +116,20 @@
 
       @case ('evidence') {
         <section class="evidence-view" data-testid="evidence-view">
+          @if (job(); as j) {
+            @if (j.testEvidence) {
+              <div class="ev-section" data-testid="ev-section-test-evidence">
+                <div class="ev-section-head">
+                  <span class="ev-section-dot ev-section-dot--test" aria-hidden="true">●</span>
+                  <span class="ev-section-title">Test evidence</span>
+                </div>
+                <app-test-evidence-status
+                  [task]="j"
+                  variant="panel"
+                  testId="evidence-test-evidence" />
+              </div>
+            }
+          }
           @if (screenshots().length > 0) {
             <div class="ev-section" data-testid="ev-section-visual">
               <div class="ev-section-head">

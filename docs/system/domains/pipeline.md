@@ -1,6 +1,6 @@
 # Pipeline Domain Map
 
-Version: 2026-08-27
+Version: 2026-09-06
 Status: System-of-record map for task-processing pipeline changes.
 
 Use this when a change touches pre/core/post steps, pipeline catalog entries,
@@ -662,6 +662,18 @@ authoritative prompt section. For `bounded-slice`, it judges only the named
 slice and criteria; a linked Dossier, parent objective, or open recommendation
 list is context. Cards without a scope retain full-task review, with a narrow
 legacy inference only for explicit one-slice or partial-success declarations.
+
+Task test-evidence projection keeps deterministic build facts separate from the
+Remote Review outcome. A `review-build-tests` source is `passed` only from
+present, passing `build-tests` verdict rows, `failed` from a present non-passing
+row, and `not-proven` only when that row is missing. A product failure or blocked
+semantic aspect cannot replace a passing build result. Each blocking aspect is
+projected independently as `review-aspects` with result `blocked`. Every
+task-scoped evidence source carries a one-sentence `reason` and a `reportRef`
+beside its summary so the Evidence tab can explain the state and open the
+originating Remote Review report or gate log. The UI renders blocked aspects in
+the warning tone, failed builds in the failure tone, and missing proof in the
+neutral tone.
 
 The lane decision also has a semantic convergence bound. Each blocking aspect,
 classification, and summary set is normalized and fingerprinted. The second
