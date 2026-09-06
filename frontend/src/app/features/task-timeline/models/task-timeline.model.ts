@@ -101,6 +101,35 @@ const VERDICT_KINDS = new Set<string>([
   TIMELINE_KIND.orchestratorEscalated,
 ]);
 
+/**
+ * Lanes a card sits in before a run starts. An operator moving a card from a
+ * loop terminal back into one of these opens a fresh attempt: the previous
+ * verdict is history, not the current state of the loop.
+ */
+const PRE_RUN_LANES: ReadonlySet<string> = new Set(['0-backlog', '1-preparation', '2-ready']);
+
+/** Lanes the completion loop leaves a card in (its terminals plus the archive). */
+const LOOP_TERMINAL_LANES: ReadonlySet<string> = new Set([
+  '5e-escalated',
+  '5-human-review',
+  '6-completed',
+  '7-archive',
+]);
+
+/**
+ * True when the event reopens the task for a fresh attempt by operator
+ * action: an explicit requeue, or a lane change from a loop terminal back
+ * into a pre-run lane. A quality-loop reopen (auto-review to ready) is not
+ * such an event; it is part of the loop and keeps its `reopened` verdict.
+ */
+function reopensForFreshAttempt(event: TaskTimelineEvent): boolean {
+  if (event.kind === TIMELINE_KIND.operatorRequeued) return true;
+  if (event.kind !== TIMELINE_KIND.laneChanged) return false;
+  const from = event.details?.['from'] ?? '';
+  const to = event.details?.['to'] ?? '';
+  return LOOP_TERMINAL_LANES.has(from) && PRE_RUN_LANES.has(to);
+}
+
 function verdictOf(kind: string): CompletionLoopVerdict | null {
   switch (kind) {
     case TIMELINE_KIND.orchestratorVerdictAccepted: return 'accepted';
@@ -128,6 +157,11 @@ function parseIntOrNull(value: string | undefined | null): number | null {
  *   so we fall back to `reopenCount + 1` (initial run + each reopen).
  * - `reason` prefers the structured `gap` (reopen) / `reason` (escalate)
  *   detail and falls back to the event summary.
+ * - An operator requeue, or a lane change from a loop terminal back into a
+ *   pre-run lane, closes the loop that produced the latest verdict. Until a
+ *   new verdict arrives the state is empty again, so a card waiting in Ready
+ *   does not carry an "Escalated to human" flag from a run weeks ago
+ *   (AGT-2373, 2026-09-06). The Timeline tab still lists the old verdict.
  */
 export function deriveCompletionLoop(events: readonly TaskTimelineEvent[]): CompletionLoopState {
   const empty: CompletionLoopState = {
@@ -145,6 +179,11 @@ export function deriveCompletionLoop(events: readonly TaskTimelineEvent[]): Comp
   let reopenCount = 0;
   let latest: TaskTimelineEvent | null = null;
   for (const e of events) {
+    if (reopensForFreshAttempt(e)) {
+      reopenCount = 0;
+      latest = null;
+      continue;
+    }
     if (!VERDICT_KINDS.has(e.kind)) continue;
     if (e.kind === TIMELINE_KIND.qualityLoopReopened) reopenCount++;
     latest = e;
