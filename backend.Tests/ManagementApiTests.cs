@@ -232,6 +232,63 @@ public sealed class ManagementApiTests : IDisposable
     }
 
     [Fact]
+    public async Task CodexSignIn_StreamsDevicePrompt_ThenReportsConfirmedStatusWithoutPersistingCode()
+    {
+        const string code = "ABCD-EFGH";
+        var transport = new FakeCodexDeviceAuthTransport(code);
+        await using var factory = BuildFactory(codexTransport: transport);
+        using var client = factory.CreateClient();
+
+        var denied = await client.PostAsJsonAsync(
+            "/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in",
+            new CodexSignInStartRequest("agent@runner-01"));
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+
+        client.DefaultRequestHeaders.Add("X-Client-Id", DefaultClientIdentity.Id);
+        var started = await client.PostAsJsonAsync(
+            "/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in",
+            new CodexSignInStartRequest("agent@runner-01"));
+        started.EnsureSuccessStatusCode();
+        var prompt = await started.Content.ReadFromJsonAsync<CodexSignInStartResponse>();
+        Assert.NotNull(prompt);
+        Assert.Equal("https://auth.openai.com/codex/device", prompt.VerificationUrl);
+        Assert.Equal(code, prompt.UserCode);
+
+        var pending = await client.GetStringAsync(
+            $"/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in/{prompt.Handle}");
+        Assert.Contains("pending", pending, StringComparison.Ordinal);
+        Assert.DoesNotContain(code, pending, StringComparison.Ordinal);
+
+        transport.Complete();
+        await transport.WaitUntilReleasedAsync();
+        CodexSignInStatusResponse? terminalStatus = null;
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            terminalStatus = await client.GetFromJsonAsync<CodexSignInStatusResponse>(
+                $"/api/v1/management/remote-hosts/agent-runner-01/codex-sign-in/{prompt.Handle}");
+            if (terminalStatus?.State == "completed") break;
+            await Task.Delay(100);
+        }
+        Assert.NotNull(terminalStatus);
+        Assert.Equal("completed", terminalStatus.State);
+        Assert.True(terminalStatus.ProbeRefreshTriggered);
+        var terminal = System.Text.Json.JsonSerializer.Serialize(terminalStatus);
+        Assert.DoesNotContain(code, terminal, StringComparison.Ordinal);
+        string persisted = "";
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            persisted = string.Join('\n', Directory.GetFiles(_root, "*", SearchOption.AllDirectories)
+                .Select(File.ReadAllText));
+            if (persisted.Contains("provider_sign_in", StringComparison.Ordinal)) break;
+            await Task.Delay(100);
+        }
+        Assert.Equal(1, persisted.Split("provider_sign_in", StringSplitOptions.None).Length - 1);
+        Assert.Contains("agent-runner-01", persisted, StringComparison.Ordinal);
+        Assert.Contains("local-default", persisted, StringComparison.Ordinal);
+        Assert.DoesNotContain(code, persisted, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task BackupCreate_VerifiesRealArchive_OutsideDataDirectory()
     {
         await using var factory = BuildFactory(Environments.Production);
@@ -418,7 +475,8 @@ public sealed class ManagementApiTests : IDisposable
 
     private WebApplicationFactory<Program> BuildFactory(
         string environment = "Test",
-        IProviderAuthProvisioner? provisioner = null) =>
+        IProviderAuthProvisioner? provisioner = null,
+        ICodexDeviceAuthTransport? codexTransport = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment(environment);
@@ -441,8 +499,43 @@ public sealed class ManagementApiTests : IDisposable
                 services.RemoveAll<IProviderAuthProvisioner>();
                 services.AddSingleton(provisioner);
             }
+            if (codexTransport is not null)
+            {
+                services.RemoveAll<ICodexDeviceAuthTransport>();
+                services.AddSingleton(codexTransport);
+            }
         });
     });
+
+    private sealed class FakeCodexDeviceAuthTransport(string code) : ICodexDeviceAuthTransport
+    {
+        private readonly TaskCompletionSource _completed =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Complete() => _completed.TrySetResult();
+
+        public Task WaitUntilReleasedAsync() => _released.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        public async Task<CodexDeviceAuthTransportResult> RunAsync(
+            string sshTarget,
+            Action<string> observeOutput,
+            CancellationToken cancellationToken)
+        {
+            Assert.Equal("agent@runner-01", sshTarget);
+            observeOutput("Open this URL in your browser: https://auth.openai.com/codex/device");
+            observeOutput("Enter this one-time code (expires in 15 minutes)");
+            observeOutput(code);
+            await _completed.Task.WaitAsync(cancellationToken);
+            _released.TrySetResult();
+            return new CodexDeviceAuthTransportResult(
+                0,
+                true,
+                true,
+                "Codex sign-in completed and runner units were restarted for a fresh provider probe.");
+        }
+    }
 
     private sealed class RecordingProviderAuthProvisioner : IProviderAuthProvisioner
     {

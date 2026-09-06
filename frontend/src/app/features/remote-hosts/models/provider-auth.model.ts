@@ -53,6 +53,31 @@ export interface ProviderAuthProvisioningResponse {
   processEnvironmentVerified: boolean;
 }
 
+export interface CodexSignInStartRequest {
+  sshTarget: string;
+}
+
+export interface CodexSignInStartResponse {
+  handle: string;
+  hostId: string;
+  state: 'pending';
+  verificationUrl: string;
+  userCode: string;
+  startedAt: string;
+  expiresAt: string;
+}
+
+export interface CodexSignInStatusResponse {
+  handle: string;
+  hostId: string;
+  state: 'pending' | 'completed' | 'failed';
+  detail: string;
+  startedAt: string;
+  expiresAt: string;
+  completedAt: string | null;
+  probeRefreshTriggered: boolean;
+}
+
 const PROVIDER_AUTH_PREFIX = 'provider-auth:';
 const CLI_EXECUTION_PREFIX = 'cli-execution:';
 const REACHABLE_RUNNER_MS = 5 * 60_000;

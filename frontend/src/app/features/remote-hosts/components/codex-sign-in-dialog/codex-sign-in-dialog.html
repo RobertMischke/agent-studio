@@ -1,0 +1,62 @@
+<div class="codex-auth-backdrop"
+     data-testid="codex-sign-in-dialog"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="codex-sign-in-title"
+     (click)="closeFromBackdrop($event)"
+     (keydown.escape)="cancelled.emit()">
+  <section class="codex-auth">
+    <header class="codex-auth__header">
+      <div>
+        <span class="codex-auth__eyebrow">Provider authentication</span>
+        <h2 id="codex-sign-in-title">Sign in Codex on {{ host().name }}</h2>
+        <p>The browser approves a host-owned session. The token stays on the execution host and is never stored by Studio.</p>
+      </div>
+      <button class="codex-auth__close" type="button" aria-label="Close Codex sign-in" (click)="cancelled.emit()">×</button>
+    </header>
+
+    <div class="codex-auth__body">
+      @if (phase() === 'starting') {
+        <div class="codex-auth__state" data-testid="codex-sign-in-starting" role="status">
+          <span class="codex-auth__spinner" aria-hidden="true"></span>
+          <p>{{ detail() }}</p>
+        </div>
+      } @else if (phase() === 'failed') {
+        <div class="codex-auth__failure" data-testid="codex-sign-in-failed" role="alert">
+          <strong>Sign-in did not complete</strong>
+          <p>{{ detail() }}</p>
+        </div>
+      } @else {
+        <ol class="codex-auth__steps">
+          <li>
+            <span>1</span>
+            <div>
+              <strong>Open the verification page</strong>
+              <a data-testid="codex-sign-in-url" [href]="verificationUrl()" target="_blank" rel="noopener noreferrer">
+                {{ verificationUrl() }}
+              </a>
+            </div>
+          </li>
+          <li>
+            <span>2</span>
+            <div>
+              <strong>Enter this one-time code</strong>
+              <button type="button" class="codex-auth__code" data-testid="codex-sign-in-code" (click)="copyCode()">
+                {{ userCode() }}
+              </button>
+              <small>{{ copied() ? 'Copied' : 'Select to copy' }}</small>
+            </div>
+          </li>
+        </ol>
+        <div class="codex-auth__state" data-testid="codex-sign-in-status" role="status" [attr.data-state]="phase()">
+          <span class="codex-auth__spinner" aria-hidden="true"></span>
+          <div>
+            <strong>{{ phase() === 'verifying' ? 'Verifying runner probe' : 'Waiting for browser approval' }}</strong>
+            <p>{{ detail() }}</p>
+            <small>{{ expiresLabel() }}</small>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+</div>

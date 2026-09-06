@@ -183,9 +183,10 @@ The controller is intentionally repeatable after a host wipe:
    the Studio dialog. Studio sends `CLAUDE_CODE_OAUTH_TOKEN` or
    `ANTHROPIC_API_KEY` only through SSH stdin. The host atomically writes
    `/etc/agent-runner/provider-auth.env` as `root:agent` mode `640`. The value is
-   never persisted in Studio, a task, or the repository. Codex uses its
-   host-owned `codex login --device-auth` flow; credential files are never
-   copied from the operator workstation.
+   never persisted in Studio, a task, or the repository. Provision Codex from
+   the dialog with **Sign in Codex**. Studio runs the host-owned
+   `codex login --device-auth` flow through SSH and waits for the fresh provider
+   probe; credential files are never copied from the operator workstation.
 4. Atomically write `/etc/agent-runner/runner.env` with the Task Server URL,
    stable runner identity, optional `RUNNER_CLIENT_ID`, credential-file path,
    and fallback git origin. Install and start `agent-host.service` through
@@ -226,8 +227,14 @@ seeding.
 
 - **Claude.** For a headless host, use the setup-token flow below. An interactive
   host login remains a diagnostic fallback, not the provisioning contract.
-- **Codex.** Same rule: run `codex login` on the host so it writes the host's own
-  `~/.codex/auth.json`; do not copy the operator's. Verify with `codex --version`.
+- **Codex.** Choose **Sign in Codex** on the host's provider badge in **Execution
+  Hosts**, or on a Ready-card Codex wait chip. Studio starts
+  `codex login --device-auth` as the runner user through SSH and displays the
+  live verification URL and one-time code. It confirms the result with
+  `codex login status` and restarts active runner units so a fresh provider
+  probe is published. The host writes its own `~/.codex/auth.json`; do not copy
+  the operator's. The token never leaves the host, and the one-time code is not
+  stored in Studio, tasks, logs, or evidence.
 - **Rotation is now per host.** Replace only the affected host's provider-auth
   file and restart its units. Other hosts and the operator's normal Claude login
   remain independent.
@@ -322,6 +329,15 @@ placing the secret in a task. It atomically updates the shared file, restarts
 both installed units, verifies the variable name in each daemon's
 `/proc/<MainPID>/environ`, and waits for a fresh runner probe. It never persists
 the value in the Studio database, repository, task, log, or evidence artifact.
+
+Codex is provisioned from the same Execution Hosts surface through its native
+device-auth flow rather than the EnvironmentFile form. **Sign in Codex** is
+shown for **Unavailable** and **Expiring** Codex badges and for matching Ready
+card wait chips. Studio keeps an opaque in-memory handle while the SSH process
+runs, times it out after 15 minutes, verifies `codex login status`, then restarts
+active Coding and Review units to trigger a fresh probe. The audit record is one
+`provider_sign_in` operator-feed event with host, provider, actor, and outcome;
+it never contains the verification URL, one-time code, or a credential.
 
 Provider capability snapshots refresh every 60 seconds. Execution Hosts shows
 **OK**, **Retrying**, **Limited**, **Expiring**, **Unavailable**, or **Unknown**

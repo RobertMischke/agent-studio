@@ -37,6 +37,7 @@ import {
 } from '../../models/remote-host.model';
 import { freshHostTelemetry, latestHostTelemetry } from '../../models/running-truth';
 import { providerAuthBadgesForHost, type ProviderAuthBadge } from '../../models/provider-auth.model';
+import { CodexSignInActionComponent } from '../codex-sign-in-action/codex-sign-in-action';
 
 /** One meter row (RAM / CPU / Disk) resolved for the template. */
 interface Meter {
@@ -70,6 +71,7 @@ interface Meter {
     RuntimeCapacityEditorComponent,
     RemoteHostRoleRowComponent,
     RemoteHostDetailSummaryComponent,
+    CodexSignInActionComponent,
   ],
   templateUrl: './remote-host-card.html',
   styleUrl: './remote-host-card.scss',

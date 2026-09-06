@@ -5,6 +5,40 @@ namespace AgentStudio.Tests;
 
 public sealed class ProviderAuthProvisioningTests
 {
+    [Fact]
+    public void CodexDeviceAuthTranscript_ExtractsUrlAndOneTimeCode()
+    {
+        var parsed = CodexSignInPolicy.ParseDeviceAuthTranscript([
+            "To sign in using device code authentication:",
+            "1. Open this URL in your browser",
+            "   https://auth.openai.com/codex/device",
+            "2. Enter this one-time code (expires in 15 minutes)",
+            "   ABCD-EFGH",
+        ]);
+
+        Assert.Equal("https://auth.openai.com/codex/device", parsed.VerificationUrl);
+        Assert.Equal("ABCD-EFGH", parsed.UserCode);
+    }
+
+    [Theory]
+    [InlineData("runner;shutdown", "runner")]
+    [InlineData("agent@runner", "runner/id")]
+    public void CodexSignInPolicy_RejectsUnsafeHostInputs(string sshTarget, string hostId)
+    {
+        Assert.NotNull(CodexSignInPolicy.Validate(hostId, new CodexSignInStartRequest(sshTarget)));
+    }
+
+    [Fact]
+    public void CodexSshTransport_PassesOnlyTheValidatedTargetAsData()
+    {
+        var startInfo = SshCodexDeviceAuthTransport.BuildStartInfo("agent@runner-01");
+
+        Assert.Equal("ssh", startInfo.FileName);
+        Assert.Contains("agent@runner-01", startInfo.ArgumentList);
+        Assert.DoesNotContain(startInfo.ArgumentList, argument => argument.Contains("codex login", StringComparison.Ordinal));
+        Assert.Equal(["sudo", "bash", "-s"], startInfo.ArgumentList.TakeLast(3));
+    }
+
     [Theory]
     [InlineData("CLAUDE_CODE_OAUTH_TOKEN")]
     [InlineData("ANTHROPIC_API_KEY")]

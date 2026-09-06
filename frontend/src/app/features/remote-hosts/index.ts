@@ -3,6 +3,8 @@ export { RemoteHostsPanelComponent } from './components/remote-hosts-panel/remot
 export { RemoteHostCardComponent } from './components/remote-host-card/remote-host-card';
 export { AddHostWizardComponent } from './components/add-host-wizard/add-host-wizard';
 export { RunnerSetupDialogComponent } from './components/runner-setup-dialog/runner-setup-dialog';
+export { CodexSignInDialogComponent } from './components/codex-sign-in-dialog/codex-sign-in-dialog';
+export { CodexSignInActionComponent } from './components/codex-sign-in-action/codex-sign-in-action';
 export { RemoteHostsService } from './services/remote-hosts.service';
 export { ReviewQueueService } from './services/review-queue.service';
 export type { ReviewQueueSnapshot } from './services/review-queue.service';

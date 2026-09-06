@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TaskCardComponent } from './task-card.component';
 import { MODEL_IDS } from '../../../cli';
-import { ProviderAuthStatusService } from '../../../remote-hosts';
+import { ProviderAuthStatusService, RemoteHostsService } from '../../../remote-hosts';
 import type { TaskInfo, ClientSummary, TagRegistryEntry } from '../../../../models/task.model';
 import {
   buildEffectiveModelChip,
@@ -1331,7 +1331,40 @@ describe('TaskCardComponent (smoke)', () => {
       '[data-testid="task-card-provider-auth-wait"]',
     ) as HTMLElement | null;
     expect(wait?.textContent).toContain('Waiting for Claude sign-in on linux-host');
-    expect(fixture.componentInstance.providerAuthWait()?.tooltip).toContain('Not logged in');
+    expect(wait?.getAttribute('title')).toContain('Not logged in');
+  });
+
+  it('makes a Codex Ready-card wait chip an actionable sign-in control', async () => {
+    const fixture = await renderCard(makeJob({
+      state: '2-ready', cliType: 'codex', execution: null,
+      executionLocation: {
+        state: 'queued-remote', executionKind: 'remote', runnerId: 'agent-runner-01',
+        configuredRunnerId: 'agent-runner-01', connectionState: 'connected',
+        leaseState: 'queued', trustReason: 'Project execution assignment targets this runner.',
+      },
+    }));
+    const now = new Date();
+    TestBed.inject(RemoteHostsService).hosts.set([{
+      id: 'agent-runner-01', name: 'linux-host', role: 'remote', address: 'agent@linux-host',
+      clientId: 'agent-runner-01', status: 'online', os: 'Linux', lastHeartbeatAt: now.toISOString(),
+      uptimeLabel: null, capabilities: [], cliQuotas: [], stats: null,
+    }]);
+    TestBed.inject(ProviderAuthStatusService).ingest([{
+      runnerId: 'agent-runner-01', name: 'linux-host', hostId: 'agent-runner-01', instanceId: 'coding-01',
+      runnerVersion: '1.0.0', protocolVersion: 3, status: 'active', registeredAt: now.toISOString(),
+      lastSeenAt: now.toISOString(), hostAdmission: { hostId: 'agent-runner-01', admissionState: 'open' },
+      capabilities: [{
+        key: 'provider-auth:codex', category: 'provider-auth', advertisedStatus: 'unavailable',
+        healthState: 'healthy', advertisedAt: now.toISOString(),
+        freshUntil: new Date(now.getTime() + 120_000).toISOString(), isFresh: true,
+        consecutiveFailures: 0, detail: 'Not logged in', affectedClaims: [], recoveryHistory: [], signal: 'signed-out',
+      }],
+    }]);
+    fixture.detectChanges();
+
+    const wait = fixture.nativeElement.querySelector('[data-testid="task-card-provider-auth-wait"]');
+    expect(wait?.tagName).toBe('BUTTON');
+    expect(wait?.textContent).toContain('Sign in');
   });
 
   it('renders a compact family code and named thinking level without model text', async () => {

@@ -120,15 +120,7 @@
         <span class="task-card__waiting-glyph" aria-hidden="true">{{ dep.glyph }}</span> {{ dep.label }}
       </button>
     }
-    @if (providerAuthWait(); as authWait) {
-      <span class="task-card__provider-auth-wait"
-            data-testid="task-card-provider-auth-wait"
-            role="status"
-            [cacTooltip]="authWait.tooltip">
-        <span class="task-card__provider-auth-dot" aria-hidden="true"></span>
-        {{ authWait.label }}
-      </span>
-    }
+    <app-codex-sign-in-action [task]="job()" mode="wait" />
     <app-review-decision-badges [job]="job()" />
     @if (phaseBadge(); as pb) {
       <span class="task-card__phase-pill"

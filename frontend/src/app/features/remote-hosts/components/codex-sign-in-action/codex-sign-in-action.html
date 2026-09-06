@@ -1,0 +1,26 @@
+@if (visible()) {
+  @if (mode() === 'badge') {
+    <button type="button" class="codex-action" data-testid="remote-host-codex-sign-in" (click)="show($event)">
+      Sign in Codex
+    </button>
+  } @else if (wait(); as authWait) {
+    @if (actionableWait()) {
+      <button type="button" class="provider-wait provider-wait--action" data-testid="task-card-provider-auth-wait"
+              [attr.title]="authWait.tooltip" (click)="show($event)">
+        <span class="provider-wait__dot" aria-hidden="true"></span>
+        {{ authWait.label }} · Sign in
+      </button>
+    } @else {
+      <span class="provider-wait" data-testid="task-card-provider-auth-wait" role="status" [attr.title]="authWait.tooltip">
+        <span class="provider-wait__dot" aria-hidden="true"></span>
+        {{ authWait.label }}
+      </span>
+    }
+  }
+}
+@if (open() && target(); as selectedHost) {
+  <app-codex-sign-in-dialog
+    [host]="selectedHost"
+    (cancelled)="open.set(false)"
+    (signedIn)="complete()" />
+}

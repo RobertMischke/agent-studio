@@ -67,7 +67,7 @@ import { TaskSelectionService } from '../../../task-detail';
 import { PostProcessingActivityComponent } from '../post-processing-activity/post-processing-activity.component';
 import { TestEvidenceStatusComponent } from '../../../test-evidence';
 import { CopyableTaskKeyComponent } from '../../../../components/copyable-task-key/copyable-task-key.component';
-import { ProviderAuthStatusService, providerAuthWaitReason } from '../../../remote-hosts';
+import { CodexSignInActionComponent } from '../../../remote-hosts';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -78,7 +78,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-task-card, app-job-card',
   standalone: true,
-  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, TaskTokenUsagePopoverComponent, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TestEvidenceStatusComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent],
+  imports: [TooltipDirective, TaskStatusPopoverDirective, MenuComponent, StudioIconComponent, TokenPopoverDirective, TaskTokenUsagePopoverComponent, ModelLevelIndicatorComponent, ExecutionLocationBadgeComponent, IntegrationStatusBadgeComponent, ReviewDecisionBadgesComponent, PostProcessingActivityComponent, TestEvidenceStatusComponent, TaskLiveStatusComponent, TaskCardQuotaWaitComponent, CopyableTaskKeyComponent, CodexSignInActionComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-card.component.html',
   styleUrl: './task-card.component.scss',
@@ -120,7 +120,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
   private readonly clients = inject(ClientService);
   private readonly tagRegistry = inject(TagRegistryStore);
   private readonly codeReviewActivity = inject(CodeReviewActivityStore);
-  private readonly providerAuthStatus = inject(ProviderAuthStatusService);
   private stopPolling: (() => void) | null = null;
 
   readonly taskTypeChip = computed(() => buildTaskTypeChip(this.job().taskType));
@@ -432,9 +431,6 @@ export class TaskCardComponent implements OnInit, OnDestroy {
    * status (fulfilled/open per target, blocked, cycle). Null when no deps.
    */
   readonly dependencyChip = computed(() => buildVisibleDependencyChip(this.job()));
-  readonly providerAuthWait = computed(() => this.providerAuthStatus.loaded()
-    ? providerAuthWaitReason(this.job(), this.providerAuthStatus.statuses())
-    : null);
 
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;

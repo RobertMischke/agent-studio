@@ -395,6 +395,87 @@ test.describe('Execution Hosts settings section', () => {
     await machine.screenshot({ path: join(SHOT_DIR, 'execution-hosts-expanded-summary-dark--mocked.png') });
   });
 
+  test('completes Codex device sign-in from an unavailable provider badge', async ({ page, devBackend: _devBackend }) => {
+    const observed = new Date();
+    let signInCompleted = false;
+    let statusPolls = 0;
+    await page.route('**/hubs/jobs/negotiate**', route => route.fulfill({
+      json: {
+        connectionId: 'codex-sign-in-e2e',
+        connectionToken: 'codex-sign-in-e2e',
+        negotiateVersion: 1,
+        availableTransports: [{ transport: 'WebSockets', transferFormats: ['Text', 'Binary'] }],
+      },
+    }));
+    await page.routeWebSocket('**/hubs/jobs**', socket => {
+      socket.onMessage(message => {
+        if (message.toString().includes('"protocol":"json"')) socket.send('{}\u001e');
+      });
+    });
+    await page.reload();
+    await expect(page.getByText('Backend not reachable.')).toHaveCount(0, { timeout: 8_000 });
+    const snapshot = () => ({
+      runnerId: 'agent-runner-01', name: 'agent-runner-01', hostId: 'agent-runner-01',
+      instanceId: 'agent-runner-01:coding', runnerVersion: 'e2e', protocolVersion: 3,
+      status: 'active', registeredAt: observed.toISOString(), lastSeenAt: observed.toISOString(),
+      hostAdmission: { hostId: 'agent-runner-01', admissionState: 'open' },
+      capabilities: [{
+        key: 'provider-auth:codex', category: 'provider-auth',
+        advertisedStatus: signInCompleted ? 'ready' : 'unavailable', healthState: 'healthy',
+        advertisedAt: new Date(observed.getTime() + (signInCompleted ? 10_000 : 0)).toISOString(),
+        freshUntil: new Date(observed.getTime() + 180_000).toISOString(), isFresh: true,
+        consecutiveFailures: 0, affectedClaims: [], recoveryHistory: [],
+        signal: signInCompleted ? 'ok' : 'signed-out', detail: signInCompleted ? 'Active session confirmed' : 'Not logged in',
+      }],
+    });
+
+    await page.unroute('**/api/v1/management/remote-hosts');
+    await page.route('**/api/v1/management/remote-hosts', route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify([snapshot()]),
+    }));
+    await page.route('**/api/v1/management/remote-hosts/**/codex-sign-in**', route => {
+      if (!route.request().url().endsWith('/e2e-session')) {
+        return route.fulfill({
+          status: 200, contentType: 'application/json', body: JSON.stringify({
+            handle: 'e2e-session', hostId: 'agent-runner-01', state: 'pending',
+            verificationUrl: 'https://auth.openai.com/codex/device', userCode: 'ABCD-EFGH',
+            startedAt: observed.toISOString(), expiresAt: new Date(observed.getTime() + 900_000).toISOString(),
+          }),
+        });
+      }
+
+      statusPolls += 1;
+      if (statusPolls > 1) signInCompleted = true;
+      return route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify({
+          handle: 'e2e-session', hostId: 'agent-runner-01', state: signInCompleted ? 'completed' : 'pending',
+          detail: signInCompleted ? 'Codex sign-in completed.' : 'Waiting for browser confirmation.',
+          startedAt: observed.toISOString(), expiresAt: new Date(observed.getTime() + 900_000).toISOString(),
+          completedAt: signInCompleted ? new Date().toISOString() : null, probeRefreshTriggered: signInCompleted,
+        }),
+      });
+    });
+
+    await page.goto('/#/workspace/settings/execution-hosts');
+    const machine = page.getByTestId('remote-host-card').filter({ hasText: 'agent-runner-01' });
+    await expandHost(machine, true);
+    await machine.getByTestId('remote-host-detail-toggle-capabilities').click();
+    await expect(machine.getByTestId('remote-host-codex-sign-in')).toBeVisible();
+    await machine.getByTestId('remote-host-codex-sign-in').click();
+
+    const dialog = page.getByTestId('codex-sign-in-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByTestId('codex-sign-in-url')).toHaveAttribute('href', 'https://auth.openai.com/codex/device');
+    await expect(dialog.getByTestId('codex-sign-in-code')).toContainText('ABCD-EFGH');
+    await setTheme(page, 'light');
+    await dialog.screenshot({ path: join(SHOT_DIR, 'codex-sign-in-dialog-light--mocked.png') });
+    await setTheme(page, 'dark');
+    await dialog.screenshot({ path: join(SHOT_DIR, 'codex-sign-in-dialog-dark--mocked.png') });
+
+    await expect(dialog).toHaveCount(0, { timeout: 8_000 });
+    await expect(machine.getByTestId('remote-host-provider-auth-codex')).toContainText('ok');
+  });
+
   test('shows a corrupt identity with its restore path in both themes', async ({ page }) => {
     await page.unroute('**/api/clients');
     await page.route('**/api/clients', route => route.fulfill({

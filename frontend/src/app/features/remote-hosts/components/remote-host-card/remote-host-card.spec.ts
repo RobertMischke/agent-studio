@@ -185,6 +185,20 @@ describe('RemoteHostCardComponent', () => {
       .toContain('ready → unavailable');
   });
 
+  it('offers Codex sign-in for unavailable auth', () => {
+    const fixture = mount({
+      ...HOST,
+      capabilityHealth: [{
+        key: 'provider-auth:codex', category: 'provider-auth', advertisedStatus: 'unavailable',
+        healthState: 'healthy', advertisedAt: '2026-07-10T11:59:30Z',
+        freshUntil: '2026-07-10T12:02:30Z', isFresh: true, consecutiveFailures: 0,
+        detail: 'Not logged in', affectedClaims: [], recoveryHistory: [], signal: 'signed-out',
+      }],
+    });
+    expect(fixture.nativeElement.querySelector('[data-testid="remote-host-codex-sign-in"]')?.textContent)
+      .toContain('Sign in Codex');
+  });
+
   it('shows contents ready, workflow missing, and the documentation fix without blocking inflow', () => {
     const el: HTMLElement = mount({
       ...HOST,

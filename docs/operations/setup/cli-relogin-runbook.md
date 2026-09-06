@@ -44,13 +44,22 @@ from the secret.
 
 ## 2. Renew through Studio
 
-1. Open the affected host in **Execution Hosts** and choose **Set up agent
-   host**.
+For Claude:
+
+1. Open the affected host in **Execution Hosts** and choose **Set up agent host**.
 2. In **Provider authentication**, select `CLAUDE_CODE_OAUTH_TOKEN` or
    `ANTHROPIC_API_KEY` and paste the replacement value.
 3. Choose **Provision and verify**.
 4. Wait for **Latest runner probe: OK**. The dialog clears the input after both
    successful and failed requests.
+
+For Codex, choose **Sign in Codex** beside an **Unavailable** or **Expiring**
+Codex badge. The same action is available directly on a Ready card waiting for
+Codex sign-in. Studio starts `codex login --device-auth` as the runner user over
+the configured SSH target and displays the verification link and one-time code.
+Open the link, enter the code, and approve the host. The dialog polls the
+session and closes only after `codex login status` succeeds and a newer runner
+probe reports usable Codex authentication.
 
 Studio sends the value to the selected host through SSH stdin. It never places
 the value on the SSH command line, in shell history, in the setup task, in the
@@ -61,6 +70,12 @@ for a newer runner probe.
 
 Provisioning one Claude credential replaces the other Claude variable while
 preserving entries for future providers in the shared file.
+
+Codex uses its native host credential file. Studio retains only the opaque
+in-memory session handle and terminal outcome. The one-time code is never
+written to Studio storage, tasks, logs, or evidence. A terminal attempt emits
+one `provider_sign_in` operator-feed event containing host, provider, actor,
+and outcome only.
 
 ## 3. Verify recovery
 
